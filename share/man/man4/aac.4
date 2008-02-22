@@ -1,4 +1,4 @@
-.\"	$NetBSD: aac.4,v 1.12 2007/03/21 07:03:18 wiz Exp $
+.\"	$NetBSD: aac.4,v 1.15 2016/06/01 01:33:10 pgoyette Exp $
 .\"
 .\" Copyright (c) 2000 Scott Long
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" from FreeBSD: aac.4,v 1.18 2001/09/27 21:52:42 scottl Exp
-.Dd March 10, 2007
+.Dd June 1, 2016
 .Dt AAC 4
 .Os
 .Sh NAME
@@ -42,7 +42,7 @@ and SATA RAID controllers.
 These controllers support RAID 0, 1, 5, 10, and volume sets.
 They have four channels in the add-in version
 or 1-2 channels in the motherboard integrated version,
-and are most often found relabeled by Dell or Hewlett-Packard.
+and are most often found rebadged by Dell, Hewlett-Packard or IBM.
 Supported controllers include:
 .Pp
 .Bl -bullet -compact
@@ -54,6 +54,8 @@ Adaptec SCSI RAID 2120S
 Adaptec SCSI RAID 2200S
 .It
 Adaptec SATA RAID 2410SA
+.It
+Adaptec SATA RAID 3405
 .It
 Adaptec SCSI RAID 5400S
 .It
@@ -72,14 +74,16 @@ Dell CERC SATA RAID 1.5/6ch
 HP NetRAID 4M
 .It
 HP ML110 G2 (Adaptec SATA RAID 2610SA)
-.Pp
+.It
+IBM ServeRAID 8k
 .El
+.Pp
 Access to RAID containers is available via the
 .Nm ld
 device driver.
 Individual drives cannot be accessed unless they are part of a container
 or volume set, and non-fixed disks cannot be accessed.
-Containers can be configured by using either the on-board BIOS utility of
+Containers can be configured by using the on-board BIOS utility of
 the card.
 .Sh DIAGNOSTICS
 The adapter can send status and alert messages asynchronously to the driver.

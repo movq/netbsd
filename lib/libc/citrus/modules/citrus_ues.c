@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_ues.c,v 1.1 2006/11/13 15:16:31 tnozaki Exp $ */
+/* $NetBSD: citrus_ues.c,v 1.4 2013/05/28 16:57:56 joerg Exp $ */
 
 /*-
  * Copyright (c)2006 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_ues.c,v 1.1 2006/11/13 15:16:31 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_ues.c,v 1.4 2013/05/28 16:57:56 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -68,8 +68,10 @@ typedef struct {
 		_UESState	s_mbrtowc;
 		_UESState	s_mbtowc;
 		_UESState	s_mbsrtowcs;
+		_UESState	s_mbsnrtowcs;
 		_UESState	s_wcrtomb;
 		_UESState	s_wcsrtombs;
+		_UESState	s_wcsnrtombs;
 		_UESState	s_wctomb;
 	} states;
 } _UESCTypeInfo;
@@ -212,7 +214,7 @@ _citrus_UES_mbrtowc_priv(_UESEncodingInfo * __restrict ei,
 	_UESState * __restrict psenc, size_t * __restrict nresult)
 {
 	const char *s0;
-	int ch, head, tail, i, num;
+	int ch, head, tail, num;
 	wchar_t hi, wc;
 
 	_DIAGASSERT(ei != NULL);
@@ -367,6 +369,7 @@ e2big:
 }
 
 /*ARGSUSED*/
+static int
 _citrus_UES_stdenc_wctocs(_UESEncodingInfo * __restrict ei,
 	_csid_t * __restrict csid, _index_t * __restrict idx, wchar_t wc)
 {

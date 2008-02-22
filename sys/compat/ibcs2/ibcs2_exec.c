@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_exec.c,v 1.70 2007/12/08 18:36:00 dsl Exp $	*/
+/*	$NetBSD: ibcs2_exec.c,v 1.78 2018/05/06 13:40:51 kamil Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1998 Scott Bartram
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.70 2007/12/08 18:36:00 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.78 2018/05/06 13:40:51 kamil Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -70,51 +70,48 @@ extern char ibcs2_sigcode[], ibcs2_esigcode[];
 void syscall(void);
 #endif
 
-#ifdef IBCS2_DEBUG
+#ifdef DEBUG_IBCS2
 int ibcs2_debug = 1;
 #endif
 
 struct uvm_object *emul_ibcs2_object;
 
-const struct emul emul_ibcs2 = {
-	"ibcs2",
-	"/emul/ibcs2",
+struct emul emul_ibcs2 = {
+	.e_name =		"ibcs2",
+	.e_path =		"/emul/ibcs2",
 #ifndef __HAVE_MINIMAL_EMUL
-	0,
-	native_to_ibcs2_errno,
-	IBCS2_SYS_syscall,
-	IBCS2_SYS_NSYSENT,
+	.e_flags =		0,
+	.e_errno =		native_to_ibcs2_errno,
+	.e_nosys =		IBCS2_SYS_syscall,
+	.e_nsysent =		IBCS2_SYS_NSYSENT,
 #endif
-	ibcs2_sysent,
+	.e_sysent =		ibcs2_sysent,
 #ifdef SYSCALL_DEBUG
-	ibcs2_syscallnames,
+	.e_syscallnames =	ibcs2_syscallnames,
 #else
-	NULL,
+	.e_syscallnames =	NULL,
 #endif
-	ibcs2_sendsig,
-	trapsignal,
-	NULL,	/* e_tracesig */
-	ibcs2_sigcode,
-	ibcs2_esigcode,
-	&emul_ibcs2_object,
-	ibcs2_setregs,
-	ibcs2_e_proc_exec,
-	NULL,	/* e_proc_fork */
-	NULL,	/* e_proc_exit */
-	NULL,	/* e_lwp_fork */
-	NULL,	/* e_lwp_exec */
+	.e_sendsig =		ibcs2_sendsig,
+	.e_trapsignal =		trapsignal,
+	.e_sigcode =		ibcs2_sigcode,
+	.e_esigcode =		ibcs2_esigcode,
+	.e_sigobject =		&emul_ibcs2_object,
+	.e_setregs =		ibcs2_setregs,
+	.e_proc_exec =		ibcs2_e_proc_exec,
+	.e_proc_fork =		NULL,
+	.e_proc_exit =		NULL,
+	.e_lwp_fork =		NULL,
+	.e_lwp_exit =		NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	ibcs2_syscall_intern,
+	.e_syscall_intern =	ibcs2_syscall_intern,
 #else
-	syscall,
+	.e_syscall_intern =	syscall,
 #endif
-	NULL,	/* e_sysctlovly */
-	NULL,	/* e_fault */
-
-	uvm_default_mapaddr,
-	NULL,	/* e_usertrap */
-	0,	/* e_ucsize */
-	NULL,	/* e_startlwp */
+	.e_sysctlovly =		NULL,
+	.e_vm_default_addr =	uvm_default_mapaddr,
+	.e_usertrap =		NULL,
+	.e_ucsize =		0,
+	.e_startlwp =		NULL
 };
 
 /*
@@ -180,14 +177,14 @@ ibcs2_exec_setup_stack(struct lwp *l, struct exec_package *epp)
 	noaccess_linear_min = (u_long)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
 	    access_size), noaccess_size);
 	if (noaccess_size > 0) {
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
-		    noaccess_linear_min, NULL, 0, VM_PROT_NONE);
+		NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
+		    noaccess_linear_min, NULL, 0, VM_PROT_NONE, VMCMD_STACK);
 	}
 	KASSERT(access_size > 0);
 	/* XXX: some ibcs2 binaries need an executable stack. */
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
 	    access_linear_min, NULL, 0, VM_PROT_READ | VM_PROT_WRITE |
-	    VM_PROT_EXECUTE);
+	    VM_PROT_EXECUTE, VMCMD_STACK);
 
 	return 0;
 }

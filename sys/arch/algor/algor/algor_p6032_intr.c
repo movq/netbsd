@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p6032_intr.c,v 1.14 2008/01/10 14:57:34 tsutsui Exp $	*/
+/*	$NetBSD: algor_p6032_intr.c,v 1.22 2014/03/29 19:28:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,21 +37,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p6032_intr.c,v 1.14 2008/01/10 14:57:34 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p6032_intr.c,v 1.22 2014/03/29 19:28:25 christos Exp $");
 
 #include "opt_ddb.h"
+#define	__INTR_PRIVATE
 
 #include <sys/param.h>
-#include <sys/queue.h>
-#include <sys/malloc.h>
-#include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
+#include <sys/bus.h>
 #include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/queue.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
-#include <machine/intr.h>
+#include <algor/autoconf.h>
 
 #include <mips/locore.h>
 
@@ -91,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p6032_intr.c,v 1.14 2008/01/10 14:57:34 tsutsu
 
 #define	NIRQMAPS	10
 
-const char *p6032_intrnames[NIRQMAPS] = {
+const char * const p6032_intrnames[NIRQMAPS] = {
 	"gpin 0",
 	"gpin 1",
 	"gpin 2",
@@ -168,12 +162,12 @@ struct p6032_intrhead p6032_intrtab[NIRQMAPS];
 #define	NINTRS			2	/* MIPS INT0 - INT1 */
 
 struct p6032_cpuintr {
-	LIST_HEAD(, algor_intrhand) cintr_list;
+	LIST_HEAD(, evbmips_intrhand) cintr_list;
 	struct evcnt cintr_count;
 };
 
 struct p6032_cpuintr p6032_cpuintrs[NINTRS];
-const char *p6032_cpuintrnames[NINTRS] = {
+const char * const p6032_cpuintrnames[NINTRS] = {
 	"int 0 (pci)",
 	"int 1 (isa)",
 };
@@ -181,15 +175,16 @@ const char *p6032_cpuintrnames[NINTRS] = {
 void	*algor_p6032_intr_establish(int, int (*)(void *), void *);
 void	algor_p6032_intr_disestablish(void *);
 
-int	algor_p6032_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char *algor_p6032_pci_intr_string(void *, pci_intr_handle_t);
+int	algor_p6032_pci_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *algor_p6032_pci_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *algor_p6032_pci_intr_evcnt(void *, pci_intr_handle_t);
 void	*algor_p6032_pci_intr_establish(void *, pci_intr_handle_t, int,
 	    int (*)(void *), void *);
 void	algor_p6032_pci_intr_disestablish(void *, void *);
 void	algor_p6032_pci_conf_interrupt(void *, int, int, int, int, int *);
 
-void	algor_p6032_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	algor_p6032_iointr(int, vaddr_t, uint32_t);
 
 void
 algor_p6032_intr_init(struct p6032_config *acp)
@@ -203,9 +198,8 @@ algor_p6032_intr_init(struct p6032_config *acp)
 		evcnt_attach_dynamic(&p6032_cpuintrs[i].cintr_count,
 		    EVCNT_TYPE_INTR, NULL, "mips", p6032_cpuintrnames[i]);
 	}
-	evcnt_attach_static(&mips_int5_evcnt);
 
-	for (i = 0; i <= NIRQMAPS; i++) {
+	for (i = 0; i < __arraycount(p6032_irqmap); i++) {
 		irqmap = &p6032_irqmap[i];
 
 		evcnt_attach_dynamic(&p6032_intrtab[i].intr_count,
@@ -247,7 +241,7 @@ void
 algor_p6032_cal_timer(bus_space_tag_t st, bus_space_handle_t sh)
 {
 	u_long ctrdiff[4], startctr, endctr, cps;
-	u_int8_t regc;
+	uint8_t regc;
 	int i;
 
 	/* Disable interrupts first. */
@@ -298,7 +292,6 @@ algor_p6032_cal_timer(bus_space_tag_t st, bus_space_handle_t sh)
 	/* XXX assume CPU_MIPS_DOUBLE_COUNT */
 	curcpu()->ci_cycles_per_hz /= 2;
 	curcpu()->ci_divisor_delay /= 2;
-	MIPS_SET_CI_RECIPROCAL(curcpu());
 
 	printf("Timer calibration: %lu cycles/sec [(%lu, %lu) * 16]\n",
 	    cps, ctrdiff[2], ctrdiff[3]);
@@ -313,7 +306,7 @@ void *
 algor_p6032_intr_establish(int irq, int (*func)(void *), void *arg)
 {
 	const struct p6032_irqmap *irqmap;
-	struct algor_intrhand *ih;
+	struct evbmips_intrhand *ih;
 	int s;
 
 	irqmap = &p6032_irqmap[irq];
@@ -354,7 +347,7 @@ void
 algor_p6032_intr_disestablish(void *cookie)
 {
 	const struct p6032_irqmap *irqmap;
-	struct algor_intrhand *ih = cookie;
+	struct evbmips_intrhand *ih = cookie;
 	int s;
 
 	irqmap = ih->ih_irqmap;
@@ -379,13 +372,12 @@ algor_p6032_intr_disestablish(void *cookie)
 }
 
 void
-algor_p6032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
-    u_int32_t ipending)
+algor_p6032_iointr(int ipl, vaddr_t pc, uint32_t ipending)
 {
 	const struct p6032_irqmap *irqmap;
-	struct algor_intrhand *ih;
+	struct evbmips_intrhand *ih;
 	int level;
-	u_int32_t isr;
+	uint32_t isr;
 
 	/* Check for DEBUG interrupts. */
 	if (ipending & MIPS_INT_MASK_3) {
@@ -398,8 +390,6 @@ algor_p6032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
 		printf("Debug switch ignored -- "
 		    "no debugger configured\n");
 #endif
-
-		cause &= ~MIPS_INT_MASK_3;
 	}
 
 	/*
@@ -422,11 +412,7 @@ algor_p6032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
 				(*ih->ih_func)(ih->ih_arg);
 			}
 		}
-		cause &= ~(MIPS_INT_MASK_0 << level);
 	}
-
-	/* Re-enable anything that we have processed. */
-	_splset(MIPS_SR_INT_IE | ((status & ~cause) & MIPS_HARD_INT_MASK));
 }
 
 /*****************************************************************************
@@ -434,7 +420,7 @@ algor_p6032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
  *****************************************************************************/
 
 int
-algor_p6032_pci_intr_map(struct pci_attach_args *pa,
+algor_p6032_pci_intr_map(const struct pci_attach_args *pa,
     pci_intr_handle_t *ihp)
 {
 	static const int pciirqmap[6/*device*/][4/*pin*/] = {
@@ -491,13 +477,14 @@ algor_p6032_pci_intr_map(struct pci_attach_args *pa,
 }
 
 const char *
-algor_p6032_pci_intr_string(void *v, pci_intr_handle_t ih)
+algor_p6032_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
 
 	if (ih >= NIRQMAPS)
 		panic("algor_p6032_intr_string: bogus IRQ %ld", ih);
 
-	return (p6032_intrnames[ih]);
+	strlcpy(buf, p6032_intrnames[ih], len);
+	return buf;
 }
 
 const struct evcnt *

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtwreg.h,v 1.24 2007/11/16 23:35:19 dyoung Exp $	*/
+/*	$NetBSD: rtwreg.h,v 1.29 2016/09/15 21:45:37 jdolecek Exp $	*/
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -841,7 +838,7 @@ struct rtw_txdesc {
 	volatile uint32_t	td_len;
 	volatile uint32_t	td_next;
 	volatile uint32_t	td_rsvd[3];
-} __attribute__((__packed__, __aligned__(4)));
+} __packed __aligned(4);
 
 #define td_stat td_ctl0
 
@@ -902,7 +899,7 @@ struct rtw_rxdesc {
 	volatile uint32_t	rd_rsvd0;
 	volatile uint32_t	rd_buf;
 	volatile uint32_t	rd_rsvd1;
-} __attribute__((__packed__, __aligned__(4)));
+} __packed __aligned(4);
 
 #define rd_stat rd_ctl
 #define rd_rssi rd_rsvd0
@@ -993,66 +990,6 @@ struct rtw_rxdesc {
 
 #define	RTW_CLR(regs, reg, mask)					\
 	RTW_WRITE((regs), (reg), RTW_READ((regs), (reg)) & ~(mask))
-
-/* bus_space(9) lied? */
-#ifndef BUS_SPACE_BARRIER_SYNC
-#define BUS_SPACE_BARRIER_SYNC (BUS_SPACE_BARRIER_READ|BUS_SPACE_BARRIER_WRITE)
-#endif
-
-#ifndef BUS_SPACE_BARRIER_READ_BEFORE_READ
-#define BUS_SPACE_BARRIER_READ_BEFORE_READ BUS_SPACE_BARRIER_READ
-#endif
-
-#ifndef BUS_SPACE_BARRIER_READ_BEFORE_WRITE
-#define BUS_SPACE_BARRIER_READ_BEFORE_WRITE BUS_SPACE_BARRIER_READ
-#endif
-
-#ifndef BUS_SPACE_BARRIER_WRITE_BEFORE_READ
-#define BUS_SPACE_BARRIER_WRITE_BEFORE_READ BUS_SPACE_BARRIER_WRITE
-#endif
-
-#ifndef BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE
-#define BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE BUS_SPACE_BARRIER_WRITE
-#endif
-
-/*
- * Bus barrier
- *
- * Complete outstanding read and/or write ops on [reg0, reg1]
- * ([reg1, reg0]) before starting new ops on the same region. See
- * acceptable bus_space_barrier(9) for the flag definitions.
- */
-#define RTW_BARRIER(regs, reg0, reg1, flags)			\
-	bus_space_barrier((regs)->r_bh, (regs)->r_bt,		\
-	    MIN(reg0, reg1), MAX(reg0, reg1) - MIN(reg0, reg1) + 4, flags)
-
-/*
- * Barrier convenience macros.
- */
-/* sync */
-#define RTW_SYNC(regs, reg0, reg1)				\
-	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_SYNC)
-
-/* write-before-write */
-#define RTW_WBW(regs, reg0, reg1)				\
-	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
-
-/* write-before-read */
-#define RTW_WBR(regs, reg0, reg1)				\
-	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE_BEFORE_READ)
-
-/* read-before-read */
-#define RTW_RBR(regs, reg0, reg1)				\
-	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_READ)
-
-/* read-before-read */
-#define RTW_RBW(regs, reg0, reg1)				\
-	RTW_BARRIER(regs, reg0, reg1, BUS_SPACE_BARRIER_READ_BEFORE_WRITE)
-
-#define RTW_WBRW(regs, reg0, reg1)				\
-		RTW_BARRIER(regs, reg0, reg1,			\
-		    BUS_SPACE_BARRIER_WRITE_BEFORE_READ |	\
-		    BUS_SPACE_BARRIER_WRITE_BEFORE_WRITE)
 
 /*
  * Registers for RTL8180L's built-in baseband modem.

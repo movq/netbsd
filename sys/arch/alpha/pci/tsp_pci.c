@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_pci.c,v 1.3 2001/02/27 19:07:53 cgd Exp $ */
+/* $NetBSD: tsp_pci.c,v 1.10 2015/10/02 05:22:49 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -33,14 +33,12 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: tsp_pci.c,v 1.3 2001/02/27 19:07:53 cgd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsp_pci.c,v 1.10 2015/10/02 05:22:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -53,19 +51,17 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_pci.c,v 1.3 2001/02/27 19:07:53 cgd Exp $");
 
 #define tsp_pci() { Generate ctags(1) key. }
 
-void		tsp_attach_hook __P((struct device *, struct device *,
-		    struct pcibus_attach_args *));
-int		tsp_bus_maxdevs __P((void *, int));
-pcitag_t	tsp_make_tag __P((void *, int, int, int));
-void		tsp_decompose_tag __P((void *, pcitag_t, int *, int *,
-		    int *));
-pcireg_t	tsp_conf_read __P((void *, pcitag_t, int));
-void		tsp_conf_write __P((void *, pcitag_t, int, pcireg_t));
+void		tsp_attach_hook(device_t, device_t,
+		    struct pcibus_attach_args *);
+int		tsp_bus_maxdevs(void *, int);
+pcitag_t	tsp_make_tag(void *, int, int, int);
+void		tsp_decompose_tag(void *, pcitag_t, int *, int *,
+		    int *);
+pcireg_t	tsp_conf_read(void *, pcitag_t, int);
+void		tsp_conf_write(void *, pcitag_t, int, pcireg_t);
 
 void
-tsp_pci_init(pc, v)
-	pci_chipset_tag_t pc;
-	void *v;
+tsp_pci_init(pci_chipset_tag_t pc, void *v)
 {
 	pc->pc_conf_v = v;
 	pc->pc_attach_hook = tsp_attach_hook;
@@ -77,33 +73,24 @@ tsp_pci_init(pc, v)
 }
 
 void
-tsp_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+tsp_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 
 int
-tsp_bus_maxdevs(cpv, busno)
-	void *cpv;
-	int busno;
+tsp_bus_maxdevs(void *cpv, int busno)
 {
 	return 32;
 }
 
 pcitag_t
-tsp_make_tag(cpv, b, d, f)
-	void *cpv;
-	int b, d, f;
+tsp_make_tag(void *cpv, int b, int d, int f)
 {
 	return b << 16 | d << 11 | f << 8;
 }
 
 void
-tsp_decompose_tag(cpv, tag, bp, dp, fp)
-	void *cpv;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
+tsp_decompose_tag(void *cpv, pcitag_t tag, int *bp, int *dp, int *fp)
 {
 	if (bp != NULL)
 		*bp = (tag >> 16) & 0xff;
@@ -118,13 +105,13 @@ tsp_decompose_tag(cpv, tag, bp, dp, fp)
  * no errors on unanswered probes.
  */
 pcireg_t
-tsp_conf_read(cpv, tag, offset)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
+tsp_conf_read(void *cpv, pcitag_t tag, int offset)
 {
 	pcireg_t *datap, data;
 	struct tsp_config *pcp = cpv;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
 
 	datap = S_PAGE(pcp->pc_iobase | P_PCI_CONFIG | tag | (offset & ~3));
 	alpha_mb();
@@ -134,17 +121,69 @@ tsp_conf_read(cpv, tag, offset)
 }
 
 void
-tsp_conf_write(cpv, tag, offset, data)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
-	pcireg_t data;
+tsp_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 {
 	pcireg_t *datap;
 	struct tsp_config *pcp = cpv;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return;
 
 	datap = S_PAGE(pcp->pc_iobase | P_PCI_CONFIG | tag | (offset & ~3));
 	alpha_mb();
 	*datap = data;
 	alpha_mb();
+}
+
+#define NTH_STR(n, ...) ((const char *[]){ __VA_ARGS__ }[n])
+
+void
+tsp_print_error(unsigned int indent, unsigned long p_error)
+{
+	char buf[40];
+
+	if (PER_INV(p_error)) {
+		IPRINTF(indent, "data invalid\n");
+		return;
+	}
+
+	if (!PER_ERR(p_error))
+		return;
+
+	snprintb(buf, 40,
+		 "\177\20"
+		 "b\0Error lost\0"
+		 "b\1PCI SERR#\0"
+		 "b\2PCI PERR#\0"
+		 "b\3Delayed completion retry timeout\0"
+		 "b\4Invalid S/G page table entry\0"
+		 "b\5Address parity error\0"
+		 "b\6Target abort\0"
+		 "b\7PCI read data parity error\0"
+		 "b\10no PCI DEVSEL#\0"
+		 "b\11unknown\0"
+		 "b\12Uncorrectable ECC\0"
+		 "b\13Correctable ECC\0",
+		 PER_ERR(p_error));
+	IPRINTF(indent, "error    = %s\n", buf);
+	
+	if (PER_ECC(p_error)) {
+		IPRINTF(indent, "address  = 0x%09lx\n", PER_SADR(p_error));
+		IPRINTF(indent, "command  = 0x%lx<%s>\n", PER_CMD(p_error),
+			NTH_STR(PER_CMD(p_error) & 0x3,
+				"DMA read", "DMA RMW", "?", "S/G read"));
+		IPRINTF(indent, "syndrome = 0x%02lx\n", PER_SYN(p_error));
+	} else {
+		IPRINTF(indent, "address  = 0x%08lx, 0x%lx<%s>\n",
+			PER_PADR(p_error), PER_TRNS(p_error),
+			NTH_STR(PER_TRNS(p_error), "No DAC", "DAC SG Win3",
+				"Monster Window", "Monster Window"));
+		IPRINTF(indent, "command  = 0x%lx<%s>\n", PER_CMD(p_error),
+			NTH_STR(PER_CMD(p_error),
+				"PCI IACK", "PCI special cycle",
+				"PCI I/O read", "PCI I/O write", "?",
+				"PCI PTP write", "PCI memory read",
+				"PCI memory write", "PCI CSR write",
+				"?", "?", "?", "?", "?", "?", "?"));
+	}
 }

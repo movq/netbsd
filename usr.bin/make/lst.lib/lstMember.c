@@ -1,4 +1,4 @@
-/*	$NetBSD: lstMember.c,v 1.11 2006/10/27 21:37:25 dsl Exp $	*/
+/*	$NetBSD: lstMember.c,v 1.14 2013/11/14 00:01:28 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -33,14 +33,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: lstMember.c,v 1.11 2006/10/27 21:37:25 dsl Exp $";
+static char rcsid[] = "$NetBSD: lstMember.c,v 1.14 2013/11/14 00:01:28 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lstMember.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lstMember.c,v 1.11 2006/10/27 21:37:25 dsl Exp $");
+__RCSID("$NetBSD: lstMember.c,v 1.14 2013/11/14 00:01:28 sjg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -53,14 +53,17 @@ __RCSID("$NetBSD: lstMember.c,v 1.11 2006/10/27 21:37:25 dsl Exp $");
 #include    "lstInt.h"
 
 LstNode
-Lst_Member(Lst l, ClientData d)
+Lst_Member(Lst l, void *d)
 {
     List    	  	list = l;
     ListNode	lNode;
 
+    if (list == NULL) {
+	return NULL;
+    }
     lNode = list->firstPtr;
-    if (lNode == NilListNode) {
-	return NILLNODE;
+    if (lNode == NULL) {
+	return NULL;
     }
 
     do {
@@ -68,7 +71,7 @@ Lst_Member(Lst l, ClientData d)
 	    return lNode;
 	}
 	lNode = lNode->nextPtr;
-    } while (lNode != NilListNode && lNode != list->firstPtr);
+    } while (lNode != NULL && lNode != list->firstPtr);
 
-    return NILLNODE;
+    return NULL;
 }

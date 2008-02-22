@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tribm_isa.c,v 1.11 2007/10/19 12:00:18 ad Exp $	*/
+/*	$NetBSD: if_tribm_isa.c,v 1.14 2009/05/12 09:10:15 cegger Exp $	*/
 
 /* XXXJRT changes isa_attach_args too early */
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tribm_isa.c,v 1.11 2007/10/19 12:00:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tribm_isa.c,v 1.14 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,15 +50,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_tribm_isa.c,v 1.11 2007/10/19 12:00:18 ad Exp $")
 #include <dev/ic/tropicreg.h>
 #include <dev/ic/tropicvar.h>
 
-int	tribm_isa_probe(struct device *, struct cfdata *, void *);
+int	tribm_isa_probe(device_t, cfdata_t, void *);
 int	tr_isa_map_io(struct isa_attach_args *, bus_space_handle_t *,
 	    bus_space_handle_t *);
 void	tr_isa_unmap_io(struct isa_attach_args *, bus_space_handle_t,
 	    bus_space_handle_t);
 
 int
-tribm_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+tribm_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	static int irq_f[4] = { 9, 3, 6, 7 };

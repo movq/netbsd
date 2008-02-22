@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.89 2008/01/31 03:30:36 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.97 2017/05/22 16:39:40 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,26 +26,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.89 2008/01/31 03:30:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.97 2017/05/22 16:39:40 ragge Exp $");
 
 #include "opt_compat_netbsd.h"
+#include "opt_cputype.h"
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
-#include <sys/reboot.h>
 #include <sys/disk.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/conf.h>
+#include <sys/malloc.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/sid.h>
-#include <machine/param.h>
-#include <machine/vmparam.h>
 #include <machine/nexus.h>
 #include <machine/ioa.h>
 #include <machine/ka820.h>
@@ -58,18 +52,18 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.89 2008/01/31 03:30:36 christos Exp $
 #include <machine/ka650.h>
 #include <machine/clock.h>
 #include <machine/rpb.h>
-#include <machine/bus.h>
+#include <machine/mainbus.h>
 
 #include <vax/vax/gencons.h>
 
 #include <dev/bi/bireg.h>
 
 #include "locators.h"
-#include "opt_cputype.h"
+#include "ioconf.h"
 
-void	gencnslask __P((void));
+void	gencnslask(void);
 
-struct cpu_dep *dep_call;
+const struct cpu_dep *dep_call;
 
 #define MAINBUS	0
 
@@ -101,56 +95,55 @@ cpu_rootconf(void)
 	    rpb.devtyp, rpb.unit, rpb.csrphy, rpb.adpphy, rpb.slave);
 #endif
 	printf("boot device: %s\n",
-	    booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
-int	mainbus_print __P((void *, const char *));
-int	mainbus_match __P((struct device *, struct cfdata *, void *));
-void	mainbus_attach __P((struct device *, struct device *, void *));
+static int	mainbus_print(void *, const char *);
+static int	mainbus_match(device_t, cfdata_t, void *);
+static void	mainbus_attach(device_t, device_t, void *);
+
+extern struct vax_bus_space vax_mem_bus_space;
+extern struct vax_bus_dma_tag vax_bus_dma_tag;
 
 int
-mainbus_print(aux, hej)
-	void *aux;
-	const char *hej;
+mainbus_print(void *aux, const char *name)
 {
-	if (hej)
-		aprint_normal("nothing at %s", hej);
-	return (UNCONF);
+	struct mainbus_attach_args * const ma = aux;
+	if (name) {
+		aprint_naive("%s at %s", ma->ma_type, name);
+		aprint_normal("%s at %s", ma->ma_type, name);
+        }
+	return UNCONF;
 }
 
 int
-mainbus_match(parent, cf, aux)
-	struct	device	*parent;
-	struct cfdata *cf;
-	void	*aux;
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return 1; /* First (and only) mainbus */
 }
 
 void
-mainbus_attach(parent, self, hej)
-	struct	device	*parent, *self;
-	void	*hej;
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
+	struct mainbus_attach_args ma;
+	const char * const * devp;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	for (devp = dep_call->cpu_devs; *devp != NULL; devp++) {
+		ma.ma_type = *devp;
+		ma.ma_iot = &vax_mem_bus_space;
+		ma.ma_dmat = &vax_bus_dma_tag;
+		config_found(self, &ma, mainbus_print);
+	}
 
 	/*
 	 * Hopefully there a master bus?
 	 * Maybe should have this as master instead of mainbus.
 	 */
-	config_found(self, NULL, mainbus_print);
-
-#if VAX53 || VAXANY
-	/* Kludge: To have two master buses */
-	if (vax_boardtype == VAX_BTYP_53)
-		config_found(self, (void *)1, mainbus_print);
-#endif
-
-	if (dep_call->cpu_subconf)
-		(*dep_call->cpu_subconf)(self);
 
 #if defined(COMPAT_14)
 	if (rpb.rpb_base == (void *)-1)
@@ -159,8 +152,44 @@ mainbus_attach(parent, self, hej)
 
 }
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
+
+static int	cpu_mainbus_match(device_t, cfdata_t, void *);
+static void	cpu_mainbus_attach(device_t, device_t, void *);
+
+int
+cpu_mainbus_match(device_t self, cfdata_t cf, void *aux)
+{
+	struct mainbus_attach_args *ma = aux;
+
+	return strcmp(cpu_cd.cd_name, ma->ma_type) == 0;
+}
+
+void
+cpu_mainbus_attach(device_t parent, device_t self, void *aux)
+{
+	struct cpu_info *ci;
+
+	KASSERT(device_private(self) == NULL);
+	ci = curcpu();
+	self->dv_private = ci;
+	ci->ci_dev = self;
+	ci->ci_cpuid = device_unit(self);
+
+	if (dep_call->cpu_attach_cpu != NULL)
+		(*dep_call->cpu_attach_cpu)(self);
+	else if (ci->ci_cpustr) {
+		aprint_naive(": %s\n", ci->ci_cpustr);
+		aprint_normal(": %s\n", ci->ci_cpustr);
+        } else {
+		aprint_naive("\n");
+		aprint_normal("\n");
+        }
+}
+
+CFATTACH_DECL_NEW(cpu_mainbus, 0,
+    cpu_mainbus_match, cpu_mainbus_attach, NULL, NULL);
 
 #include "sd.h"
 #include "cd.h"
@@ -170,30 +199,30 @@ CFATTACH_DECL(mainbus, sizeof(struct device),
 #include "ry.h"
 
 static int ubtest(void *);
-static int jmfr(const char *, struct device *, int);
-static int booted_qe(struct device *, void *);
-static int booted_qt(struct device *, void *);
-static int booted_le(struct device *, void *);
-static int booted_ze(struct device *, void *);
-static int booted_de(struct device *, void *);
-static int booted_ni(struct device *, void *);
+static int jmfr(const char *, device_t, int);
+static int booted_qe(device_t, void *);
+static int booted_qt(device_t, void *);
+static int booted_le(device_t, void *);
+static int booted_ze(device_t, void *);
+static int booted_de(device_t, void *);
+static int booted_ni(device_t, void *);
 #if NSD > 0 || NCD > 0
-static int booted_sd(struct device *, void *);
+static int booted_sd(device_t, void *);
 #endif
 #if NRL > 0
-static int booted_rl(struct device *, void *);
+static int booted_rl(device_t, void *);
 #endif
-#if NRA
-static int booted_ra(struct device *, void *);
+#if NRA > 0 || NRACD > 0
+static int booted_ra(device_t, void *);
 #endif
 #if NHP
-static int booted_hp(struct device *, void *);
+static int booted_hp(device_t, void *);
 #endif
 #if NRD
-static int booted_rd(struct device *, void *);
+static int booted_rd(device_t, void *);
 #endif
 
-int (*devreg[])(struct device *, void *) = {
+int (* const devreg[])(device_t, void *) = {
 	booted_qe,
 	booted_qt,
 	booted_le,
@@ -221,16 +250,16 @@ int (*devreg[])(struct device *, void *) = {
 #define	ubreg(x) ((x) & 017777)
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
-	int (**dp)(struct device *, void *) = devreg;
+	int (* const * dp)(device_t, void *) = devreg;
 
 	/* If there's a synthetic RPB, we can't trust it */
 	if (rpb.rpb_base == (void *)-1)
 		return;
 
 	while (*dp) {
-		if ((*dp)(dev, aux)) {
+		if ((**dp)(dev, aux)) {
 			booted_device = dev;
 			break;
 		}
@@ -242,7 +271,7 @@ device_register(struct device *dev, void *aux)
  * Simple checks. Return 1 on fail.
  */
 int
-jmfr(const char *n, struct device *dev, int nr)
+jmfr(const char *n, device_t dev, int nr)
 {
 	if (rpb.devtyp != nr)
 		return 1;
@@ -264,7 +293,7 @@ ubtest(void *aux)
 #if 1 /* NNI */
 #include <dev/bi/bivar.h>
 int
-booted_ni(struct device *dev, void *aux)
+booted_ni(device_t dev, void *aux)
 {
 	struct bi_attach_args *ba = aux;
 
@@ -277,7 +306,7 @@ booted_ni(struct device *dev, void *aux)
 
 #if 1 /* NDE */
 int
-booted_de(struct device *dev, void *aux)
+booted_de(device_t dev, void *aux)
 {
 
 	if (jmfr("de", dev, BDEV_DE) || ubtest(aux))
@@ -288,7 +317,7 @@ booted_de(struct device *dev, void *aux)
 #endif /* NDE */
 
 int
-booted_le(struct device *dev, void *aux)
+booted_le(device_t dev, void *aux)
 {
 	if (jmfr("le", dev, BDEV_LE))
 		return 0;
@@ -296,7 +325,7 @@ booted_le(struct device *dev, void *aux)
 }
 
 int
-booted_ze(struct device *dev, void *aux)
+booted_ze(device_t dev, void *aux)
 {
 	if (jmfr("ze", dev, BDEV_ZE))
 		return 0;
@@ -304,7 +333,7 @@ booted_ze(struct device *dev, void *aux)
 }
 
 int
-booted_qt(struct device *dev, void *aux)
+booted_qt(device_t dev, void *aux)
 {
 	if (jmfr("qt", dev, BDEV_QE) || ubtest(aux))
 		return 0;
@@ -314,7 +343,7 @@ booted_qt(struct device *dev, void *aux)
 
 #if 1 /* NQE */
 int
-booted_qe(struct device *dev, void *aux)
+booted_qe(device_t dev, void *aux)
 {
 	if (jmfr("qe", dev, BDEV_QE) || ubtest(aux))
 		return 0;
@@ -327,10 +356,10 @@ booted_qe(struct device *dev, void *aux)
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipiconf.h>
 int
-booted_sd(struct device *dev, void *aux)
+booted_sd(device_t dev, void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
-	struct device *ppdev;
+	device_t ppdev;
 
 	/* Is this a SCSI device? */
 	if (jmfr("sd", dev, BDEV_SD) && jmfr("sd", dev, BDEV_SDN) &&
@@ -360,7 +389,7 @@ booted_sd(struct device *dev, void *aux)
 #if NRL > 0
 #include <dev/qbus/rlvar.h>
 int
-booted_rl(struct device *dev, void *aux)
+booted_rl(device_t dev, void *aux)
 {
 	struct rlc_attach_args *raa = aux;
 	static int ub;
@@ -377,18 +406,18 @@ booted_rl(struct device *dev, void *aux)
 }
 #endif
 
-#if NRA
+#if NRA > 0 || NRACD > 0
 #include <dev/mscp/mscp.h>
 #include <dev/mscp/mscpreg.h>
 #include <dev/mscp/mscpvar.h>
 int
-booted_ra(struct device *dev, void *aux)
+booted_ra(device_t dev, void *aux)
 {
 	struct drive_attach_args *da = aux;
-	struct mscp_softc *pdev = (void *)device_parent(dev);
+	struct mscp_softc *pdev = device_private(device_parent(dev));
 	paddr_t ioaddr;
 
-	if (jmfr("ra", dev, BDEV_UDA))
+	if (jmfr("ra", dev, BDEV_UDA) && jmfr("racd", dev, BDEV_UDA))
 		return 0;
 
 	if (da->da_mp->mscp_unit != rpb.unit)
@@ -401,10 +430,11 @@ booted_ra(struct device *dev, void *aux)
 	return 0;
 }
 #endif
+
 #if NHP
 #include <vax/mba/mbavar.h>
 int
-booted_hp(struct device *dev, void *aux)
+booted_hp(device_t dev, void *aux)
 {
 	static int mbaaddr;
 
@@ -430,7 +460,7 @@ booted_hp(struct device *dev, void *aux)
 #endif
 #if NRD
 int     
-booted_rd(struct device *dev, void *aux)
+booted_rd(device_t dev, void *aux)
 {
 	int *nr = aux; /* XXX - use the correct attach struct */
 

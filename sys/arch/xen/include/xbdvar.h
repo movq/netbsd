@@ -1,4 +1,4 @@
-/* $NetBSD: xbdvar.h,v 1.10 2008/01/11 20:00:41 bouyer Exp $ */
+/* $NetBSD: xbdvar.h,v 1.17 2015/05/02 08:00:08 mlelstv Exp $ */
 
 /*
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,28 +30,23 @@
 #ifndef _XEN_XBDVAR_H_
 #define _XEN_XBDVAR_H_
 
-#include <sys/simplelock.h>
+#include <sys/rndsource.h>
 
 struct xbd_softc {
-	struct device		sc_dev;		/* base device glue */
+	device_t		sc_dev;		/* base device glue */
 	struct dk_softc		sc_dksc;	/* generic disk interface */
 	unsigned long		sc_xd_device;	/* cookie identifying device */
-	struct dk_intf		*sc_di;		/* pseudo-disk interface */
-	struct simplelock	sc_slock;	/* our lock */
 	int			sc_shutdown;	/* about to be removed */
-#if NRND > 0
-	rndsource_element_t	sc_rnd_source;
-#endif
+	krndsource_t	sc_rnd_source;
 };
 
 struct xbd_attach_args {
 	const char 		*xa_device;
 	vdisk_t			*xa_xd;
-	struct dk_intf		*xa_dkintf;
 	struct sysctlnode	*xa_diskcookies;
 };
 
-int xbd_scan(struct device *, struct xbd_attach_args *, cfprint_t);
+int xbd_scan(device_t, struct xbd_attach_args *, cfprint_t);
 void xbd_suspend(void);
 void xbd_resume(void);
 

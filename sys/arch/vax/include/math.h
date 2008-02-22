@@ -1,9 +1,20 @@
-/*	$NetBSD: math.h,v 1.5 2005/12/11 12:19:34 christos Exp $	*/
+/*	$NetBSD: math.h,v 1.8 2017/07/27 12:15:59 martin Exp $	*/
 
+#ifndef _VAX_MATH_H_
+#define _VAX_MATH_H_
+
+#include <sys/cdefs.h>
+
+#if __GNUC_PREREQ__(3, 3)
+#define	__INFINITY	__builtin_huge_valf()
+#else
 #define	__INFINITY	1.0E+39F
+#endif
 
-#define	__isinf(__x)	(0)
-#define	__isnan(__x)	(0)
+static __inline int __isinf(double __x) { return 0; }
+static __inline int __isnan(double __x) { return 0; }
+#define	__HAVE_INLINE___ISINF
+#define	__HAVE_INLINE___ISNAN
 
 #if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
     !defined(_XOPEN_SOURCE) || \
@@ -15,3 +26,5 @@
 #define	FP_DIRTYZERO	0x80
 #define	FP_ROP		0x81
 #endif
+
+#endif /* _VAX_MATH_H_ */

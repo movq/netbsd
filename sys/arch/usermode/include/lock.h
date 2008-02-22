@@ -1,4 +1,4 @@
-/* $NetBSD: lock.h,v 1.1 2007/12/29 14:38:34 jmcneill Exp $ */
+/* $NetBSD: lock.h,v 1.5 2017/10/23 06:43:00 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,34 +32,41 @@
 __inline static void
 __cpu_simple_lock_init(__cpu_simple_lock_t *lockp)
 {
-}
-
-__inline static void
-__cpu_simple_lock(__cpu_simple_lock_t *lockp)
-{
-}
-
-__inline static void
-__cpu_simple_unlock(__cpu_simple_lock_t *lockp)
-{
-}
-
-__inline static int
-__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *lockp)
-{
-	return *lockp == __SIMPLELOCK_LOCKED;
-}
-
-__inline static int
-__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *lockp)
-{
-	return *lockp == __SIMPLELOCK_UNLOCKED;
+	*lockp = __SIMPLELOCK_UNLOCKED;
 }
 
 __inline static int
 __cpu_simple_lock_try(__cpu_simple_lock_t *lockp)
 {
-	return __SIMPLELOCK_UNLOCKED;
+	if (*lockp == __SIMPLELOCK_LOCKED)
+		return 0;
+	*lockp = __SIMPLELOCK_LOCKED;
+	return 1;
+}
+
+__inline static void
+__cpu_simple_lock(__cpu_simple_lock_t *lockp)
+{
+	while (!__cpu_simple_lock_try(lockp))
+		;
+}
+
+__inline static void
+__cpu_simple_unlock(__cpu_simple_lock_t *lockp)
+{
+	*lockp = __SIMPLELOCK_UNLOCKED;
+}
+
+__inline static int
+__SIMPLELOCK_LOCKED_P(const __cpu_simple_lock_t *lockp)
+{
+	return *lockp == __SIMPLELOCK_LOCKED;
+}
+
+__inline static int
+__SIMPLELOCK_UNLOCKED_P(const __cpu_simple_lock_t *lockp)
+{
+	return *lockp == __SIMPLELOCK_UNLOCKED;
 }
 
 #endif /* !_ARCH_USERMODE_INCLUDE_LOCK_H */

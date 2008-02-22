@@ -1,4 +1,4 @@
-/*	$NetBSD: pdq_ifsubr.c,v 1.51 2008/02/07 01:21:54 dyoung Exp $	*/
+/*	$NetBSD: pdq_ifsubr.c,v 1.60 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.51 2008/02/07 01:21:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.60 2018/06/26 06:48:00 msaitoh Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -58,14 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.51 2008/02/07 01:21:54 dyoung Exp $
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/if_dl.h>
+#include <net/bpf.h>
 #if !defined(__NetBSD__)
 #include <net/route.h>
-#endif
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #ifdef INET
@@ -105,34 +100,17 @@ __KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.51 2008/02/07 01:21:54 dyoung Exp $
 #include "pdqreg.h"
 #endif
 
-#if defined(__bsdi__) && _BSDI_VERSION < 199506 /* XXX */
-static void
-arp_ifinit(
-    struct arpcom *ac,
-    struct ifaddr *ifa)
-{
-    sc->sc_ac.ac_ipaddr = IA_SIN(ifa)->sin_addr;
-    arpwhohas(&sc->sc_ac, &IA_SIN(ifa)->sin_addr);
-#if _BSDI_VERSION >= 199401
-    ifa->ifa_rtrequest = arp_rtrequest;
-    ifa->ifa_flags |= RTF_CLONING;
-#endif
-#endif
-
-
 void
 pdq_ifinit(
     pdq_softc_t *sc)
 {
     if (sc->sc_if.if_flags & IFF_UP) {
 	sc->sc_if.if_flags |= IFF_RUNNING;
-#if NBPFILTER > 0
 	if (sc->sc_if.if_flags & IFF_PROMISC) {
 	    sc->sc_pdq->pdq_flags |= PDQ_PROMISC;
 	} else {
 	    sc->sc_pdq->pdq_flags &= ~PDQ_PROMISC;
 	}
-#endif
 	if (sc->sc_if.if_flags & IFF_LINK1) {
 	    sc->sc_pdq->pdq_flags |= PDQ_PASS_SMT;
 	} else {
@@ -240,7 +218,6 @@ pdq_os_receive_pdu(
     pdq_softc_t *sc = pdq->pdq_os_ctx;
     struct fddi_header *fh;
 
-    sc->sc_if.if_ipackets++;
 #if defined(PDQ_BUS_DMA)
     {
 	/*
@@ -260,18 +237,14 @@ pdq_os_receive_pdu(
     }
 #endif
     m->m_pkthdr.len = pktlen;
-#if NBPFILTER > 0
-    if (sc->sc_bpf != NULL)
-	PDQ_BPF_MTAP(sc, m);
-#endif
     fh = mtod(m, struct fddi_header *);
     if (drop || (fh->fddi_fc & (FDDIFC_L|FDDIFC_F)) != FDDIFC_LLC_ASYNC) {
 	PDQ_OS_DATABUF_FREE(pdq, m);
 	return;
     }
 
-    m->m_pkthdr.rcvif = &sc->sc_if;
-    (*sc->sc_if.if_input)(&sc->sc_if, m);
+    m_set_rcvif(m, &sc->sc_if);
+    if_percpuq_enqueue((&sc->sc_if)->if_percpuq, m);
 }
 
 void
@@ -295,10 +268,8 @@ pdq_os_transmit_done(
     struct mbuf *m)
 {
     pdq_softc_t *sc = pdq->pdq_os_ctx;
-#if NBPFILTER > 0
     if (sc->sc_bpf != NULL)
-	PDQ_BPF_MTAP(sc, m);
-#endif
+	    PDQ_BPF_MTAP(sc, m, BPF_D_OUT);
     PDQ_OS_DATABUF_FREE(pdq, m);
     sc->sc_if.if_opackets++;
 }
@@ -425,35 +396,25 @@ pdq_ifioctl(
     s = PDQ_OS_SPL_RAISE();
 
     switch (cmd) {
-	case SIOCSIFADDR: {
+	case SIOCINITIFADDR: {
 	    struct ifaddr *ifa = (struct ifaddr *)data;
 
 	    ifp->if_flags |= IFF_UP;
+	    pdq_ifinit(sc);
 	    switch(ifa->ifa_addr->sa_family) {
 #if defined(INET)
-		case AF_INET: {
-		    pdq_ifinit(sc);
+		case AF_INET:
 		    PDQ_ARP_IFINIT(sc, ifa);
 		    break;
-		}
 #endif /* INET */
-
-
-		default: {
-		    pdq_ifinit(sc);
+		default:
 		    break;
-		}
 	    }
 	    break;
 	}
-	case SIOCGIFADDR: {
-	    struct ifreq *ifr = (struct ifreq *)data;
-	    error = ifreq_setaddr(cmd, ifr,
-	        (const struct sockaddr *)sc->sc_if.if_sadl);
-	    break;
-	}
-
 	case SIOCSIFFLAGS: {
+	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+		break;
 	    pdq_ifinit(sc);
 	    break;
 	}
@@ -500,7 +461,7 @@ pdq_ifioctl(
 #endif
 
 	default: {
-	    error = EINVAL;
+	    error = ether_ioctl(ifp, cmd, data);
 	    break;
 	}
     }
@@ -764,12 +725,12 @@ pdq_os_databuf_alloc(
 
     MGETHDR(m, M_DONTWAIT, MT_DATA);
     if (m == NULL) {
-	printf("%s: can't alloc small buf\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "can't alloc small buf\n");
 	return NULL;
     }
     MCLGET(m, M_DONTWAIT);
     if ((m->m_flags & M_EXT) == 0) {
-	printf("%s: can't alloc cluster\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "can't alloc cluster\n");
         m_free(m);
 	return NULL;
     }
@@ -778,13 +739,13 @@ pdq_os_databuf_alloc(
 
     if (bus_dmamap_create(sc->sc_dmatag, PDQ_OS_DATABUF_SIZE,
 			   1, PDQ_OS_DATABUF_SIZE, 0, BUS_DMA_NOWAIT, &map)) {
-	printf("%s: can't create dmamap\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "can't create dmamap\n");
 	m_free(m);
 	return NULL;
     }
     if (bus_dmamap_load_mbuf(sc->sc_dmatag, map, m,
     			     BUS_DMA_READ|BUS_DMA_NOWAIT)) {
-	printf("%s: can't load dmamap\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "can't load dmamap\n");
 	bus_dmamap_destroy(sc->sc_dmatag, map);
 	m_free(m);
 	return NULL;

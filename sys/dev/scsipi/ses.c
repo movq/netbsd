@@ -1,4 +1,4 @@
-/*	$NetBSD: ses.c,v 1.38 2007/03/04 06:02:44 christos Exp $ */
+/*	$NetBSD: ses.c,v 1.50 2016/11/20 15:37:19 mlelstv Exp $ */
 /*
  * Copyright (C) 2000 National Aeronautics & Space Administration
  * All rights reserved.
@@ -26,9 +26,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.38 2007/03/04 06:02:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.50 2016/11/20 15:37:19 mlelstv Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_scsi.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.38 2007/03/04 06:02:44 christos Exp $");
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#include <machine/stdarg.h>
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipi_disk.h>
@@ -138,8 +139,18 @@ static dev_type_close(sesclose);
 static dev_type_ioctl(sesioctl);
 
 const struct cdevsw ses_cdevsw = {
-	sesopen, sesclose, noread, nowrite, sesioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
+	.d_open = sesopen,
+	.d_close = sesclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = sesioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER | D_MPSAFE
 };
 
 static int ses_runcmd(struct ses_softc *, char *, int, char *, int *);
@@ -151,7 +162,7 @@ static void ses_log(struct ses_softc *, const char *, ...)
  */
 
 struct ses_softc {
-	struct device	sc_device;
+	device_t	sc_dev;
 	struct scsipi_periph *sc_periph;
 	enctyp		ses_type;	/* type of enclosure */
 	encvec		ses_vec;	/* vector to handlers */
@@ -167,12 +178,13 @@ struct ses_softc {
 
 #define SESUNIT(x)       (minor((x)))
 
-static int ses_match(struct device *, struct cfdata *, void *);
-static void ses_attach(struct device *, struct device *, void *);
+static int ses_match(device_t, cfdata_t, void *);
+static void ses_attach(device_t, device_t, void *);
+static int ses_detach(device_t, int);
 static enctyp ses_device_type(struct scsipibus_attach_args *);
 
-CFATTACH_DECL(ses, sizeof (struct ses_softc),
-    ses_match, ses_attach, NULL, NULL);
+CFATTACH_DECL_NEW(ses, sizeof (struct ses_softc),
+    ses_match, ses_attach, ses_detach, NULL);
 
 extern struct cfdriver ses_cd;
 
@@ -184,8 +196,7 @@ static const struct scsipi_periphsw ses_switch = {
 };
 
 static int
-ses_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ses_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 
@@ -213,16 +224,17 @@ ses_match(struct device *parent, struct cfdata *match,
  * the softc available to set stuff in.
  */
 static void
-ses_attach(struct device *parent, struct device *self, void *aux)
+ses_attach(device_t parent, device_t self, void *aux)
 {
 	const char *tname;
 	struct ses_softc *softc = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 
+	softc->sc_dev = self;
 	SC_DEBUG(periph, SCSIPI_DB2, ("ssattach: "));
 	softc->sc_periph = periph;
-	periph->periph_dev = &softc->sc_device;
+	periph->periph_dev = self;
 	periph->periph_switch = &ses_switch;
 	periph->periph_openings = 1;
 
@@ -274,9 +286,9 @@ ses_attach(struct device *parent, struct device *self, void *aux)
 		tname = "SAF-TE Compliant Device";
 		break;
 	}
-	printf("\n%s: %s\n", softc->sc_device.dv_xname, tname);
+	aprint_naive("\n");
+	aprint_normal("\n%s: %s\n", device_xname(softc->sc_dev), tname);
 }
-
 
 static enctyp
 ses_device_type(struct scsipibus_attach_args *sa)
@@ -296,9 +308,7 @@ sesopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	int error, unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
@@ -341,9 +351,7 @@ sesclose(dev_t dev, int flags, int fmt,
 	int unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
@@ -359,7 +367,7 @@ sesioctl(dev_t dev, u_long cmd, void *arg_addr, int flag, struct lwp *l)
 	ses_encstat tmp;
 	ses_objstat objs;
 	ses_object obj, *uobj;
-	struct ses_softc *ssc = ses_cd.cd_devs[SESUNIT(dev)];
+	struct ses_softc *ssc = device_lookup_private(&ses_cd, SESUNIT(dev));
 	void *addr;
 	int error, i;
 
@@ -529,7 +537,7 @@ ses_log(struct ses_softc *ssc, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", ssc->sc_device.dv_xname);
+	printf("%s: ", device_xname(ssc->sc_dev));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
@@ -813,6 +821,29 @@ ses_softc_init(ses_softc_t *ssc, int doinit)
 	ssc->ses_nobjects = 0;
 	ssc->ses_encstat = 0;
 	return (ses_getconfig(ssc));
+}
+
+static int
+ses_detach(device_t self, int flags)
+{
+	struct ses_softc *ssc = device_private(self);
+	struct sscfg *cc = ssc->ses_private;
+
+	if (ssc->ses_objmap) {
+		SES_FREE(ssc->ses_objmap, (nobj * sizeof (encobj)));
+	}
+	if (cc != NULL) {
+		if (cc->ses_typidx) {
+			SES_FREE(cc->ses_typidx,
+			    (nobj * sizeof (struct typidx)));
+		}
+		if (cc->ses_eltmap) {
+			SES_FREE(cc->ses_eltmap, ntype);
+		}
+		SES_FREE(cc, sizeof (struct sscfg));
+	}
+
+	return 0;
 }
 
 static int

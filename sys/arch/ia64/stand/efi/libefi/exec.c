@@ -1,4 +1,4 @@
-/* $NetBSD: exec.c,v 1.2 2006/04/22 07:58:53 cherry Exp $ */
+/* $NetBSD: exec.c,v 1.7 2016/08/04 18:07:43 scole Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,6 +68,7 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 
 #include <sys/param.h>
 #include <sys/lock.h>
@@ -87,6 +81,9 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <efiboot.h>
+
+#include <machine/efilib.h>
 
 #include "bootstrap.h"
 
@@ -97,7 +94,7 @@ static int	elf64_exec(struct preloaded_file *amp);
 struct file_format ia64_elf = { elf64_loadfile, elf64_exec };
 
 static __inline u_int64_t
-disable_ic()
+disable_ic(void)
 {
 	u_int64_t psr;
 	__asm __volatile("mov %0=psr;;" : "=r" (psr));
@@ -168,7 +165,7 @@ elf64_exec(struct preloaded_file *fp)
 		return (ENOMEM);
 	}
 
-	bzero(bi, sizeof(struct bootinfo));
+	memset(bi, 0, sizeof(struct bootinfo));
 	bi_load(bi, fp, &mapkey, pages);
 
 	printf("Entering %s at 0x%lx...\n", fp->f_name, fp->marks[MARK_ENTRY]);

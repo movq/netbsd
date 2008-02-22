@@ -1,4 +1,4 @@
-/*	$NetBSD: form.h,v 1.19 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: form.h,v 1.23 2015/09/07 15:50:49 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -231,9 +231,9 @@ struct _form_field {
 	void *userptr;  /* user defined pointer. */
 	FIELD *link; /* used if fields are linked */
 	FIELDTYPE *type; /* type struct for the field */
-	CIRCLEQ_ENTRY(_form_field) glue; /* circle queue glue for sorting fields */
+	TAILQ_ENTRY(_form_field) glue; /* tail queue glue for sorting fields */
 	char *args; /* args for field type. */
-	_FORMI_FIELD_LINES *lines; /* array of the starts and ends of lines */
+	_FORMI_FIELD_LINES *alines; /* array of the starts and ends of lines */
 	_FORMI_FIELD_LINES *free; /* list of lines available for reuse */
 	FORM_STR *buffers; /* array of buffers for the field */
 };
@@ -291,7 +291,7 @@ struct _form_struct {
 	int max_page; /* number of pages in the form */
 	_FORMI_PAGE_START *page_starts; /* dynamic array of fields that start
 					   the pages */
-	CIRCLEQ_HEAD(_formi_sort_head, _form_field) sorted_fields; /* sorted field
+	TAILQ_HEAD(_formi_sort_head, _form_field) sorted_fields; /* sorted field
 								list */
 	FIELD **fields; /* array of fields attached to this form. */
 };
@@ -349,14 +349,13 @@ int          post_form(FORM *);
 int          scale_form(FORM *, int *, int *);
 int          set_current_field(FORM *, FIELD *);
 int          set_field_back(FIELD *, chtype);
-int          set_field_buffer(FIELD *, int, char *);
+int          set_field_buffer(FIELD *, int, const char *);
 int          set_field_fore(FIELD *, chtype);
 int          set_field_init(FORM *, Form_Hook);
 int          set_field_just(FIELD *, int);
 int          set_field_opts(FIELD *, Form_Options);
 int          set_field_pad(FIELD *, int);
-int          set_field_printf(FIELD *, int, char *, ...)
-				__attribute__((__format__(__printf__, 3, 4)));
+int          set_field_printf(FIELD *, int, char *, ...) __printflike(3, 4);
 int          set_field_status(FIELD *, int);
 int          set_field_term(FORM *, Form_Hook);
 int          set_field_type(FIELD *, FIELDTYPE *, ...);

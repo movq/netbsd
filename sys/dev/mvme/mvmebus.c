@@ -1,4 +1,4 @@
-/*	$NetBSD: mvmebus.c,v 1.12 2007/10/19 12:00:37 ad Exp $	*/
+/*	$NetBSD: mvmebus.c,v 1.19 2012/10/27 17:18:27 chs Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvmebus.c,v 1.12 2007/10/19 12:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvmebus.c,v 1.19 2012/10/27 17:18:27 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -92,8 +85,7 @@ extern int mem_cluster_cnt;
 
 
 static void
-mvmebus_offboard_ram(sc)
-	struct mvmebus_softc *sc;
+mvmebus_offboard_ram(struct mvmebus_softc *sc)
 {
 	struct mvmebus_range *svr, *mvr;
 	vme_addr_t start, end, size;
@@ -145,7 +137,7 @@ mvmebus_offboard_ram(sc)
 		svr->vr_am = MVMEBUS_AM_DISABLED;
 #ifdef DEBUG
 		printf("%s: No VMEbus master mapping for offboard RAM!\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 		return;
 	}
@@ -161,8 +153,7 @@ mvmebus_offboard_ram(sc)
 }
 
 void
-mvmebus_attach(sc)
-	struct mvmebus_softc *sc;
+mvmebus_attach(struct mvmebus_softc *sc)
 {
 	struct vmebus_attach_args vaa;
 	int i;
@@ -179,11 +170,11 @@ mvmebus_attach(sc)
 		struct mvmebus_range *vr = &sc->sc_masters[i];
 		if (vr->vr_am == MVMEBUS_AM_DISABLED) {
 			printf("%s: Master#%d: disabled\n",
-			    sc->sc_dev.dv_xname, i);
+			    device_xname(sc->sc_dev), i);
 			continue;
 		}
 		printf("%s: Master#%d: 0x%08lx -> %s\n",
-		    sc->sc_dev.dv_xname, i,
+		    device_xname(sc->sc_dev), i,
 		    vr->vr_locstart + (vr->vr_vmestart & vr->vr_mask),
 		    mvmebus_mod_string(vr->vr_vmestart,
 			(vr->vr_vmeend - vr->vr_vmestart) + 1,
@@ -194,11 +185,11 @@ mvmebus_attach(sc)
 		struct mvmebus_range *vr = &sc->sc_slaves[i];
 		if (vr->vr_am == MVMEBUS_AM_DISABLED) {
 			printf("%s:  Slave#%d: disabled\n",
-			    sc->sc_dev.dv_xname, i);
+			    device_xname(sc->sc_dev), i);
 			continue;
 		}
 		printf("%s:  Slave#%d: 0x%08lx -> %s\n",
-		    sc->sc_dev.dv_xname, i, vr->vr_locstart,
+		    device_xname(sc->sc_dev), i, vr->vr_locstart,
 		    mvmebus_mod_string(vr->vr_vmestart,
 			(vr->vr_vmeend - vr->vr_vmestart) + 1,
 			vr->vr_am, vr->vr_datasize));
@@ -245,20 +236,11 @@ mvmebus_attach(sc)
 	vaa.va_bdt = &sc->sc_mvmedmat;
 	vaa.va_slaveconfig = NULL;
 
-	config_found(&sc->sc_dev, &vaa, 0);
+	config_found(sc->sc_dev, &vaa, 0);
 }
 
 int
-mvmebus_map(vsc, vmeaddr, len, am, datasize, swap, tag, handle, resc)
-	void *vsc;
-	vme_addr_t vmeaddr;
-	vme_size_t len;
-	vme_am_t am;
-	vme_datasize_t datasize;
-	vme_swap_t swap;
-	bus_space_tag_t *tag;
-	bus_space_handle_t *handle;
-	vme_mapresc_t *resc;
+mvmebus_map(void *vsc, vme_addr_t vmeaddr, vme_size_t len, vme_am_t am, vme_datasize_t datasize, vme_swap_t swap, bus_space_tag_t *tag, bus_space_handle_t *handle, vme_mapresc_t *resc)
 {
 	struct mvmebus_softc *sc;
 	struct mvmebus_mapresc *mr;
@@ -314,9 +296,7 @@ mvmebus_map(vsc, vmeaddr, len, am, datasize, swap, tag, handle, resc)
 
 /* ARGSUSED */
 void
-mvmebus_unmap(vsc, resc)
-	void *vsc;
-	vme_mapresc_t resc;
+mvmebus_unmap(void *vsc, vme_mapresc_t resc)
 {
 	struct mvmebus_softc *sc = vsc;
 	struct mvmebus_mapresc *mr = (struct mvmebus_mapresc *) resc;
@@ -327,14 +307,7 @@ mvmebus_unmap(vsc, resc)
 }
 
 int
-mvmebus_probe(vsc, vmeaddr, len, am, datasize, callback, arg)
-	void *vsc;
-	vme_addr_t vmeaddr;
-	vme_size_t len;
-	vme_am_t am;
-	vme_datasize_t datasize;
-	int (*callback)(void *, bus_space_tag_t, bus_space_handle_t);
-	void *arg;
+mvmebus_probe(void *vsc, vme_addr_t vmeaddr, vme_size_t len, vme_am_t am, vme_datasize_t datasize, int (*callback)(void *, bus_space_tag_t, bus_space_handle_t), void *arg)
 {
 	bus_space_tag_t tag;
 	bus_space_handle_t handle;
@@ -377,10 +350,7 @@ mvmebus_probe(vsc, vmeaddr, len, am, datasize, callback, arg)
 
 /* ARGSUSED */
 int
-mvmebus_intmap(vsc, level, vector, handlep)
-	void *vsc;
-	int level, vector;
-	vme_intr_handle_t *handlep;
+mvmebus_intmap(void *vsc, int level, int vector, vme_intr_handle_t *handlep)
 {
 
 	if (level < 1 || level > 7 || vector < 0x80 || vector > 0xff)
@@ -393,9 +363,7 @@ mvmebus_intmap(vsc, level, vector, handlep)
 
 /* ARGSUSED */
 const struct evcnt *
-mvmebus_intr_evcnt(vsc, handle)
-	void *vsc;
-	vme_intr_handle_t handle;
+mvmebus_intr_evcnt(void *vsc, vme_intr_handle_t handle)
 {
 	struct mvmebus_softc *sc = vsc;
 
@@ -403,12 +371,7 @@ mvmebus_intr_evcnt(vsc, handle)
 }
 
 void *
-mvmebus_intr_establish(vsc, handle, prior, func, arg)
-	void *vsc;
-	vme_intr_handle_t handle;
-	int prior;
-	int (*func)(void *);
-	void *arg;
+mvmebus_intr_establish(void *vsc, vme_intr_handle_t handle, int prior, int (*func)(void *), void *arg)
 {
 	struct mvmebus_softc *sc;
 	int level, vector, first;
@@ -422,12 +385,12 @@ mvmebus_intr_establish(vsc, handle, prior, func, arg)
 #ifdef DIAGNOSTIC
 	if (vector < 0 || vector > 0xff) {
 		printf("%s: Illegal vector offset: 0x%x\n",
-		    sc->sc_dev.dv_xname, vector);
+		    device_xname(sc->sc_dev), vector);
 		panic("mvmebus_intr_establish");
 	}
 	if (level < 1 || level > 7) {
 		printf("%s: Illegal interrupt level: %d\n",
-		    sc->sc_dev.dv_xname, level);
+		    device_xname(sc->sc_dev), level);
 		panic("mvmebus_intr_establish");
 	}
 #endif
@@ -441,9 +404,7 @@ mvmebus_intr_establish(vsc, handle, prior, func, arg)
 }
 
 void
-mvmebus_intr_disestablish(vsc, handle)
-	void *vsc;
-	vme_intr_handle_t handle;
+mvmebus_intr_disestablish(void *vsc, vme_intr_handle_t handle)
 {
 	struct mvmebus_softc *sc;
 	int level, vector, last;
@@ -457,17 +418,17 @@ mvmebus_intr_disestablish(vsc, handle)
 #ifdef DIAGNOSTIC
 	if (vector < 0 || vector > 0xff) {
 		printf("%s: Illegal vector offset: 0x%x\n",
-		    sc->sc_dev.dv_xname, vector);
+		    device_xname(sc->sc_dev), vector);
 		panic("mvmebus_intr_disestablish");
 	}
 	if (level < 1 || level > 7) {
 		printf("%s: Illegal interrupt level: %d\n",
-		    sc->sc_dev.dv_xname, level);
+		    device_xname(sc->sc_dev), level);
 		panic("mvmebus_intr_disestablish");
 	}
 	if (sc->sc_irqref[level] == 0) {
 		printf("%s: VMEirq#%d: Reference count already zero!\n",
-		    sc->sc_dev.dv_xname, level);
+		    device_xname(sc->sc_dev), level);
 		panic("mvmebus_intr_disestablish");
 	}
 #endif
@@ -481,14 +442,7 @@ mvmebus_intr_disestablish(vsc, handle)
 #ifdef DIAGNOSTIC
 /* ARGSUSED */
 int
-mvmebus_dummy_dmamap_create(t, size, nsegs, maxsegsz, boundary, flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	int nsegs;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags;
-	bus_dmamap_t *dmamp;
+mvmebus_dummy_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegs, bus_size_t maxsegsz, bus_size_t boundary, int flags, bus_dmamap_t *dmamp)
 {
 
 	panic("Must use vme_dmamap_create() in place of bus_dmamap_create()");
@@ -497,9 +451,7 @@ mvmebus_dummy_dmamap_create(t, size, nsegs, maxsegsz, boundary, flags, dmamp)
 
 /* ARGSUSED */
 void
-mvmebus_dummy_dmamap_destroy(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+mvmebus_dummy_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
 {
 
 	panic("Must use vme_dmamap_destroy() in place of bus_dmamap_destroy()");
@@ -508,18 +460,17 @@ mvmebus_dummy_dmamap_destroy(t, map)
 
 /* ARGSUSED */
 int
-mvmebus_dmamap_create(vsc, len, am, datasize, swap, nsegs,
-    segsz, bound, flags, mapp)
-	void *vsc;
-	vme_size_t len;
-	vme_am_t am;
-	vme_datasize_t datasize;
-	vme_swap_t swap;
-	int nsegs;
-	vme_size_t segsz;
-	vme_addr_t bound;
-	int flags;
-	bus_dmamap_t *mapp;
+mvmebus_dmamap_create(
+	void *vsc,
+	vme_size_t len,
+	vme_am_t am,
+	vme_datasize_t datasize,
+	vme_swap_t swap,
+	int nsegs,
+	vme_size_t segsz,
+	vme_addr_t bound,
+	int flags,
+	bus_dmamap_t *mapp)
 {
 	struct mvmebus_softc *sc = vsc;
 	struct mvmebus_dmamap *vmap;
@@ -570,9 +521,7 @@ mvmebus_dmamap_create(vsc, len, am, datasize, swap, nsegs,
 }
 
 void
-mvmebus_dmamap_destroy(vsc, map)
-	void *vsc;
-	bus_dmamap_t map;
+mvmebus_dmamap_destroy(void *vsc, bus_dmamap_t map)
 {
 	struct mvmebus_softc *sc = vsc;
 
@@ -581,9 +530,7 @@ mvmebus_dmamap_destroy(vsc, map)
 }
 
 static int
-mvmebus_dmamap_load_common(sc, map)
-	struct mvmebus_softc *sc;
-	bus_dmamap_t map;
+mvmebus_dmamap_load_common(struct mvmebus_softc *sc, bus_dmamap_t map)
 {
 	struct mvmebus_dmamap *vmap = map->_dm_cookie;
 	struct mvmebus_range *vr = vmap->vm_slave;
@@ -658,13 +605,7 @@ found:
 }
 
 int
-mvmebus_dmamap_load(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+mvmebus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf, bus_size_t buflen, struct proc *p, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 	int rv;
@@ -677,11 +618,7 @@ mvmebus_dmamap_load(t, map, buf, buflen, p, flags)
 }
 
 int
-mvmebus_dmamap_load_mbuf(t, map, chain, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *chain;
-	int flags;
+mvmebus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *chain, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 	int rv;
@@ -694,11 +631,7 @@ mvmebus_dmamap_load_mbuf(t, map, chain, flags)
 }
 
 int
-mvmebus_dmamap_load_uio(t, map, uio, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct uio *uio;
-	int flags;
+mvmebus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 	int rv;
@@ -711,13 +644,7 @@ mvmebus_dmamap_load_uio(t, map, uio, flags)
 }
 
 int
-mvmebus_dmamap_load_raw(t, map, segs, nsegs, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	bus_size_t size;
-	int flags;
+mvmebus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs, int nsegs, bus_size_t size, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 	int rv;
@@ -735,9 +662,7 @@ mvmebus_dmamap_load_raw(t, map, segs, nsegs, size, flags)
 }
 
 void
-mvmebus_dmamap_unload(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+mvmebus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 
@@ -747,12 +672,7 @@ mvmebus_dmamap_unload(t, map)
 }
 
 void
-mvmebus_dmamap_sync(t, map, offset, len, ops)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_addr_t offset;
-	bus_size_t len;
-	int ops;
+mvmebus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset, bus_size_t len, int ops)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 
@@ -764,15 +684,7 @@ mvmebus_dmamap_sync(t, map, offset, len, ops)
 #ifdef DIAGNOSTIC
 /* ARGSUSED */
 int
-mvmebus_dummy_dmamem_alloc(t, size, align, boundary, segs, nsegs, rsegs, flags)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	bus_size_t align;
-	bus_size_t boundary;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	int *rsegs;
-	int flags;
+mvmebus_dummy_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t align, bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags)
 {
 
 	panic("Must use vme_dmamem_alloc() in place of bus_dmamem_alloc()");
@@ -780,10 +692,7 @@ mvmebus_dummy_dmamem_alloc(t, size, align, boundary, segs, nsegs, rsegs, flags)
 
 /* ARGSUSED */
 void
-mvmebus_dummy_dmamem_free(t, segs, nsegs)
-	bus_dma_tag_t t;
-	bus_dma_segment_t *segs;
-	int nsegs;
+mvmebus_dummy_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 {
 
 	panic("Must use vme_dmamem_free() in place of bus_dmamem_free()");
@@ -792,16 +701,7 @@ mvmebus_dummy_dmamem_free(t, segs, nsegs)
 
 /* ARGSUSED */
 int
-mvmebus_dmamem_alloc(vsc, len, am, datasize, swap, segs, nsegs, rsegs, flags)
-	void *vsc;
-	vme_size_t len;
-	vme_am_t am;
-	vme_datasize_t datasize;
-	vme_swap_t swap;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	int *rsegs;
-	int flags;
+mvmebus_dmamem_alloc(void *vsc, vme_size_t len, vme_am_t am, vme_datasize_t datasize, vme_swap_t swap, bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags)
 {
 	extern paddr_t avail_start;
 	struct mvmebus_softc *sc = vsc;
@@ -855,10 +755,7 @@ mvmebus_dmamem_alloc(vsc, len, am, datasize, swap, segs, nsegs, rsegs, flags)
 }
 
 void
-mvmebus_dmamem_free(vsc, segs, nsegs)
-	void *vsc;
-	bus_dma_segment_t *segs;
-	int nsegs;
+mvmebus_dmamem_free(void *vsc, bus_dma_segment_t *segs, int nsegs)
 {
 	struct mvmebus_softc *sc = vsc;
 
@@ -866,13 +763,7 @@ mvmebus_dmamem_free(vsc, segs, nsegs)
 }
 
 int
-mvmebus_dmamem_map(t, segs, nsegs, size, kvap, flags)
-	bus_dma_tag_t t;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	size_t size;
-	void **kvap;
-	int flags;
+mvmebus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs, size_t size, void **kvap, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 
@@ -880,10 +771,7 @@ mvmebus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 }
 
 void
-mvmebus_dmamem_unmap(t, kva, size)
-	bus_dma_tag_t t;
-	void *kva;
-	size_t size;
+mvmebus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 
@@ -891,13 +779,7 @@ mvmebus_dmamem_unmap(t, kva, size)
 }
 
 paddr_t
-mvmebus_dmamem_mmap(t, segs, nsegs, offset, prot, flags)
-	bus_dma_tag_t t;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	off_t offset;
-	int prot;
-	int flags;
+mvmebus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs, off_t offset, int prot, int flags)
 {
 	struct mvmebus_softc *sc = t->_cookie;
 
@@ -906,11 +788,7 @@ mvmebus_dmamem_mmap(t, segs, nsegs, offset, prot, flags)
 
 #ifdef DEBUG
 static const char *
-mvmebus_mod_string(addr, len, am, ds)
-	vme_addr_t addr;
-	vme_size_t len;
-	vme_am_t am;
-	vme_datasize_t ds;
+mvmebus_mod_string(vme_addr_t addr, vme_size_t len, vme_am_t am, vme_datasize_t ds)
 {
 	static const char *mode[] = {"BLT64)", "DATA)", "PROG)", "BLT32)"};
 	static const char *dsiz[] = {"(", "(D8,", "(D16,", "(D16-D8,",

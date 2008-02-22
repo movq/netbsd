@@ -1,4 +1,4 @@
-/* $NetBSD: ipivar.h,v 1.2 2007/10/17 19:56:45 garbled Exp $ */
+/* $NetBSD: ipivar.h,v 1.9 2018/04/19 21:50:07 christos Exp $ */
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,43 +29,48 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipivar.h,v 1.2 2007/10/17 19:56:45 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipivar.h,v 1.9 2018/04/19 21:50:07 christos Exp $");
 
 #ifndef _IPI_VAR_H_
 #define _IPI_VAR_H_
 
-#include <machine/intr.h>
+#ifdef _KERNEL_OPT
+#include "opt_ppcarch.h"
+#endif
 
+#if defined(_KERNEL) && !defined(PPC_BOOKE)
 struct ipi_ops {
-	void (*ppc_send_ipi)(int, u_long);
+	void (*ppc_send_ipi)(cpuid_t, uint32_t);
 	/* type, level, arg */
 	void (*ppc_establish_ipi)(int, int, void *);
 	int ppc_ipi_vector;
 };
 
 /* target macros, 0+ are real cpu numbers */
-#define IPI_T_ALL	-2
-#define IPI_T_NOTME	-1
+#define IPI_DST_ALL	((cpuid_t) -2)
+#define IPI_DST_NOTME	((cpuid_t) -1)
 
-#define PPC_IPI_NOMESG		0x0000
-#define PPC_IPI_HALT		0x0001
-#define PPC_IPI_FLUSH_FPU	0x0002
-#define PPC_IPI_FLUSH_VEC	0x0004
+#define IPI_NOMESG		0x0000
+#define IPI_HALT		0x0001
+#define IPI_XCALL		0x0002
+#define IPI_KPREEMPT		0x0004
+#define IPI_GENERIC		0x0008
+#define IPI_SUSPEND		0x0010
 
 /* OpenPIC */
 void setup_openpic_ipi(void);
 
 /* IPI Handler */
-int ppcipi_intr(void *);
+int ipi_intr(void *);
 
 /* convenience */
 extern struct ipi_ops ipiops;
 
-static inline void
-ppc_send_ipi(int cpuid, u_long msg)
+static __inline void
+cpu_send_ipi(cpuid_t cpuid, uint32_t msg)
 {
-	ipiops.ppc_send_ipi(cpuid, msg);
+	(*ipiops.ppc_send_ipi)(cpuid, msg);
 }
-
+#endif
 
 #endif /*_IPI_VAR_H_*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: comreg.h,v 1.14 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: comreg.h,v 1.26 2017/10/29 14:06:08 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -33,8 +33,14 @@
 
 #include <dev/ic/ns16550reg.h>
 
+#ifdef _KERNEL_OPT
+#include "opt_com.h"
+#endif
+
 #define	COM_FREQ	1843200	/* 16-bit baud rate divisor */
+#ifndef COM_TOLERANCE
 #define	COM_TOLERANCE	30	/* baud rate tolerance, in 0.1% units */
+#endif
 
 /* interrupt enable register */
 #define	IER_ERXRDY	0x1	/* Enable receiver interrupt */
@@ -44,6 +50,7 @@
 #define	IER_ERTS	0x40	/* Enable RTS interrupt */
 #define	IER_ECTS	0x80	/* Enable CTS interrupt */
 /* PXA2X0's ns16550 ports have extra bits in this register */
+/* Ingenic's got this one too */
 #define	IER_ERXTOUT	0x10	/* Enable rx timeout interrupt */
 #define	IER_EUART	0x40	/* Enable UART */
 
@@ -55,13 +62,17 @@
 #define	IIR_TXRDY	0x2	/* Transmitter ready */
 #define	IIR_MLSC	0x0	/* Modem status */
 #define	IIR_NOPEND	0x1	/* No pending interrupts */
+#define	IIR_64B_FIFO	0x20	/* 64byte FIFO Enabled (16750) */
 #define	IIR_FIFO_MASK	0xc0	/* set if FIFOs are enabled */
+#define IIR_BUSY	0x7	/* Busy indicator (16750/SUNXI) */
 
 /* fifo control register */
 #define	FIFO_ENABLE	0x01	/* Turn the FIFO on */
 #define	FIFO_RCV_RST	0x02	/* Reset RX FIFO */
 #define	FIFO_XMT_RST	0x04	/* Reset TX FIFO */
 #define	FIFO_DMA_MODE	0x08
+#define	FIFO_UART_ON	0x10	/* JZ47xx only */
+#define	FIFO_64B_ENABLE	0x20	/* 64byte FIFO Enable (16750) */
 #define	FIFO_TRIGGER_1	0x00	/* Trigger RXRDY intr on 1 character */
 #define	FIFO_TRIGGER_4	0x40	/* ibid 4 */
 #define	FIFO_TRIGGER_8	0x80	/* ibid 8 */
@@ -98,6 +109,12 @@
 #define	LCR_5BITS	0x00	/* 5 bits */
 
 /* modem control register */
+#define MCR_PRESCALE	0x80	/* 16650/16950: Baud rate prescaler select */
+#define MCR_MDCE	0x80	/* Ingenic: modem control enable */
+#define MCR_TCR_TLR	0x40	/* OMAP: enables access to the TCR & TLR regs */
+#define MCR_FCM		0x40	/* Ingenic: 1 - hardware flow control */
+#define MCR_XONENABLE	0x20	/* OMAP XON_EN */
+#define MCR_AFE		0x20	/* tl16c750: Flow Control Enable */
 #define	MCR_LOOPBACK	0x10	/* Loop test: echos from TX to RX */
 #define	MCR_IENABLE	0x08	/* Out2: enables UART interrupts */
 #define	MCR_DRS		0x04	/* Out1: resets some internal modems */
@@ -125,6 +142,26 @@
 #define	MSR_TERI	0x04	/* RI has toggled low to high */
 #define	MSR_DDSR	0x02	/* DSR has changed state */
 #define	MSR_DCTS	0x01	/* CTS has changed state */
+
+/* OMAP mode definition register 1 */
+#define MDR1_FRAME_END_MODE		0x80
+#define MDR1_SIP_MODE			0x40
+#define MDR1_SCT			0x20
+#define MDR1_SET_TXIR			0x10
+#define MDR1_IR_SLEEP			0x08
+#define MDR1_MODE_DISABLE		0x07
+#define MDR1_MODE_FIR			0x05
+#define MDR1_MODE_MIR			0x04
+#define MDR1_MODE_UART_13X		0x03
+#define MDR1_MODE_UART_16X_AUTOBAUD	0x02
+#define MDR1_MODE_SIR			0x01
+#define MDR1_MODE_UART_16X		0x00
+#define MDR1_MODE_MASK			0x07
+
+/* SUNXI-specific registers */
+#define HALT_CHCFG_UD			0x04 /* apply updates to LCR/dividors */
+#define HALT_CHCFG_EN			0x02 /* enable change while busy */
+
 
 /* XXX ISA-specific. */
 #define	COM_NPORTS	8

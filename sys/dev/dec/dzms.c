@@ -1,4 +1,4 @@
-/*	$NetBSD: dzms.c,v 1.17 2007/10/19 11:59:40 ad Exp $	*/
+/*	$NetBSD: dzms.c,v 1.22 2012/10/27 17:18:15 chs Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dzms.c,v 1.17 2007/10/19 11:59:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dzms.c,v 1.22 2012/10/27 17:18:15 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: dzms.c,v 1.17 2007/10/19 11:59:40 ad Exp $");
 #include "locators.h"
 
 struct dzms_softc {		/* driver status information */
-	struct	device dzms_dev;	/* required first: base device */
 	struct	dz_linestate *dzms_ls;
 
 	int sc_enabled;		/* input enabled? */
@@ -79,14 +78,14 @@ struct dzms_softc {		/* driver status information */
 	u_int buttons;
 	int dx, dy;
 
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 };
 
-static int  dzms_match(struct device *, struct cfdata *, void *);
-static void dzms_attach(struct device *, struct device *, void *);
+static int  dzms_match(device_t, cfdata_t, void *);
+static void dzms_attach(device_t, device_t, void *);
 static int dzms_input(void *, int);
 
-CFATTACH_DECL(dzms, sizeof(struct dzms_softc),
+CFATTACH_DECL_NEW(dzms, sizeof(struct dzms_softc),
     dzms_match, dzms_attach, NULL, NULL);
 
 static int  dzms_enable(void *);
@@ -100,10 +99,7 @@ const struct wsmouse_accessops dzms_accessops = {
 };
 
 static int
-dzms_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+dzms_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dzkm_attach_args *daa = aux;
 
@@ -119,9 +115,7 @@ dzms_match(parent, cf, aux)
 }
 
 static void
-dzms_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+dzms_attach(device_t parent, device_t self, void *aux)
 {
 	struct dz_softc *dz = device_private(parent);
 	struct dzms_softc *dzms = device_private(self);
@@ -145,8 +139,7 @@ dzms_attach(parent, self, aux)
 }
 
 static int
-dzms_enable(v)
-	void *v;
+dzms_enable(void *v)
 {
 	struct dzms_softc *sc = v;
 
@@ -168,8 +161,7 @@ dzms_enable(v)
 }
 
 static void
-dzms_disable(v)
-	void *v;
+dzms_disable(void *v)
 {
 	struct dzms_softc *sc = v;
 
@@ -177,12 +169,7 @@ dzms_disable(v)
 }
 
 static int
-dzms_ioctl(v, cmd, data, flag, l)
-	void *v;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+dzms_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	if (cmd == WSMOUSEIO_GTYPE) {
 		*(u_int *)data = WSMOUSE_TYPE_VSXXX;
@@ -192,9 +179,7 @@ dzms_ioctl(v, cmd, data, flag, l)
 }
 
 static int
-dzms_input(vsc, data)
-	void *vsc;
-	int data;
+dzms_input(void *vsc, int data)
 {
 	struct dzms_softc *sc = vsc;
 

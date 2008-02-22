@@ -1,4 +1,4 @@
-/*	$NetBSD: njs_pci.c,v 1.6 2007/10/19 12:00:53 ad Exp $	*/
+/*	$NetBSD: njs_pci.c,v 1.12 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: njs_pci.c,v 1.6 2007/10/19 12:00:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: njs_pci.c,v 1.12 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,11 +62,11 @@ struct njsc32_pci_softc {
 	bus_size_t		sc_regmap_size;
 };
 
-static int	njs_pci_match(struct device *, struct cfdata *, void *);
-static void	njs_pci_attach(struct device *, struct device *, void *);
-static int	njs_pci_detach(struct device *, int);
+static int	njs_pci_match(device_t, cfdata_t, void *);
+static void	njs_pci_attach(device_t, device_t, void *);
+static int	njs_pci_detach(device_t, int);
 
-CFATTACH_DECL(njs_pci, sizeof(struct njsc32_pci_softc),
+CFATTACH_DECL_NEW(njs_pci, sizeof(struct njsc32_pci_softc),
     njs_pci_match, njs_pci_attach, njs_pci_detach, NULL);
 
 static const struct njsc32_pci_product {
@@ -111,8 +104,7 @@ njs_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-njs_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+njs_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -123,22 +115,24 @@ njs_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-njs_pci_attach(struct device *parent, struct device *self, void *aux)
+njs_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct njsc32_pci_softc *psc = (void *) self;
+	struct njsc32_pci_softc *psc = device_private(self);
 	struct njsc32_softc *sc = &psc->sc_njsc32;
 	const struct njsc32_pci_product *prod;
 	pci_intr_handle_t ih;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcireg_t reg;
 	const char *str_intr, *str_at;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	aprint_naive(": SCSI controller\n");
 	if ((prod = njs_pci_lookup(pa)) == NULL)
 		panic("njs_pci_attach");
 
 	aprint_normal(": Workbit NinjaSCSI-32 SCSI adapter\n");
+	sc->sc_dev = self;
 	sc->sc_model = prod->p_model;
 	sc->sc_clk = prod->p_clk;
 
@@ -165,7 +159,7 @@ njs_pci_attach(struct device *parent, struct device *self, void *aux)
 			goto try_io;
 		}
 #ifdef NJSC32_DEBUG
-		printf("%s: memory space mapped\n", sc->sc_dev.dv_xname);
+		printf("%s: memory space mapped\n", device_xname(self));
 #endif
 		sc->sc_flags = NJSC32_MEM_MAPPED;
 	} else {
@@ -174,12 +168,12 @@ njs_pci_attach(struct device *parent, struct device *self, void *aux)
 		    PCI_MAPREG_TYPE_IO, 0, &sc->sc_regt, &sc->sc_regh,
 		    NULL, &psc->sc_regmap_size) == 0) {
 #ifdef NJSC32_DEBUG
-			printf("%s: io space mapped\n", sc->sc_dev.dv_xname);
+			printf("%s: io space mapped\n", device_xname(self));
 #endif
 			sc->sc_flags = NJSC32_IO_MAPPED;
 		} else {
-			aprint_error("%s: unable to map device registers\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(self,
+			    "unable to map device registers\n");
 			return;
 		}
 	}
@@ -188,12 +182,11 @@ njs_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* map interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 
-	str_intr = pci_intr_string(pa->pa_pc, ih);
+	str_intr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	str_at = " at ";
 	if (str_intr == NULL)
 		str_at = str_intr = "";
@@ -201,21 +194,20 @@ njs_pci_attach(struct device *parent, struct device *self, void *aux)
 	/* setup interrupt handler */
 	if ((sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, njsc32_intr, sc))
 	    == NULL) {
-		printf("%s: unable to establish interrupt%s%s\n",
-		    sc->sc_dev.dv_xname, str_at, str_intr);
+		aprint_error_dev(self, "unable to establish interrupt%s%s\n",
+		    str_at, str_intr);
 		return;
 	}
-	printf("%s: interrupting%s%s\n",
-		sc->sc_dev.dv_xname, str_at, str_intr);
+	aprint_normal_dev(self, "interrupting%s%s\n", str_at, str_intr);
 
 	/* attach */
 	njsc32_attach(sc);
 }
 
 static int
-njs_pci_detach(struct device *self, int flags)
+njs_pci_detach(device_t self, int flags)
 {
-	struct njsc32_pci_softc *psc = (void *) self;
+	struct njsc32_pci_softc *psc = device_private(self);
 	struct njsc32_softc *sc = &psc->sc_njsc32;
 	int rv;
 

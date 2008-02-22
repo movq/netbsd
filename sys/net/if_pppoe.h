@@ -1,4 +1,4 @@
-/* $NetBSD: if_pppoe.h,v 1.10 2007/07/14 21:02:41 ad Exp $ */
+/* $NetBSD: if_pppoe.h,v 1.15 2017/10/12 09:50:55 knakahara Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,8 @@
 
 #ifndef _NET_IF_PPPOE_H_
 #define _NET_IF_PPPOE_H_
+
+#include <sys/ioccom.h>
 
 struct pppoediscparms {
 	char	ifname[IFNAMSIZ];	/* pppoe interface name */
@@ -71,11 +66,19 @@ struct pppoeconnectionstate {
 
 #ifdef _KERNEL
 
-extern struct ifqueue ppoediscinq;
-extern struct ifqueue ppoeinq;
-
-extern void *pppoe_softintr;			/* softinterrupt cookie */
-
+void pppoe_input(struct ifnet *, struct mbuf *);
+void pppoedisc_input(struct ifnet *, struct mbuf *);
 #endif /* _KERNEL */
+/*
+ * Locking notes:
+ * + pppoe_softc_list is protected by pppoe_softc_list_lock (an rwlock)
+ *     pppoe_softc_list is a list of all pppoe_softc, and it is used to
+ *     find pppoe interface by session id or host unique tag.
+ * + pppoe_softc is protected by pppoe_softc->sc_lock (an rwlock)
+ *     pppoe_softc holds session id and parameters to establish the id
+ *
+ * Locking order:
+ *    - pppoe_softc_list_lock => pppoe_softc->sc_lock
+ */
 #endif /* !_NET_IF_PPPOE_H_ */
 

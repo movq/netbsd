@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.11 2007/12/18 07:17:11 joerg Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.18 2016/07/24 14:09:22 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 
 /*
  * This code is derived from FreeBSD.  Original copyrights:
@@ -118,6 +110,18 @@ wakeup_16:
 	movw	%cs,%ax
 	movw	%ax,%ds
 	movw	%ax,%ss
+
+	/* If we need to restore a VESA VBE mode, do it now */
+	cmpb	$0,WAKEUP_vesa_modenum
+	je	1f
+	movw	WAKEUP_vesa_modenum,%bx
+	orw	$0x4000,%bx
+	movw	$0x4f02,%ax
+	int	$0x10
+
+	movw	%cs,%ax
+	movw	%ax,%ds
+	movw	%ax,%ss
 1:
 
 	/* Disable beep again if machdep.acpi_beep_on_reset=1 */
@@ -131,14 +135,13 @@ wakeup_16:
 	/* Load GDT while non-paging */
 	lgdt	tmp_gdt
 
-	/* Enable protected mode */
+	/* Enable protected mode without paging */
 	mov	%cr0,%eax
 	orl	$(CR0_PE),%eax
 	mov	%eax,%cr0
 
 	/* Switch to protected mode by intersegmental jump */
-	ljmpl	$0x8,$wakeup_32	+ ACPI_WAKEUP_ADDR
-
+	ljmpl	$0x8,$wakeup_32 + ACPI_WAKEUP_ADDR
 
 	.code32
 	.align	16
@@ -146,21 +149,30 @@ wakeup_32:
 	/*
 	 * Switched to protected mode w/o paging
 	 */
-
 	nop
+
 	/* Set up segment registers for protected mode */
 	movw	$GSEL(GDATA_SEL,SEL_KPL),%ax
 	movw	%ax,%ds
 
-	/* Restore PSE and other settings before enabling paging. */
+	/* Enable potentially PSE and PAE */
 	movl	WAKEUP_r_cr4 + ACPI_WAKEUP_ADDR,%eax
 	movl	%eax,%cr4
 
-	/* Enable paging (assumes identical mapping) */
+	/*
+	 * Load the correct MSR EFER value now to not depend on the
+	 * data segment register. After this point, no instruction is
+	 * allowed to clobber %ebx until wrmsr.
+	 */
+	movl	WAKEUP_efer + ACPI_WAKEUP_ADDR,%ebx
+
+	/* Load temporary page table, we will switch to full page table later */
 	movl	WAKEUP_r_cr3 + ACPI_WAKEUP_ADDR,%eax
 	movl	%eax,%cr3
+
+	/* Enable paging */
 	movl	%cr0,%eax
-	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_EM|CR0_MP|CR0_WP),%eax
+	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_MP|CR0_WP|CR0_AM),%eax
 	movl	%eax,%cr0
 
 	/* Flush the prefetch queue */
@@ -170,10 +182,20 @@ wakeup_32:
 
 	nop
 
+	/*
+	 * Load the normal system value of MSR EFER.  This includes
+	 * enabling NXE (if supported).
+	 */
+	movl	%ebx,%eax
+	movl	$0,%edx
+	movl	$MSR_EFER,%ecx
+	wrmsr
+
 	/* Restore registers */
 	movl	WAKEUP_curcpu + ACPI_WAKEUP_ADDR,%edx
 	movl	WAKEUP_restorecpu + ACPI_WAKEUP_ADDR,%ebx
 
+	/* Continue with wakeup in the high-level wakeup code */
 	jmp	*%ebx
 
 	.align	8
@@ -203,8 +225,12 @@ WAKEUP_r_cr4:		.long 0
 WAKEUP_curcpu:		.long 0
 	.global WAKEUP_restorecpu
 WAKEUP_restorecpu:	.long 0
+	.global WAKEUP_efer
+WAKEUP_efer:		.long 0
 
 	.global WAKEUP_vbios_reset
 WAKEUP_vbios_reset:	.byte 0
+	.global WAKEUP_vesa_modenum
+WAKEUP_vesa_modenum:	.word 0
 	.global WAKEUP_beep_on_reset
 WAKEUP_beep_on_reset:	.byte 0

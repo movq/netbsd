@@ -1,4 +1,4 @@
-/*	$NetBSD: ev_timers.c,v 1.5 2007/03/30 20:23:03 ghen Exp $	*/
+/*	$NetBSD: ev_timers.c,v 1.11 2012/03/21 00:34:54 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -24,9 +24,9 @@
 #include <sys/cdefs.h>
 #if !defined(LINT) && !defined(CODECENTER) && !defined(lint)
 #ifdef notdef
-static const char rcsid[] = "Id: ev_timers.c,v 1.5.18.1 2005/04/27 05:01:06 sra Exp";
+static const char rcsid[] = "Id: ev_timers.c,v 1.6 2005/04/27 04:56:36 sra Exp";
 #else
-__RCSID("$NetBSD: ev_timers.c,v 1.5 2007/03/30 20:23:03 ghen Exp $");
+__RCSID("$NetBSD: ev_timers.c,v 1.11 2012/03/21 00:34:54 christos Exp $");
 #endif
 #endif
 
@@ -108,15 +108,20 @@ evSubTime(struct timespec minuend, struct timespec subtrahend) {
 
 int
 evCmpTime(struct timespec a, struct timespec b) {
-	long x = a.tv_sec - b.tv_sec;
+#define SGN(x) ((x) < 0 ? (-1) : (x) > 0 ? (1) : (0));
+	time_t s = a.tv_sec - b.tv_sec;
+	long n;
 
-	if (x == 0L)
-		x = a.tv_nsec - b.tv_nsec;
-	return (x < 0L ? (-1) : x > 0L ? (1) : (0));
+	if (s != 0)
+		return SGN(s);
+
+	n = a.tv_nsec - b.tv_nsec;
+	return SGN(n);
 }
 
 struct timespec
-evNowTime() {
+evNowTime(void)
+{
 	struct timeval now;
 #ifdef CLOCK_REALTIME
 	struct timespec tsnow;
@@ -132,7 +137,7 @@ evNowTime() {
 		return (tsnow);
 #endif
 	if (gettimeofday(&now, NULL) < 0)
-		return (evConsTime(0L, 0L));
+		return (evConsTime((time_t)0, 0L));
 	return (evTimeSpec(now));
 }
 
@@ -145,7 +150,7 @@ evUTCTime(void) {
 		return (tsnow);
 #endif
 	if (gettimeofday(&now, NULL) < 0)
-		return (evConsTime(0L, 0L));
+		return (evConsTime((time_t)0, 0L));
 	return (evTimeSpec(now));
 }
 
@@ -172,7 +177,7 @@ evTimeVal(struct timespec ts) {
 	struct timeval tv;
 
 	tv.tv_sec = ts.tv_sec;
-	tv.tv_usec = ts.tv_nsec / 1000;
+	tv.tv_usec = (suseconds_t)(ts.tv_nsec / 1000);
 	return (tv);
 }
 

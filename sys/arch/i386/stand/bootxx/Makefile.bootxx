@@ -1,13 +1,18 @@
-# $NetBSD: Makefile.bootxx,v 1.30 2008/01/31 11:11:09 sborrill Exp $
+# $NetBSD: Makefile.bootxx,v 1.50 2018/06/02 14:30:07 christos Exp $
 
-S=	${.CURDIR}/../../../../../
+S=	${.CURDIR}/../../../../..
 
+AFLAGS.bootxx.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.pbr.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+
+NOPIE=
 NOMAN=
+NOSANITIZER=
 PROG?= bootxx_${FS}
 BINDIR= /usr/mdec
 BINMODE= 0444
 
-PRIMARY_LOAD_ADDRESS=0x600
+PRIMARY_LOAD_ADDRESS=0x1000
 SECONDARY_LOAD_ADDRESS=0x10000
 
 # We ought (need?) to fit into track 0 of a 1.2M floppy.
@@ -17,11 +22,12 @@ BOOTXX_MAXSIZE?= $$(( ${BOOTXX_SECTORS} * 512 ))
 
 SRCS= pbr.S label.S bootxx.S boot1.c
 
-.include <bsd.own.mk>
+.include <bsd.init.mk>
 
 STRIPFLAG=	# nothing
 
 LIBCRT0=	# nothing
+LIBCRTI=	# nothing
 LIBCRTBEGIN=	# nothing
 LIBCRTEND=	# nothing
 LIBC=		# nothing
@@ -43,14 +49,16 @@ CPPFLAGS+= -DXXfs_close=${FS}_close
 CPPFLAGS+= -DXXfs_read=${FS}_read
 CPPFLAGS+= -DXXfs_stat=${FS}_stat
 CPPFLAGS+= -DFS=${FS}
+# CPPFLAGS+= -DBOOT_MSG_COM0
 
 # Make sure we override any optimization options specified by the user
-COPTS=  -Os
+.include "${.PARSEDIR}/../Makefile.inc"
+COPTS=	${OPT_SIZE.${ACTIVE_CC}}
 DBG=
 
 CPPFLAGS+= -DNO_LBA_CHECK
 
-.if ${MACHINE} == "amd64"
+.if ${MACHINE_ARCH} == "x86_64"
 LDFLAGS+=  -Wl,-m,elf_i386
 AFLAGS+=   -m32
 CPUFLAGS=  -m32
@@ -58,14 +66,9 @@ LIBKERN_ARCH=i386
 KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
 .else
 CPPFLAGS+= -DEPIA_HACK
-.if ${HAVE_GCC} == 3
-CPUFLAGS=  -mcpu=i386
-.else
 CPUFLAGS=  -march=i386 -mtune=i386
 .endif
-.endif
 
-COPTS+=    -ffreestanding
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes
 CPPFLAGS+= -nostdinc -D_STANDALONE
 CPPFLAGS+= -I$S
@@ -76,8 +79,6 @@ CPPFLAGS+= -DLIBSA_SINGLE_FILESYSTEM=xxfs \
 		-DLIBSA_NO_RAW_ACCESS \
 		-DLIBSA_NO_FS_WRITE \
 		-DLIBSA_NO_FS_SEEK \
-		-DLIBSA_USE_MEMCPY \
-		-DLIBSA_USE_MEMSET \
 		-DLIBSA_SINGLE_DEVICE=blkdev \
 		-DLIBKERN_OPTIMISE_SPACE \
 		-D"blkdevioctl(x,y,z)=EINVAL" \
@@ -90,18 +91,6 @@ CPPFLAGS+= -DLIBSA_SINGLE_FILESYSTEM=xxfs \
 # CPPFLAGS+= -DBOOTXX_RAID1_SUPPORT
 
 I386_STAND_DIR?= $S/arch/i386/stand
-
-CLEANFILES+= machine x86
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	-rm -f machine && ln -s $S/arch/i386/include machine
-	-rm -f x86 && ln -s $S/arch/x86/include x86
-.ifdef LIBOBJ
-	-rm -f lib && ln -s ${LIBOBJ}/lib lib
-	mkdir -p ${LIBOBJ}/lib
-.endif
-.endif
 
 ### find out what to use for libi386
 I386DIR= ${I386_STAND_DIR}/lib
@@ -119,8 +108,9 @@ KERN_AS=        library
 .include "${S}/lib/libkern/Makefile.inc"
 LIBKERN=        ${KERNLIB}
 
+LDSCRIPT ?= $S/arch/i386/conf/stand.ldscript
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
@@ -129,10 +119,10 @@ LIBLIST= ${LIBI386} ${LIBSA} ${LIBKERN} ${LIBI386} ${LIBSA}
 
 CLEANFILES+= ${PROG}.sym ${PROG}.map
 
-${PROG}: ${OBJS} ${LIBLIST}
+${PROG}: ${OBJS} ${LIBLIST} ${LDSCRIPT}
 	${_MKTARGET_LINK}
 	${CC} -o ${PROG}.sym ${LDFLAGS} -Wl,-Ttext,${PRIMARY_LOAD_ADDRESS} \
-		-Wl,-Map,${PROG}.map -Wl,-cref ${OBJS} ${LIBLIST}
+		-T ${LDSCRIPT} -Wl,-Map,${PROG}.map -Wl,-cref ${OBJS} ${LIBLIST}
 	${OBJCOPY} -O binary ${PROG}.sym ${PROG}
 	@ sz=$$(${TOOL_STAT} -f '%z' ${PROG}); \
 	if [ "$$sz" -gt "${BOOTXX_MAXSIZE}" ]; then \
@@ -148,3 +138,5 @@ ${PROG}: ${OBJS} ${LIBLIST}
 	fi
 
 .include <bsd.prog.mk>
+KLINK_MACHINE=	i386
+.include <bsd.klinks.mk>

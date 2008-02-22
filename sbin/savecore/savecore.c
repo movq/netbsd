@@ -1,4 +1,4 @@
-/*	$NetBSD: savecore.c,v 1.72 2008/01/15 14:26:42 ad Exp $	*/
+/*	$NetBSD: savecore.c,v 1.86 2013/05/13 18:44:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1992, 1993
@@ -31,23 +31,28 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1986, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1986, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)savecore.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: savecore.c,v 1.72 2008/01/15 14:26:42 ad Exp $");
+__RCSID("$NetBSD: savecore.c,v 1.86 2013/05/13 18:44:11 christos Exp $");
 #endif
 #endif /* not lint */
+
+#define _KSYMS_PRIVATE
+
+#include <stdbool.h>
 
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/msgbuf.h>
 #include <sys/syslog.h>
 #include <sys/time.h>
+#include <sys/ksyms.h>
 
 #include <dirent.h>
 #include <errno.h>
@@ -63,6 +68,7 @@ __RCSID("$NetBSD: savecore.c,v 1.72 2008/01/15 14:26:42 ad Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <kvm.h>
 
 extern FILE *zopen(const char *fname, const char *mode);
@@ -70,7 +76,7 @@ extern FILE *zopen(const char *fname, const char *mode);
 #define	KREAD(kd, addr, p)\
 	(kvm_read(kd, addr, (char *)(p), sizeof(*(p))) != sizeof(*(p)))
 
-struct nlist current_nl[] = {	/* Namelist for currently running system. */
+static struct nlist current_nl[] = {	/* Namelist for currently running system. */
 #define	X_DUMPDEV	0
 	{ .n_name = "_dumpdev" },
 #define	X_DUMPLO	1
@@ -95,13 +101,21 @@ struct nlist current_nl[] = {	/* Namelist for currently running system. */
 	{ .n_name = "_msgbufp" },
 #define	X_DUMPCDEV	11
 	{ .n_name = "_dumpcdev" },
+#define X_SYMSZ		12
+	{ .n_name = "_ksyms_symsz" },
+#define X_STRSZ		13
+	{ .n_name = "_ksyms_strsz" },
+#define X_KHDR		14
+	{ .n_name = "_ksyms_hdr" },
+#define X_SYMTABS	15
+	{ .n_name = "_ksyms_symtabs" },
 	{ .n_name = NULL },
 };
-int cursyms[] = { X_DUMPDEV, X_DUMPLO, X_VERSION, X_DUMPMAG, X_DUMPCDEV, -1 };
-int dumpsyms[] = { X_TIME_SECOND, X_TIME, X_DUMPSIZE, X_VERSION, X_PANICSTR,
-    X_DUMPMAG, -1 };
+static int cursyms[] = { X_DUMPDEV, X_DUMPLO, X_VERSION, X_DUMPMAG, X_DUMPCDEV, -1 };
+static int dumpsyms[] = { X_TIME_SECOND, X_TIME, X_DUMPSIZE, X_VERSION, X_PANICSTR,
+    X_DUMPMAG, X_SYMSZ, X_STRSZ, X_KHDR, X_SYMTABS, -1 };
 
-struct nlist dump_nl[] = {	/* Name list for dumped system. */
+static struct nlist dump_nl[] = {	/* Name list for dumped system. */
 	{ .n_name = "_dumpdev" },	/* Entries MUST be the same as */
 	{ .n_name = "_dumplo" },	/*	those in current_nl[].  */
 	{ .n_name = "_time_second" },
@@ -114,56 +128,58 @@ struct nlist dump_nl[] = {	/* Name list for dumped system. */
 	{ .n_name = "_panicend" },
 	{ .n_name = "_msgbufp" },
 	{ .n_name = "_dumpcdev" },
+	{ .n_name = "_ksyms_symsz" },
+	{ .n_name = "_ksyms_strsz" },
+	{ .n_name = "_ksyms_hdr" },
+	{ .n_name = "_ksyms_symtabs" },
 	{ .n_name = NULL },
 };
 
 /* Types match kernel declarations. */
-off_t	dumplo;				/* where dump starts on dumpdev */
-u_int32_t dumpmag;			/* magic number in dump */
-int	dumpsize;			/* amount of memory dumped */
-off_t dumpbytes;			/* in bytes */
+static off_t	dumplo;				/* where dump starts on dumpdev */
+static u_int32_t dumpmag;			/* magic number in dump */
+static int	dumpsize;			/* amount of memory dumped */
+static off_t dumpbytes;			/* in bytes */
 
-const char	*kernel;		/* name of used kernel */
-char	*dirname;			/* directory to save dumps in */
-char	*ddname;			/* name of dump device */
-dev_t	dumpdev;			/* dump device */
-dev_t	dumpcdev = NODEV;		/* dump device (char equivalent) */
-int	dumpfd;				/* read/write descriptor on dev */
-kvm_t	*kd_dump;			/* kvm descriptor on dev	*/
-time_t	now;				/* current date */
-char	panic_mesg[1024];
-long	panicstr;
-char	vers[1024];
-char	gzmode[3];
+static const char	*kernel;		/* name of used kernel */
+static const char	*dirname;		/* directory to save dumps in */
+static char	*ddname;			/* name of dump device */
+static dev_t	dumpdev;			/* dump device */
+static dev_t	dumpcdev = NODEV;		/* dump device (char equivalent) */
+static int	dumpfd;				/* read/write descriptor on dev */
+static kvm_t	*kd_dump;			/* kvm descriptor on dev	*/
+static time_t	now;				/* current date */
+static char	panic_mesg[1024];
+static long	panicstr;
+static char	vers[1024];
+static char	gzmode[3];
 
-static int	clear, compress, force, verbose;	/* flags */
-
-void	check_kmem(void);
-int	check_space(void);
-void	clear_dump(void);
-int	Create(char *, int);
-int	dump_exists(void);
-char	*find_dev(dev_t, int);
-int	get_crashtime(void);
-void	kmem_setup(void);
-void	Lseek(int, off_t, int);
-int	main(int, char *[]);
-int	Open(const char *, int rw);
-char	*rawname(char *s);
-void	save_core(void);
-void	usage(void);
-void	Write(int, void *, int);
+static void	check_kmem(void);
+static int	check_space(void);
+static void	clear_dump(void);
+static int	Create(char *, int);
+static int	dump_exists(int);
+static char	*find_dev(dev_t, mode_t);
+static int	get_crashtime(void);
+static void	kmem_setup(int);
+static void	Lseek(int, off_t, int);
+static int	Open(const char *, int rw);
+static void	save_core(int);
+__dead static void	usage(const char *fmt, ...) __printflike(1, 2);
 
 int
 main(int argc, char *argv[])
 {
-	int ch, level, testonly;
+	int ch, level, testonly, compress, force, clear, verbose;
 	char *ep;
 
-	dirname = NULL;
 	kernel = NULL;
 	level = 1;		/* default to fastest gzip compression */
+	force = 0;
+	clear = 0;
 	testonly = 0;
+	verbose = 0;
+	compress = 0;
 	gzmode[0] = 'w';
 
 	openlog("savecore", LOG_PERROR, LOG_DAEMON);
@@ -191,39 +207,33 @@ main(int argc, char *argv[])
 			break;
 		case 'Z':
 			level = (int)strtol(optarg, &ep, 10);
-			if (level < 0 || level > 9) {
-				(void)syslog(LOG_ERR, "invalid compression %s",
-				    optarg);
-				usage();
-			}
+			if (level < 0 || level > 9)
+				usage("Invalid compression `%s'", optarg);
 			break;
 		case '?':
+			usage("Missing argument for flag `%c'", optopt);
 		default:
-			usage();
+			usage("Unknown flag `%c'", ch);
 		}
 	argc -= optind;
 	argv += optind;
 
-	if (argc != ((clear || testonly) ? 0 : 1))
-		usage();
+	if (argc != 0)
+		dirname = argv[0];
+	else
+		dirname = "/var/crash";
 
 	gzmode[1] = level + '0';
-	if (!clear)
-		dirname = argv[0];
-
-	if (kernel == NULL) {
-		kernel = getbootfile();
-	}
 
 	(void)time(&now);
-	kmem_setup();
+	kmem_setup(verbose);
 
 	if (clear && !testonly) {
 		clear_dump();
 		exit(0);
 	}
 
-	if (!dump_exists() && !force)
+	if (!dump_exists(verbose) && !force)
 		exit(1);
 
 	if (testonly)
@@ -240,14 +250,14 @@ main(int argc, char *argv[])
 	if ((!get_crashtime() || !check_space()) && !force)
 		exit(1);
 
-	save_core();
+	save_core(compress);
 
 	clear_dump();
 	exit(0);
 }
 
-void
-kmem_setup(void)
+static void
+kmem_setup(int verbose)
 {
 	kvm_t *kd_kern;
 	char errbuf[_POSIX2_LINE_MAX];
@@ -286,8 +296,7 @@ kmem_setup(void)
 	}
 
 	if (KREAD(kd_kern, current_nl[X_DUMPDEV].n_value, &dumpdev) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
 		exit(1);
 	}
 	if (dumpdev == NODEV) {
@@ -298,8 +307,7 @@ kmem_setup(void)
 	    long l_dumplo;
 
 	    if (KREAD(kd_kern, current_nl[X_DUMPLO].n_value, &l_dumplo) != 0) {
-		    if (verbose)
-			syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
+		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
 		    exit(1);
 	    }
 	    if (l_dumplo == -1) {
@@ -313,8 +321,7 @@ kmem_setup(void)
 		(void)printf("dumplo = %lld (%ld * %ld)\n",
 		    (long long)dumplo, (long)(dumplo / DEV_BSIZE), (long)DEV_BSIZE);
 	if (KREAD(kd_kern, current_nl[X_DUMPMAG].n_value, &dumpmag) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_kern));
 		exit(1);
 	}
 
@@ -325,14 +332,20 @@ kmem_setup(void)
 	if (current_nl[X_DUMPCDEV].n_value != 0) {
 		if (KREAD(kd_kern, current_nl[X_DUMPCDEV].n_value,
 		    &dumpcdev) != 0) {
-			if (verbose)
-				syslog(LOG_WARNING, "kvm_read: %s",
-			            kvm_geterr(kd_kern));
+			syslog(LOG_WARNING, "kvm_read: %s",
+			    kvm_geterr(kd_kern));
 			exit(1);
 		}
 		ddname = find_dev(dumpcdev, S_IFCHR);
 	} else
 		ddname = find_dev(dumpdev, S_IFBLK);
+	if (strncmp(ddname, "/dev/cons", 8) == 0 ||
+	    strncmp(ddname, "/dev/tty", 7) == 0 ||
+	    strncmp(ddname, "/dev/pty", 7) == 0 ||
+	    strncmp(ddname, "/dev/pts", 7) == 0) {
+		syslog(LOG_ERR, "dumpdev %s is tty; override kernel", ddname);
+		exit(1);
+	}
 	dumpfd = Open(ddname, O_RDWR);
 
 	kd_dump = kvm_openfiles(kernel, ddname, NULL, O_RDWR, errbuf);
@@ -372,7 +385,7 @@ kmem_setup(void)
 	kvm_close(kd_kern);
 }
 
-void
+static void
 check_kmem(void)
 {
 	char *cp, *bufdata;
@@ -387,47 +400,40 @@ check_kmem(void)
 	if (strcmp(vers, core_vers) != 0)
 		syslog(LOG_WARNING,
 		    "warning: %s version mismatch:\n\t%s\nand\t%s\n",
-		    kernel, vers, core_vers);
+		    kvm_getkernelname(kd_dump), vers, core_vers);
 
 	panicstart = panicend = 0;
 	if (KREAD(kd_dump, dump_nl[X_PANICSTART].n_value, &panicstart) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 		goto nomsguf;
 	}
 	if (KREAD(kd_dump, dump_nl[X_PANICEND].n_value, &panicend) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 		goto nomsguf;
 	}
 	if (panicstart != 0 && panicend != 0) {
 		if (KREAD(kd_dump, dump_nl[X_MSGBUF].n_value, &bufp)) {
-			if (verbose)
-				syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+			syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 			goto nomsguf;
 		}
 		if (kvm_read(kd_dump, (long)bufp, &msgbuf,
 		    offsetof(struct kern_msgbuf, msg_bufc)) !=
 		    offsetof(struct kern_msgbuf, msg_bufc)) {
-			if (verbose)
-				syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+			syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 			goto nomsguf;
 		}
 		if (msgbuf.msg_magic != MSG_MAGIC) {
-			if (verbose)
-				syslog(LOG_WARNING, "msgbuf magic incorrect");
+			syslog(LOG_WARNING, "msgbuf magic incorrect");
 			goto nomsguf;
 		}
 		bufdata = malloc(msgbuf.msg_bufs);
 		if (bufdata == NULL) {
-			if (verbose)
-				syslog(LOG_WARNING, "couldn't allocate space for msgbuf data");
+			syslog(LOG_WARNING, "couldn't allocate space for msgbuf data");
 			goto nomsguf;
 		}
 		if (kvm_read(kd_dump, (long)&bufp->msg_bufc, bufdata,
 		    msgbuf.msg_bufs) != msgbuf.msg_bufs) {
-			if (verbose)
-				syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+			syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 			free(bufdata);
 			goto nomsguf;
 		}
@@ -450,8 +456,7 @@ check_kmem(void)
 	}
 nomsguf:
 	if (KREAD(kd_dump, dump_nl[X_PANICSTR].n_value, &panicstr) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 		return;
 	}
 	if (panicstr) {
@@ -459,9 +464,8 @@ nomsguf:
 		panicloc = panicstr;
 		do {
 			if (KREAD(kd_dump, panicloc, cp) != 0) {
-				if (verbose)
-				    syslog(LOG_WARNING, "kvm_read: %s",
-					kvm_geterr(kd_dump));
+				syslog(LOG_WARNING, "kvm_read: %s",
+				    kvm_geterr(kd_dump));
 				break;
 			}
 			panicloc++;
@@ -470,21 +474,19 @@ nomsguf:
 	}
 }
 
-int
-dump_exists(void)
+static int
+dump_exists(int verbose)
 {
 	u_int32_t newdumpmag;
 
 	if (KREAD(kd_dump, dump_nl[X_DUMPMAG].n_value, &newdumpmag) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 		return (0);
 	}
 
 	/* Read the dump size. */
 	if (KREAD(kd_dump, dump_nl[X_DUMPSIZE].n_value, &dumpsize) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
 		return (0);
 	}
 	dumpbytes = (off_t)dumpsize * getpagesize();
@@ -496,16 +498,15 @@ dump_exists(void)
 	 */
 	if (newdumpmag != dumpmag) {
 		if (verbose)
-			syslog(LOG_WARNING,
-			    "magic number mismatch (0x%x != 0x%x)",
-			    newdumpmag, dumpmag);
+			syslog(LOG_WARNING, "magic number mismatch "
+			    "(0x%x != 0x%x)", newdumpmag, dumpmag);
 		syslog(LOG_WARNING, "no core dump");
 		return (0);
 	}
 	return (1);
 }
 
-void
+static void
 clear_dump(void)
 {
 	if (kvm_dump_inval(kd_dump) == -1)
@@ -514,14 +515,138 @@ clear_dump(void)
 
 }
 
-char buf[1024 * 1024];
+static char buf[1024 * 1024];
 
-void
-save_core(void)
+static void
+save_kernel(FILE *fp, char *path)
+{
+	int nw, nr, ifd;
+
+	ifd = Open(kernel, O_RDONLY);
+	while ((nr = read(ifd, buf, sizeof(buf))) > 0) {
+		nw = fwrite(buf, 1, nr, fp);
+		if (nw != nr) {
+			syslog(LOG_ERR, "%s: %s",
+			    path, strerror(nw == 0 ? EIO : errno));
+			syslog(LOG_WARNING,
+			    "WARNING: kernel may be incomplete");
+			exit(1);
+		}
+	}
+	if (nr < 0) {
+		syslog(LOG_ERR, "%s: %m", kernel);
+		syslog(LOG_WARNING, "WARNING: kernel may be incomplete");
+		exit(1);
+	}
+}
+
+static int
+ksymsget(u_long addr, void *ptr, size_t size)
+{
+
+	if ((size_t)kvm_read(kd_dump, addr, ptr, size) != size) {
+		syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+		return 1;
+	}
+	return 0;
+}
+
+static int
+save_ksyms(FILE *fp, char *path)
+{
+	struct ksyms_hdr khdr;
+	int nw, symsz, strsz;
+	TAILQ_HEAD(, ksyms_symtab) symtabs;
+	struct ksyms_symtab st, *stptr;
+	void *p;
+
+	/* Get basic info and ELF headers, check if ksyms was on. */
+	if (ksymsget(dump_nl[X_KHDR].n_value, &khdr, sizeof(khdr)))
+		return 1;
+	if (ksymsget(dump_nl[X_SYMSZ].n_value, &symsz, sizeof(symsz)))
+		return 1;
+	if (ksymsget(dump_nl[X_STRSZ].n_value, &strsz, sizeof(strsz)))
+		return 1;
+	if (symsz == 0 || strsz == 0)
+		return 1;
+
+	/* Update the ELF section headers for symbols/strings. */
+	khdr.kh_shdr[SYMTAB].sh_size = symsz;
+	khdr.kh_shdr[SYMTAB].sh_info = symsz / sizeof(Elf_Sym);
+	khdr.kh_shdr[STRTAB].sh_offset = symsz +
+	    khdr.kh_shdr[SYMTAB].sh_offset;
+	khdr.kh_shdr[STRTAB].sh_size = strsz;
+
+	/* Write out the ELF headers. */
+	nw = fwrite(&khdr, 1, sizeof(khdr), fp);
+	if (nw != sizeof(khdr)) {
+		syslog(LOG_ERR, "%s: %s",
+		    path, strerror(nw == 0 ? EIO : errno));
+		syslog(LOG_WARNING,
+		    "WARNING: kernel may be incomplete");
+		exit(1);
+        }
+
+        /* Dump symbol table. */
+	if (ksymsget(dump_nl[X_SYMTABS].n_value, &symtabs, sizeof(symtabs)))
+		return 1;
+	stptr = TAILQ_FIRST(&symtabs);
+	while (stptr != NULL) {
+		if (ksymsget((u_long)stptr, &st, sizeof(st)))
+			return 1;
+		stptr = TAILQ_NEXT(&st, sd_queue);
+		if ((p = malloc(st.sd_symsize)) == NULL)
+			return 1;
+		if (ksymsget((u_long)st.sd_symstart, p, st.sd_symsize)) {
+			free(p);
+			return 1;
+		}
+		nw = fwrite(p, 1, st.sd_symsize, fp);
+		free(p);
+		if (nw != st.sd_symsize) {
+			syslog(LOG_ERR, "%s: %s",
+			    path, strerror(nw == 0 ? EIO : errno));
+			syslog(LOG_WARNING,
+			    "WARNING: kernel may be incomplete");
+			exit(1);
+		}
+	}
+
+	/* Dump string table. */
+	if (ksymsget(dump_nl[X_SYMTABS].n_value, &symtabs, sizeof(symtabs)))
+		return 1;
+	stptr = TAILQ_FIRST(&symtabs);
+	while (stptr != NULL) {
+		if (ksymsget((u_long)stptr, &st, sizeof(st)))
+			return 1;
+		stptr = TAILQ_NEXT(&st, sd_queue);
+		if ((p = malloc(st.sd_symsize)) == NULL)
+			return 1;
+		if (ksymsget((u_long)st.sd_strstart, p, st.sd_strsize)) {
+			free(p);
+			return 1;
+		}
+		nw = fwrite(p, 1, st.sd_strsize, fp);
+		free(p);
+		if (nw != st.sd_strsize) {
+			syslog(LOG_ERR, "%s: %s",
+			    path, strerror(nw == 0 ? EIO : errno));
+			syslog(LOG_WARNING,
+			    "WARNING: kernel may be incomplete");
+			exit(1);
+		}
+	}
+
+	return 0;
+}
+
+static void
+save_core(int compress)
 {
 	FILE *fp;
-	int bounds, ifd, nr, nw, ofd;
-	char *rawp, path[MAXPATHLEN];
+	int bounds, ifd, nr, nw, ofd, tryksyms;
+	char path[MAXPATHLEN], rbuf[MAXPATHLEN];
+	const char *rawp;
 
 	ofd = -1;
 	/*
@@ -566,7 +691,12 @@ err1:			syslog(LOG_WARNING, "%s: %m", path);
 
 	if (dumpcdev == NODEV) {
 		/* Open the raw device. */
-		rawp = rawname(ddname);
+		rawp = getdiskrawname(rbuf, sizeof(rbuf), ddname);
+		if (rawp == NULL) {
+			syslog(LOG_WARNING, "%s: %m; can't convert to raw",
+			    ddname);
+			rawp = ddname;
+		}
 		if ((ifd = open(rawp, O_RDONLY)) == -1) {
 			syslog(LOG_WARNING, "%s: %m; using block device",
 			    rawp);
@@ -594,7 +724,7 @@ err1:			syslog(LOG_WARNING, "%s: %m", path);
 		humanize_number(nbuf, 7, dumpbytes, "", HN_AUTOSCALE, 0);
 		(void)printf("%7s\r", nbuf);
 		(void)fflush(stdout);
-		nr = read(ifd, buf, MIN(dumpbytes, sizeof(buf)));
+		nr = read(ifd, buf, MIN(dumpbytes, (off_t)sizeof(buf)));
 		if (nr <= 0) {
 			if (nr == 0)
 				syslog(LOG_WARNING,
@@ -617,45 +747,49 @@ err2:			syslog(LOG_WARNING,
 		(void)close(ifd);
 	(void)fclose(fp);
 
-	/* Copy the kernel. */
-	ifd = Open(kernel, O_RDONLY);
+	/* Create a kernel. */
 	(void)snprintf(path, sizeof(path), "%s/netbsd.%d%s",
 	    dirname, bounds, compress ? ".gz" : "");
-	if (compress) {
-		if ((fp = zopen(path, gzmode)) == NULL) {
-			syslog(LOG_ERR, "%s: %m", path);
-			exit(1);
-		}
-	} else
-		ofd = Create(path, S_IRUSR | S_IWUSR);
 	syslog(LOG_NOTICE, "writing %skernel to %s",
 	    compress ? "compressed " : "", path);
-	while ((nr = read(ifd, buf, sizeof(buf))) > 0) {
-		if (compress)
-			nw = fwrite(buf, 1, nr, fp);
-		else
-			nw = write(ofd, buf, nr);
-		if (nw != nr) {
-			syslog(LOG_ERR, "%s: %s",
-			    path, strerror(nw == 0 ? EIO : errno));
-			syslog(LOG_WARNING,
-			    "WARNING: kernel may be incomplete");
-			exit(1);
+	for (tryksyms = 1;; tryksyms = 0) {
+		if (compress) {
+			if ((fp = zopen(path, gzmode)) == NULL) {
+				syslog(LOG_ERR, "%s: %m", path);
+				exit(1);
+			}
+		} else {
+			ofd = Create(path, S_IRUSR | S_IWUSR);
+			fp  = fdopen(ofd, "w");
+			if (fp == NULL) {
+				syslog(LOG_ERR, "fdopen: %m");
+				exit(1);
+			}
+		}
+		if (tryksyms) {
+			if (!save_ksyms(fp, path))
+				break;
+			(void)fclose(fp);
+			unlink(path);
+		} else {
+			save_kernel(fp, path);
+			break;
 		}
 	}
-	if (nr < 0) {
-		syslog(LOG_ERR, "%s: %m", kernel);
-		syslog(LOG_WARNING, "WARNING: kernel may be incomplete");
-		exit(1);
-	}
-	if (compress)
-		(void)fclose(fp);
-	else
-		(void)close(ofd);
+	(void)fclose(fp);
+
+	/*
+	 * For development systems where the crash occurs during boot
+	 * to multiuser.
+	 */
+	sync();
+	sleep(1);
+	sync();
+	sleep(1);
 }
 
-char *
-find_dev(dev_t dev, int type)
+static char *
+find_dev(dev_t dev, mode_t type)
 {
 	DIR *dfd;
 	struct dirent *dir;
@@ -688,31 +822,12 @@ find_dev(dev_t dev, int type)
 		}
 	}
 	closedir(dfd);
-	syslog(LOG_ERR, "can't find device %d/%d", major(dev), minor(dev));
+	syslog(LOG_ERR, "can't find device %lld/%lld",
+	    (long long)major(dev), (long long)minor(dev));
 	exit(1);
 }
 
-char *
-rawname(char *s)
-{
-	char *sl;
-	char name[MAXPATHLEN];
-
-	if ((sl = strrchr(s, '/')) == NULL || sl[1] == '0') {
-		syslog(LOG_ERR,
-		    "can't make raw dump device name from %s", s);
-		return (s);
-	}
-	(void)snprintf(name, sizeof(name), "%.*s/r%s", (int)(sl - s), s,
-	    sl + 1);
-	if ((sl = strdup(name)) == NULL) {
-		syslog(LOG_ERR, "%m");
-		exit(1);
-	}
-	return (sl);
-}
-
-int
+static int
 get_crashtime(void)
 {
 	time_t dumptime;			/* Time the dump was taken. */
@@ -720,27 +835,26 @@ get_crashtime(void)
 
 	if (KREAD(kd_dump, dump_nl[X_TIME_SECOND].n_value, &dumptime) != 0) {
 		if (KREAD(kd_dump, dump_nl[X_TIME].n_value, &dtime) != 0) {
-			if (verbose)
-				syslog(LOG_WARNING, "kvm_read: %s (and _time_second is not defined also)", kvm_geterr(kd_dump));
+			syslog(LOG_WARNING, "kvm_read: %s (and _time_second "
+			    "is not defined also)", kvm_geterr(kd_dump));
 			return (0);
 		}
 		dumptime = dtime.tv_sec;
 	}
 	if (dumptime == 0) {
-		if (verbose)
-			syslog(LOG_ERR, "dump time is zero");
+		syslog(LOG_WARNING, "dump time is zero");
 		return (0);
 	}
-	(void)printf("savecore: system went down at %s", ctime(&dumptime));
+	syslog(LOG_INFO, "system went down at %s", ctime(&dumptime));
 #define	LEEWAY	(60 * SECSPERDAY)
 	if (dumptime < now - LEEWAY || dumptime > now + LEEWAY) {
-		(void)printf("dump time is unreasonable\n");
+		syslog(LOG_WARNING, "dump time is unreasonable");
 		return (0);
 	}
 	return (1);
 }
 
-int
+static int
 check_space(void)
 {
 	FILE *fp;
@@ -749,11 +863,9 @@ check_space(void)
 	struct statvfs fsbuf;
 	char mbuf[100], path[MAXPATHLEN];
 
-	if (stat(kernel, &st) < 0) {
-		syslog(LOG_ERR, "%s: %m", kernel);
-		exit(1);
-	}
-	kernelsize = st.st_blocks * S_BLKSIZE;
+	/* XXX assume a reasonable default, unless we find a kernel. */
+	kernelsize = 20 * 1024 * 1024;
+	if (!stat(kernel, &st)) kernelsize = st.st_blocks * S_BLKSIZE;
 	if (statvfs(dirname, &fsbuf) < 0) {
 		syslog(LOG_ERR, "%s: %m", dirname);
 		exit(1);
@@ -785,7 +897,7 @@ check_space(void)
 	return (1);
 }
 
-int
+static int
 Open(const char *name, int rw)
 {
 	int fd;
@@ -797,7 +909,7 @@ Open(const char *name, int rw)
 	return (fd);
 }
 
-void
+static void
 Lseek(int fd, off_t off, int flag)
 {
 	off_t ret;
@@ -809,7 +921,7 @@ Lseek(int fd, off_t off, int flag)
 	}
 }
 
-int
+static int
 Create(char *file, int mode)
 {
 	int fd;
@@ -822,21 +934,15 @@ Create(char *file, int mode)
 	return (fd);
 }
 
-void
-Write(int fd, void *bp, int size)
+static void
+usage(const char *fmt, ...)
 {
-	int n;
-
-	if ((n = write(fd, bp, size)) < size) {
-		syslog(LOG_ERR, "write: %s", strerror(n == -1 ? errno : EIO));
-		exit(1);
-	}
-}
-
-void
-usage(void)
-{
+	va_list ap;
+	va_start(ap, fmt);
+	(void)vsyslog(LOG_ERR, fmt, ap);
+	va_end(ap);
 	(void)syslog(LOG_ERR,
-	    "usage: savecore [-cfnvz] [-N system] [-Z level] directory");
+	    "Usage: %s [-cfnvz] [-N system] [-Z level] [directory]",
+	    getprogname());
 	exit(1);
 }

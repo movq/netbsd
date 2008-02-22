@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2007/10/17 19:54:14 garbled Exp $
+#	$NetBSD: Makefile,v 1.9 2017/08/15 10:11:31 mrg Exp $
 
 # Makefile for evbmips tags file and boot blocks
 
@@ -7,10 +7,18 @@
 
 # XXX !  fix this
 TEVBMIPS=	${SYSDIR}/arch/evbmips/tags
-SEVBMIPS=	${SYSDIR}/arch/evbmips/evbmips/*.[ch] \
-		${SYSDIR}/arch/evbmips/include/*.h \
-		${SYSDIR}/arch/evbmips/isa/*.[ch]
+SEVBMIPS=	${SYSDIR}/arch/evbmips/adm5120/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/alchemy/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/atheros/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/evbmips/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/gdium/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/include/*.h
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/isa/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/malta/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/rmixl/*.[ch]
+SEVBMIPS+=	${SYSDIR}/arch/evbmips/sbmips/*.[ch]
 AEVBMIPS=	${SYSDIR}/arch/evbmips/evbmips/*.S
+AEVBMIPS+=	${SYSDIR}/arch/evbmips/sbmips/*.S
 
 # Directories in which to place tags links
 DEVBMIPS= evbmips include isa pci
@@ -22,7 +30,8 @@ tags:
 	-echo ${SEVBMIPS} ${SMIPS} | xargs ctags -wadtf ${TEVBMIPS}
 	-${FINDCOMM} | xargs ctags -wadtf ${TEVBMIPS}
 	egrep "^LEAF(.*)|^[AN]LEAF(.*)|^NON_LEAF(.*)" ${AEVBMIPS} ${AMIPS} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
 	    >> ${TEVBMIPS}
 	sort -o ${TEVBMIPS} ${TEVBMIPS}
 
@@ -31,6 +40,6 @@ links:
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
 
-SUBDIR=	compile include
+SUBDIR=	compile include stand
 
 .include <bsd.subdir.mk>

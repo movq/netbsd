@@ -1,4 +1,4 @@
-/*	$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $	*/
+/*	$NetBSD: bcsp.c,v 1.30 2016/08/15 08:20:11 maxv Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.30 2016/08/15 08:20:11 maxv Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -49,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $");
 #include <netbt/hci.h>
 
 #include <dev/bluetooth/bcsp.h>
-#include <dev/bluetooth/btuart.h>
 
 #include "ioconf.h"
 
@@ -132,8 +131,7 @@ struct bcsp_softc {
 #define	BCSP_XMIT	(1 << 0)	/* transmit active */
 #define	BCSP_ENABLED	(1 << 1)	/* is enabled */
 
-void bcspattach(int);
-static int bcsp_match(device_t, struct cfdata *, void *);
+static int bcsp_match(device_t, cfdata_t, void *);
 static void bcsp_attach(device_t, device_t, void *);
 static int bcsp_detach(device_t, int);
 
@@ -247,7 +245,7 @@ bcspattach(int num __unused)
  */
 /* ARGSUSED */
 static int
-bcsp_match(device_t self __unused, struct cfdata *cfdata __unused,
+bcsp_match(device_t self __unused, cfdata_t cfdata __unused,
 	   void *arg __unused)
 {
 
@@ -286,13 +284,8 @@ bcsp_attach(device_t parent __unused, device_t self, void *aux __unused)
 	MBUFQ_INIT(&sc->sc_scoq);
 
 	/* Attach Bluetooth unit */
-	sc->sc_unit = hci_attach(&bcsp_hci, self, 0);
+	sc->sc_unit = hci_attach_pcb(&bcsp_hci, self, 0);
 
-	if ((rc = sysctl_createv(&sc->sc_log, 0, NULL, NULL,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0) {
-		goto err;
-	}
 	if ((rc = sysctl_createv(&sc->sc_log, 0, NULL, &node,
 	    0, CTLTYPE_NODE, device_xname(self),
 	    SYSCTL_DESCR("bcsp controls"),
@@ -301,7 +294,7 @@ bcsp_attach(device_t parent __unused, device_t self, void *aux __unused)
 	}
 	bcsp_node_num = node->sysctl_num;
 	if ((rc = sysctl_createv(&sc->sc_log, 0, NULL, &node,
-	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    CTLFLAG_READWRITE, CTLTYPE_BOOL,
 	    "muzzled", SYSCTL_DESCR("muzzled for Link-establishment Layer"),
 	    NULL, 0, &sc->sc_le_muzzled,
 	    0, CTL_HW, bcsp_node_num, CTL_CREATE, CTL_EOL)) != 0) {
@@ -351,14 +344,14 @@ bcsp_detach(device_t self, int flags __unused)
 	struct bcsp_softc *sc = device_private(self);
 
 	if (sc->sc_unit != NULL) {
-		hci_detach(sc->sc_unit);
+		hci_detach_pcb(sc->sc_unit);
 		sc->sc_unit = NULL;
 	}
 
-	callout_stop(&sc->sc_seq_timer);
+	callout_halt(&sc->sc_seq_timer, NULL);
 	callout_destroy(&sc->sc_seq_timer);
 
-	callout_stop(&sc->sc_le_timer);
+	callout_halt(&sc->sc_le_timer, NULL);
 	callout_destroy(&sc->sc_le_timer);
 
 	return 0;
@@ -374,14 +367,15 @@ bcspopen(dev_t device __unused, struct tty *tp)
 {
 	struct bcsp_softc *sc;
 	device_t dev;
-	struct cfdata *cfdata;
+	cfdata_t cfdata;
 	struct lwp *l = curlwp;		/* XXX */
 	int error, unit, s;
 	static char name[] = "bcsp";
 
-	if ((error = kauth_authorize_device_tty(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, tp)) != 0)
-		return error;
+	error = kauth_authorize_device(l->l_cred, KAUTH_DEVICE_BLUETOOTH_BCSP,
+	    KAUTH_ARG(KAUTH_REQ_DEVICE_BLUETOOTH_BCSP_ADD), NULL, NULL, NULL);
+	if (error)
+		return (error);
 
 	s = spltty();
 
@@ -397,15 +391,16 @@ bcspopen(dev_t device __unused, struct tty *tp)
 
 	cfdata = malloc(sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
 	for (unit = 0; unit < bcsp_cd.cd_ndevs; unit++)
-		if (bcsp_cd.cd_devs[unit] == NULL)
+		if (device_lookup(&bcsp_cd, unit) == NULL)
 			break;
 	cfdata->cf_name = name;
 	cfdata->cf_atname = name;
 	cfdata->cf_unit = unit;
 	cfdata->cf_fstate = FSTATE_STAR;
 
-	aprint_normal("%s%d at tty major %d minor %d",
-	    name, unit, major(tp->t_dev), minor(tp->t_dev));
+	aprint_normal("%s%d at tty major %llu minor %llu",
+	    name, unit, (unsigned long long)major(tp->t_dev),
+	    (unsigned long long)minor(tp->t_dev));
 	dev = config_attach_pseudo(cfdata);
 	if (dev == NULL) {
 		splx(s);
@@ -435,7 +430,7 @@ static int
 bcspclose(struct tty *tp, int flag __unused)
 {
 	struct bcsp_softc *sc = tp->t_sc;
-	struct cfdata *cfdata;
+	cfdata_t cfdata;
 	int s;
 
 	/* terminate link-establishment */
@@ -721,8 +716,12 @@ bcsp_slip_receive(int c, struct tty *tp)
 	}
 	if (discard) {
 discarded:
+#ifdef BCSP_DEBUG
 		DPRINTFN(4, ("%s: receives unexpected byte 0x%02x: %s\n",
 		    device_xname(sc->sc_dev), c, errstr));
+#else
+		__USE(errstr);
+#endif
 	}
 	sc->sc_stats.byte_rx++;
 
@@ -835,8 +834,12 @@ bcsp_pktintegrity_receive(struct bcsp_softc *sc, struct mbuf *m)
 
 	if (discard) {
 discarded:
+#ifdef BCSP_DEBUG
 		DPRINTFN(3, ("%s: receives unexpected packet: %s\n",
 		    device_xname(sc->sc_dev), errstr));
+#else
+		__USE(errstr);
+#endif
 		m_freem(m);
 	} else
 		bcsp_mux_receive(sc, m);
@@ -998,7 +1001,7 @@ bcsp_send_ack_command(struct bcsp_softc *sc)
 }
 
 static __inline struct mbuf *
-bcsp_create_ackpkt()
+bcsp_create_ackpkt(void)
 {
 	struct mbuf *m;
 	bcsp_hdr_t *hdrp;
@@ -1124,16 +1127,16 @@ bcsp_tx_reliable_pkt(struct bcsp_softc *sc, struct mbuf *m, u_int protocol_id)
 
 	for (pldlen = 0, _m = m; _m != NULL; _m = _m->m_next) {
 		if (_m->m_len < 0)
-			return false;
+			goto out;
 		pldlen += _m->m_len;
 	}
 	if (pldlen > 0xfff)
-		return false;
+		goto out;
 	if (protocol_id == BCSP_IDENT_ACKPKT || protocol_id > 15)
-		return false;
+		goto out;
 
 	if (sc->sc_seq_winspace == 0)
-		return false;
+		goto out;
 
 	M_PREPEND(m, sizeof(bcsp_hdr_t), M_DONTWAIT);
 	if (m == NULL) {
@@ -1164,12 +1167,15 @@ bcsp_tx_reliable_pkt(struct bcsp_softc *sc, struct mbuf *m, u_int protocol_id)
 	_m = m_copym(m, 0, M_COPYALL, M_DONTWAIT);
 	if (_m == NULL) {
 		aprint_error_dev(sc->sc_dev, "out of memory\n");
-		return false;
+		goto out;
 	}
 	MBUFQ_ENQUEUE(&sc->sc_seq_retryq, _m);
 	bcsp_mux_transmit(sc);
 
 	return true;
+out:
+	m_freem(m);
+	return false;
 }
 
 #if 0
@@ -1360,14 +1366,14 @@ bcsp_tx_unreliable_pkt(struct bcsp_softc *sc, struct mbuf *m, u_int protocol_id)
 
 	for (pldlen = 0, _m = m; _m != NULL; _m = m->m_next) {
 		if (_m->m_len < 0)
-			return false;
+			goto out;
 		pldlen += _m->m_len;
 	}
 	DPRINTFN(1, (" pldlen=%d\n", pldlen));
 	if (pldlen > 0xfff)
-		return false;
+		goto out;
 	if (protocol_id == BCSP_IDENT_ACKPKT || protocol_id > 15)
-		return false;
+		goto out;
 
 	M_PREPEND(m, sizeof(bcsp_hdr_t), M_DONTWAIT);
 	if (m == NULL) {
@@ -1393,6 +1399,9 @@ bcsp_tx_unreliable_pkt(struct bcsp_softc *sc, struct mbuf *m, u_int protocol_id)
 	bcsp_mux_transmit(sc);
 
 	return true;
+out:
+	m_freem(m);
+	return false;
 }
 
 #if 0

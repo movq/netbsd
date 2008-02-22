@@ -1,4 +1,4 @@
-/*	$NetBSD: assert.h,v 1.18 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: assert.h,v 1.22 2016/10/03 12:08:39 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -43,6 +43,7 @@
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
+#include <sys/null.h>
 
 #undef assert
 
@@ -84,7 +85,9 @@
 #endif /* _DIAGNOSTIC */
 
 
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#if defined(__lint__)
+#define	__assert_function__	(__static_cast(const void *,0))
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
 #define	__assert_function__	__func__
 #elif __GNUC_PREREQ__(2, 6)
 #define	__assert_function__	__PRETTY_FUNCTION__
@@ -95,9 +98,15 @@
 #ifndef __ASSERT_DECLARED
 #define __ASSERT_DECLARED
 __BEGIN_DECLS
-void __assert(const char *, int, const char *);
-void __assert13(const char *, int, const char *, const char *);
+__dead void __assert(const char *, int, const char *);
+__dead void __assert13(const char *, int, const char *, const char *);
 void __diagassert(const char *, int, const char *);
 void __diagassert13(const char *, int, const char *, const char *);
 __END_DECLS
 #endif /* __ASSERT_DECLARED */
+
+#if ((__cplusplus - 0) < 201103L)
+#ifndef static_assert
+#define static_assert _Static_assert
+#endif /* static_assert */
+#endif

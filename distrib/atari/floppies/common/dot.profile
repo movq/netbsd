@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.2 2003/07/26 17:06:33 salo Exp $
+# $NetBSD: dot.profile,v 1.7 2017/11/25 09:40:17 tsutsui Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -46,14 +46,15 @@ export EDITOR
 
 umask 022
 
+mount_gemdos() mount_msdos -G "$@"
+
 makerootwritable() {
-	if [ ! -e /tmp/.root_writable ]; then
-		if [ ! -e /kern/msgbuf ]; then
-			mount -t kernfs /kern /kern
-		fi
-		mount -t ffs -u /kern/rootdev /
-		cp /dev/null /tmp/.root_writable
+	rootdev=/kern/rootdev
+	if ! mount -u $rootdev / ; then
+	    echo "Unable to mount $rootdev read-write"
+	    exit 1
 	fi
+	echo "Mounted $rootdev read-write"
 }
 
 if [ "X${DONEPROFILE}" = "X" ]; then
@@ -63,6 +64,9 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 	# set up some sane defaults
 	echo 'erase ^H, werase ^W, kill ^U, intr ^C'
 	stty newcrt werase ^W intr ^C kill ^U erase ^H 9600
+
+	# mount the kernfs so that we can check rootdev etc.
+	mount -t kernfs /kern /kern
 
 	# mount root read write
 	makerootwritable
@@ -77,7 +81,7 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 		_num=0
 		for i in $_maps; do
 			echo "	$_num  $i"
-			_num=`expr $_num + 1`
+			_num=$(( $_num + 1 ))
 		done
 		echo
 		echo -n "Select the number of the map you want to activate: "
@@ -85,7 +89,7 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 
 		# Delete all non-nummeric characters from the users answer
 		if [ ! -z "$_ans" ]; then
-			_ans=`echo $_ans | sed 's/[^0-9]//g`
+			_ans=`echo $_ans | sed 's/[^0-9]//g'`
 		fi
 
 		# Check if the answer is valid (in range). Note that an answer
@@ -103,35 +107,5 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 		break
 	done
 
-	if [ -x /sysinst ]; then
-		sysinst
-	else
-	   if [ -x /upgrade ]; then
-		#
-		# Original installation script.
-		# Installing or upgrading?
-		_forceloop=""
-		while [ "X${_forceloop}" = X"" ]; do
-			echo -n '(I)nstall or (U)pgrade? '
-			read _forceloop
-			case "$_forceloop" in
-				i*|I*)
-					/install
-					;;
-
-				u*|U*)
-					/upgrade
-					;;
-
-				*)
-					_forceloop=""
-					;;
-			esac
-		done
-	    else
-		#
-		# Stripped down preparation version
-		/install
-	    fi
-	fi
+	sysinst
 fi

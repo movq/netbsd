@@ -1,10 +1,22 @@
-#	$NetBSD: Makefile.inc,v 1.6 2002/11/23 14:29:29 chris Exp $
+#	$NetBSD: Makefile.inc,v 1.21 2014/01/29 23:37:18 joerg Exp $
 
-SRCS+=	__assert.c __main.c bswap64.c byte_swap_2.S byte_swap_4.S \
-	ffs.S imax.c imin.c lmax.c lmin.c max.c min.c random.c scanc.c \
-	skpc.c strcat.c strcasecmp.c \
-	strcpy.c strlen.c strncasecmp.c \
-	strncpy.c strtoul.c ulmax.c ulmin.c
+SRCS+=	byte_swap_2.S byte_swap_4.S
+SRCS+=	ffs.S
+SRCS+=	memcmp.S memcpy.S memset.S memmove.S strcmp.S strncmp.S
 
-SRCS+=	divsi3.S
-SRCS+=	memchr.c memcmp.S memcpy.S memset.S memmove.S strcmp.S strncmp.S
+.if !empty(MACHINE_ARCH:Mearm*)
+SRCS+=	unwind_stub.c
+.endif
+.if empty(MACHINE_ARCH:Mearmv7*)
+CPUFLAGS.ffs.S+=	-marm
+.endif
+CPUFLAGS.divide.S+=	-marm
+CPUFLAGS.memcmp.S+=	-marm
+CPUFLAGS.memcpy.S+=	-marm
+CPUFLAGS.memmove.S+=	-marm
+CPUFLAGS.memset.S+=	-marm
+.if empty(CPPFLAGS:M-D_STANDALONE)
+CPUFLAGS.strcpy.S+=	-marm
+CPUFLAGS.strlcpy.S+=	-marm
+CPUFLAGS.strncpy.S+=	-marm
+.endif

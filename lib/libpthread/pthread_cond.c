@@ -1,7 +1,7 @@
-/*	$NetBSD: pthread_cond.c,v 1.41 2008/02/14 21:40:51 ad Exp $	*/
+/*	$NetBSD: pthread_cond.c,v 1.65 2017/12/08 03:08:19 christos Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,22 +29,44 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_cond.c,v 1.41 2008/02/14 21:40:51 ad Exp $");
+/*
+ * We assume that there will be no contention on pthread_cond_t::ptc_lock
+ * because functioning applications must call both the wait and wakeup
+ * functions while holding the same application provided mutex.  The
+ * spinlock is present only to prevent libpthread causing the application
+ * to crash or malfunction as a result of corrupted data structures, in
+ * the event that the application is buggy.
+ *
+ * If there is contention on spinlock when real-time threads are in use,
+ * it could cause a deadlock due to priority inversion: the thread holding
+ * the spinlock may not get CPU time to make forward progress and release
+ * the spinlock to a higher priority thread that is waiting for it.
+ * Contention on the spinlock will only occur with buggy applications,
+ * so at the time of writing it's not considered a major bug in libpthread.
+ */
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: pthread_cond.c,v 1.65 2017/12/08 03:08:19 christos Exp $");
+
+#include <stdlib.h>
 #include <errno.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
 #include "pthread.h"
 #include "pthread_int.h"
+#include "reentrant.h"
 
-int	_sys_nanosleep(const struct timespec *, struct timespec *);
+int	_sys___nanosleep50(const struct timespec *, struct timespec *);
 
 extern int pthread__started;
 
 static int pthread_cond_wait_nothread(pthread_t, pthread_mutex_t *,
-    const struct timespec *);
+    pthread_cond_t *, const struct timespec *);
+
+int	_pthread_cond_has_waiters_np(pthread_cond_t *);
+
+__weak_alias(pthread_cond_has_waiters_np,_pthread_cond_has_waiters_np)
 
 __strong_alias(__libc_cond_init,pthread_cond_init)
 __strong_alias(__libc_cond_signal,pthread_cond_signal)
@@ -60,9 +75,18 @@ __strong_alias(__libc_cond_wait,pthread_cond_wait)
 __strong_alias(__libc_cond_timedwait,pthread_cond_timedwait)
 __strong_alias(__libc_cond_destroy,pthread_cond_destroy)
 
+static clockid_t
+pthread_cond_getclock(const pthread_cond_t *cond)
+{
+	return cond->ptc_private ? 
+	    *(clockid_t *)cond->ptc_private : CLOCK_REALTIME;
+}
+
 int
 pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_init_stub(cond, attr);
 
 	pthread__error(EINVAL, "Invalid condition variable attribute",
 	    (attr == NULL) || (attr->ptca_magic == _PT_CONDATTR_MAGIC));
@@ -71,6 +95,14 @@ pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
 	pthread_lockinit(&cond->ptc_lock);
 	PTQ_INIT(&cond->ptc_waiters);
 	cond->ptc_mutex = NULL;
+	if (attr && attr->ptca_private) {
+		cond->ptc_private = malloc(sizeof(clockid_t));
+		if (cond->ptc_private == NULL)
+			return errno;
+		*(clockid_t *)cond->ptc_private =
+		    *(clockid_t *)attr->ptca_private;
+	} else
+		cond->ptc_private = NULL;
 
 	return 0;
 }
@@ -79,6 +111,8 @@ pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr)
 int
 pthread_cond_destroy(pthread_cond_t *cond)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_destroy_stub(cond);
 
 	pthread__error(EINVAL, "Invalid condition variable",
 	    cond->ptc_magic == _PT_COND_MAGIC);
@@ -86,102 +120,21 @@ pthread_cond_destroy(pthread_cond_t *cond)
 	    cond->ptc_mutex == NULL);
 
 	cond->ptc_magic = _PT_COND_DEAD;
-
-	return 0;
-}
-
-
-int
-pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
-{
-	pthread_t self;
-
-	pthread__error(EINVAL, "Invalid condition variable",
-	    cond->ptc_magic == _PT_COND_MAGIC);
-	pthread__error(EINVAL, "Invalid mutex",
-	    mutex->ptm_magic == _PT_MUTEX_MAGIC);
-	pthread__error(EPERM, "Mutex not locked in condition wait",
-	    mutex->ptm_owner != NULL);
-
-	self = pthread__self();
-
-	/* Just hang out for a while if threads aren't running yet. */
-	if (__predict_false(pthread__started == 0))
-		return pthread_cond_wait_nothread(self, mutex, NULL);
-
-	if (__predict_false(self->pt_cancel))
-		pthread__cancelled();
-
-	/*
-	 * Note this thread as waiting on the CV.  To ensure good
-	 * performance it's critical that the spinlock is held for
-	 * as short a time as possible - that means no system calls.
-	 */ 
-	pthread__spinlock(self, &cond->ptc_lock);
-#ifdef ERRORCHECK
-	if (cond->ptc_mutex == NULL)
-		cond->ptc_mutex = mutex;
-	else {
-		pthread__error(EINVAL,
-		    "Multiple mutexes used for condition wait", 
-		    cond->ptc_mutex == mutex);
-	}
-#else
-	cond->ptc_mutex = mutex;
-#endif
-	PTQ_INSERT_HEAD(&cond->ptc_waiters, self, pt_sleep);
-	self->pt_signalled = 0;
-	self->pt_sleeponq = 1;
-	self->pt_sleepobj = &cond->ptc_waiters;
-	pthread__spinunlock(self, &cond->ptc_lock);
-
- 	/*
- 	 * Before releasing the mutex, note that this thread is
- 	 * about to block by setting the willpark flag.  If there
- 	 * is a single waiter on the mutex, setting the flag will
- 	 * defer restarting it until calling into the kernel to
- 	 * park, saving a syscall & involuntary context switch.
- 	 */
-	self->pt_willpark = 1;
-	pthread_mutex_unlock(mutex);
-	(void)pthread__park(self, &cond->ptc_lock, &cond->ptc_waiters,
-	    NULL, 1, __UNVOLATILE(&mutex->ptm_waiters));
-	pthread_mutex_lock(mutex);
-
-	/*
-	 * If we awoke abnormally the waiters list will have been
-	 * made empty by the current thread (in pthread__park()),
-	 * so we can check the value safely without locking.
-	 *
-	 * Otherwise, it will have been updated by whichever thread
-	 * last issued a wakeup.
-	 */
-	if (PTQ_EMPTY(&cond->ptc_waiters) && cond->ptc_mutex != NULL) {
-		pthread__spinlock(self, &cond->ptc_lock);
-		if (PTQ_EMPTY(&cond->ptc_waiters))
-			cond->ptc_mutex = NULL;
-		pthread__spinunlock(self, &cond->ptc_lock);
-	}
-
-	/*
-	 * If we have cancelled then exit.  POSIX dictates that the
-	 * mutex must be held when we action the cancellation.
-	 */
-	if (__predict_false(self->pt_cancel)) {
-		if (self->pt_signalled)
-			pthread_cond_signal(cond);
-		pthread__cancelled();
-	}
+	free(cond->ptc_private);
 
 	return 0;
 }
 
 int
 pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
-    const struct timespec *abstime)
+		       const struct timespec *abstime)
 {
 	pthread_t self;
 	int retval;
+	clockid_t clkid = pthread_cond_getclock(cond);
+
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_timedwait_stub(cond, mutex, abstime);
 
 	pthread__error(EINVAL, "Invalid condition variable",
 	    cond->ptc_magic == _PT_COND_MAGIC);
@@ -189,211 +142,243 @@ pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	    mutex->ptm_magic == _PT_MUTEX_MAGIC);
 	pthread__error(EPERM, "Mutex not locked in condition wait",
 	    mutex->ptm_owner != NULL);
-	pthread__error(EINVAL, "Invalid wait time", 
-	    (abstime->tv_sec >= 0) &&
-	    (abstime->tv_nsec >= 0) && (abstime->tv_nsec < 1000000000));
 
 	self = pthread__self();
 
 	/* Just hang out for a while if threads aren't running yet. */
-	if (__predict_false(pthread__started == 0))
-		return pthread_cond_wait_nothread(self, mutex, abstime);
-
-	if (__predict_false(self->pt_cancel))
-		pthread__cancelled();
-
-	/*
-	 * Note this thread as waiting on the CV.  To ensure good
-	 * performance it's critical that the spinlock is held for
-	 * as short a time as possible - that means no system calls.
-	 */ 
-	pthread__spinlock(self, &cond->ptc_lock);
-#ifdef ERRORCHECK
-	if (cond->ptc_mutex == NULL)
-		cond->ptc_mutex = mutex;
-	else {
-		pthread__error(EINVAL,
-		    "Multiple mutexes used for condition wait",
-		    cond->ptc_mutex == mutex);
+	if (__predict_false(pthread__started == 0)) {
+		return pthread_cond_wait_nothread(self, mutex, cond, abstime);
 	}
-#else
+	if (__predict_false(self->pt_cancel)) {
+		pthread__cancelled();
+	}
+
+	/* Note this thread as waiting on the CV. */
+	pthread__spinlock(self, &cond->ptc_lock);
 	cond->ptc_mutex = mutex;
-#endif
 	PTQ_INSERT_HEAD(&cond->ptc_waiters, self, pt_sleep);
-	self->pt_signalled = 0;
-	self->pt_sleeponq = 1;
-	self->pt_sleepobj = &cond->ptc_waiters;
+	self->pt_sleepobj = cond;
 	pthread__spinunlock(self, &cond->ptc_lock);
 
- 	/*
- 	 * Before releasing the mutex, note that this thread is
- 	 * about to block by setting the willpark flag.  If there
- 	 * is a single waiter on the mutex, setting the flag will
- 	 * defer restarting it until calling into the kernel to
- 	 * park, saving a syscall & involuntary context switch.
- 	 */
-	self->pt_willpark = 1;
-	pthread_mutex_unlock(mutex);
-	retval = pthread__park(self, &cond->ptc_lock, &cond->ptc_waiters,
-	    abstime, 1, __UNVOLATILE(&mutex->ptm_waiters));
-	pthread_mutex_lock(mutex);
+	do {
+		self->pt_willpark = 1;
+		pthread_mutex_unlock(mutex);
+		self->pt_willpark = 0;
+		self->pt_blocking++;
+		do {
+			retval = _lwp_park(clkid, TIMER_ABSTIME,
+			    __UNCONST(abstime), self->pt_unpark,
+			    __UNVOLATILE(&mutex->ptm_waiters),
+			    __UNVOLATILE(&mutex->ptm_waiters));
+			self->pt_unpark = 0;
+		} while (retval == -1 && errno == ESRCH);
+		self->pt_blocking--;
+		membar_sync();
+		pthread_mutex_lock(mutex);
 
-	/*
-	 * If we awoke abnormally the waiters list will have been
-	 * made empty by the current thread (in pthread__park()),
-	 * so we can check the value safely without locking.
-	 *
-	 * Otherwise, it will have been updated by whichever thread
-	 * last issued a wakeup.
-	 */
-	if (PTQ_EMPTY(&cond->ptc_waiters) && cond->ptc_mutex != NULL) {
-		pthread__spinlock(self, &cond->ptc_lock);
-		if (PTQ_EMPTY(&cond->ptc_waiters))
-			cond->ptc_mutex = NULL;
-		pthread__spinunlock(self, &cond->ptc_lock);
-	}
-
-	/*
-	 * If we have cancelled then exit.  POSIX dictates that the
-	 * mutex must be held when we action the cancellation.
-	 */
-	if (__predict_false(self->pt_cancel | retval)) {
-		if (self->pt_signalled)
+		/*
+		 * If we have cancelled then exit.  POSIX dictates that
+		 * the mutex must be held when we action the cancellation.
+		 *
+		 * If we absorbed a pthread_cond_signal() and cannot take
+		 * the wakeup, we must ensure that another thread does.
+		 *
+		 * If awoke early, we may still be on the sleep queue and
+		 * must remove ourself.
+		 */
+		if (__predict_false(retval != 0)) {
+			switch (errno) {
+			case EINTR:
+			case EALREADY:
+				retval = 0;
+				break;
+			default:
+				retval = errno;
+				break;
+			}
+		}
+		if (__predict_false(self->pt_cancel | retval)) {
 			pthread_cond_signal(cond);
-		if (self->pt_cancel)
-			pthread__cancelled();
-	}
+			if (self->pt_cancel) {
+				pthread__cancelled();
+			}
+			break;
+		}
+	} while (self->pt_sleepobj != NULL);
 
 	return retval;
 }
 
 int
-pthread_cond_signal(pthread_cond_t *cond)
+pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+{
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_wait_stub(cond, mutex);
+
+	return pthread_cond_timedwait(cond, mutex, NULL);
+}
+
+static int __noinline
+pthread__cond_wake_one(pthread_cond_t *cond)
 {
 	pthread_t self, signaled;
 	pthread_mutex_t *mutex;
+	lwpid_t lid;
 
 	pthread__error(EINVAL, "Invalid condition variable",
 	    cond->ptc_magic == _PT_COND_MAGIC);
 
-	if (PTQ_EMPTY(&cond->ptc_waiters))
-		return 0;
-
+	/*
+	 * Pull the first thread off the queue.  If the current thread
+	 * is associated with the condition variable, remove it without
+	 * awakening (error case in pthread_cond_timedwait()).
+	 */
 	self = pthread__self();
 	pthread__spinlock(self, &cond->ptc_lock);
-
-	/*
-	 * Find a thread that is still blocked (no pending wakeup).
-	 * A wakeup can be pending if we have interrupted unpark_all
-	 * as it releases the interlock.
-	 */
-	PTQ_FOREACH(signaled, &cond->ptc_waiters, pt_sleep) {	
-		if (signaled->pt_sleepobj != NULL)
-			break;
+	if (self->pt_sleepobj == cond) {
+		PTQ_REMOVE(&cond->ptc_waiters, self, pt_sleep);
+		self->pt_sleepobj = NULL;
 	}
+	signaled = PTQ_FIRST(&cond->ptc_waiters);
 	if (__predict_false(signaled == NULL)) {
 		cond->ptc_mutex = NULL;
 		pthread__spinunlock(self, &cond->ptc_lock);
 		return 0;
 	}
-
-	/*
-	 * Pull the thread off the queue, and set pt_signalled.
-	 *
-	 * After resuming execution, the thread must check to see if it
-	 * has been restarted as a result of pthread_cond_signal().  If it
-	 * has, but cannot take the wakeup (because of eg a timeout) then
-	 * try to ensure that another thread sees it.  This is necessary
-	 * because there may be multiple waiters, and at least one should
-	 * take the wakeup if possible.
-	 */
-	PTQ_REMOVE(&cond->ptc_waiters, signaled, pt_sleep);
 	mutex = cond->ptc_mutex;
-	if (PTQ_EMPTY(&cond->ptc_waiters))
+	if (PTQ_NEXT(signaled, pt_sleep) == NULL) {
 		cond->ptc_mutex = NULL;
-	signaled->pt_signalled = 1;
+		PTQ_INIT(&cond->ptc_waiters);
+	} else {
+		PTQ_REMOVE(&cond->ptc_waiters, signaled, pt_sleep);
+	}
+	signaled->pt_sleepobj = NULL;
+	lid = signaled->pt_lid;
+	pthread__spinunlock(self, &cond->ptc_lock);
 
 	/*
 	 * For all valid uses of pthread_cond_signal(), the caller will
 	 * hold the mutex that the target is using to synchronize with.
-	 * To avoid the target awakening and immediatley blocking on the
+	 * To avoid the target awakening and immediately blocking on the
 	 * mutex, transfer the thread to be awoken to the current thread's
 	 * deferred wakeup list.  The waiter will be set running when the
 	 * caller (this thread) releases the mutex.
 	 */
-	if (mutex != NULL && self->pt_nwaiters < pthread__unpark_max &&
-	    pthread__mutex_deferwake(self, mutex)) {
-		signaled->pt_sleepobj = NULL;
-		signaled->pt_sleeponq = 0;
-		pthread__spinunlock(self, &cond->ptc_lock);
-		self->pt_waiters[self->pt_nwaiters++] = signaled->pt_lid;
-	} else {
-		pthread__unpark(self, &cond->ptc_lock,
-		    &cond->ptc_waiters, signaled);
+	if (__predict_false(self->pt_nwaiters == (size_t)pthread__unpark_max)) {
+		(void)_lwp_unpark_all(self->pt_waiters, self->pt_nwaiters,
+		    __UNVOLATILE(&mutex->ptm_waiters));
+		self->pt_nwaiters = 0;
 	}
-
+	self->pt_waiters[self->pt_nwaiters++] = lid;
+	pthread__mutex_deferwake(self, mutex);
 	return 0;
 }
 
-
 int
-pthread_cond_broadcast(pthread_cond_t *cond)
+pthread_cond_signal(pthread_cond_t *cond)
 {
-	pthread_t self, signaled, next;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_signal_stub(cond);
+
+	if (__predict_true(PTQ_EMPTY(&cond->ptc_waiters)))
+		return 0;
+	return pthread__cond_wake_one(cond);
+}
+
+static int __noinline
+pthread__cond_wake_all(pthread_cond_t *cond)
+{
+	pthread_t self, signaled;
 	pthread_mutex_t *mutex;
+	u_int max;
+	size_t nwaiters;
 
 	pthread__error(EINVAL, "Invalid condition variable",
 	    cond->ptc_magic == _PT_COND_MAGIC);
-
-	if (PTQ_EMPTY(&cond->ptc_waiters))
-		return 0;
-
-	self = pthread__self();
-	pthread__spinlock(self, &cond->ptc_lock);
-	mutex = cond->ptc_mutex;
-	cond->ptc_mutex = NULL;
 
 	/*
 	 * Try to defer waking threads (see pthread_cond_signal()).
 	 * Only transfer waiters for which there is no pending wakeup.
 	 */
-	if (mutex != NULL && pthread__mutex_deferwake(self, mutex)) {
-		for (signaled = PTQ_FIRST(&cond->ptc_waiters);
-		    signaled != NULL;
-		    signaled = next) {	
-		    	next = PTQ_NEXT(signaled, pt_sleep);
-		    	if (__predict_false(signaled->pt_sleepobj == NULL))
-		    		continue;
-			if (self->pt_nwaiters == pthread__unpark_max) {
-				/* Overflow, take the slow path. */
-				break;
-			}
-		    	PTQ_REMOVE(&cond->ptc_waiters, signaled, pt_sleep);
-			signaled->pt_sleepobj = NULL;
-			signaled->pt_sleeponq = 0;
-			self->pt_waiters[self->pt_nwaiters++] =
-			    signaled->pt_lid;
+	self = pthread__self();
+	pthread__spinlock(self, &cond->ptc_lock);
+	max = pthread__unpark_max;
+	mutex = cond->ptc_mutex;
+	nwaiters = self->pt_nwaiters;
+	PTQ_FOREACH(signaled, &cond->ptc_waiters, pt_sleep) {
+		if (__predict_false(nwaiters == max)) {
+			/* Overflow. */
+			(void)_lwp_unpark_all(self->pt_waiters,
+			    nwaiters, __UNVOLATILE(&mutex->ptm_waiters));
+			nwaiters = 0;
 		}
-		if (signaled == NULL) {
-			/* Anything more to do? */
-			pthread__spinunlock(self, &cond->ptc_lock);
-			return 0;
-		}
+		signaled->pt_sleepobj = NULL;
+		self->pt_waiters[nwaiters++] = signaled->pt_lid;
 	}
-	pthread__unpark_all(self, &cond->ptc_lock, &cond->ptc_waiters);
+	PTQ_INIT(&cond->ptc_waiters);
+	self->pt_nwaiters = nwaiters;
+	cond->ptc_mutex = NULL;
+	pthread__spinunlock(self, &cond->ptc_lock);
+	pthread__mutex_deferwake(self, mutex);
+
 	return 0;
 }
 
+int
+pthread_cond_broadcast(pthread_cond_t *cond)
+{
+	if (__predict_false(__uselibcstub))
+		return __libc_cond_broadcast_stub(cond);
+
+	if (__predict_true(PTQ_EMPTY(&cond->ptc_waiters)))
+		return 0;
+	return pthread__cond_wake_all(cond);
+}
+
+int
+_pthread_cond_has_waiters_np(pthread_cond_t *cond)
+{
+
+	return !PTQ_EMPTY(&cond->ptc_waiters);
+}
 
 int
 pthread_condattr_init(pthread_condattr_t *attr)
 {
 
 	attr->ptca_magic = _PT_CONDATTR_MAGIC;
+	attr->ptca_private = NULL;
 
 	return 0;
 }
 
+int
+pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clck)
+{
+	switch (clck) {
+	case CLOCK_MONOTONIC:
+	case CLOCK_REALTIME:
+		if (attr->ptca_private == NULL)
+			attr->ptca_private = malloc(sizeof(clockid_t));
+		if (attr->ptca_private == NULL)
+			return errno;
+		*(clockid_t *)attr->ptca_private = clck;
+		return 0;
+	default:
+		return EINVAL;
+	}
+}
+
+int
+pthread_condattr_getclock(const pthread_condattr_t *__restrict attr,
+    clockid_t *__restrict clock_id)
+{
+	if (attr == NULL || attr->ptca_private == NULL)
+		return EINVAL;
+	*clock_id = *(clockid_t *)attr->ptca_private;
+	return 0;
+}
 
 int
 pthread_condattr_destroy(pthread_condattr_t *attr)
@@ -403,14 +388,39 @@ pthread_condattr_destroy(pthread_condattr_t *attr)
 	    attr->ptca_magic == _PT_CONDATTR_MAGIC);
 
 	attr->ptca_magic = _PT_CONDATTR_DEAD;
+	free(attr->ptca_private);
 
 	return 0;
 }
 
+#ifdef _PTHREAD_PSHARED
+int
+pthread_condattr_getpshared(const pthread_condattr_t * __restrict attr,
+    int * __restrict pshared)
+{
+
+	*pshared = PTHREAD_PROCESS_PRIVATE;
+	return 0;
+}
+
+int
+pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared)
+{
+
+	switch(pshared) {
+	case PTHREAD_PROCESS_PRIVATE:
+		return 0;
+	case PTHREAD_PROCESS_SHARED:
+		return ENOSYS;
+	}
+	return EINVAL;
+}
+#endif
+
 /* Utility routine to hang out for a while if threads haven't started yet. */
 static int
 pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
-    const struct timespec *abstime)
+    pthread_cond_t *cond, const struct timespec *abstime)
 {
 	struct timespec now, diff;
 	int retval;
@@ -419,7 +429,8 @@ pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
 		diff.tv_sec = 99999999;
 		diff.tv_nsec = 0;
 	} else {
-		clock_gettime(CLOCK_REALTIME, &now);
+		clockid_t clck = pthread_cond_getclock(cond);
+		clock_gettime(clck, &now);
 		if  (timespeccmp(abstime, &now, <))
 			timespecclear(&diff);
 		else
@@ -429,7 +440,7 @@ pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
 	do {
 		pthread__testcancel(self);
 		pthread_mutex_unlock(mutex);
-		retval = _sys_nanosleep(&diff, NULL);
+		retval = _sys___nanosleep50(&diff, NULL);
 		pthread_mutex_lock(mutex);
 	} while (abstime == NULL && retval == 0);
 	pthread__testcancel(self);

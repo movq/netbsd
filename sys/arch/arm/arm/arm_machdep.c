@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_machdep.c,v 1.17 2007/12/16 07:31:47 mrg Exp $	*/
+/*	$NetBSD: arm_machdep.c,v 1.53 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,27 +71,66 @@
  * SUCH DAMAGE.
  */
 
-#include "opt_compat_netbsd.h"
 #include "opt_execfmt.h"
+#include "opt_cpuoptions.h"
+#include "opt_cputypes.h"
 #include "opt_arm_debug.h"
+#include "opt_multiprocessor.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.17 2007/12/16 07:31:47 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.53 2018/01/24 09:04:44 skrll Exp $");
 
 #include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/pool.h>
+#include <sys/kmem.h>
 #include <sys/ucontext.h>
 #include <sys/evcnt.h>
 #include <sys/cpu.h>
+#include <sys/atomic.h>
+#include <sys/kcpuset.h>
 
-#include <arm/cpufunc.h>
+#ifdef EXEC_AOUT
+#include <sys/exec_aout.h>
+#endif
 
-#include <machine/pcb.h>
+#include <arm/locore.h>
+
 #include <machine/vmparam.h>
+
+/* the following is used externally (sysctl_hw) */
+char	machine[] = MACHINE;		/* from <machine/param.h> */
+char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
+
+extern const uint32_t undefinedinstruction_bounce[];
+
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store = {
+	.ci_cpl = IPL_HIGH,
+	.ci_curlwp = &lwp0,
+	.ci_undefsave[2] = (register_t) undefinedinstruction_bounce,
+#if defined(ARM_MMU_EXTENDED) && KERNEL_PID != 0
+	.ci_pmap_asid_cur = KERNEL_PID,
+#endif
+};
+
+#ifdef MULTIPROCESSOR
+#define	NCPUINFO	MAXCPUS
+#else
+#define	NCPUINFO	1
+#endif
+
+struct cpu_info *cpu_info[NCPUINFO] = {
+	[0] = &cpu_info_store
+};
+
+const pcu_ops_t * const pcu_ops_md_defs[PCU_UNIT_COUNT] = {
+#if defined(FPU_VFP)
+	[PCU_FPU] = &arm_vfp_ops,
+#endif
+};
 
 /*
  * The ARM architecture places the vector page at address 0.
@@ -128,35 +167,40 @@ EVCNT_ATTACH_STATIC(_lock_cas_fail);
  */
 
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
-	struct trapframe *tf;
-
-	tf = l->l_addr->u_pcb.pcb_tf;
+	struct trapframe * const tf = lwp_trapframe(l);
 
 	memset(tf, 0, sizeof(*tf));
-	tf->tf_r0 = (u_int)l->l_proc->p_psstr;
-#ifdef COMPAT_13
+	tf->tf_r0 = l->l_proc->p_psstrp;
 	tf->tf_r12 = stack;			/* needed by pre 1.4 crt0.c */
-#endif
 	tf->tf_usr_sp = stack;
 	tf->tf_usr_lr = pack->ep_entry;
 	tf->tf_svc_lr = 0x77777777;		/* Something we can see */
 	tf->tf_pc = pack->ep_entry;
-#ifdef __PROG32
+#if defined(__ARMEB__)
+	/*
+	 * If we are running on ARMv7, we need to set the E bit to force
+	 * programs to start as big endian.
+	 */
+	tf->tf_spsr = PSR_USR32_MODE | (CPU_IS_ARMV7_P() ? PSR_E_BIT : 0);
+#else
 	tf->tf_spsr = PSR_USR32_MODE;
+#endif /* __ARMEB__ */
+
 #ifdef THUMB_CODE
 	if (pack->ep_entry & 1)
 		tf->tf_spsr |= PSR_T_bit;
 #endif
-#endif
 
+	l->l_md.md_flags = 0;
 #ifdef EXEC_AOUT
 	if (pack->ep_esch->es_makecmds == exec_aout_makecmds)
-		l->l_addr->u_pcb.pcb_flags = PCB_NOALIGNFLT;
-	else
+		l->l_md.md_flags |= MDLWP_NOALIGNFLT;
 #endif
-	l->l_addr->u_pcb.pcb_flags = 0;
+#ifdef FPU_VFP
+	vfp_discardcontext(l, false);
+#endif
 }
 
 /*
@@ -167,16 +211,142 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 void
 startlwp(void *arg)
 {
-	int err;
-	ucontext_t *uc = arg; 
-	struct lwp *l = curlwp;
+	ucontext_t *uc = (ucontext_t *)arg;
+	lwp_t *l = curlwp;
+	int error __diagused;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#ifdef DIAGNOSTIC
-	if (err)
-		printf("Error %d from cpu_setmcontext.", err);
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l);
 }
+
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+	struct lwp * const l = ci->ci_data.cpu_onproc;
+	const bool immed = (flags & RESCHED_IMMED) != 0;
+#ifdef MULTIPROCESSOR
+	struct cpu_info * const cur_ci = curcpu();
+	u_long ipi = IPI_NOP;
+#endif
+
+	if (__predict_false((l->l_pflag & LP_INTR) != 0)) {
+		/*
+		 * No point doing anything, it will switch soon.
+		 * Also here to prevent an assertion failure in
+		 * kpreempt() due to preemption being set on a
+		 * soft interrupt LWP.
+		 */
+		return;
+	}
+	if (ci->ci_want_resched && !immed)
+		return;
+
+	if (l == ci->ci_data.cpu_idlelwp) {
+#ifdef MULTIPROCESSOR
+		/*
+		 * If the other CPU is idling, it must be waiting for an
+		 * event.  So give it one.
+		 */
+		if (ci != cur_ci)
+			goto send_ipi;
+#endif
+		return;
+	}
+#ifdef MULTIPROCESSOR
+	atomic_swap_uint(&ci->ci_want_resched, 1);
+#else
+	ci->ci_want_resched = 1;
+#endif
+	if (flags & RESCHED_KPREEMPT) {
+#ifdef __HAVE_PREEMPTION
+		atomic_or_uint(&l->l_dopreempt, DOPREEMPT_ACTIVE);
+		if (ci == cur_ci) {
+			atomic_or_uint(&ci->ci_astpending, __BIT(1));
+		} else {
+			ipi = IPI_KPREEMPT;
+			goto send_ipi;
+		}
+#endif /* __HAVE_PREEMPTION */
+		return;
+	}
+#ifdef MULTIPROCESSOR
+	if (ci == cur_ci || !immed) {
+		setsoftast(ci);
+		return;
+	}
+	ipi = IPI_AST;
+
+   send_ipi:
+	intr_ipi_send(ci->ci_kcpuset, ipi);
+#else
+	setsoftast(ci);
+#endif /* MULTIPROCESSOR */
+}
+
+bool
+cpu_intr_p(void)
+{
+	struct cpu_info * const ci = curcpu();
+#ifdef __HAVE_PIC_FAST_SOFTINTS
+	if (ci->ci_cpl < IPL_VM)
+		return false;
+#endif
+	return ci->ci_intr_depth != 0;
+}
+
+void
+ucas_ras_check(trapframe_t *tf)
+{
+	extern char ucas_32_ras_start[];
+	extern char ucas_32_ras_end[];
+
+	if (tf->tf_pc > (vaddr_t)ucas_32_ras_start &&
+	    tf->tf_pc < (vaddr_t)ucas_32_ras_end) {
+		tf->tf_pc = (vaddr_t)ucas_32_ras_start;
+	}
+}
+
+#ifdef MODULAR
+struct lwp *
+arm_curlwp(void)
+{
+	return curlwp;
+}
+
+struct cpu_info *
+arm_curcpu(void)
+{
+	return curcpu();
+}
+#endif
+
+#ifdef __HAVE_PREEMPTION
+void
+cpu_set_curpri(int pri)
+{
+	kpreempt_disable();
+	curcpu()->ci_schedstate.spc_curpriority = pri;
+	kpreempt_enable();
+}
+
+bool
+cpu_kpreempt_enter(uintptr_t where, int s)
+{
+	return s == IPL_NONE;
+}
+
+void
+cpu_kpreempt_exit(uintptr_t where)
+{
+	atomic_and_uint(&curcpu()->ci_astpending, (unsigned int)~__BIT(1));
+}
+
+bool
+cpu_kpreempt_disabled(void)
+{
+	return curcpu()->ci_cpl != IPL_NONE;
+}
+#endif /* __HAVE_PREEMPTION */

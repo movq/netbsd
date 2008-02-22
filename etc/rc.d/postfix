@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: postfix,v 1.14 2007/08/27 10:59:06 pavel Exp $
+# $NetBSD: postfix,v 1.18 2016/10/30 15:47:06 riastradh Exp $
 #
 
 # PROVIDE: mail
@@ -18,7 +18,8 @@ start_precmd="postfix_precmd"
 start_cmd="postfix_op"
 stop_cmd="postfix_op"
 reload_cmd="postfix_op"
-extra_commands="reload"
+status_cmd="postfix_op"
+extra_commands="reload status"
 spooletcdir="/var/spool/${name}/etc"
 postconf="/usr/sbin/postconf"
 required_dirs=$spooletcdir
@@ -43,9 +44,10 @@ postfix_precmd()
 		fi
 	done
 
-	for f in $($postconf -h alias_database); do
-		OIFS="${IFS}"
-		IFS="${IFS}:"
+	OIFS="${IFS}"
+	IFS="${IFS},"
+	for f in $($postconf -hx alias_database); do
+		IFS="${OIFS}:"
 		set -- $f
 		IFS="${OIFS}"
 		case "$1" in

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_script.c,v 1.61 2008/01/02 19:44:37 yamt Exp $	*/
+/*	$NetBSD: exec_script.c,v 1.75 2018/04/27 18:33:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,13 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.61 2008/01/02 19:44:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.75 2018/04/27 18:33:24 christos Exp $");
 
 #if defined(SETUIDSCRIPTS) && !defined(FDSCRIPTS)
 #define FDSCRIPTS		/* Need this for safe set-id scripts. */
 #endif
-
-#include "veriexec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +50,53 @@ __KERNEL_RCSID(0, "$NetBSD: exec_script.c,v 1.61 2008/01/02 19:44:37 yamt Exp $"
 #include <sys/filedesc.h>
 #include <sys/exec.h>
 #include <sys/resourcevar.h>
-
+#include <sys/module.h>
 #include <sys/exec_script.h>
 #include <sys/exec_elf.h>
+
+MODULE(MODULE_CLASS_EXEC, exec_script, NULL);
+
+static struct execsw exec_script_execsw = {
+	.es_hdrsz = SCRIPT_HDR_SIZE,
+	.es_makecmds = exec_script_makecmds,
+	.u = {
+		.elf_probe_func = NULL,
+	},
+	.es_emul = NULL,
+	.es_prio = EXECSW_PRIO_ANY,
+	.es_arglen = 0,
+	.es_copyargs = NULL,
+	.es_setregs = NULL,
+	.es_coredump = NULL,
+	.es_setup_stack = exec_setup_stack,
+};
+
+static int
+exec_script_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return exec_add(&exec_script_execsw, 1);
+
+	case MODULE_CMD_FINI:
+		return exec_remove(&exec_script_execsw, 1);
+
+	case MODULE_CMD_AUTOUNLOAD:
+		/*
+		 * We don't want to be autounloaded because our use is
+		 * transient: no executables with p_execsw equal to
+		 * exec_script_execsw will exist, so FINI will never
+		 * return EBUSY.  However, the system will run scripts
+		 * often.  Return EBUSY here to prevent this module from
+		 * ping-ponging in and out of the kernel.
+		 */
+		return EBUSY;
+
+	default:
+		return ENOTTY;
+	}
+}
 
 /*
  * exec_script_makecmds(): Check if it's an executable shell script.
@@ -73,10 +115,11 @@ exec_script_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error, hdrlinelen, shellnamelen, shellarglen;
 	char *hdrstr = epp->ep_hdr;
-	char *cp, *shellname, *shellarg, *oldpnbuf;
+	char *cp, *shellname, *shellarg;
 	size_t shellargp_len;
 	struct exec_fakearg *shellargp;
 	struct exec_fakearg *tmpsap;
+	struct pathbuf *shell_pathbuf;
 	struct vnode *scriptvp;
 #ifdef SETUIDSCRIPTS
 	/* Gcc needs those initialized for spurious uninitialized warning */
@@ -95,11 +138,8 @@ exec_script_makecmds(struct lwp *l, struct exec_package *epp)
 		return ENOEXEC;
 
 	/*
-	 * check that the shell spec is terminated by a newline,
-	 * and that it isn't too large.  Don't modify the
-	 * buffer unless we're ready to commit to handling it.
-	 * (The latter requirement means that we have to check
-	 * for both spaces and tabs later on.)
+	 * Check that the shell spec is terminated by a newline, and that
+	 * it isn't too large.
 	 */
 	hdrlinelen = min(epp->ep_hdrvalid, SCRIPT_HDR_SIZE);
 	for (cp = hdrstr + EXEC_SCRIPT_MAGICLEN; cp < hdrstr + hdrlinelen;
@@ -112,27 +152,19 @@ exec_script_makecmds(struct lwp *l, struct exec_package *epp)
 	if (cp >= hdrstr + hdrlinelen)
 		return ENOEXEC;
 
-	/*
-	 * If the script has an ELF header, don't exec it.
-	 */
-	if (epp->ep_hdrvalid >= sizeof(ELFMAG)-1 &&
-	    memcmp(hdrstr, ELFMAG, sizeof(ELFMAG)-1) == 0)
-		return ENOEXEC;
-
-	shellname = NULL;
-	shellarg = NULL;
-	shellarglen = 0;
-
 	/* strip spaces before the shell name */
 	for (cp = hdrstr + EXEC_SCRIPT_MAGICLEN; *cp == ' ' || *cp == '\t';
 	    cp++)
 		;
+	if (*cp == '\0')
+		return ENOEXEC;
 
-	/* collect the shell name; remember it's length for later */
+	shellarg = NULL;
+	shellarglen = 0;
+
+	/* collect the shell name; remember its length for later */
 	shellname = cp;
 	shellnamelen = 0;
-	if (*cp == '\0')
-		goto check_shell;
 	for ( /* cp = cp */ ; *cp != '\0' && *cp != ' ' && *cp != '\t'; cp++)
 		shellnamelen++;
 	if (*cp == '\0')
@@ -178,7 +210,7 @@ check_shell:
 	 */
 	vn_lock(epp->ep_vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_ACCESS(epp->ep_vp, VREAD, l->l_cred);
-	VOP_UNLOCK(epp->ep_vp, 0);
+	VOP_UNLOCK(epp->ep_vp);
 	if (error == EACCES
 #ifdef SETUIDSCRIPTS
 	    || script_sbits
@@ -186,34 +218,23 @@ check_shell:
 	    ) {
 		struct file *fp;
 
-#if defined(DIAGNOSTIC) && defined(FDSCRIPTS)
-		if (epp->ep_flags & EXEC_HASFD)
-			panic("exec_script_makecmds: epp already has a fd");
-#endif
+		KASSERT(!(epp->ep_flags & EXEC_HASFD));
 
-		/* falloc() will use the descriptor for us */
-		if ((error = falloc(l, &fp, &epp->ep_fd)) != 0) {
+		if ((error = fd_allocfile(&fp, &epp->ep_fd)) != 0) {
 			scriptvp = NULL;
 			shellargp = NULL;
 			goto fail;
 		}
-
 		epp->ep_flags |= EXEC_HASFD;
 		fp->f_type = DTYPE_VNODE;
 		fp->f_ops = &vnops;
-		fp->f_data = (void *) epp->ep_vp;
+		fp->f_vnode = epp->ep_vp;
 		fp->f_flag = FREAD;
-		FILE_SET_MATURE(fp);
-		FILE_UNUSE(fp, l);
+		fd_affix(curproc, fp, epp->ep_fd);
 	}
 #endif
 
-	/* set up the parameters for the recursive check_exec() call */
-	epp->ep_ndp->ni_dirp = shellname;
-	epp->ep_ndp->ni_segflg = UIO_SYSSPACE;
-	epp->ep_flags |= EXEC_INDIR;
-
-	/* and set up the fake args list, for later */
+	/* set up the fake args list */
 	shellargp_len = 4 * sizeof(*shellargp);
 	shellargp = kmem_alloc(shellargp_len, KM_SLEEP);
 	tmpsap = shellargp;
@@ -233,13 +254,10 @@ check_shell:
 	if ((epp->ep_flags & EXEC_HASFD) == 0) {
 #endif
 		/* normally can't fail, but check for it if diagnostic */
-		error = copyinstr(epp->ep_name, tmpsap->fa_arg, MAXPATHLEN,
-		    (size_t *)0);
+		error = copystr(epp->ep_kname, tmpsap->fa_arg, MAXPATHLEN,
+		    NULL);
+		KASSERT(error == 0);
 		tmpsap++;
-#ifdef DIAGNOSTIC
-		if (error != 0)
-			panic("exec_script: copyinstr couldn't fail");
-#endif
 #ifdef FDSCRIPTS
 	} else {
 		snprintf(tmpsap->fa_arg, MAXPATHLEN, "/dev/fd/%d", epp->ep_fd);
@@ -248,22 +266,29 @@ check_shell:
 #endif
 	tmpsap->fa_arg = NULL;
 
+	/* Save the old vnode so we can clean it up later. */
+	scriptvp = epp->ep_vp;
+	epp->ep_vp = NULL;
+
+	/* Note that we're trying recursively. */
+	epp->ep_flags |= EXEC_INDIR;
+
 	/*
 	 * mark the header we have as invalid; check_exec will read
 	 * the header from the new executable
 	 */
 	epp->ep_hdrvalid = 0;
 
-	/*
-	 * remember the old vp and pnbuf for later, so we can restore
-	 * them if check_exec() fails.
-	 */
-	scriptvp = epp->ep_vp;
-	oldpnbuf = epp->ep_ndp->ni_cnd.cn_pnbuf;
+	/* try loading the interpreter */
+	if ((error = exec_makepathbuf(l, shellname, UIO_SYSSPACE,
+	    &shell_pathbuf, NULL)) == 0) {
+		error = check_exec(l, epp, shell_pathbuf);
+		pathbuf_destroy(shell_pathbuf);
+	}
 
-	error = check_exec(l, epp);
 	/* note that we've clobbered the header */
 	epp->ep_flags |= EXEC_DESTR;
+
 	if (error == 0) {
 		/*
 		 * It succeeded.  Unlock the script and
@@ -276,9 +301,6 @@ check_shell:
 			VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 			vput(scriptvp);
 		}
-
-		/* free the old pathname buffer */
-		PNBUF_PUT(oldpnbuf);
 
 		epp->ep_flags |= (EXEC_HASARGL | EXEC_SKIPARG);
 		epp->ep_fa = shellargp;
@@ -299,23 +321,19 @@ check_shell:
 		return (0);
 	}
 
-	/* XXX oldpnbuf not set for "goto fail" path */
-	epp->ep_ndp->ni_cnd.cn_pnbuf = oldpnbuf;
 #ifdef FDSCRIPTS
 fail:
 #endif
 
 	/* kill the opened file descriptor, else close the file */
-        if (epp->ep_flags & EXEC_HASFD) {
-                epp->ep_flags &= ~EXEC_HASFD;
-                (void) fdrelease(l, epp->ep_fd);
-        } else if (scriptvp) {
+	if (epp->ep_flags & EXEC_HASFD) {
+		epp->ep_flags &= ~EXEC_HASFD;
+		fd_close(epp->ep_fd);
+	} else if (scriptvp) {
 		vn_lock(scriptvp, LK_EXCLUSIVE | LK_RETRY);
 		VOP_CLOSE(scriptvp, FREAD, l->l_cred);
 		vput(scriptvp);
 	}
-
-        PNBUF_PUT(epp->ep_ndp->ni_cnd.cn_pnbuf);
 
 	/* free the fake arg list, because we're not returning it */
 	if ((tmpsap = shellargp) != NULL) {
@@ -326,11 +344,11 @@ fail:
 		kmem_free(shellargp, shellargp_len);
 	}
 
-        /*
-         * free any vmspace-creation commands,
-         * and release their references
-         */
-        kill_vmcmds(&epp->ep_vmcmds);
+	/*
+	 * free any vmspace-creation commands,
+	 * and release their references
+	 */
+	kill_vmcmds(&epp->ep_vmcmds);
 
-        return error;
+	return error;
 }

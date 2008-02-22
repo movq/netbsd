@@ -1,7 +1,7 @@
-/*	$NetBSD: genfs_vfsops.c,v 1.1 2008/01/28 15:17:54 dholland Exp $	*/
+/*	$NetBSD: genfs_vfsops.c,v 1.7 2017/05/24 09:53:55 hannken Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,16 +27,36 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_vfsops.c,v 1.1 2008/01/28 15:17:54 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_vfsops.c,v 1.7 2017/05/24 09:53:55 hannken Exp $");
 
 #include <sys/types.h>
 #include <sys/mount.h>
-
-/* required by genfs.h */
-#include <uvm/uvm.h>
+#include <sys/fstrans.h>
+#include <sys/statvfs.h>
+#include <sys/vnode.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
+
+int
+genfs_statvfs(struct mount *mp, struct statvfs *sbp)
+{
+
+	sbp->f_bsize = DEV_BSIZE;
+	sbp->f_frsize = DEV_BSIZE;
+	sbp->f_iosize = DEV_BSIZE;
+	sbp->f_blocks = 2;		/* 1k to keep df happy */
+	sbp->f_bfree = 0;
+	sbp->f_bavail = 0;
+	sbp->f_bresvd = 0;
+	sbp->f_files = 0;
+	sbp->f_ffree = 0;
+	sbp->f_favail = 0;
+	sbp->f_fresvd = 0;
+	copy_statvfs_info(sbp, mp);
+
+	return 0;
+}
 
 int
 genfs_renamelock_enter(struct mount *mp)
@@ -57,4 +70,36 @@ void
 genfs_renamelock_exit(struct mount *mp)
 {
 	mutex_exit(&mp->mnt_renamelock);
+}
+
+int
+genfs_suspendctl(struct mount *mp, int cmd)
+{
+	int error;
+	int error2 __diagused;
+
+	if ((mp->mnt_iflag & IMNT_HAS_TRANS) == 0)
+		return EOPNOTSUPP;
+
+	switch (cmd) {
+	case SUSPEND_SUSPEND:
+		error = fstrans_setstate(mp, FSTRANS_SUSPENDED);
+		if (error == 0) {
+			if ((mp->mnt_iflag & IMNT_GONE) != 0)
+				error = ENOENT;
+			if (error) {
+				error2 = fstrans_setstate(mp, FSTRANS_NORMAL);
+				KASSERT(error2 == 0);
+			}
+		}
+		return error;
+
+	case SUSPEND_RESUME:
+		error2 = fstrans_setstate(mp, FSTRANS_NORMAL);
+		KASSERT(error2 == 0);
+		return 0;
+
+	default:
+		panic("%s: bogus command %d", __func__, cmd);
+	}
 }

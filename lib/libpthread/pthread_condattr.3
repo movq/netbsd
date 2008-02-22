@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_condattr.3,v 1.3 2005/06/17 18:07:06 peter Exp $
+.\" $NetBSD: pthread_condattr.3,v 1.12 2017/03/28 17:42:52 maya Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -10,9 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -53,12 +50,15 @@
 .\" EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_condattr.3,v 1.10 2002/09/16 19:29:28 mini Exp $
-.Dd January 30, 2003
+.Dd March 28, 2017
 .Dt PTHREAD_CONDATTR 3
 .Os
 .Sh NAME
 .Nm pthread_condattr_init ,
-.Nm pthread_condattr_destroy
+.Nm pthread_condattr_getpshared ,
+.Nm pthread_condattr_setpshared ,
+.Nm pthread_condattr_getclock ,
+.Nm pthread_condattr_setclock
 .Nd condition attribute operations
 .Sh LIBRARY
 .Lb libpthread
@@ -67,29 +67,85 @@
 .Ft int
 .Fn pthread_condattr_init "pthread_condattr_t *attr"
 .Ft int
+.Fn pthread_condattr_getclock "const pthread_condattr_t *__restrict attr" \
+"clockid_t * __restrict clock_id"
+.Ft int
+.Fn pthread_condattr_setclock "pthread_condattr_t *attr" "clockid_t clock"
+.Ft int
 .Fn pthread_condattr_destroy "pthread_condattr_t *attr"
+.Ft int
+.Fn pthread_condattr_getpshared "const pthread_condattr_t * __restrict attr" "int * __restrict pshared"
+.Ft int
+.Fn pshared_condattr_setpshared "pthread_condattr_t *attr" "int pshared"
 .Sh DESCRIPTION
-Condition attribute objects are used to specify parameters to
-.Fn pthread_cond_init .
+Condition attribute objects are used to specify parameters to the
+.Xr pthread_cond_init 3
+function.
 The
 .Fn pthread_condattr_init
-function initializes a condition attribute object with the default attributes.
-.Pp
-The
+function initializes a condition attribute object with the default attributes
+and the
 .Fn pthread_condattr_destroy
 function destroys a condition attribute object.
+The
+.Fn pthread_condattr_getclock
+function shall obtain the value of the
+.Fa clock
+attributes object referenced by
+.Fa attr .
+The
+.Fn pthread_condattr_setclock
+function sets the system clock to be used for time comparisons to
+the one specified in
+.Fa clock .
+Valid clock values are
+.Dv CLOCK_MONOTONIC
+and
+.Dv CLOCK_REALTIME
+(the default).
+The
+.Fn pthread_condattr_getpshared
+function shall obtain the value of the process-shared attribute from the
+attributes object referenced by
+.Fa attr .
+The
+.Fn pthread_condattr_setpshared
+function shall set the process-shared attribute in an initialized attributes
+object referenced by
+.Fa attr .
 .Sh RETURN VALUES
 If successful, these functions return 0.
 Otherwise, an error number is returned to indicate the error.
 .Sh ERRORS
-.Fn pthread_condattr_init
-shall fail if:
+No errors are defined for
+.Fn pthread_condattr_init .
+.Pp
+The
+.Fn pthread_condattr_destroy
+function may fail if:
 .Bl -tag -width Er
-.It Bq Er ENOMEM
-Insufficient memory exists to initialize the condition attribute object.
+.It Bq Er EINVAL
+The value specified by
+.Fa attr
+is invalid.
 .El
 .Pp
-.Fn pthread_condattr_destroy
+The
+.Fn pthread_condattr_getclock
+and
+.Fn pthread_condattr_setclock
+may fail if:
+.Bl -tag -width Er
+.It Bq Er EINVAL
+The value specified by
+.Fa attr
+is invalid.
+.El
+.Pp
+The
+.Fn pthread_condattr_getpshared
+and
+.Fn pthread_condattr_setpshared
 may fail if:
 .Bl -tag -width Er
 .It Bq Er EINVAL
@@ -100,8 +156,12 @@ is invalid.
 .Sh SEE ALSO
 .Xr pthread_cond_init 3
 .Sh STANDARDS
-.Fn pthread_condattr_init
+Both functions conform to
+.St -p1003.1-2001 .
+.Sh BUGS
+The
+.Fn pthread_condattr_getpshared
 and
-.Fn pthread_condattr_destroy
-conform to
-.St -p1003.1-96 .
+.Fn pthread_condattr_setpshared
+functions are hidden by default since only thread shared attributes
+are supported.

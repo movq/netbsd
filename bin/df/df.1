@@ -1,4 +1,4 @@
-.\"	$NetBSD: df.1,v 1.41 2007/06/24 01:52:46 christos Exp $
+.\"	$NetBSD: df.1,v 1.47 2017/07/03 21:33:22 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)df.1	8.2 (Berkeley) 1/13/92
 .\"
-.Dd June 23, 2007
+.Dd August 10, 2016
 .Dt DF 1
 .Os
 .Sh NAME
@@ -37,8 +37,8 @@
 .Nd display free disk space
 .Sh SYNOPSIS
 .Nm
-.Op Fl aGklmn
-.Op Fl g | Fl i | Fl P
+.Op Fl agklmn
+.Op Fl G | Fl i | Fl P
 .Op Fl t Ar type
 .Op Ar file | Ar file_system ...
 .Sh DESCRIPTION
@@ -73,26 +73,28 @@ including those that were mounted with the
 .Dv MNT_IGNORE
 flag.
 .It Fl G
-The
-.Fl G
-option causes the numbers to be reported in gigabytes (1024*1024*1024
-bytes).
-.It Fl g
 Display all the fields of the structure(s) returned by
 .Xr statvfs 2 .
 This option cannot be used with the
 .Fl i
 or
 .Fl P
-options.
+options, and it is modelled after the Solaris
+.Fl g
+option.
 This option will override the
-.Fl G ,
+.Fl g ,
 .Fl h ,
 .Fl k ,
 and
 .Fl m
 options, as well as any setting of
 .Ev BLOCKSIZE .
+.It Fl g
+The
+.Fl g
+option causes the numbers to be reported in gigabytes (1024*1024*1024
+bytes).
 .It Fl h
 "Human-readable" output.
 Use unit suffixes: Byte, Kilobyte, Megabyte,
@@ -134,7 +136,7 @@ and
 option are specified, the output will be preceded by the following header
 line, formatted to match the data following it:
 .Bd -literal
-"Filesystem 1024-blocks Used Available Capacity Mounted on\\n"
+"Filesystem 1024-blocks Used Available Capacity Mounted on\en"
 .Ed
 .Pp
 If the
@@ -144,14 +146,14 @@ option is specified without the
 options, the output will be preceded by the following header line,
 formatted to match the data following it:
 .Bd -literal
-"Filesystem \*[Lt]blksize\*[Gt]-blocks Used Available Capacity Mounted on\\n"
+"Filesystem <blksize>-blocks Used Available Capacity Mounted on\en"
 .Ed
 .Pp
 The header line is followed by data formatted as follows:
 .Bd -literal
-"%s %d %d %d %d%% %s\\n", \*[Lt]file system name\*[Gt], \*[Lt]total space\*[Gt],
-    \*[Lt]space used\*[Gt], \*[Lt]space free\*[Gt], \*[Lt]percentage used\*[Gt],
-    \*[Lt]file system root\*[Gt]
+"%s %d %d %d %d%% %s\en", <file system name>, <total space>,
+    <space used>, <space free>, <percentage used>,
+    <file system root>
 .Ed
 .Pp
 Note that the
@@ -177,7 +179,7 @@ that file system.
 If the environment variable
 .Ev BLOCKSIZE
 is set, and the
-.Fl G ,
+.Fl g ,
 .Fl h ,
 .Fl k
 and
@@ -201,4 +203,4 @@ size block.
 A
 .Nm
 utility appeared in
-.At v6 .
+.At v1 .

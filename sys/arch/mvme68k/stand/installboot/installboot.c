@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.14 2008/01/12 09:54:30 tsutsui Exp $ */
+/*	$NetBSD: installboot.c,v 1.19 2014/09/21 16:33:48 christos Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -226,10 +219,6 @@ loadprotoblocks(char *fname, size_t *size)
 	}
 
 	return (char *)bp;
-
-	if (bp)
-		free((void *)bp);
-	return NULL;
 }
 
 static void
@@ -301,7 +290,7 @@ loadblocknums(char *boot, int devfd)
 	if ((buf = malloc(fs->fs_bsize)) == NULL)
 		errx(1, "No memory for filesystem block");
 
-	blk = fsbtodb(fs, ino_to_fsba(fs, statbuf.st_ino));
+	blk = FFS_FSBTODB(fs, ino_to_fsba(fs, statbuf.st_ino));
 	devread(devfd, buf, blk, fs->fs_bsize, "inode");
 	ip = (struct ufs1_dinode *)(buf) + ino_to_fsbo(fs, statbuf.st_ino);
 
@@ -321,8 +310,8 @@ loadblocknums(char *boot, int devfd)
 	 * Get the block numbers; we don't handle fragments
 	 */
 	ap = ip->di_db;
-	for (i = 0; i < NDADDR && *ap && ndb; i++, ap++, ndb--) {
-		blk = fsbtodb(fs, *ap);
+	for (i = 0; i < UFS_NDADDR && *ap && ndb; i++, ap++, ndb--) {
+		blk = FFS_FSBTODB(fs, *ap);
 		if (verbose)
 			printf("%d: %d\n", i, blk);
 		block_table[i] = blk;
@@ -334,12 +323,12 @@ loadblocknums(char *boot, int devfd)
 	 * Just one level of indirections; there isn't much room
 	 * for more in the 1st-level bootblocks anyway.
 	 */
-	blk = fsbtodb(fs, ip->di_ib[0]);
+	blk = FFS_FSBTODB(fs, ip->di_ib[0]);
 	devread(devfd, buf, blk, fs->fs_bsize, "indirect block");
 	/* XXX ondisk32 */
 	ap = (int32_t *)buf;
-	for (; i < NINDIR(fs) && *ap && ndb; i++, ap++, ndb--) {
-		blk = fsbtodb(fs, *ap);
+	for (; i < FFS_NINDIR(fs) && *ap && ndb; i++, ap++, ndb--) {
+		blk = FFS_FSBTODB(fs, *ap);
 		if (verbose)
 			printf("%d: %d\n", i, blk);
 		block_table[i] = blk;

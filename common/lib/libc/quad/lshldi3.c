@@ -1,4 +1,4 @@
-/*	$NetBSD: lshldi3.c,v 1.1 2005/12/20 19:28:51 christos Exp $	*/
+/*	$NetBSD: lshldi3.c,v 1.4 2012/12/07 15:41:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,20 +38,20 @@
 #if 0
 static char sccsid[] = "@(#)lshldi3.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: lshldi3.c,v 1.1 2005/12/20 19:28:51 christos Exp $");
+__RCSID("$NetBSD: lshldi3.c,v 1.4 2012/12/07 15:41:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "quad.h"
+
+ARM_EABI_ALIAS(__aeabi_llsl, __lshldi3)	/* no semicolon */
 
 /*
  * Shift an (unsigned) quad value left (logical shift left).
  * This is the same as arithmetic shift left!
  */
 quad_t
-__lshldi3(a, shift)
-	quad_t a;
-	qshift_t shift;
+__lshldi3(quad_t a, qshift_t shift)
 {
 	union uu aa;
 
@@ -59,7 +59,7 @@ __lshldi3(a, shift)
 		return(a);
 	aa.q = a;
 	if (shift >= INT_BITS) {
-		aa.ul[H] = aa.ul[L] << (shift - INT_BITS);
+		aa.ul[H] = aa.ul[L] << (unsigned int)(shift - INT_BITS);
 		aa.ul[L] = 0;
 	} else {
 		aa.ul[H] = (aa.ul[H] << shift) |

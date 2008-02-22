@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.15 2008/01/04 22:15:58 ad Exp $ */
+/* $NetBSD: autoconf.c,v 1.20 2016/02/09 12:48:06 kiyohara Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2008/01/04 22:15:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20 2016/02/09 12:48:06 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,6 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2008/01/04 22:15:58 ad Exp $");
 #include <mips/alchemy/include/aureg.h>
 #include <mips/alchemy/include/auvar.h>
 #include <mips/alchemy/include/aubusvar.h>
+
+#include <dev/ata/atavar.h>
 
 /*
  * Configure all devices on system
@@ -81,14 +76,12 @@ void
 cpu_rootconf(void)
 {
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
-	struct aubus_attach_args *aa = aux;
-
 	/*
 	 * We don't ever know the boot device.  But that's because the
 	 * firmware only loads from the network.
@@ -96,6 +89,7 @@ device_register(struct device *dev, void *aux)
 
 	/* Fetch the MAC addresses from YAMON. */
 	if (device_is_a(dev, "aumac")) {
+		struct aubus_attach_args *aa = aux;
 		prop_data_t pd;
 		const char *cp;
 		char *cp0;
@@ -126,11 +120,25 @@ device_register(struct device *dev, void *aux)
 			pd = prop_data_create_data(ethaddr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-addr", pd) == false) {
+						"mac-address", pd) == false) {
 				printf("WARNING: unable to set mac-addr "
-				    "property for %s\n", dev->dv_xname);
+				    "property for %s\n", device_xname(dev));
 			}
 			prop_object_release(pd);
+		}
+	}
+	if (device_is_a(dev, "atabus")) {
+		device_t p1 = device_parent(dev);
+		device_t p2 = device_parent(p1);
+		device_t p3 = device_parent(p2);
+
+		if (device_is_a(p1, "wdc") &&
+		    device_is_a(p2, "pcmcia") &&
+		    device_is_a(p3, "aupcmcia")) {
+			struct ata_channel *chp = aux;
+
+			/* 32-bit transfers are not supported. */
+			chp->ch_atac->atac_cap &= ~ATAC_CAP_DATA32;
 		}
 	}
 }

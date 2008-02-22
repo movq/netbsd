@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.18 2007/03/04 05:59:40 christos Exp $	*/
+/*	$NetBSD: dma.c,v 1.28 2017/10/07 16:05:31 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -52,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.18 2007/03/04 05:59:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.28 2017/10/07 16:05:31 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,8 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.18 2007/03/04 05:59:40 christos Exp $");
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/dma.h>
-
-#include <atari/atari/intr.h>
+#include <machine/intr.h>
 
 #define	NDMA_DEV	10	/* Max 2 floppy's, 8 hard-disks		*/
 typedef struct dma_entry {
@@ -88,19 +82,19 @@ static  TAILQ_HEAD(acthead, dma_entry)	dma_active;
 
 static	int	must_init = 1;		/* Must initialize		*/
 
-int	cdmaint __P((void *, int));
+int	cdmaint(void *, int);
 
-static	void	st_dma_init __P((void));
+static	void	st_dma_init(void);
 
 static void
-st_dma_init()
+st_dma_init(void)
 {
-	int	i;
+	int i;
 
 	TAILQ_INIT(&dma_free);
 	TAILQ_INIT(&dma_active);
 
-	for(i = 0; i < NDMA_DEV; i++)
+	for (i = 0; i < NDMA_DEV; i++)
 		TAILQ_INSERT_HEAD(&dma_free, &dmatable[i], entries);
 
 	if (intr_establish(7, USER_VEC, 0, cdmaint, NULL) == NULL)
@@ -108,83 +102,77 @@ st_dma_init()
 }
 
 int
-st_dmagrab(int_func, call_func, softc, lock_stat, rcaller)
-dma_farg	int_func;
-dma_farg 	call_func;
-void		*softc;
-int		*lock_stat;
-int		rcaller;
+st_dmagrab(dma_farg int_func, dma_farg call_func, void *softc, int *lock_stat,
+    int rcaller, kmutex_t *interlock)
 {
-	int		sps;
-	DMA_ENTRY	*req;
+	int s;
+	DMA_ENTRY *req;
 
-	if(must_init) {
+	if (must_init) {
 		st_dma_init();
 		must_init = 0;
 	}
 	*lock_stat = DMA_LOCK_REQ;
 
-	sps = splhigh();
+	s = splhigh();
 
 	/*
 	 * Create a request...
 	 */
-	if(dma_free.tqh_first == NULL)
+	if ((req = TAILQ_FIRST(&dma_free)) == NULL)
 		panic("st_dmagrab: Too many outstanding requests");
-	req = dma_free.tqh_first;
-	TAILQ_REMOVE(&dma_free, dma_free.tqh_first, entries);
+	TAILQ_REMOVE(&dma_free, req, entries);
 	req->call_func = call_func;
 	req->int_func  = int_func;
 	req->softc     = softc;
 	req->lock_stat = lock_stat;
 	TAILQ_INSERT_TAIL(&dma_active, req, entries);
 
-	if(dma_active.tqh_first != req) {
+	if (TAILQ_FIRST(&dma_active) != req) {
 		if (call_func == NULL) {
 			do {
-				tsleep(&dma_active, PRIBIO, "dmalck", 0);
+				mtsleep(&dma_active, PRIBIO, "dmalck", 0,
+				    interlock);
 			} while (*req->lock_stat != DMA_LOCK_GRANT);
-			splx(sps);
-			return(1);
+			splx(s);
+			return 1;
 		}
-		splx(sps);
-		return(0);
+		splx(s);
+		return 0;
 	}
-	splx(sps);
+	splx(s);
 
 	/*
 	 * We're at the head of the queue, ergo: we got the lock.
 	 */
 	*lock_stat = DMA_LOCK_GRANT;
 
-	if(rcaller || (call_func == NULL)) {
+	if (rcaller || (call_func == NULL)) {
 		/*
 		 * Just return to caller immediately without going
 		 * through 'call_func' first.
 		 */
-		return(1);
+		return 1;
 	}
 
 	(*call_func)(softc);	/* Call followup function		*/
-	return(0);
+	return 0;
 }
 
 void
-st_dmafree(softc, lock_stat)
-void	*softc;
-int	*lock_stat;
+st_dmafree(void *softc, int *lock_stat)
 {
-	int		sps;
-	DMA_ENTRY	*req;
+	int s;
+	DMA_ENTRY *req;
 	
-	sps = splhigh();
+	s = splhigh();
 
 	/*
 	 * Some validity checks first.
 	 */
-	if((req = dma_active.tqh_first) == NULL)
+	if ((req = TAILQ_FIRST(&dma_active)) == NULL)
 		panic("st_dmafree: empty active queue");
-	if(req->softc != softc)
+	if (req->softc != softc)
 		printf("Caller of st_dmafree is not lock-owner!\n");
 
 	/*
@@ -194,52 +182,44 @@ int	*lock_stat;
 	TAILQ_REMOVE(&dma_active, req, entries);
 	TAILQ_INSERT_HEAD(&dma_free, req, entries);
 
-	if((req = dma_active.tqh_first) != NULL) {
+	if ((req = TAILQ_FIRST(&dma_active)) != NULL) {
 		*req->lock_stat = DMA_LOCK_GRANT;
 
 		if (req->call_func == NULL)
 			wakeup((void *)&dma_active);
 		else {
-		    /*
-		     * Call next request through softint handler. This avoids
-		     * spl-conflicts.
-		     */
-		    add_sicallback((si_farg)req->call_func, req->softc, 0);
+			/*
+			 * Call next request through softint handler.
+			 * This avoids spl-conflicts.
+			 */
+			add_sicallback((si_farg)req->call_func, req->softc, 0);
 		}
 	}
-	splx(sps);
-	return;
+	splx(s);
 }
 
 int
-st_dmawanted()
+st_dmawanted(void)
 {
-	return(dma_active.tqh_first->entries.tqe_next != NULL);
+
+	return TAILQ_NEXT(TAILQ_FIRST(&dma_active), entries) != NULL;
 }
 
 int
-cdmaint(unused, sr)
-void	*unused;
-int	sr;	/* sr at time of interrupt */
+cdmaint(void *unused, int sr)
+	/* sr:	 sr at time of interrupt */
 {
-	dma_farg	int_func;
-	void		*softc;
+	dma_farg int_func;
+	void *softc;
 
-	if(dma_active.tqh_first != NULL) {
+	if (TAILQ_FIRST(&dma_active) != NULL) {
 		/*
 		 * Due to the logic of the ST-DMA chip, it is not possible to
 		 * check for stray interrupts here...
 		 */
-		int_func = dma_active.tqh_first->int_func;
-		softc    = dma_active.tqh_first->softc;
-
-		if(!BASEPRI(sr))
-			add_sicallback((si_farg)int_func, softc, 0);
-		else {
-			spl1();
-			(*int_func)(softc);
-			spl0();
-		}
+		int_func = TAILQ_FIRST(&dma_active)->int_func;
+		softc    = TAILQ_FIRST(&dma_active)->softc;
+		add_sicallback((si_farg)int_func, softc, 0);
 		return 1;
 	}
 	return 0;
@@ -250,10 +230,9 @@ int	sr;	/* sr at time of interrupt */
  * Note: The order _is_ important!
  */
 void
-st_dmaaddr_set(address)
-void *	address;
+st_dmaaddr_set(void *address)
 {
-	register u_long ad = (u_long)address;
+	u_long ad = (u_long)address;
 
 	DMA->dma_addr[AD_LOW ] = (ad     ) & 0xff;
 	DMA->dma_addr[AD_MID ] = (ad >> 8) & 0xff;
@@ -264,14 +243,14 @@ void *	address;
  * Get address from DMA unit.
  */
 u_long
-st_dmaaddr_get()
+st_dmaaddr_get(void)
 {
-	register u_long ad = 0;
+	u_long ad = 0;
 
 	ad  = (DMA->dma_addr[AD_LOW ] & 0xff);
 	ad |= (DMA->dma_addr[AD_MID ] & 0xff) << 8;
 	ad |= (DMA->dma_addr[AD_HIGH] & 0xff) <<16;
-	return(ad);
+	return ad;
 }
 
 /*
@@ -279,9 +258,9 @@ st_dmaaddr_get()
  * The DMA_WRBIT trick flushes the FIFO before doing DMA.
  */
 void
-st_dmacomm(mode, nblk)
-int	mode, nblk;
+st_dmacomm(int mode, int nblk)
 {
+
 	DMA->dma_mode = mode;
 	DMA->dma_mode = mode ^ DMA_WRBIT;
 	DMA->dma_mode = mode;

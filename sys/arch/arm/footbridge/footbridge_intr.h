@@ -1,4 +1,4 @@
-/* 	$NetBSD: footbridge_intr.h,v 1.12 2008/01/04 21:58:03 ad Exp $	*/
+/* 	$NetBSD: footbridge_intr.h,v 1.20 2018/06/01 21:22:43 mrg Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -38,6 +38,16 @@
 #ifndef _FOOTBRIDGE_INTR_H_
 #define _FOOTBRIDGE_INTR_H_
 
+#ifndef _LOCORE
+typedef uint8_t ipl_t;
+typedef struct {
+	ipl_t _ipl;
+} ipl_cookie_t;
+
+#include <arm/mutex.h>
+#endif
+#include <sys/param.h>
+#include <arm/cpu.h>
 #include <arm/armreg.h>
 
 #define IPL_NONE	0	/* nothing */
@@ -57,8 +67,6 @@
 #define	IST_EDGE	2	/* edge-triggered */
 #define	IST_LEVEL	3	/* level-triggered */
 
-#define	__NEWINTR	/* enables new hooks in cpu_fork()/cpu_switch() */
-
 #define	ARM_IRQ_HANDLER	_C_LABEL(footbridge_intr_dispatch)
 
 #ifndef _LOCORE
@@ -74,31 +82,33 @@
 
 /* only call this with interrupts off */
 static inline void __attribute__((__unused__))
-    footbridge_set_intrmask(void)
+footbridge_set_intrmask(void)
 {
-    extern volatile uint32_t intr_enabled;
-    /* fetch once so we write the same number to both registers */
-    uint32_t tmp = intr_enabled & ICU_INT_HWMASK;
+	extern volatile uint32_t intr_enabled;
+	volatile uint32_t * const dc21285_armcsr_vbase = 
+	    (volatile uint32_t *)(DC21285_ARMCSR_VBASE);
 
-    ((volatile uint32_t*)(DC21285_ARMCSR_VBASE))[IRQ_ENABLE_SET>>2] = tmp;
-    ((volatile uint32_t*)(DC21285_ARMCSR_VBASE))[IRQ_ENABLE_CLEAR>>2] = ~tmp;
+	/* fetch once so we write the same number to both registers */
+	uint32_t tmp = intr_enabled & ICU_INT_HWMASK;
+
+	dc21285_armcsr_vbase[IRQ_ENABLE_SET>>2] = tmp;
+	dc21285_armcsr_vbase[IRQ_ENABLE_CLEAR>>2] = ~tmp;
 }
     
 static inline void __attribute__((__unused__))
-footbridge_splx(int newspl)
+footbridge_splx(int ipl)
 {
+	extern int footbridge_imask[];
 	extern volatile uint32_t intr_enabled;
-	extern volatile int current_spl_level;
 	extern volatile int footbridge_ipending;
-	extern void footbridge_do_pending(void);
 	int oldirqstate, hwpend;
 
 	/* Don't let the compiler re-order this code with preceding code */
 	__insn_barrier();
 
-	current_spl_level = newspl;
+	set_curcpl(ipl);
 
-	hwpend = (footbridge_ipending & ICU_INT_HWMASK) & ~newspl;
+	hwpend = footbridge_ipending & ICU_INT_HWMASK & ~footbridge_imask[ipl];
 	if (hwpend != 0) {
 		oldirqstate = disable_interrupts(I32_bit);
 		intr_enabled |= hwpend;
@@ -106,19 +116,18 @@ footbridge_splx(int newspl)
 		restore_interrupts(oldirqstate);
 	}
 
-	if ((footbridge_ipending & INT_SWMASK) & ~newspl)
-		footbridge_do_pending();
+#ifdef __HAVE_FAST_SOFTINTS
+	cpu_dosoftints();
+#endif
 }
 
 static inline int __attribute__((__unused__))
 footbridge_splraise(int ipl)
 {
-	extern volatile int current_spl_level;
-	extern int footbridge_imask[];
 	int	old;
 
-	old = current_spl_level;
-	current_spl_level |= footbridge_imask[ipl];
+	old = curcpl();
+	set_curcpl(ipl);
 
 	/* Don't let the compiler re-order this code with subsequent code */
 	__insn_barrier();
@@ -129,11 +138,9 @@ footbridge_splraise(int ipl)
 static inline int __attribute__((__unused__))
 footbridge_spllower(int ipl)
 {
-	extern volatile int current_spl_level;
-	extern int footbridge_imask[];
-	int old = current_spl_level;
+	int old = curcpl();
 
-	footbridge_splx(footbridge_imask[ipl]);
+	footbridge_splx(ipl);
 	return(old);
 }
 
@@ -143,14 +150,12 @@ footbridge_spllower(int ipl)
 #define splx(newspl)		footbridge_splx(newspl)
 #define	_spllower(ipl)		footbridge_spllower(ipl)
 #define	_splraise(ipl)		footbridge_splraise(ipl)
-void	_setsoftintr(int);
 
 #else
 
 int	_splraise(int);
 int	_spllower(int);
 void	splx(int);
-void	_setsoftintr(int);
 
 #endif /* ! ARM_SPL_NOINLINE */
 
@@ -163,10 +168,6 @@ void	_setsoftintr(int);
 #define	spl0()		(void)_spllower(IPL_NONE)
 #define	spllowersoftclock() (void)_spllower(IPL_SOFTCLOCK)
 
-typedef uint8_t ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
 
 static inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
@@ -183,9 +184,6 @@ splraiseipl(ipl_cookie_t icookie)
 }
 
 #include <sys/spl.h>
-
-/* Use generic software interrupt support. */
-#include <arm/softintr.h>
 
 /* footbridge has 32 interrupt lines */
 #define	NIRQ		32
@@ -206,6 +204,7 @@ struct intrq {
 	int iq_mask;			/* IRQs to mask while handling */
 	int iq_levels;			/* IPL_*'s this IRQ has */
 	int iq_ist;			/* share type */
+	int iq_ipl;			/* max ipl */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 };
 

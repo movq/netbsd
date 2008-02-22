@@ -1,11 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.2 2007/03/23 12:26:10 njoly Exp $
+#	$NetBSD: Makefile.inc,v 1.4 2017/01/16 17:39:59 christos Exp $
 
-.include <bsd.sys.mk>		# for HOST_SH
+.if !defined(SUBDIR)
+SYSCALL_PREFIX=linux32
 
-DEP=	syscalls.conf syscalls.master ../../../../kern/makesyscalls.sh
-OBJS=	linux32_sysent.c linux32_syscalls.c linux32_syscall.h linux32_syscallargs.h
-
-${OBJS}: ${DEP}
-	${HOST_SH} ../../../../kern/makesyscalls.sh syscalls.conf syscalls.master
-
-all: ${OBJS}
+.include <bsd.syscall.mk>
+.endif

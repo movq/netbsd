@@ -1,4 +1,4 @@
-/*	$NetBSD: uboot.c,v 1.14 2005/12/24 22:45:35 perry Exp $	*/
+/*	$NetBSD: uboot.c,v 1.17 2016/06/11 06:22:11 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,8 +75,8 @@ main(void)
 	int currname = 0;
 
 	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);  
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
+	printf(">> %s, Revision %s (from NetBSD %s)\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 	printf(">> HP 9000/%s SPU\n", getmachineid());
 	printf(">> Enter \"reset\" to reset system.\n");
 
@@ -109,7 +109,7 @@ getbootdev(int *howto)
 	printf("Boot: [[[%s%d%c:]%s][-a][-c][-d][-s][-v][-q]] :- ",
 	    devsw[bdev].dv_name, bctlr + (8 * badapt), 'a' + bpart, name);
 
-	if (tgets(line)) {
+	if (tgets(line, sizeof(line))) {
 		if (strcmp(line, "reset") == 0) {
 			call_req_reboot();      /* reset machine */
 			printf("panic: can't reboot, halting\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: vasprintf.c,v 1.10 2005/02/09 21:35:47 kleink Exp $	*/
+/*	$NetBSD: vasprintf.c,v 1.17 2013/05/19 21:45:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -29,21 +29,28 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: vasprintf.c,v 1.10 2005/02/09 21:35:47 kleink Exp $");
+__RCSID("$NetBSD: vasprintf.c,v 1.17 2013/05/19 21:45:00 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
 
 #include <assert.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "reentrant.h"
+#include "setlocale_local.h"
 #include "local.h"
 
+__weak_alias(asprintf, _asprintf)
+__weak_alias(asprintf_l, _asprintf_l)
+__weak_alias(vasprintf, _vasprintf)
+__weak_alias(vasprintf_l, _vasprintf_l)
+
 int
-vasprintf(str, fmt, ap)
-	char **str;
-	const char *fmt;
-	_BSD_VA_LIST_ ap;
+vasprintf_l(char **str, locale_t loc, const char *fmt, va_list ap)
 {
 	int ret;
 	FILE f;
@@ -56,11 +63,11 @@ vasprintf(str, fmt, ap)
 	_FILEEXT_SETUP(&f, &fext);
 	f._file = -1;
 	f._flags = __SWR | __SSTR | __SALC;
-	f._bf._base = f._p = (unsigned char *)malloc(128);
+	f._bf._base = f._p = malloc(128);
 	if (f._bf._base == NULL)
 		goto err;
 	f._bf._size = f._w = 127;		/* Leave room for the NUL */
-	ret = __vfprintf_unlocked(&f, fmt, ap);
+	ret = __vfprintf_unlocked_l(&f, loc, fmt, ap);
 	if (ret == -1)
 		goto err;
 	*f._p = '\0';
@@ -68,12 +75,42 @@ vasprintf(str, fmt, ap)
 	if (_base == NULL)
 		goto err;
 	*str = (char *)_base;
-	return (ret);
+	return ret;
 
 err:
 	if (f._bf._base)
 		free(f._bf._base);
 	*str = NULL;
 	errno = ENOMEM;
-	return (-1);
+	return -1;
+}
+
+int
+vasprintf(char **str, const char *fmt, va_list ap)
+{
+	return vasprintf_l(str, _current_locale(), fmt, ap);
+}
+
+int
+asprintf_l(char **str, locale_t loc, char const *fmt, ...)
+{
+	va_list ap;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vasprintf_l(str, loc, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
+int
+asprintf(char **str, char const *fmt, ...)
+{
+	va_list ap;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vasprintf(str, fmt, ap);
+	va_end(ap);
+	return ret;
 }

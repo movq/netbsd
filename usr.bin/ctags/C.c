@@ -1,4 +1,4 @@
-/*	$NetBSD: C.c,v 1.15 2006/04/22 17:46:48 christos Exp $	*/
+/*	$NetBSD: C.c,v 1.19 2009/07/13 19:05:40 roy Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -38,11 +38,12 @@
 #if 0
 static char sccsid[] = "@(#)C.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: C.c,v 1.15 2006/04/22 17:46:48 christos Exp $");
+__RCSID("$NetBSD: C.c,v 1.19 2009/07/13 19:05:40 roy Exp $");
 #endif
 #endif /* not lint */
 
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -166,7 +167,7 @@ c_entries(void)
 				 *	foo\n
 				 *	(arg1,
 				 */
-				getline();
+				get_line();
 				curline = lineno;
 				if (func_entry()) {
 					++level;
@@ -195,7 +196,7 @@ c_entries(void)
 		case ';':
 			if (t_def && level == t_level) {
 				t_def = NO;
-				getline();
+				get_line();
 				if (sp != tok)
 					*sp = EOS;
 				pfnote(tok, lineno);
@@ -224,7 +225,7 @@ c_entries(void)
 						break;
 					}
 					/* catch "typedef struct" */
-					if ((!t_def || t_level < level)
+					if ((!t_def || t_level <= level)
 					    && (!memcmp(tok, "struct", 7)
 					    || !memcmp(tok, "union", 6)
 					    || !memcmp(tok, "enum", 5))) {
@@ -232,7 +233,7 @@ c_entries(void)
 						 * get line immediately;
 						 * may change before '{'
 						 */
-						getline();
+						get_line();
 						if (str_entry(c))
 							++level;
 						break;
@@ -323,7 +324,7 @@ fnd:
 		} else {
 			if (intoken(c)) {
 				if (anext - maybe_attribute 
-				 < sizeof attribute - 1)
+				 < (ptrdiff_t)(sizeof attribute - 1))
 					*anext++ = c;
 				else	break;
 				continue;
@@ -404,7 +405,7 @@ hash_entry(void)
 		--sp;
 	*sp = EOS;
 	if (dflag || c == '(') {	/* only want macros */
-		getline();
+		get_line();
 		pfnote(tok, curline);
 	}
 skip:	if (c == '\n') {		/* get rid of rest of define */

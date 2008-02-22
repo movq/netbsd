@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.47 2008/01/19 13:11:18 chris Exp $
+#	$NetBSD: GENERIC,v 1.97 2018/01/23 15:08:12 sevan Exp $
 #
 # GENERIC machine description file
 #
@@ -22,11 +22,11 @@ include	"arch/iyonix/conf/std.iyonix"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.47 $"
+#ident 		"GENERIC-$Revision: 1.97 $"
 
 maxusers	32		# estimated number of users
 
-options		MSGBUFSIZE=65536
+options 	MSGBUFSIZE=65536
 
 # CPU options
 
@@ -42,8 +42,6 @@ options 	XSCALE_CACHE_READ_WRITE_ALLOCATE
 
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	NTP		# NTP phase/frequency locked loop
-#options 	NO_TSC_TIME	# Don't use TSC microtime, even if available.
-				# Improves time behavior under VMware.
 
 #options 	KTRACE		# system call tracing via ktrace(1)
 
@@ -51,7 +49,6 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
 #options 	SYSVSHM		# System V-like memory sharing
-#options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -61,8 +58,6 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
-#options 	LKM		# loadable kernel modules
-#options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	PCIVERBOSE	# Verbose PCI descriptions
 options 	MIIVERBOSE	# Verbose MII autoconfuration messages
@@ -74,23 +69,22 @@ options 	USERCONF	# userconf(4) support
 
 # Development and Debugging options
 
-# Enable experimental buffer queue strategy for better responsiveness under
-# high disk I/O load. Likely stable but not yet the default.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
-#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
-#options 	DDB_ONPANIC=1	# see also sysctl(8): `ddb.onpanic'
+#options 	DDB_ONPANIC=1	# see also sysctl(7): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	DDB_KEYCODE=0x40
 #options 	KGDB		# remote debugger
 #options 	KGDB_DEVNAME="\"com\"",KGDB_DEVADDR=0x3f8,KGDB_DEVRATE=9600
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=350000
+makeoptions	COPY_SYMTAB=1
 options 	PERFCTRS	# performance counters
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	VERBOSE_INIT_ARM # verbose bootstraping messages
@@ -100,19 +94,9 @@ options 	PERFCTRS	# performance counters
 
 
 # Compatibility options
-#options 	COMPAT_09	# NetBSD 0.9
-#options 	COMPAT_10	# NetBSD 1.0
-#options 	COMPAT_11	# NetBSD 1.1
-#options 	COMPAT_12	# NetBSD 1.2
-#options 	COMPAT_13	# NetBSD 1.3
-#options 	COMPAT_14	# NetBSD 1.4
-#options 	COMPAT_15	# NetBSD 1.5
-#options 	COMPAT_16	# NetBSD 1.6
-#options 	COMPAT_20	# NetBSD 2.0
-#options 	COMPAT_30	# NetBSD 3.0
-#options 	COMPAT_43	# 4.3BSD
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+
+include 	"conf/compat_netbsd50.config"
+options 	COMPAT_NETBSD32	# allow running arm (e.g. non-earm) binaries
 
 # File systems
 file-system 	FFS		# UFS
@@ -127,7 +111,6 @@ file-system 	MSDOSFS		# MS-DOS file system
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -140,14 +123,16 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system     FILECORE        # Acorn filecore file system
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-#options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support
 # Note that UFS_DIRHASH is suspected of causing kernel memory corruption.
 # It is not recommended for general use.
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	NFSSERVER	# Network File System server
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+#options 	UFS_EXTATTR	# Extended attribute support for UFS1
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
@@ -156,18 +141,13 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-#options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
@@ -212,14 +192,27 @@ iic1            at iopiic?
 iopwdog*        at iopxs?               # Watchdog timer
 pci0            at iopxs? bus ?         # PCI/PCI-X support
 
+# The curious can see their RAM timings.
+spdmem* at iic1 addr 0x56
+
 # PCI bridges
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 pci*	at ppb? bus ?
 # XXX 'puc's aren't really bridges, but there's no better place for them here
 #puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
 
+#options COMCONSOLE
+
 # VGA
 #vga*            at pci? dev ? function ?
+genfb*		at pci? dev ? function ?
+
+# Display
+wsdisplay0      at wsemuldisplaydev? console 1
+wsdisplay*      at wsemuldisplaydev?
+
+options 	WSEMUL_VT100			# VT100 / VT220 emulation
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # CardBus bridge support
 #cbb*		at pci? dev ? function ?
@@ -552,6 +545,9 @@ ulpt*	at uhub? port ? configuration ? interface ?
 umodem*	at uhub? port ? configuration ?
 ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
 wd*	at umass?
@@ -582,7 +578,7 @@ uaudio*	at uhub? port ? configuration ?
 
 # USB 802.11 adapters
 #atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-#ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
+#ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
 #rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
@@ -637,8 +633,6 @@ ucom*	at uvscom? portno ?
 
 # USB Generic driver
 #ugen*	at uhub? port ?
-# On ugen bulk endpoints, perform read-ahead and write-behind.
-#options UGEN_BULK_RA_WB
 
 
 # IrDA and Consumer Ir devices
@@ -691,6 +685,8 @@ opl*	at yds?
 # Audio support
 audio*	at audiobus?
 
+spkr*	at audio?		# PC speaker (synthesized)
+
 # MPU 401 UARTs
 mpu*	at cmpci?
 mpu*	at eso?
@@ -721,6 +717,7 @@ midi*	at midibus?
 
 # Bluetooth USB Controllers
 #ubt* at uhub? port ?
+#aubtfwl* at uhub? port ?
 
 # Bluetooth Device Hub
 #bthub* at bcsp?
@@ -739,6 +736,10 @@ midi*	at midibus?
 # Bluetooth Keyboard
 #btkbd* at bthidev? reportid ?
 #wskbd* at btkbd? console ? mux 1
+
+# Bluetooth Apple Magic Mouse
+#btmagic* at bthub?
+#wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 #btsco* at bthub?
@@ -765,9 +766,9 @@ com0	at obio? addr 0x900002f8 xint 1 # on-board UART
 # disk/mass storage pseudo-devices
 
 #pseudo-device	bio			# RAID control device driver
-#pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	raid		8	# RAIDframe disk driver
+#pseudo-device	ccd			# concatenated/striped disk devices
+#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -777,9 +778,9 @@ com0	at obio? addr 0x900002f8 xint 1 # on-board UART
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -808,10 +809,14 @@ pseudo-device	loop			# network loopback
 # srt is EXPERIMENTAL
 #pseudo-device	srt			# source-address-based routing
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
+#pseudo-device	sequencer		# MIDI sequencer
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
@@ -820,16 +825,17 @@ pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	btuart			# Bluetooth HCI UART (H4)
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+#pseudo-device	vcoda			# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 #pseudo-device	nsmb			# experimental - SMB requester
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-#pseudo-device	wsfont
+pseudo-device	wsfont
 
 #options 	FILEASSOC		# fileassoc(9) - required for Veriexec
+					# and PAX_SEGVGUARD
 
 # Veriexec
 #pseudo-device	veriexec
@@ -838,11 +844,8 @@ pseudo-device	wsmux			# mouse & keyboard multiplexor
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5
 
 #options PAX_MPROTECT=0			# PaX mprotect(2) restrictions

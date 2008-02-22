@@ -1,4 +1,4 @@
-.\"	$NetBSD: select.2,v 1.30 2007/05/29 07:54:17 manu Exp $
+.\"	$NetBSD: select.2,v 1.43 2017/10/25 17:39:47 abhinav Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,12 +29,16 @@
 .\"
 .\"     @(#)select.2	8.2 (Berkeley) 3/25/94
 .\"
-.Dd March 5, 2005
+.Dd November 28, 2013
 .Dt SELECT 2
 .Os
 .Sh NAME
 .Nm select ,
-.Nm pselect
+.Nm pselect ,
+.Nm FD_SET ,
+.Nm FD_CLR ,
+.Nm FD_ISSET ,
+.Nm FD_ZERO
 .Nd synchronous I/O multiplexing
 .Sh LIBRARY
 .Lb libc
@@ -65,7 +69,8 @@ The first
 descriptors are checked in each set;
 i.e., the descriptors from 0 through
 .Fa nfds Ns No \-1
-in the descriptor sets are examined. This means that
+in the descriptor sets are examined.
+This means that
 .Fa nfds
 must be set to the highest file descriptor of the three sets, plus one.
 On return,
@@ -115,7 +120,7 @@ selection to complete.
 If
 .Fa timeout
 is a null pointer, the select blocks indefinitely.
-To affect a poll, the
+To poll without blocking, the
 .Fa timeout
 argument should be non-null, pointing to a zero-valued timeval or timespec
 structure, as appropriate.
@@ -142,6 +147,10 @@ Any of
 and
 .Fa exceptfds
 may be given as null pointers if no descriptors are of interest.
+.Sh NOTES
+It is recommended to use the
+.Xr poll 2
+interface instead, which tends to be more portable and efficient.
 .Sh RETURN VALUES
 .Fn select
 returns the number of ready descriptors that are contained in
@@ -155,42 +164,19 @@ If
 returns with an error,
 including one due to an interrupted call,
 the descriptor sets will be unmodified.
-.Sh ERRORS
-An error return from
-.Fn select
-indicates:
-.Bl -tag -width Er
-.It Bq Er EFAULT
-One or more of
-.Fa readfds ,
-.Fa writefds ,
-or
-.Fa exceptfds
-points outside the process's allocated address space.
-.It Bq Er EBADF
-One of the descriptor sets specified an invalid descriptor.
-.It Bq Er EINTR
-A signal was delivered before the time limit expired and
-before any of the selected events occurred.
-.It Bq Er EINVAL
-The specified time limit is invalid.
-One of its components is negative or too large.
-.El
-.Sh EXAMPLE
-.nf
+.Sh EXAMPLES
+.Bd -literal
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <err.h>
 #include <errno.h>
-#include <sysexits.h>
 #include <sys/types.h>
 #include <sys/time.h>
 
 int
-main(argc, argv) 
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	fd_set read_set;
 	struct timeval timeout;
@@ -209,36 +195,36 @@ main(argc, argv)
 	/* Add file descriptor 1 to read_set */
 	FD_SET(fd, &read_set);
 
-	/* 
-	 * Check if data is ready to be readen on 
+	/*
+	 * Check if data is ready to be read on
 	 * file descriptor 1, give up after 10 seconds.
 	 */
 	ret = select(fd + 1, &read_set, NULL, NULL, &timeout);
 
-	/* 
-	 * Returned value is the number of file 
+	/*
+	 * Returned value is the number of file
 	 * descriptors ready for I/O, or -1 on error.
-	 */ 
+	 */
 	switch (ret) {
 	case \-1:
-		err(EX_OSERR, "select() failed");
+		err(EXIT_FAILURE, "select() failed");
 		break;
 
 	case 0:
-		printf("Timeout, no data received.\\n");
+		printf("Timeout, no data received.\en");
 		break;
 
 	default:
-		printf("Data received on %d file desciptor(s)\\n", ret);
+		printf("Data received on %d file descriptor(s)\en", ret);
 
-		/* 
-		 * select(2) hands back a file descriptor set where 
-		 * only descriptors ready for I/O are set. Theses can 
+		/*
+		 * select(2) hands back a file descriptor set where
+		 * only descriptors ready for I/O are set. These can
 		 * be tested using FD_ISSET
 		 */
 		for (i = 0; i <= fd; i++) {
 			if (FD_ISSET(i, &read_set)) {
-				printf("Data on file descriptor %d\\n", i);
+				printf("Data on file descriptor %d\en", i);
 				/* Remove the file descriptor from the set */
 				FD_CLR(fd, &read_set);
 			}
@@ -248,7 +234,27 @@ main(argc, argv)
 
 	return 0;
 }
-.fi
+.Ed
+.Sh ERRORS
+An error return from
+.Fn select
+indicates:
+.Bl -tag -width Er
+.It Bq Er EBADF
+One of the descriptor sets specified an invalid descriptor.
+.It Bq Er EFAULT
+One or more of
+.Fa readfds ,
+.Fa writefds ,
+or
+.Fa exceptfds
+points outside the process's allocated address space.
+.It Bq Er EINTR
+A signal was delivered before the time limit expired and
+before any of the selected events occurred.
+.It Bq Er EINVAL
+The specified time limit is invalid.
+One of its components is negative or too large.
 .El
 .Sh SEE ALSO
 .Xr accept 2 ,
@@ -284,7 +290,7 @@ to increase this size within a program by providing
 a larger definition of
 .Dv FD_SETSIZE
 before the inclusion of
-.Aq Pa sys/types.h .
+.In sys/types.h .
 The kernel will cope, and the userland libraries provided with the
 system are also ready for large numbers of file descriptors.
 .Pp
@@ -320,21 +326,10 @@ userland libraries:
 		return (-1);
 	}
 	FD_SET(fd, fdsr);
-	n = select(max+1, fdsr, NULL, NULL, \*[Am]tv);
+	n = select(max+1, fdsr, NULL, NULL, &tv);
 	...
 	free(fdsr);
 .Ed
-.Pp
-Alternatively, it is possible to use the
-.Xr poll 2
-interface.
-.Xr poll 2
-is more efficient when the size of
-.Fn select Ns 's
-.Ft fd_set
-bit-arrays are very large, and for fixed numbers of
-file descriptors one need not size and dynamically allocate a
-memory object.
 .Pp
 .Fn select
 should probably have been designed to return the time remaining from the

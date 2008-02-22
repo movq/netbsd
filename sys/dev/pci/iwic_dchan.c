@@ -1,4 +1,4 @@
-/*	$NetBSD: iwic_dchan.c,v 1.5 2007/10/19 12:00:50 ad Exp $	*/
+/*	$NetBSD: iwic_dchan.c,v 1.9 2014/03/23 02:54:12 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Dave Boyce. All rights reserved.
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwic_dchan.c,v 1.5 2007/10/19 12:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwic_dchan.c,v 1.9 2014/03/23 02:54:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -342,21 +342,19 @@ dchan_receive(struct iwic_softc *sc, int ista)
 		if (status & (D_RSTA_RDOV | D_RSTA_CRCE | D_RSTA_RMB))
 		{
 			if (status & D_RSTA_RDOV)
-				NDBGL1(L1_I_ERR, "%s: D-channel Receive Data Overflow", sc->sc_dev.dv_xname);
+				NDBGL1(L1_I_ERR, "%s: D-channel Receive Data Overflow", device_xname(sc->sc_dev));
 			if (status & D_RSTA_CRCE)
-				NDBGL1(L1_I_ERR, "%s: D-channel CRC Error", sc->sc_dev.dv_xname);
+				NDBGL1(L1_I_ERR, "%s: D-channel CRC Error", device_xname(sc->sc_dev));
 			if (status & D_RSTA_RMB)
-				NDBGL1(L1_I_ERR, "%s: D-channel Receive Message Aborted", sc->sc_dev.dv_xname);
+				NDBGL1(L1_I_ERR, "%s: D-channel Receive Message Aborted", device_xname(sc->sc_dev));
 			command |= D_CMDR_RRST;
 		}
 		else
 		{
-			int hi, lo;
-			int total_frame_len;
+			int lo;
 
 			lo = IWIC_READ(sc, D_RBCL);
-			hi = IWIC_READ(sc, D_RBCH);
-			total_frame_len = D_RBC(hi, lo);
+			(void)IWIC_READ(sc, D_RBCH);
 			lo = lo & 0x3f;
 
 			if (lo == 0)

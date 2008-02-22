@@ -1,4 +1,4 @@
-/*	$NetBSD: pic.c,v 1.12 2006/12/27 15:56:26 rumble Exp $	 */
+/*	$NetBSD: pic.c,v 1.17 2015/02/18 16:47:58 macallan Exp $	 */
 
 /*
  * Copyright (c) 2002 Steve Rumble
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.12 2006/12/27 15:56:26 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.17 2015/02/18 16:47:58 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.12 2006/12/27 15:56:26 rumble Exp $");
 #include <machine/cpu.h>
 #include <machine/locore.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
 
@@ -48,24 +48,21 @@ __KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.12 2006/12/27 15:56:26 rumble Exp $");
 #include "locators.h"
 
 struct pic_softc {
-	struct device   	sc_dev;
-
 	bus_space_tag_t		iot;
 	bus_space_handle_t	ioh;
-
 };
 
-static int      pic_match(struct device *, struct cfdata *, void *);
-static void     pic_attach(struct device *, struct device *, void *);
+static int      pic_match(device_t, cfdata_t, void *);
+static void     pic_attach(device_t, device_t, void *);
 static int      pic_print(void *, const char *);
 static void	pic_bus_reset(void);
-static void	pic_bus_error(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+static void	pic_bus_error(vaddr_t, uint32_t, uint32_t);
 static void	pic_watchdog_enable(void);
 static void	pic_watchdog_disable(void);
 static void	pic_watchdog_tickle(void);
 
-CFATTACH_DECL(pic, sizeof(struct pic_softc),
-	      pic_match, pic_attach, NULL, NULL);
+CFATTACH_DECL_NEW(pic, 0,
+    pic_match, pic_attach, NULL, NULL);
 
 struct pic_attach_args {
 	const char	       *iaa_name;
@@ -79,27 +76,27 @@ int pic_gio32_arb_config(int, uint32_t);
 static struct pic_softc psc;
 
 static int
-pic_match(struct device * parent, struct cfdata * match, void *aux)
+pic_match(device_t parent, cfdata_t match, void *aux)
 {
 	/*
 	 * PIC exists on IP12 systems. It appears to be the immediate
 	 * ancestor of the mc, for mips1 processors.
 	 */
 	if (mach_type == MACH_SGI_IP12)
-		return (1);
+		return 1;
 	else
-		return (0);
+		return 0;
 }
 
 static void
-pic_attach(struct device * parent, struct device * self, void *aux)
+pic_attach(device_t parent, device_t self, void *aux)
 {
-	u_int32_t reg;
+	uint32_t reg;
 	struct pic_attach_args iaa;
 	struct mainbus_attach_args *ma = aux;
 
-	psc.iot = SGIMIPS_BUS_SPACE_HPC;
-	if (bus_space_map(psc.iot, ma->ma_addr, 0,
+	psc.iot = normal_memt;
+	if (bus_space_map(psc.iot, ma->ma_addr, 0x20010,
 			  BUS_SPACE_MAP_LINEAR, &psc.ioh))
 		panic("pic_attach: could not allocate memory\n");
 
@@ -127,21 +124,21 @@ pic_attach(struct device * parent, struct device * self, void *aux)
 	printf("pic0: ");
 
 	switch (mach_subtype) {
-		case MACH_SGI_IP12_4D_3X:
-			printf("Personal Iris 4D/3x");
-			break;
-		case MACH_SGI_IP12_VIP12:
-			printf("VME IP12");
-			break;
-		case MACH_SGI_IP12_HP1:
-			printf("Indigo R3000");
-			break;
-		case MACH_SGI_IP12_HPLC:
-			printf("Hollywood Light");
-			break;
-		default:
-			printf("unknown machine");
-			break;
+	case MACH_SGI_IP12_4D_3X:
+		printf("Personal Iris 4D/3x");
+		break;
+	case MACH_SGI_IP12_VIP12:
+		printf("VME IP12");
+		break;
+	case MACH_SGI_IP12_HP1:
+		printf("Indigo R3000");
+		break;
+	case MACH_SGI_IP12_HPLC:
+		printf("Hollywood Light");
+		break;
+	default:
+		printf("unknown machine");
+		break;
 	}
 	printf(", board revision %x\n", mach_boardrev);
 
@@ -187,7 +184,7 @@ pic_attach(struct device * parent, struct device * self, void *aux)
 	 * machines use VME for their expansion bus.
 	 */
 	iaa.iaa_name = "gio";
-	(void) config_found(self, (void *) &iaa, pic_print);
+	(void)config_found(self, (void *)&iaa, pic_print);
 
 	pic_watchdog_enable();
 }
@@ -201,18 +198,18 @@ pic_print(void *aux, const char *name)
 	if (name)
 		aprint_normal("%s at %s", iaa->iaa_name, name);
 
-	return (UNCONF);
+	return UNCONF;
 }
 
 static void
 pic_bus_reset(void)
 {
+
 	bus_space_write_4(psc.iot, psc.ioh, PIC_PARITY_ERROR, 0);
 }
 
 static void
-pic_bus_error(u_int32_t status, u_int32_t cause, u_int32_t pc,
-    u_int32_t ipending)
+pic_bus_error(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 
 	printf("pic0: bus error\n");
@@ -256,11 +253,11 @@ pic_gio32_arb_config(int slot, uint32_t flags)
 	/* only Indigo machines have GIO expansion slots (XXX HPLC?) */
 	if (mach_subtype != MACH_SGI_IP12_HP1 &&
 	    mach_subtype != MACH_SGI_IP12_HPLC)
-		return (EINVAL);
+		return EINVAL;
 
 	/* graphics slot is not valid on IP12 */
 	if (slot != GIO_SLOT_EXP0 && slot != GIO_SLOT_EXP1)
-		return (EINVAL);
+		return EINVAL;
 
 	reg = bus_space_read_4(psc.iot, psc.ioh, (slot == GIO_SLOT_EXP0) ?
 	    PIC_GIO32ARB_SLOT0 : PIC_GIO32ARB_SLOT1);
@@ -280,5 +277,5 @@ pic_gio32_arb_config(int slot, uint32_t flags)
 	bus_space_write_4(psc.iot, psc.ioh, (slot == GIO_SLOT_EXP0) ?
 	    PIC_GIO32ARB_SLOT0 : PIC_GIO32ARB_SLOT1, reg);
 
-	return (0);
+	return 0;
 }

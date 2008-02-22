@@ -1,7 +1,7 @@
-/*	$NetBSD: mutex.h,v 1.4 2007/12/09 15:32:27 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.6 2009/04/24 17:49:51 ad Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,9 +57,12 @@ struct kmutex {
 #define	__HAVE_SIMPLE_MUTEXES		1
 
 /*
- * MUTEX_RECEIVE: no memory barrier required, as 'ret' implies a load fence.
+ * MUTEX_RECEIVE: technically, no memory barrier is required
+ * as 'ret' implies a load fence.  However we need this to
+ * handle a bug with some Opteron revisions.  See patch.c,
+ * lock_stubs.S.
  */
-#define	MUTEX_RECEIVE(mtx)		/* nothing */
+#define	MUTEX_RECEIVE(mtx)		membar_consumer()
 
 /*
  * MUTEX_GIVE: no memory barrier required, as _lock_cas() will take care of it.

@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $
+ *	$Id: i4b_ipr.c,v 1.45 2018/06/26 06:48:03 msaitoh Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.45 2018/06/26 06:48:03 msaitoh Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -124,7 +124,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $");
 #if defined(__FreeBSD_version) &&  __FreeBSD_version >= 400008
 #include "bpf.h"
 #else
-#include "bpfilter.h"
+#define NBPFILTER 1
 #endif
 #if NBPFILTER > 0 || NBPF > 0
 #include <sys/time.h>
@@ -247,7 +247,7 @@ PDEVSTATIC void iripattach(void *);
 PSEUDO_SET(iripattach, i4b_ipr);
 static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data);
 #else
-PDEVSTATIC void iripattach __P((void));
+PDEVSTATIC void iripattach(void);
 static int iripioctl(struct ifnet *ifp, u_long cmd, void *data);
 #endif
 
@@ -257,7 +257,8 @@ static int iprwatchdog(int unit);
 static void iprwatchdog(struct ifnet *ifp);
 #endif
 static void ipr_tx_queue_empty(void *);
-static int iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst, struct rtentry *rtp);
+static int iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+    const struct rtentry *rtp);
 static void iripclearqueues(struct ipr_softc *sc);
 static void ipr_set_linktab(void *softc, isdn_link_t *ilt);
 static void ipr_activity(void *softc, int rxtx);
@@ -295,7 +296,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 iripattach(void *dummy)
 #else
-iripattach()
+iripattach(void)
 #endif
 {
 	struct ipr_softc *sc = ipr_softc;
@@ -404,7 +405,8 @@ iripattach()
 #ifdef __FreeBSD__
 		bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 #else
-		bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
+		bpf_attach(&sc->sc_if, DLT_NULL, sizeof(u_int));
+		bpf_mtap_softint_init(&sc->sc_if);
 #endif
 #endif
 	}
@@ -415,13 +417,12 @@ iripattach()
  *---------------------------------------------------------------------------*/
 static int
 iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-	 struct rtentry *rtp)
+	 const struct rtentry *rtp)
 {
 	struct ipr_softc *sc;
 	int s, rv;
 	struct ifqueue *ifq = NULL;
 	struct ip *ip;
-	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	s = splnet();
 
@@ -515,7 +516,7 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	 * else (i.e. ftp traffic) put it into the "normal" queue
 	 */
 
-	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
 
 	ip = mtod(m, struct ip *);		/* get ptr to ip header */
 
@@ -540,7 +541,7 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		}
 		IF_ENQUEUE(ifq, m);
 	} else {
-		IFQ_ENQUEUE(&sc->sc_if.if_snd, m, &pktattr, rv);
+		IFQ_ENQUEUE(&sc->sc_if.if_snd, m, rv);
 		if (rv != 0) {
 			sc->sc_if.if_oerrors++;
 			splx(s);
@@ -560,22 +561,12 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 /*---------------------------------------------------------------------------*
  *	process ioctl
  *---------------------------------------------------------------------------*/
-#ifdef __FreeBSD__
-static int
-iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
-#else
 static int
 iripioctl(struct ifnet *ifp, u_long cmd, void *data)
-#endif
 {
-#if defined(__FreeBSD__) || defined(__bsdi__)
-	struct ipr_softc *sc = &ipr_softc[ifp->if_unit];
-#else
 	struct ipr_softc *sc = ifp->if_softc;
-#endif
 
 	struct ifreq *ifr = (struct ifreq *)data;
-	struct ifaddr *ifa = (struct ifaddr *)data;
 	int s;
 	int error = 0;
 
@@ -584,19 +575,19 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 	switch (cmd)
 	{
 		case SIOCAIFADDR:	/* add interface address */
-		case SIOCSIFADDR:	/* set interface address */
+		case SIOCINITIFADDR:	/* set interface address */
 		case SIOCSIFDSTADDR:	/* set interface destination address */
-			if(ifa->ifa_addr->sa_family != AF_INET)
+			if (ifreq_getaddr(cmd, ifr)->sa_family != AF_INET)
 				error = EAFNOSUPPORT;
 			else
 				sc->sc_if.if_flags |= IFF_UP;
 			break;
 
 		case SIOCSIFFLAGS:	/* set interface flags */
-			if(!(ifr->ifr_flags & IFF_UP))
-			{
-				if(sc->sc_if.if_flags & IFF_RUNNING)
-				{
+			if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+				break;
+			if ((ifr->ifr_flags & IFF_UP) == 0) {
+				if (sc->sc_if.if_flags & IFF_RUNNING) {
 					/* disconnect ISDN line */
 					i4b_l4_drvrdisc(sc->sc_cdp->cdid);
 					sc->sc_if.if_flags &= ~IFF_RUNNING;
@@ -609,10 +600,10 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 				iripclearqueues(sc);
 			}
 
+#if 0
 			if(ifr->ifr_flags & IFF_DEBUG)
-			{
-				/* enable debug messages */
-			}
+				; /* enable debug messages */
+#endif
 
 			break;
 
@@ -636,18 +627,12 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #ifdef IPR_VJ
 		case IPRIOCSMAXCID:
 			{
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 400005
-			struct proc *p = curproc;	/* XXX */
-
-			if((error = suser(p)) != 0)
-#else
 			struct lwp *l = curlwp;		/* XXX */
 
 			if((error = kauth_authorize_network(l->l_cred,
 			    KAUTH_NETWORK_INTERFACE,
 			    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp,
 			    (void *)cmd, NULL)) != 0)
-#endif
 				break;
 		        sl_compress_setup(sc->sc_compr, *(int *)data);
 			}
@@ -655,7 +640,9 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 #endif
 		default:
-			error = EINVAL;
+			error = ifioctl_common(ifp, cmd, data);
+			if (error == ENETRESET)
+				error = 0;
 			break;
 	}
 
@@ -937,7 +924,7 @@ ipr_rx_data_rdy(void *softc)
 	if((m = *sc->sc_ilt->rx_mbuf) == NULL)
 		return;
 
-	m->m_pkthdr.rcvif = &sc->sc_if;
+	m_set_rcvif(m, &sc->sc_if);
 
 	m->m_pkthdr.len = m->m_len;
 
@@ -1083,27 +1070,14 @@ error:
 		mm.m_len = 4;
 		mm.m_data = (char *)&af;
 
-#ifdef __FreeBSD__
-		bpf_mtap(&sc->sc_if, &mm);
-#else
-		bpf_mtap(sc->sc_if.if_bpf, &mm);
-#endif
+		bpf_mtap_softint(&sc->sc_if, &mm);
 	}
 #endif /* NBPFILTER > 0  || NBPF > 0 */
 
-	if(IF_QFULL(&ipintrq))
-	{
-		NDBGL4(L4_IPRDBG, "%s: ipintrq full!", sc->sc_if.if_xname);
-
-		IF_DROP(&ipintrq);
+	if (__predict_false(!pktq_enqueue(ip_pktq, m, 0))) {
 		sc->sc_if.if_ierrors++;
 		sc->sc_if.if_iqdrops++;
 		m_freem(m);
-	}
-	else
-	{
-		IF_ENQUEUE(&ipintrq, m);
-		schednetisr(NETISR_IP);
 	}
 }
 
@@ -1150,11 +1124,7 @@ ipr_tx_queue_empty(void *softc)
 			mm.m_len = 4;
 			mm.m_data = (char *)&af;
 
-#ifdef __FreeBSD__
-			bpf_mtap(&sc->sc_if, &mm);
-#else
-			bpf_mtap(sc->sc_if.if_bpf, &mm);
-#endif
+			bpf_mtap(&sc->sc_if, &mm, BPF_D_OUT);
 		}
 #endif /* NBPFILTER */
 
@@ -1181,11 +1151,9 @@ ipr_tx_queue_empty(void *softc)
 		}
 		else
 		{
-			IF_ENQUEUE(sc->sc_ilt->tx_queue, m);
-
 			sc->sc_if.if_obytes += m->m_pkthdr.len;
-
 			sc->sc_if.if_opackets++;
+			IF_ENQUEUE(sc->sc_ilt->tx_queue, m);
 		}
 	}
 

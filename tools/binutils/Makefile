@@ -1,11 +1,27 @@
-#	$NetBSD: Makefile,v 1.12 2007/11/19 05:54:03 uebayasi Exp $
+#	$NetBSD: Makefile,v 1.28 2018/05/01 19:59:46 christos Exp $
 
-.include <bsd.own.mk>
+.include <bsd.hostinit.mk>
 
 MODULE=		binutils
 
+GNUHOSTDIST=	${.CURDIR}/../../external/gpl3/${EXTERNAL_BINUTILS_SUBDIR}/dist
+
+BRANDING?=	\
+	--with-pkgversion="NetBSD Binutils nb1" \
+	--with-bugurl="http://www.NetBSD.org/support/send-pr.html" \
+	--with-lib-path="=/usr/lib" --with-sysroot
+
 CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} --disable-nls \
-		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-,"
+		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-," \
+		--disable-werror \
+		${BRANDING}
+
+build/gas/m68k-parse.c: ${GNUHOSTDIST}/gas/m68k-parse.c
+	@mkdir build 2>/dev/null || true
+	@mkdir build/gas 2>/dev/null || true
+	cat ${GNUHOSTDIST}/gas/m68k-parse.c > ${.TARGET}
+
+.configure_done: build/gas/m68k-parse.c
 
 MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
 
@@ -18,7 +34,11 @@ INSTALL_TARGET+=install-gprof
 
 .include "${.CURDIR}/../Makefile.gnuhost"
 
-CCADDFLAGS=	-I${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
+CCADDFLAGS=	-I${DESTDIR}/usr/include -B${DESTDIR}/usr/lib/
+LDADDFLAGS=	-L${DESTDIR}/lib -L${DESTDIR}/usr/lib
+
+# Force avoiding possibly non-executable install-sh.
+CONFIGURE_ENV+= ac_cv_path_mkdir="${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-install -d"
 
 NEWCONFIGDIR?=	${.CURDIR}/../..
 MKNATIVE?=	${.CURDIR}/mknative-binutils
@@ -36,7 +56,8 @@ native-binutils: .native/.configure_done
 			CC=${CC:Q}' '${CCADDFLAGS:Q} \
 			CXX=${CXX:Q}' '${CCADDFLAGS:Q} \
 			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
-			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS= \
+			CFLAGS= CPPFLAGS= CXXFLAGS= \
+			LDFLAGS=${LDADDFLAGS:Q} \
 			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
 			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
 			LIBS=-lintl \
@@ -45,7 +66,9 @@ native-binutils: .native/.configure_done
 			${HOST_SH} ${GNUHOSTDIST}/configure \
 			--build=`${GNUHOSTDIST}/config.guess` \
 			--host=${MACHINE_GNU_PLATFORM} \
-			--target=${MACHINE_GNU_PLATFORM})
+			--target=${MACHINE_GNU_PLATFORM} \
+			${BRANDING} \
+		)
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
 		(cd .native && ${MAKE} configure-host)
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \

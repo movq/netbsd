@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pcmcia.c,v 1.150 2007/10/19 12:01:04 ad Exp $	*/
+/*	$NetBSD: if_ne_pcmcia.c,v 1.160 2013/10/17 21:06:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.150 2007/10/19 12:01:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.160 2013/10/17 21:06:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +64,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.150 2007/10/19 12:01:04 ad Exp $"
 #include <dev/ic/ax88190reg.h>
 #include <dev/ic/ax88190var.h>
 
-int	ne_pcmcia_match(struct device *, struct cfdata *, void *);
+int	ne_pcmcia_match(device_t, cfdata_t , void *);
 int	ne_pcmcia_validate_config(struct pcmcia_config_entry *);
-void	ne_pcmcia_attach(struct device *, struct device *, void *);
-int	ne_pcmcia_detach(struct device *, int);
+void	ne_pcmcia_attach(device_t, device_t, void *);
+int	ne_pcmcia_detach(device_t, int);
 
 int	ne_pcmcia_enable(struct dp8390_softc *);
 void	ne_pcmcia_disable(struct dp8390_softc *);
@@ -80,7 +80,6 @@ struct ne_pcmcia_softc {
 	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
 	int sc_state;
 #define	NE_PCMCIA_ATTACHED	3
-	void *sc_powerhook;			/* power management hook */
 };
 
 u_int8_t *ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *, int,
@@ -88,7 +87,7 @@ u_int8_t *ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *, int,
 u_int8_t *ne_pcmcia_dl10019_get_enaddr(struct ne_pcmcia_softc *,
 	    u_int8_t [ETHER_ADDR_LEN]);
 
-CFATTACH_DECL(ne_pcmcia, sizeof(struct ne_pcmcia_softc),
+CFATTACH_DECL_NEW(ne_pcmcia, sizeof(struct ne_pcmcia_softc),
     ne_pcmcia_match, ne_pcmcia_attach, ne_pcmcia_detach, dp8390_activate);
 
 static const struct ne2000dev {
@@ -301,6 +300,10 @@ static const struct ne2000dev {
       0, -1, { 0x00, 0x80, 0x19 }, 0 },
 
     { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_ETHER_CF_TD,
+      0, -1, { 0x00, 0x00, 0xf4 }, 0 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_ETHER_PCC_T,
       0, -1, { 0x00, 0x00, 0xf4 }, 0 },
 
@@ -335,6 +338,10 @@ static const struct ne2000dev {
     { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_COREGA_FETHER_II_PCC_TXD,
       0, -1, { 0x00, 0x90, 0x99 }, NE2000DVF_AX88190 },
+
+    { PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
+      PCMCIA_CIS_COREGA_LAPCCTXD,
+      0, -1, { 0x00, 0x90, 0x99 }, 0 },
 
     { PCMCIA_VENDOR_COMPEX, PCMCIA_PRODUCT_COMPEX_LINKPORT_ENET_B,
       PCMCIA_CIS_INVALID,
@@ -541,8 +548,7 @@ match:
 
 
 int
-ne_pcmcia_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ne_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 	int i;
@@ -556,8 +562,7 @@ ne_pcmcia_match(struct device *parent, struct cfdata *match,
 }
 
 int
-ne_pcmcia_validate_config(cfe)
-	struct pcmcia_config_entry *cfe;
+ne_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_iospace < 1 || cfe->num_iospace > 2)
@@ -568,10 +573,9 @@ ne_pcmcia_validate_config(cfe)
 }
 
 void
-ne_pcmcia_attach( struct device *parent, struct device *self,
-    void *aux)
+ne_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct ne_pcmcia_softc *psc = (void *) self;
+	struct ne_pcmcia_softc *psc = device_private(self);
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
 	struct pcmcia_attach_args *pa = aux;
@@ -579,15 +583,16 @@ ne_pcmcia_attach( struct device *parent, struct device *self,
 	const struct ne2000dev *ne_dev;
 	int i;
 	u_int8_t myea[6], *enaddr;
-	const char *typestr = "";
 	int error;
 
+	aprint_naive("\n");
+
+	dsc->sc_dev = self;
 	psc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf, ne_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -599,8 +604,8 @@ ne_pcmcia_attach( struct device *parent, struct device *self,
 		nsc->sc_asict = dsc->sc_regt;
 		if (bus_space_subregion(dsc->sc_regt, dsc->sc_regh,
 		    NE2000_ASIC_OFFSET, NE2000_ASIC_NPORTS, &nsc->sc_asich)) {
-			aprint_error("%s: can't get subregion for asic\n",
-			    self->dv_xname);
+			aprint_error_dev(self,
+			    "can't get subregion for asic\n");
 			goto fail;
 		}
 	} else {
@@ -622,7 +627,6 @@ ne_pcmcia_attach( struct device *parent, struct device *self,
 	i = 0;
 again:
 	enaddr = NULL;			/* Ask ASIC by default */
-	typestr = "";			/* clear previous card-type */
 	for (; i < NE2000_NDEVS; i++) {
 		ne_dev = ne2000_match(pa->card, pa->pf->number, i);
 		if (ne_dev != NULL) {
@@ -635,10 +639,11 @@ again:
 			goto found;
 		}
 	}
-	aprint_error("%s: can't match ethernet vendor code\n", self->dv_xname);
+	aprint_error_dev(self, "can't match ethernet vendor code\n");
 	if (enaddr != NULL)
-		aprint_error("%s: ethernet vendor code %02x:%02x:%02x\n",
-	            self->dv_xname, enaddr[0], enaddr[1], enaddr[2]);
+		aprint_error_dev(self,
+		    "ethernet vendor code %02x:%02x:%02x\n",
+		    enaddr[0], enaddr[1], enaddr[2]);
 	goto fail2;
 
 found:
@@ -662,10 +667,8 @@ found:
 		type = bus_space_read_1(nsc->sc_asict, nsc->sc_asich, 0x0f);
 		if (type == 0x91 || type == 0x99) {
 			nsc->sc_type = NE2000_TYPE_DL10022;
-			typestr = " (DL10022)";
 		} else {
 			nsc->sc_type = NE2000_TYPE_DL10019;
-			typestr = " (DL10019)";
 		}
 	}
 
@@ -688,10 +691,8 @@ found:
 		test = bus_space_read_1(nsc->sc_asict, nsc->sc_asich, 0x05);
 		if (test != 0) {
 			nsc->sc_type = NE2000_TYPE_AX88790;
-			typestr = " (AX88790)";
 		} else {
 			nsc->sc_type = NE2000_TYPE_AX88190;
-			typestr = " (AX88190)";
 		}
 	}
 
@@ -711,14 +712,13 @@ found:
 	/*
 	 * Check for a Realtek 8019.
 	 */
-	if (nsc->sc_type == 0) {
+	if (nsc->sc_type == NE2000_TYPE_UNKNOWN) {
 		bus_space_write_1(dsc->sc_regt, dsc->sc_regh, ED_P0_CR,
 		    ED_CR_PAGE_0 | ED_CR_STP);
 		if (bus_space_read_1(dsc->sc_regt, dsc->sc_regh,
 		    NERTL_RTL0_8019ID0) == RTL0_8019ID0 &&
 		    bus_space_read_1(dsc->sc_regt, dsc->sc_regh,
 		    NERTL_RTL0_8019ID1) == RTL0_8019ID1) {
-			typestr = " (RTL8019)";
 			dsc->sc_mediachange = rtl80x9_mediachange;
 			dsc->sc_mediastatus = rtl80x9_mediastatus;
 			dsc->init_card = rtl80x9_init_card;
@@ -729,11 +729,16 @@ found:
 	if (ne2000_attach(nsc, enaddr))
 		goto fail2;
 
-	psc->sc_powerhook = powerhook_establish(self->dv_xname,
-	    ne2000_power, nsc);
-	if (psc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-		    self->dv_xname);
+	if (!pmf_device_register(self, ne2000_suspend, ne2000_resume)) {
+		aprint_error_dev(self, "cannot set power mgmt handler\n");
+	}
+	/* pmf(9) power hooks */
+	if (pmf_device_register(self, ne2000_suspend, ne2000_resume)) {
+#if 0 /* XXX: notyet: if_stop is NULL! */
+		pmf_class_network_register(self, &dsc->sc_ec.ec_if);
+#endif
+	} else
+		aprint_error_dev(self, "unable to establish power handler\n");
 
 	psc->sc_state = NE_PCMCIA_ATTACHED;
 	ne_pcmcia_disable(dsc);
@@ -746,20 +751,16 @@ fail:
 }
 
 int
-ne_pcmcia_detach(self, flags)
-	struct device *self;
-	int flags;
+ne_pcmcia_detach(device_t self, int flags)
 {
-	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)self;
+	struct ne_pcmcia_softc *psc = device_private(self);
 	struct pcmcia_function *pf = psc->sc_pf;
 	int error;
 
 	if (psc->sc_state != NE_PCMCIA_ATTACHED)
 		return (0);
 
-	if (psc->sc_powerhook != NULL)
-		powerhook_disestablish(psc->sc_powerhook);
-
+	pmf_device_deregister(self);
 	error = ne2000_detach(&psc->sc_ne2000, flags);
 	if (error)
 		return (error);
@@ -770,8 +771,7 @@ ne_pcmcia_detach(self, flags)
 }
 
 int
-ne_pcmcia_enable(dsc)
-	struct dp8390_softc *dsc;
+ne_pcmcia_enable(struct dp8390_softc *dsc)
 {
 	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)dsc;
 	int error;
@@ -792,8 +792,7 @@ ne_pcmcia_enable(dsc)
 }
 
 void
-ne_pcmcia_disable(dsc)
-	struct dp8390_softc *dsc;
+ne_pcmcia_disable(struct dp8390_softc *dsc)
 {
 	struct ne_pcmcia_softc *psc = (struct ne_pcmcia_softc *)dsc;
 
@@ -803,10 +802,8 @@ ne_pcmcia_disable(dsc)
 }
 
 u_int8_t *
-ne_pcmcia_get_enaddr(psc, maddr, myea)
-	struct ne_pcmcia_softc *psc;
-	int maddr;
-	u_int8_t myea[ETHER_ADDR_LEN];
+ne_pcmcia_get_enaddr(struct ne_pcmcia_softc *psc, int maddr,
+   u_int8_t myea[ETHER_ADDR_LEN])
 {
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	struct dp8390_softc *dsc = &nsc->sc_dp8390;
@@ -819,14 +816,13 @@ ne_pcmcia_get_enaddr(psc, maddr, myea)
 		return (NULL);
 
 	if (pcmcia_mem_alloc(psc->sc_pf, ETHER_ADDR_LEN * 2, &pcmh)) {
-		printf("%s: can't alloc mem for enet addr\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev,
+		    "can't alloc mem for enet addr\n");
 		goto fail_1;
 	}
 	if (pcmcia_mem_map(psc->sc_pf, PCMCIA_MEM_ATTR, maddr,
 	    ETHER_ADDR_LEN * 2, &pcmh, &offset, &mwindow)) {
-		printf("%s: can't map mem for enet addr\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev, "can't map mem for enet addr\n");
 		goto fail_2;
 	}
 	for (j = 0; j < ETHER_ADDR_LEN; j++)
@@ -842,9 +838,8 @@ ne_pcmcia_get_enaddr(psc, maddr, myea)
 }
 
 u_int8_t *
-ne_pcmcia_dl10019_get_enaddr(psc, myea)
-	struct ne_pcmcia_softc *psc;
-	u_int8_t myea[ETHER_ADDR_LEN];
+ne_pcmcia_dl10019_get_enaddr(struct ne_pcmcia_softc *psc,
+    u_int8_t myea[ETHER_ADDR_LEN])
 {
 	struct ne2000_softc *nsc = &psc->sc_ne2000;
 	u_int8_t sum;

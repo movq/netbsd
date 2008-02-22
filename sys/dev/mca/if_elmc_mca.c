@@ -1,4 +1,4 @@
-/*	$NetBSD: if_elmc_mca.c,v 1.23 2007/10/19 12:00:34 ad Exp $	*/
+/*	$NetBSD: if_elmc_mca.c,v 1.32 2016/07/14 04:00:45 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.23 2007/10/19 12:00:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.32 2016/07/14 04:00:45 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,8 +72,8 @@ struct elmc_mca_softc {
 	void		*sc_ih;		/* interrupt handle */
 };
 
-int	elmc_mca_match(struct device *, struct cfdata *, void *);
-void	elmc_mca_attach(struct device *, struct device *, void *);
+int	elmc_mca_match(device_t, cfdata_t, void *);
+void	elmc_mca_attach(device_t, device_t, void *);
 
 static void	elmc_mca_copyin(struct ie_softc *, void *, int, size_t);
 static void	elmc_mca_copyout(struct ie_softc *, const void *, int, size_t);
@@ -92,7 +85,7 @@ static void	elmc_mca_hwreset(struct ie_softc *, int);
 static int	elmc_mca_intrhook(struct ie_softc *, int);
 
 int
-elmc_mca_match(struct device *parent, struct cfdata *cf,
+elmc_mca_match(device_t parent, cfdata_t cf,
     void *aux)
 {
 	struct mca_attach_args *ma = aux;
@@ -106,7 +99,7 @@ elmc_mca_match(struct device *parent, struct cfdata *cf,
 }
 
 void
-elmc_mca_attach(struct device *parent, struct device *self, void *aux)
+elmc_mca_attach(device_t parent, device_t self, void *aux)
 {
 	struct elmc_mca_softc *asc = device_private(self);
 	struct ie_softc *sc = &asc->sc_ie;
@@ -147,18 +140,19 @@ elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 	case 8: irq = 9; break;
 	case 1: irq = 12; break;
 	default:
-		printf(": cannot determine irq\n");
+		aprint_error(": cannot determine irq\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	pbram_addr = ELMC_MADDR_BASE + (((pos2 & 0x18) >> 3) * 0x8000);
 
-	printf(" slot %d irq %d: 3Com EtherLink/MC Ethernet Adapter (3C523)\n",
-		ma->ma_slot + 1, irq);
+	aprint_normal(" slot %d irq %d: 3Com EtherLink/MC Ethernet Adapter "
+	    "(3C523)\n", ma->ma_slot + 1, irq);
 
 	/* map the pio registers */
 	if (bus_space_map(ma->ma_iot, iobase, ELMC_IOADDR_SIZE, 0, &ioh)) {
-		printf("%s: unable to map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map i/o space\n");
 		return;
 	}
 
@@ -168,10 +162,10 @@ elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 	 * about. Just use the first 16K.
 	 */
 	if (bus_space_map(ma->ma_memt, pbram_addr, ELMC_MADDR_SIZE, 0, &memh)) {
-		printf("%s: unable to map memory space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map memory space\n");
 		if (pbram_addr == 0xc0000) {
-			printf("%s: memory space 0xc0000 may conflict with vga\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(self,
+			    "memory space 0xc0000 may conflict with vga\n");
 		}
 
 		bus_space_unmap(ma->ma_iot, ioh, ELMC_IOADDR_SIZE);
@@ -236,13 +230,14 @@ elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 	/* set up pointers to key structures */
 	elmc_mca_write_24(sc, IE_SCP_ISCP((u_long)sc->scp), (u_long) sc->iscp);
 	elmc_mca_write_16(sc, IE_ISCP_SCB((u_long)sc->iscp), (u_long) sc->scb);
-	elmc_mca_write_24(sc, IE_ISCP_BASE((u_long)sc->iscp), (u_long) sc->iscp);
+	elmc_mca_write_24(sc, IE_ISCP_BASE((u_long)sc->iscp),
+	    (u_long) sc->iscp);
 
 	/* flush setup of pointers, check if chip answers */
 	bus_space_barrier(sc->bt, sc->bh, 0, sc->sc_msize,
 			  BUS_SPACE_BARRIER_WRITE);
 	if (!i82586_proberam(sc)) {
-		printf("%s: can't talk to i82586!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't talk to i82586!\n");
 
 		bus_space_unmap(asc->sc_regt, asc->sc_regh, ELMC_IOADDR_SIZE);
 		bus_space_unmap(sc->bt, sc->bh, ELMC_MADDR_SIZE);
@@ -254,11 +249,12 @@ elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 				ELMC_REVISION) & ELMC_REVISION_MASK;
 
 	/* dump known info */
-	printf("%s: rev %d, i/o %#04x-%#04x, mem %#06x-%#06x, %sternal xcvr\n",
-		sc->sc_dev.dv_xname, revision,
-		iobase, iobase + ELMC_IOADDR_SIZE - 1,
-		pbram_addr, pbram_addr + ELMC_MADDR_SIZE - 1,
-		(pos2 & 0x20) ? "ex" : "in");
+	aprint_normal("%s: rev %d, i/o %#04x-%#04x, mem %#06x-%#06x, "
+	    "%sternal xcvr\n",
+	    device_xname(self), revision,
+	    iobase, iobase + ELMC_IOADDR_SIZE - 1,
+	    pbram_addr, pbram_addr + ELMC_MADDR_SIZE - 1,
+	    (pos2 & 0x20) ? "ex" : "in");
 
 	/*
 	 * Hardware ethernet address is stored in the first six bytes
@@ -267,25 +263,21 @@ elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 	for(i=0; i < MIN(6, ETHER_ADDR_LEN); i++)
 		myaddr[i] = bus_space_read_1(asc->sc_regt, asc->sc_regh, i);
 
-	printf("%s:", sc->sc_dev.dv_xname);
-	i82586_attach((void *)sc, "3C523", myaddr, NULL, 0, 0);
+	printf("%s:", device_xname(self));
+	i82586_attach(sc, "3C523", myaddr, NULL, 0, 0);
 
 	/* establish interrupt handler */
 	asc->sc_ih = mca_intr_establish(ma->ma_mc, irq, IPL_NET, i82586_intr,
 			sc);
 	if (asc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt handler\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "couldn't establish interrupt handler\n");
 		return;
 	}
 }
 
 static void
-elmc_mca_copyin (sc, dst, offset, size)
-        struct ie_softc *sc;
-        void *dst;
-        int offset;
-        size_t size;
+elmc_mca_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
 {
 	int dribble;
 	u_int8_t* bptr = dst;
@@ -310,11 +302,8 @@ elmc_mca_copyin (sc, dst, offset, size)
 }
 
 static void
-elmc_mca_copyout (sc, src, offset, size)
-        struct ie_softc *sc;
-        const void *src;
-        int offset;
-        size_t size;
+elmc_mca_copyout (struct ie_softc *sc, const void *src, int offset,
+    size_t size)
 {
 	int dribble;
 	int osize = size;
@@ -340,31 +329,24 @@ elmc_mca_copyout (sc, src, offset, size)
 }
 
 static u_int16_t
-elmc_mca_read_16 (sc, offset)
-        struct ie_softc *sc;
-        int offset;
+elmc_mca_read_16 (struct ie_softc *sc, int offset)
 {
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_READ);
         return bus_space_read_2(sc->bt, sc->bh, offset);
 }
 
 static void
-elmc_mca_write_16 (sc, offset, value)
-        struct ie_softc *sc;
-        int offset;
-        u_int16_t value;
+elmc_mca_write_16 (struct ie_softc *sc, int offset, u_int16_t value)
 {
         bus_space_write_2(sc->bt, sc->bh, offset, value);
 	bus_space_barrier(sc->bt, sc->bh, offset, 2, BUS_SPACE_BARRIER_WRITE);
 }
 
 static void
-elmc_mca_write_24 (sc, offset, addr)
-        struct ie_softc *sc;
-        int offset, addr;
+elmc_mca_write_24 (struct ie_softc *sc, int offset, int addr)
 {
         bus_space_write_4(sc->bt, sc->bh, offset, addr +
-                                (u_long) sc->sc_maddr - (u_long) sc->sc_iobase);
+	    (u_long) sc->sc_maddr - (u_long) sc->sc_iobase);
 	bus_space_barrier(sc->bt, sc->bh, offset, 4, BUS_SPACE_BARRIER_WRITE);
 }
 
@@ -372,56 +354,50 @@ elmc_mca_write_24 (sc, offset, addr)
  * Channel attention hook.
  */
 static void
-elmc_mca_attn(sc, why)
-	struct ie_softc *sc;
-	int why;
+elmc_mca_attn(struct ie_softc *sc, int why)
 {
-    struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
-    int intr = 0;
+	struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
+	int intr = 0;
 
-    switch (why) {
-    case CHIP_PROBE:
-	intr = 0;
-	break;
-    case CARD_RESET:
-	intr = ELMC_CTRL_INT;
-	break;
-    }
+	switch (why) {
+	case CHIP_PROBE:
+		intr = 0;
+		break;
+	case CARD_RESET:
+		intr = ELMC_CTRL_INT;
+		break;
+	}
 
-    bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
-		ELMC_CTRL_RST | ELMC_CTRL_BS3 | ELMC_CTRL_CHA | intr);
-    delay(1);	/* should be > 500 ns */
-    bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
-		ELMC_CTRL_RST | ELMC_CTRL_BS3 | intr);
+	bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
+	    ELMC_CTRL_RST | ELMC_CTRL_BS3 | ELMC_CTRL_CHA | intr);
+	delay(1);	/* should be > 500 ns */
+	bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
+	    ELMC_CTRL_RST | ELMC_CTRL_BS3 | intr);
 }
 
 /*
  * Do full card hardware reset.
  */
 static void
-elmc_mca_hwreset(sc, why)
-	struct ie_softc *sc;
-	int why;
+elmc_mca_hwreset(struct ie_softc *sc, int why)
 {
-    struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
+	struct elmc_mca_softc* asc = (struct elmc_mca_softc *) sc;
 
-    /* toggle the RST bit low then high */
-    bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
-		ELMC_CTRL_BS3 | ELMC_CTRL_LOOP);
-    delay(1);	/* should be > 500 ns */
-    bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
-		ELMC_CTRL_BS3 | ELMC_CTRL_LOOP | ELMC_CTRL_RST);
+	/* toggle the RST bit low then high */
+	bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
+	    ELMC_CTRL_BS3 | ELMC_CTRL_LOOP);
+	delay(1);	/* should be > 500 ns */
+	bus_space_write_1(asc->sc_regt, asc->sc_regh, ELMC_CTRL,
+	    ELMC_CTRL_BS3 | ELMC_CTRL_LOOP | ELMC_CTRL_RST);
 
-    elmc_mca_attn(sc, why);
+	elmc_mca_attn(sc, why);
 }
 
 /*
  * Interrupt hook.
  */
 static int
-elmc_mca_intrhook(sc, why)
-	struct ie_softc *sc;
-	int why;
+elmc_mca_intrhook(struct ie_softc *sc, int why)
 {
 	switch (why) {
 	case INTR_ACK:
@@ -435,5 +411,5 @@ elmc_mca_intrhook(sc, why)
 	return (0);
 }
 
-CFATTACH_DECL(elmc_mca, sizeof(struct elmc_mca_softc),
+CFATTACH_DECL_NEW(elmc_mca, sizeof(struct elmc_mca_softc),
     elmc_mca_match, elmc_mca_attach, NULL, NULL);

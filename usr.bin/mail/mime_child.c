@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_child.c,v 1.6 2007/10/29 23:20:38 christos Exp $	*/
+/*	$NetBSD: mime_child.c,v 1.9 2017/11/09 20:27:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_child.c,v 1.6 2007/10/29 23:20:38 christos Exp $");
+__RCSID("$NetBSD: mime_child.c,v 1.9 2017/11/09 20:27:50 christos Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -102,11 +95,9 @@ get_cmd_flags(const char *cmd, const char **cmd_start)
 static int
 prepare_pipe(sigset_t *nset, int p[2])
 {
-	if (pipe(p) == -1)
+	if (pipe2(p, O_CLOEXEC) == -1)
 		return -1;
 
-	(void)fcntl(p[READ],  F_SETFD, FD_CLOEXEC);
-	(void)fcntl(p[WRITE], F_SETFD, FD_CLOEXEC);
 	/*
 	 * We _must_ ignore SIGINT and SIGPIPE or the child
 	 * will end up in our earlier handlers.
@@ -168,7 +159,7 @@ mime_run_command(const char *cmd, FILE *fo)
 	default:	/* parent */
 		(void)close(p[READ]);
 
-		nfo = fdopen(p[WRITE], "w");
+		nfo = fdopen(p[WRITE], "wef");
 		if (nfo == NULL) {
 			warn("mime_run_command: fdopen");
 			(void)close(p[WRITE]);
@@ -212,7 +203,7 @@ mime_run_function(void (*fn)(FILE *, FILE *, void *), FILE *fo, void *cookie)
 
 	default:	/* parent */
 		(void)close(p[READ]);
-		nfo = fdopen(p[WRITE], "w");
+		nfo = fdopen(p[WRITE], "wef");
 		if (nfo == NULL) {
 			warn("run_function: fdopen");
 			(void)close(p[WRITE]);

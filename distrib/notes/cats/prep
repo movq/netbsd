@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.9 2006/03/09 18:10:07 wiz Exp $
+.\"	$NetBSD: prep,v 1.13 2014/11/13 08:16:42 snj Exp $
 .
 A \*M machine usually needs little or no preparation before installing
 .Nx ,
@@ -13,7 +13,7 @@ Currently the \*M Cyclone firmware allows for system booting using:
 .(bullet -compact
 Ethernet (netboot) using DHCP, BOOTP, TFTP, or NFS.
 .It
-Local harddisk or CD ROM with the following file systems:
+Local hard disk or CD-ROM with the following file systems:
 .(bullet -compact
 Berkeley FFS
 .It
@@ -29,14 +29,14 @@ Booting from floppy disk is not currently supported.
 .
 .Ss2 Preparing the Bootable Media
 .
-This section desribes how to get a
+This section describes how to get a
 .Nx*M
 install kernel onto a CD-R.
 .Pp
 Go to one of the
 .Nx
 mirror sites and download CD-R image from the
-.Pa pub/NetBSD/iso
+.Pa pub/NetBSD/images
 directory.
 .Lk http://www.NetBSD.org/mirrors/#iso
 .Pp
@@ -50,12 +50,11 @@ collection should get it from the official website:
 .Lk http://www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private/cdrecord.html
 .Pp
 .(disp
-.No # Ic "cdrecord -v speed=4 dev=/dev/cd1d output.iso"
+.No # Ic "cdrecord -v speed=4 dev=/dev/cd1d NetBSD-\*V-cats.iso"
 .disp)
 .Pp
-You will need to substitute the correct name of the disk image file,
-speed for your CD writer, and the
-correct device for your system (for i386 it would be
+You will need to substitute the correct speed for your CD writer, as well
+as the correct device for your system (for i386 it would be
 .Pa /dev/cd1d ) .
 .
 .Ss2 Booting from CD-ROM
@@ -63,5 +62,5 @@ correct device for your system (for i386 it would be
 To boot from a CD-ROM simply issue the following command
 .Pp
 .(disp
-.No boot> Ic "boot cd0:/netbsd"
+.No boot\*[Gt] Ic "boot cd0:/netbsd"
 .disp)

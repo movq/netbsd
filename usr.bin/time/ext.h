@@ -1,4 +1,5 @@
-/*	$NetBSD: ext.h,v 1.1 2007/02/24 21:30:27 matt Exp $	*/
+/*	$NetBSD: ext.h,v 1.3 2017/07/15 14:34:08 christos Exp $	*/
 
-void prusage(FILE *, struct rusage *, struct rusage *, struct timeval *,
-        struct timeval *);
+/* borrowed from ../../bin/csh/extern.h */
+void prusage1(FILE *, const char *fmt, struct rusage *, struct rusage *,
+    struct timespec *, struct timespec *);

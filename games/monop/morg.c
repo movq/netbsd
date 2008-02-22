@@ -1,4 +1,4 @@
-/*	$NetBSD: morg.c,v 1.14 2008/02/20 05:08:46 dholland Exp $	*/
+/*	$NetBSD: morg.c,v 1.19 2012/06/19 05:35:32 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,11 +34,11 @@
 #if 0
 static char sccsid[] = "@(#)morg.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: morg.c,v 1.14 2008/02/20 05:08:46 dholland Exp $");
+__RCSID("$NetBSD: morg.c,v 1.19 2012/06/19 05:35:32 dholland Exp $");
 #endif
 #endif /* not lint */
 
-#include "monop.ext"
+#include "monop.h"
 
 /*
  *	These routines deal with mortgaging.
@@ -73,7 +73,6 @@ static int set_mlist(void);
 static void m(int);
 static int set_umlist(void);
 static void unm(int);
-static void fix_ex(int);
 
 /*
  *	This routine is the command level response the mortgage command.
@@ -81,7 +80,7 @@ static void fix_ex(int);
  * be mortgaged.
  */
 void
-mortgage()
+mortgage(void)
 {
 	int propnum;
 
@@ -96,7 +95,7 @@ mortgage()
 			return;
 		}
 		if (num_good == 1) {
-			printf("Your only mortageable property is %s\n",
+			printf("Your only mortgageable property is %s\n",
 			    names[0]);
 			if (getyn("Do you want to mortgage it? ") == 0)
 				m(square[0]);
@@ -115,7 +114,7 @@ mortgage()
  *	This routine sets up the list of mortgageable property
  */
 static int
-set_mlist()
+set_mlist(void)
 {
 	OWN *op;
 
@@ -138,8 +137,7 @@ set_mlist()
  *	This routine actually mortgages the property.
  */
 static void
-m(propnum)
-	int propnum;
+m(int propnum)
 {
 	int price;
 
@@ -155,7 +153,7 @@ m(propnum)
  * to be unmortgaged.
  */
 void
-unmortgage()
+unmortgage(void)
 {
 	int propnum;
 
@@ -165,7 +163,8 @@ unmortgage()
 			return;
 		}
 		if (num_good == 1) {
-			printf("Your only mortaged property is %s\n",names[0]);
+			printf("Your only mortgaged property is %s\n",
+			    names[0]);
 			if (getyn("Do you want to unmortgage it? ") == 0)
 				unm(square[0]);
 			return;
@@ -182,7 +181,7 @@ unmortgage()
  *	This routine sets up the list of mortgaged property
  */
 static int
-set_umlist()
+set_umlist(void)
 {
 	OWN *op;
 
@@ -201,8 +200,7 @@ set_umlist()
  *	This routine actually unmortgages the property
  */
 static void
-unm(propnum)
-	int propnum;
+unm(int propnum)
 {
 	int price;
 
@@ -211,30 +209,21 @@ unm(propnum)
 	price += price/10;
 	printf("That cost you $%d\n",price);
 	cur_p->money -= price;
-	set_umlist();
+	(void)set_umlist();
 }
 
 /*
  *	This routine forces the indebted player to fix his
- * financial woes.
+ * financial woes.  It is fine to have $0 but not to be in debt.
  */
 void
-force_morg()
+force_morg(void)
 {
 	told_em = fixing = TRUE;
-	while (cur_p->money <= 0)
-		fix_ex(getinp("How are you going to fix it up? ",morg_coms));
+	while (cur_p->money < 0) {
+		told_em = FALSE;
+		(*func[(getinp("How are you going to fix it up? ", morg_coms))])();
+		notify();
+	}
 	fixing = FALSE;
-}
-
-/*
- *	This routine is a special execute for the force_morg routine
- */
-static void
-fix_ex(com_num)
-	int com_num;
-{
-	told_em = FALSE;
-	(*func[com_num])();
-	notify();
 }

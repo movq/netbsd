@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.h,v 1.2 2005/12/24 23:24:01 perry Exp $	*/
+/*	$NetBSD: interrupt.h,v 1.7 2016/04/03 10:03:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,6 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/evcnt.h>
 
 enum ipl_type {
 	IPL_INTC,
@@ -67,4 +62,4 @@ void _sif_call_end(void);
 
 /* SPL */
 void md_ipl_register(enum ipl_type, struct _ipl_holder *);
-inline void md_imask_update(void);
+void md_imask_update(void);

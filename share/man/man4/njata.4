@@ -1,4 +1,4 @@
-.\"	$NetBSD: njata.4,v 1.5 2007/03/08 13:05:51 itohy Exp $
+.\"	$NetBSD: njata.4,v 1.9 2018/01/13 23:43:46 wiz Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,6 @@ The
 .Nm
 driver provides support for the following
 Workbit Bus-Master CardBus IDE controller chips:
-.Pp
 .Bl -tag -width "NinjaATA-32Bi" -offset indent
 .It NinjaATA-32Bi
 CardBus / PCMCIA dual mode IDE controller
@@ -73,12 +65,12 @@ The optional flags parameter is the
 .Dq wait
 value for ATA transfers.
 Some combinations of host and device may fail without flags parameter or
-.Tn flags 0x00 .
+.Cd flags 0x00 .
 In this case try adding wait values like
-.Tn flags 0x01
+.Cd flags 0x01
 or
-.Tn flags 0x11
-(the wait parameter is composed of two 4bit values).
+.Cd flags 0x11
+(the wait parameter is composed of two 4-bit values).
 Smaller wait values should be faster.
 Too long waits may cause transfer errors.
 .Sh SEE ALSO
@@ -94,4 +86,4 @@ The
 device driver first appeared in
 .Nx 4.0 .
 .Sh AUTHORS
-.An ITOH Yasufumi Aq itohy@NetBSD.org
+.An ITOH Yasufumi

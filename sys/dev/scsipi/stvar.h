@@ -1,4 +1,4 @@
-/*	$NetBSD: stvar.h,v 1.17 2006/04/14 13:09:06 blymn Exp $ */
+/*	$NetBSD: stvar.h,v 1.26 2018/03/24 08:08:19 mlelstv Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,10 +49,7 @@
  * A lot of rewhacking done by mjacob (mjacob@nas.nasa.gov).
  */
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -73,7 +63,7 @@
 struct modes {
 	u_int quirks;			/* same definitions as in quirkdata */
 	int blksize;
-	u_int8_t density;
+	uint8_t density;
 };
 
 struct quirkdata {
@@ -97,7 +87,7 @@ struct st_quirk_inquiry_pattern {
 };
 
 struct st_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 /*--------------------callback to bus-specific code--------------------------*/
 	int (*ops)(struct st_softc *, int, int);
 #define ST_OPS_RBL		0x00	/* read block limit */
@@ -109,7 +99,7 @@ struct st_softc {
 	int flags;		/* see below                         */
 	u_int quirks;		/* quirks for the open mode          */
 	int blksize;		/* blksize we are using              */
-	u_int8_t density;	/* present density                   */
+	uint8_t density;	/* present density                   */
 	u_int page_0_size;	/* size of page 0 data		     */
 	u_int last_dsty;	/* last density opened               */
 	short mt_resid;		/* last (short) resid                */
@@ -120,8 +110,8 @@ struct st_softc {
 	int32_t last_io_resid;
 	int32_t last_ctl_resid;
 #define	mt_key	mt_erreg
-	u_int8_t asc;		/* last asc code seen		     */
-	u_int8_t ascq;		/* last asc code seen		     */
+	uint8_t asc;		/* last asc code seen		     */
+	uint8_t ascq;		/* last asc code seen		     */
 /*--------------------device/scsi parameters---------------------------------*/
 	struct scsipi_periph *sc_periph;/* our link to the adpter etc.       */
 /*--------------------parameters reported by the device ---------------------*/
@@ -131,12 +121,12 @@ struct st_softc {
 /*--------------------parameters reported by the device for this media-------*/
 	u_long numblks;		/* nominal blocks capacity            */
 	int media_blksize;	/* 0 if not ST_FIXEDBLOCKS            */
-	u_int8_t media_density;	/* this is what it said when asked    */
+	uint8_t media_density;	/* this is what it said when asked    */
 /*--------------------quirks for the whole drive-----------------------------*/
 	u_int drive_quirks;	/* quirks of this drive               */
 /*--------------------How we should set up when opening each minor device----*/
 	struct modes modes[4];	/* plus more for each mode            */
-	u_int8_t  modeflags[4];	/* flags for the modes                */
+	uint8_t  modeflags[4];	/* flags for the modes                */
 #define DENSITY_SET_BY_USER	0x01
 #define DENSITY_SET_BY_QUIRK	0x02
 #define BLKSIZE_SET_BY_USER	0x04
@@ -148,14 +138,15 @@ struct st_softc {
 						 */
 	struct bufq_state *buf_queue;	/* the queue of pending IO */
 					/* operations */
+	struct bufq_state *buf_defer;	/* the queue of deferred IO */
+					/* operations */
 	struct callout sc_callout;	/* restarting the queue after */
 					/* transient error */
 
 	struct io_stats *stats;		/* statistics for the drive */
 
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
+	kmutex_t	sc_iolock;
 };
 
 #define	ST_INFO_VALID	0x0001
@@ -185,8 +176,8 @@ struct st_softc {
 			 ST_FIXEDBLOCKS | ST_READONLY | ST_FM_WRITTEN |	\
 			 ST_2FM_AT_EOD | ST_PER_ACTION | ST_POSUPDATED)
 
-void	stattach(struct device *, struct st_softc *, void *);
-int	stactivate(struct device *, enum devact);
-int	stdetach(struct device *, int);
+void	stattach(device_t, device_t, void *);
+int	stdetach(device_t, int);
+int	st_mode_select(struct st_softc *, int);
 
 extern struct cfdriver st_cd;

@@ -1,4 +1,4 @@
-#	$NetBSD: files.evbarm,v 1.20 2008/02/20 21:43:33 drochner Exp $
+#	$NetBSD: files.evbarm,v 1.30 2018/04/01 04:35:04 ryo Exp $
 #
 # First try for arm-specific configuration info
 #
@@ -9,26 +9,13 @@ maxusers	2 8 64
 # Maintain Interrupt statistics
 defflag			IRQSTATS
 
-#
-# Machine-independent ATA drivers
-#
-include "dev/ata/files.ata"
-
 # Memory disk driver
 file	dev/md_root.c				md & memory_disk_hooks
-
-#
-# Machine-independent SCSI drivers
-#
-
-include "dev/scsipi/files.scsipi"
 
 # Generic MD files
 file	arch/evbarm/evbarm/autoconf.c
 
-file	arch/arm/arm/disksubr.c			disk
-file	arch/arm/arm/disksubr_acorn.c		disk
-file	arch/arm/arm/disksubr_mbr.c		disk
+file	kern/subr_disk_mbr.c			disk
 
 # ARM FPE
 file	arch/arm32/fpe-arm/armfpe_glue.S	armfpe
@@ -36,19 +23,22 @@ file	arch/arm32/fpe-arm/armfpe_init.c	armfpe
 file	arch/arm32/fpe-arm/armfpe.s		armfpe
 
 #
-# Include ISA config
+# Machine-independent drivers
 #
-
+include "dev/ata/files.ata"			# ATA devices
+include "dev/bluetooth/files.bluetooth"		# Bluetooth devices
+include "dev/i2o/files.i2o"			# I2O devices
 include "dev/isa/files.isa"			# ISA devices
-
-#
-# Include PCI config
-#
-
-include "dev/i2o/files.i2o"			# I2O drivers.
 include "dev/pci/files.pci"			# PCI devices
-include "dev/usb/files.usb"			# USB device
-include "dev/cardbus/files.cardbus"		# CARDBus device
+include "dev/cardbus/files.cardbus"		#   and CardBus devices
+include "dev/pcmcia/files.pcmcia"		# PCMCIA devices
+include "dev/sdmmc/files.sdmmc"			# SD/MMC devices
+include "dev/scsipi/files.scsipi"		# SCSI devices
+include "dev/usb/files.usb"			# USB devices
+
+
+# Kernel boot arguments
+defparam	opt_machdep.h			BOOT_ARGS
 
 #
 # ARM evaluation board specific devices
@@ -61,4 +51,13 @@ defflag	opt_plcom.h	PLCOM_DEBUG
 device	plcom { }: tty
 file	arch/evbarm/dev/plcom.c			plcom needs-flag
 
+#
+# Maximum number of memory ranges
+#
+defparam	opt_bootconfig.h		DRAM_BLOCKS
+
+ifdef arm32
 include "arch/arm/conf/majors.arm32"
+else
+include "arch/aarch64/conf/majors.aarch64"
+endif

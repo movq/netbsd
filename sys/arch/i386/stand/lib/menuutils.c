@@ -1,4 +1,4 @@
-/*	$NetBSD: menuutils.c,v 1.1 1997/09/17 17:13:02 drochner Exp $	*/
+/*	$NetBSD: menuutils.c,v 1.6 2016/06/11 06:20:11 dholland Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997
@@ -43,8 +43,7 @@
 #include "libi386.h"
 
 void
-docommand(arg)
-	char *arg;
+docommand(char *arg)
 {
 	char *options;
 	int i;
@@ -62,8 +61,8 @@ docommand(arg)
 	command_help(NULL);
 }
 
-void
-bootmenu()
+__dead void
+bootmenu(void)
 {
 	char input[80];
 
@@ -72,13 +71,14 @@ bootmenu()
 
 		input[0] = '\0';
 		printf("> ");
-		gets(input);
+		kgets(input, sizeof(input));
 
 		/*
 		 * Skip leading whitespace.
 		 */
-		while(*c == ' ') c++;
-		if(*c)
+		while (*c == ' ')
+			c++;
+		if (*c)
 			docommand(c);
 	}
 }

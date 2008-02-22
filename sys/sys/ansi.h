@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.11 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: ansi.h,v 1.14 2011/07/17 20:54:54 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #ifndef	_SYS_ANSI_H_
 #define	_SYS_ANSI_H_
 
-#include <machine/int_types.h>
+#include <machine/ansi.h>
 
 typedef char *		__caddr_t;	/* core address */
 typedef __uint32_t	__gid_t;	/* group id */
@@ -53,5 +46,30 @@ typedef unsigned int	__socklen_t;	/* socket-related datum length */
 typedef __uint32_t	__uid_t;	/* user id */
 typedef	__uint64_t	__fsblkcnt_t;	/* fs block count (statvfs) */
 typedef	__uint64_t	__fsfilcnt_t;	/* fs file count */
+
+struct __tag_wctrans_t;
+typedef struct __tag_wctrans_t *__wctrans_t;
+
+struct __tag_wctype_t;
+typedef struct __tag_wctype_t *__wctype_t;
+
+/*
+ * mbstate_t is an opaque object to keep conversion state, during multibyte
+ * stream conversions.  The content must not be referenced by user programs.
+ */
+typedef union {
+	__int64_t __mbstateL; /* for alignment */
+	char __mbstate8[128];
+} __mbstate_t;
+
+#define _BSD_WCTRANS_T_	__wctrans_t	/* wctrans_t */
+#define _BSD_WCTYPE_T_	__wctype_t	/* wctype_t */
+#define _BSD_MBSTATE_T_	__mbstate_t	/* mbstate_t */
+
+#ifdef __lint__
+typedef char *__va_list;
+#else
+typedef __builtin_va_list __va_list;
+#endif
 
 #endif	/* !_SYS_ANSI_H_ */

@@ -1,4 +1,7 @@
-#	$NetBSD: Makefile,v 1.14 2006/06/29 03:46:43 lukem Exp $
+#	$NetBSD: Makefile,v 1.17 2014/08/08 15:19:51 isaki Exp $
+
+NOMAN=		# defined
+.include <bsd.own.mk>
 
 BOOT=		mboot
 VERSION=	0.1
@@ -10,27 +13,26 @@ TEXTSZ=		1024
 PROG=		${BOOT}
 BINDIR=		/usr/mdec
 BINMODE=	444
-NOMAN=		# defined
 STRIPFLAG=
-
-STRIP?=		/usr/bin/strip
 
 SRCS=		srt0.S mboot.c
 KERN!=		cd ${.CURDIR}/../../../..; pwd
 
 CPPFLAGS+=	-D_STANDALONE
 CPPFLAGS+=	-nostdinc -I${KERN} -I${.CURDIR} -I.
-#CPPFLAGS+=	-I${.CURDIR}/../libiocs
+CPPFLAGS+=	-I${.CURDIR}/../libiocs
 CPPFLAGS+=	-DTEXTADDR="0x${TEXT}" 
 CPPFLAGS+=	-DBOOT=\"${BOOT}\" -DBOOT_VERS=\"${VERSION}\"
 CFLAGS=		-Wno-main -Os -m68000
 
 LINKFLAGS=	-N -static -Ttext ${TEXT}
+LIBIOCS!=	cd ${.CURDIR}/../libiocs && ${PRINTOBJDIR}
+LDLIBS+=	${LIBIOCS}/libiocs.a
 
 .include "../Makefile.booters"
 
-realall: machine-links ${PROG}
-${BOOT}:	${OBJS}
+realall: ${PROG}
+${BOOT}:	${OBJS} ${LDLIBS}
 	${_MKTARGET_LINK}
 	${LD} ${LINKFLAGS} -o ${BOOT}.x ${OBJS} ${LDLIBS}
 #	${STRIP} ${BOOT}.x

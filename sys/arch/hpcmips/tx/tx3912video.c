@@ -1,4 +1,4 @@
-/*	$NetBSD: tx3912video.c,v 1.38 2007/03/04 05:59:54 christos Exp $ */
+/*	$NetBSD: tx3912video.c,v 1.45 2016/07/11 16:18:56 matt Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx3912video.c,v 1.38 2007/03/04 05:59:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx3912video.c,v 1.45 2016/07/11 16:18:56 matt Exp $");
 
 #define TX3912VIDEO_DEBUG
 
@@ -46,11 +39,10 @@ __KERNEL_RCSID(0, "$NetBSD: tx3912video.c,v 1.38 2007/03/04 05:59:54 christos Ex
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-
 #include <sys/ioctl.h>
-#include <sys/buf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -59,6 +51,8 @@ __KERNEL_RCSID(0, "$NetBSD: tx3912video.c,v 1.38 2007/03/04 05:59:54 christos Ex
 #include <machine/bus.h>
 #include <machine/bootinfo.h>
 #include <machine/config_hook.h>
+
+#include <mips/locore.h>
 
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/tx3912videovar.h>
@@ -86,7 +80,7 @@ int	tx3912video_debug = 1;
 #endif
 
 struct tx3912video_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_powerhook;	/* power management hook */
 	int sc_console;
 	struct hpcfb_fbconf sc_fbconf;
@@ -102,8 +96,8 @@ void	tx3912video_framebuffer_init(struct video_chip *);
 int	tx3912video_framebuffer_alloc(struct video_chip *, paddr_t, paddr_t *);
 void	tx3912video_reset(struct video_chip *);
 void	tx3912video_resolution_init(struct video_chip *);
-int	tx3912video_match(struct device *, struct cfdata *, void *);
-void	tx3912video_attach(struct device *, struct device *, void *);
+int	tx3912video_match(device_t, cfdata_t, void *);
+void	tx3912video_attach(device_t, device_t, void *);
 int	tx3912video_print(void *, const char *);
 
 void	tx3912video_hpcfbinit(struct tx3912video_softc *);
@@ -118,7 +112,7 @@ void	tx3912video_clut_get(struct tx3912video_softc *, u_int32_t *, int,
 static int __get_color8(int);
 static int __get_color4(int);
 
-CFATTACH_DECL(tx3912video, sizeof(struct tx3912video_softc),
+CFATTACH_DECL_NEW(tx3912video, sizeof(struct tx3912video_softc),
     tx3912video_match, tx3912video_attach, NULL, NULL);
 
 struct hpcfb_accessops tx3912video_ha = {
@@ -127,15 +121,15 @@ struct hpcfb_accessops tx3912video_ha = {
 };
 
 int
-tx3912video_match(struct device *parent, struct cfdata *cf, void *aux)
+tx3912video_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (ATTACH_NORMAL);
 }
 
 void
-tx3912video_attach(struct device *parent, struct device *self, void *aux)
+tx3912video_attach(device_t parent, device_t self, void *aux)
 {
-	struct tx3912video_softc *sc = (void *)self;
+	struct tx3912video_softc *sc = device_private(self);
 	struct video_chip *chip;
 	static const char *const depth_print[] = { 
 		[TX3912_VIDEOCTRL1_BITSEL_MONOCHROME] = "monochrome",
@@ -148,6 +142,7 @@ tx3912video_attach(struct device *parent, struct device *self, void *aux)
 	txreg_t val;
 	int console;
 
+	sc->sc_dev = self;
 	sc->sc_console = console = cn_tab ? 0 : 1;
 	sc->sc_chip = chip = &tx3912video_chip;
 
@@ -221,7 +216,7 @@ tx3912video_power(void *ctx, int type, long id, void *msg)
 		if (!sc->sc_console)
 			return (0); /* serial console */
 
-		DPRINTF(("%s: ON\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: ON\n", device_xname(sc->sc_dev)));
 		val = tx_conf_read(tc, TX3912_VIDEOCTRL1_REG);
 		val |= (TX3912_VIDEOCTRL1_DISPON | TX3912_VIDEOCTRL1_ENVID);
 		tx_conf_write(tc, TX3912_VIDEOCTRL1_REG, val);
@@ -229,7 +224,7 @@ tx3912video_power(void *ctx, int type, long id, void *msg)
 	case PWR_SUSPEND:
 		/* FALLTHROUGH */
 	case PWR_STANDBY:
-		DPRINTF(("%s: OFF\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: OFF\n", device_xname(sc->sc_dev)));
 		val = tx_conf_read(tc, TX3912_VIDEOCTRL1_REG);
 		val &= ~(TX3912_VIDEOCTRL1_DISPON | TX3912_VIDEOCTRL1_ENVID);
 		tx_conf_write(tc, TX3912_VIDEOCTRL1_REG, val);
@@ -240,8 +235,7 @@ tx3912video_power(void *ctx, int type, long id, void *msg)
 }
 
 void
-tx3912video_hpcfbinit(sc)
-	struct tx3912video_softc *sc;
+tx3912video_hpcfbinit(struct tx3912video_softc *sc)
 {
 	struct video_chip *chip = sc->sc_chip;
 	struct hpcfb_fbconf *fb = &sc->sc_fbconf;
@@ -374,7 +368,7 @@ tx3912video_framebuffer_alloc(struct video_chip *chip, paddr_t fb_start,
 
 	/* extent V-RAM region */
 	ex = extent_create("Frame buffer address", fb_start, *fb_end,
-	    0, (void *)ex_fixed, sizeof ex_fixed,
+	    (void *)ex_fixed, sizeof ex_fixed,
 	    EX_NOWAIT);
 	if (ex == 0)
 		return (1);
@@ -441,7 +435,7 @@ tx3912video_framebuffer_init(struct video_chip *chip)
 void
 tx3912video_resolution_init(struct video_chip *chip)
 {
-	int h, v, split, bit8, horzval, lineval;
+	int h, v, split, horzval, lineval;
 	tx_chipset_tag_t tc = chip->vc_v;
 	txreg_t reg;
 	u_int32_t val;
@@ -450,8 +444,6 @@ tx3912video_resolution_init(struct video_chip *chip)
 	v = chip->vc_fbheight;
 	reg = tx_conf_read(tc, TX3912_VIDEOCTRL1_REG);
 	split = reg & TX3912_VIDEOCTRL1_DISPSPLIT;
-	bit8  = (TX3912_VIDEOCTRL1_BITSEL(reg) == 
-	    TX3912_VIDEOCTRL1_BITSEL_8BITCOLOR);
 	val = TX3912_VIDEOCTRL1_BITSEL(reg);
 
 	if ((val == TX3912_VIDEOCTRL1_BITSEL_8BITCOLOR) && !split) {

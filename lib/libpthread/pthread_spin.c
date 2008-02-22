@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_spin.c,v 1.4 2008/01/05 01:37:35 ad Exp $	*/
+/*	$NetBSD: pthread_spin.c,v 1.6 2012/08/16 04:49:47 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_spin.c,v 1.4 2008/01/05 01:37:35 ad Exp $");
+__RCSID("$NetBSD: pthread_spin.c,v 1.6 2012/08/16 04:49:47 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/ras.h>
@@ -140,6 +133,7 @@ pthread_spin_unlock(pthread_spinlock_t *lock)
 
 	self = pthread__self();
 	pthread__spinunlock(self, &lock->pts_spin);
+	pthread__smt_wake();
 
 	return 0;
 }

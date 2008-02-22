@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39ir.c,v 1.8 2005/12/11 12:17:34 christos Exp $ */
+/*	$NetBSD: tx39ir.c,v 1.10 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39ir.c,v 1.8 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39ir.c,v 1.10 2012/10/27 17:17:54 chs Exp $");
 
 #undef TX39IRDEBUG
 
@@ -66,12 +59,11 @@ int	tx39ir_debug = 1;
 #define	DPRINTF(arg)
 #endif
 
-int	tx39ir_match(struct device *, struct cfdata *, void *);
-void	tx39ir_attach(struct device *, struct device *, void *);
+int	tx39ir_match(device_t, cfdata_t, void *);
+void	tx39ir_attach(device_t, device_t, void *);
 
 struct tx39ir_softc {
-	struct	device sc_dev;
-	struct	device *sc_parent;
+	device_t sc_parent;
 	tx_chipset_tag_t sc_tc;
 };
 
@@ -82,20 +74,20 @@ static void	tx39ir_dump(struct tx39ir_softc *);
 static int	tx39ir_intr(void *);
 #endif
 
-CFATTACH_DECL(tx39ir, sizeof(struct tx39ir_softc),
+CFATTACH_DECL_NEW(tx39ir, sizeof(struct tx39ir_softc),
     tx39ir_match, tx39ir_attach, NULL, NULL);
 
 int
-tx39ir_match(struct device *parent, struct cfdata *cf, void *aux)
+tx39ir_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (ATTACH_NORMAL);
 }
 
 void
-tx39ir_attach(struct device *parent, struct device *self, void *aux)
+tx39ir_attach(device_t parent, device_t self, void *aux)
 {
 	struct txcom_attach_args *tca = aux;
-	struct tx39ir_softc *sc = (void*)self;
+	struct tx39ir_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 	txreg_t reg;
 

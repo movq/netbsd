@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.21 2005/12/11 12:19:06 christos Exp $ */
+/*	$NetBSD: signal.h,v 1.23 2017/11/29 17:49:03 christos Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -51,7 +51,7 @@ typedef int sig_atomic_t;
 
 #if defined(_NETBSD_SOURCE)
 #ifndef _LOCORE
-
+#include <sys/sigtypes.h>
 /*
  * Information pushed on stack when a signal is delivered.
  * This is used by the kernel to restore state following
@@ -94,14 +94,6 @@ struct sigcontext {
 	long		sc_o0;		/* %o0 to restore */
 	sigset_t	sc_mask;	/* signal mask to restore (new style) */
 };
-
-#ifdef _KERNEL
-#ifdef COMPAT_16
-#define	SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
-#else
-#define	SIGTRAMP_VALID(vers)	((vers) == 2)
-#endif
-#endif
 
 #else /* _LOCORE */
 /* XXXXX These values don't work for _LP64 */

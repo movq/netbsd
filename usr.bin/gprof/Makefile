@@ -1,7 +1,5 @@
-#	$NetBSD: Makefile,v 1.27 1999/02/09 18:28:10 tv Exp $
+#	$NetBSD: Makefile,v 1.30 2018/06/11 14:18:17 kamil Exp $
 
-.if make(install)
-SUBDIR=	PSD.doc
-.endif
+SUBDIR.roff=PSD.doc
 
 .include <bsd.subdir.mk>

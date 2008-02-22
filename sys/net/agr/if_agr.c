@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agr.c,v 1.20 2007/12/20 19:53:31 dyoung Exp $	*/
+/*	$NetBSD: if_agr.c,v 1.47 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -27,10 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_agr.c,v 1.20 2007/12/20 19:53:31 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_agr.c,v 1.47 2018/06/26 06:48:02 msaitoh Exp $");
 
-#include "bpfilter.h"
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#include "vlan.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -42,13 +44,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_agr.c,v 1.20 2007/12/20 19:53:31 dyoung Exp $");
 #include <sys/sockio.h>
 #include <sys/proc.h>	/* XXX for curproc */
 #include <sys/kauth.h>
+#include <sys/xcall.h>
+#include <sys/device.h>
+#include <sys/module.h>
+#include <sys/atomic.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+#include <net/if_ether.h>
+#include <net/if_vlanvar.h>
 
 #if defined(INET)
 #include <netinet/in.h>
@@ -61,14 +67,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_agr.c,v 1.20 2007/12/20 19:53:31 dyoung Exp $");
 #include <net/agr/if_agrsubr.h>
 #include <net/agr/if_agrethervar.h>
 
-void agrattach(int);
+#include "ioconf.h"
 
 static int agr_clone_create(struct if_clone *, int);
 static int agr_clone_destroy(struct ifnet *);
 static void agr_start(struct ifnet *);
-static int agr_setconfig(struct ifnet *, const struct agrreq *);
-static int agr_getconfig(struct ifnet *, struct agrreq *);
-static int agr_getportlist(struct ifnet *, struct agrreq *);
+static int agr_setconfig(struct agr_softc *, const struct agrreq *);
+static int agr_getconfig(struct agr_softc *, struct agrreq *);
+static int agr_getportlist(struct agr_softc *, struct agrreq *);
 static int agr_addport(struct ifnet *, struct ifnet *);
 static int agr_remport(struct ifnet *, struct ifnet *);
 static int agrreq_copyin(const void *, struct agrreq *);
@@ -82,8 +88,20 @@ static int agrport_config_promisc_callback(struct agr_port *, void *);
 static int agrport_config_promisc(struct agr_port *, bool);
 static int agrport_cleanup(struct agr_softc *, struct agr_port *);
 
+static int agr_enter(struct agr_softc *);
+static void agr_exit(struct agr_softc *);
+static int agr_pause(struct agr_softc *);
+static void agr_evacuate(struct agr_softc *);
+static void agr_sync(void);
+static void agr_ports_lock(struct agr_softc *);
+static void agr_ports_unlock(struct agr_softc *);
+static bool agr_ports_enter(struct agr_softc *);
+static void agr_ports_exit(struct agr_softc *);
+
 static struct if_clone agr_cloner =
     IF_CLONE_INITIALIZER("agr", agr_clone_create, agr_clone_destroy);
+
+static u_int agr_count;
 
 /*
  * EXPORTED FUNCTIONS
@@ -97,7 +115,30 @@ void
 agrattach(int count)
 {
 
+	/*
+	 * Nothing to do here, initialization is handled by the
+	 * module initialization code in agrinit() below).
+	 */
+}
+
+static void
+agrinit(void)
+{
 	if_clone_attach(&agr_cloner);
+}
+
+static int
+agrdetach(void)
+{
+	int error = 0;
+
+	if (agr_count != 0)
+		error = EBUSY;
+
+	if (error == 0)
+		if_clone_detach(&agr_cloner);
+
+	return error;
 }
 
 /*
@@ -107,6 +148,7 @@ agrattach(int count)
 void
 agr_input(struct ifnet *ifp_port, struct mbuf *m)
 {
+	struct ethercom *ec = (struct ethercom *)ifp_port;
 	struct agr_port *port;
 	struct ifnet *ifp;
 
@@ -119,16 +161,23 @@ agr_input(struct ifnet *ifp_port, struct mbuf *m)
 		return;
 	}
 
-	ifp->if_ipackets++;
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) {
-		bpf_mtap(ifp->if_bpf, m);
-	}
+	/*
+	 * If VLANs are configured on the interface, check to
+	 * see if the device performed the decapsulation and
+	 * provided us with the tag.
+	 */
+	if (ec->ec_nvlans && vlan_has_tag(m)) {
+#if NVLAN > 0
+		vlan_input(ifp, m);
+#else
+		m_freem(m);
 #endif
+		return;
+	}
 
-	(*ifp->if_input)(ifp, m);
+	if_percpuq_enqueue(ifp->if_percpuq, m);
 }
 
 /*
@@ -147,20 +196,6 @@ agr_unlock(struct agr_softc *sc)
 {
 
 	mutex_exit(&sc->sc_lock);
-}
-
-void
-agr_ioctl_lock(struct agr_softc *sc)
-{
-
-	mutex_enter(&sc->sc_ioctl_lock);
-}
-
-void
-agr_ioctl_unlock(struct agr_softc *sc)
-{
-
-	mutex_exit(&sc->sc_ioctl_lock);
 }
 
 /*
@@ -193,7 +228,7 @@ agr_xmit_frame(struct ifnet *ifp_port, struct mbuf *m)
 	m_copydata(m, 0, hdrlen, &dst->sa_data);
 	m_adj(m, hdrlen);
 
-	error = (*ifp_port->if_output)(ifp_port, m, dst, NULL);
+	error = if_output_lock(ifp_port, ifp_port, m, dst, NULL);
 
 	return error;
 }
@@ -212,18 +247,53 @@ agrport_ioctl(struct agr_port *port, u_long cmd, void *arg)
 /*
  * INTERNAL FUNCTIONS
  */
+/*
+ * Check for vlan attach/detach.
+ * ec->ec_nvlans is directly modified by the vlan driver.
+ * We keep a local count in sc (sc->sc_nvlans) to detect
+ * when the vlan driver attaches or detaches.
+ * Note the agr interface must be up for this to work.
+ */
+static void
+agr_vlan_check(struct ifnet *ifp, struct agr_softc *sc)
+{
+	struct ethercom *ec = (void *)ifp;
+
+	/* vlans in sync? */
+	if (sc->sc_nvlans == ec->ec_nvlans) {
+		return;
+	}
+
+	if (sc->sc_nvlans == 0) {
+		/* vlan added */
+		agr_port_foreach(sc, agr_vlan_add, NULL);
+		sc->sc_nvlans = ec->ec_nvlans;
+	} else if (ec->ec_nvlans == 0) {
+		bool force_zero = false;
+		/* vlan removed */
+		agr_port_foreach(sc, agr_vlan_del, &force_zero);
+		sc->sc_nvlans = 0;
+	}
+}
 
 static int
 agr_clone_create(struct if_clone *ifc, int unit)
 {
 	struct agr_softc *sc;
 	struct ifnet *ifp;
+	int error;
 
 	sc = agr_alloc_softc();
+	error = agrtimer_init(sc);
+	if (error) {
+		agr_free_softc(sc);
+		return error;
+	}
 	TAILQ_INIT(&sc->sc_ports);
-	mutex_init(&sc->sc_ioctl_lock, MUTEX_DRIVER, IPL_NONE);
-	mutex_init(&sc->sc_lock, MUTEX_DRIVER, IPL_NET);
-	agrtimer_init(sc);
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NET);
+	mutex_init(&sc->sc_entry_mtx, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&sc->sc_insc_cv, "agrsoftc");
+	cv_init(&sc->sc_ports_cv, "agrports");
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
 	    ifc->ifc_name, unit);
@@ -237,7 +307,7 @@ agr_clone_create(struct if_clone *ifc, int unit)
 	if_attach(ifp);
 
 	agr_reset_iftype(ifp);
-
+	atomic_inc_uint(&agr_count);
 	return 0;
 }
 
@@ -257,26 +327,25 @@ agr_clone_destroy(struct ifnet *ifp)
 	struct agr_softc *sc = ifp->if_softc;
 	int error;
 
-	agr_ioctl_lock(sc);
+	if ((error = agr_pause(sc)) != 0)
+		return error;
 
-	AGR_LOCK(sc);
-	if (sc->sc_nports > 0) {
-		error = EBUSY;
-	} else {
-		error = 0;
-	}
-	AGR_UNLOCK(sc);
+	if_detach(ifp);
+	agrtimer_destroy(sc);
+	/* Now that the ifnet has been detached, and our
+	 * component ifnets are disconnected, there can be
+	 * no new threads in the softc.  Wait for every
+	 * thread to get out of the softc.
+	 */
+	agr_evacuate(sc);
+	mutex_destroy(&sc->sc_lock);
+	mutex_destroy(&sc->sc_entry_mtx);
+	cv_destroy(&sc->sc_insc_cv);
+	cv_destroy(&sc->sc_ports_cv);
+	agr_free_softc(sc);
 
-	agr_ioctl_unlock(sc);
-
-	if (error == 0) {
-		if_detach(ifp);
-		mutex_destroy(&sc->sc_ioctl_lock);
-		mutex_destroy(&sc->sc_lock);
-		agr_free_softc(sc);
-	}
-
-	return error;
+	atomic_dec_uint(&agr_count);
+	return 0;
 }
 
 static struct agr_port *
@@ -323,11 +392,7 @@ agr_start(struct ifnet *ifp)
 		if (m == NULL) {
 			break;
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf) {
-			bpf_mtap(ifp->if_bpf, m);
-		}
-#endif
+		bpf_mtap(ifp, m, BPF_D_OUT);
 		port = agr_select_tx_port(sc, m);
 		if (port) {
 			int error;
@@ -350,8 +415,9 @@ agr_start(struct ifnet *ifp)
 }
 
 static int
-agr_setconfig(struct ifnet *ifp, const struct agrreq *ar)
+agr_setconfig(struct agr_softc *sc, const struct agrreq *ar)
 {
+	struct ifnet *ifp = &sc->sc_if;
 	int cmd = ar->ar_cmd;
 	struct ifnet *ifp_port;
 	int error = 0;
@@ -368,6 +434,7 @@ agr_setconfig(struct ifnet *ifp, const struct agrreq *ar)
 		return ENOENT;
 	}
 
+	agr_ports_lock(sc);
 	switch (cmd) {
 	case AGRCMD_ADDPORT:
 		error = agr_addport(ifp, ifp_port);
@@ -381,14 +448,14 @@ agr_setconfig(struct ifnet *ifp, const struct agrreq *ar)
 		error = EINVAL;
 		break;
 	}
+	agr_ports_unlock(sc);
 
 	return error;
 }
 
 static int
-agr_getportlist(struct ifnet *ifp, struct agrreq *ar)
+agr_getportlist(struct agr_softc *sc, struct agrreq *ar)
 {
-	struct agr_softc *sc = ifp->if_softc;
 	struct agr_port *port;
 	struct agrportlist apl;
 	struct agrportinfo api;
@@ -443,20 +510,22 @@ agr_getportlist(struct ifnet *ifp, struct agrreq *ar)
 }
 
 static int
-agr_getconfig(struct ifnet *ifp, struct agrreq *ar)
+agr_getconfig(struct agr_softc *sc, struct agrreq *ar)
 {
 	int cmd = ar->ar_cmd;
 	int error;
 
+	(void)agr_ports_enter(sc);
 	switch (cmd) {
 	case AGRCMD_PORTLIST:
-		error = agr_getportlist(ifp, ar);
+		error = agr_getportlist(sc, ar);
 		break;
 
 	default:
 		error = EINVAL;
 		break;
 	}
+	agr_ports_exit(sc);
 
 	return error;
 }
@@ -468,6 +537,7 @@ agr_addport(struct ifnet *ifp, struct ifnet *ifp_port)
 	struct agr_softc *sc = ifp->if_softc;
 	struct agr_port *port = NULL;
 	int error = 0;
+	int s;
 
 	if (ifp_port->if_ioctl == NULL) {
 		error = EOPNOTSUPP;
@@ -492,12 +562,15 @@ agr_addport(struct ifnet *ifp, struct ifnet *ifp_port)
 	}
 	port->port_flags = AGRPORT_LARVAL;
 
-	IFADDR_FOREACH(ifa, ifp_port) {
+	s = pserialize_read_enter();
+	IFADDR_READER_FOREACH(ifa, ifp_port) {
 		if (ifa->ifa_addr->sa_family != AF_LINK) {
+			pserialize_read_exit(s);
 			error = EBUSY;
 			goto out;
 		}
 	}
+	pserialize_read_exit(s);
 
 	if (sc->sc_nports == 0) {
 		switch (ifp_port->if_type) {
@@ -532,11 +605,18 @@ agr_addport(struct ifnet *ifp, struct ifnet *ifp_port)
 	 * start to modify ifp_port.
 	 */
 
-	error = (*ifp_port->if_ioctl)(ifp_port, SIOCSIFADDR,
-	    (void *)ifp->if_dl);
+	/*
+	 * XXX this should probably be SIOCALIFADDR but that doesn't 
+	 * appear to work (ENOTTY). We want to change the mac address
+	 * of each port to that of the first port. No need for arps 
+	 * since there are no inet addresses assigned to the ports.
+	 */
+	IFNET_LOCK(ifp_port);
+	error = if_addr_init(ifp_port, ifp->if_dl, true);
+	IFNET_UNLOCK(ifp_port);
 
 	if (error) {
-		printf("%s: SIOCSIFADDR error %d\n", __func__, error);
+		printf("%s: if_addr_init error %d\n", __func__, error);
 		goto cleanup;
 	}
 	port->port_flags |= AGRPORT_LADDRCHANGED;
@@ -563,8 +643,6 @@ agr_addport(struct ifnet *ifp, struct ifnet *ifp_port)
 		goto cleanup;
 	}
 
-	ifp->if_flags |= IFF_RUNNING;
-
 	agrport_config_promisc(port, (ifp->if_flags & IFF_PROMISC) != 0);
 	error = (*sc->sc_iftop->iftop_configmulti_port)(sc, port, true);
 	if (error) {
@@ -579,6 +657,8 @@ out:
 	if (error && port) {
 		free(port, M_DEVBUF);
 	}
+	if (error == 0)
+		ifp->if_flags |= IFF_RUNNING;
 	return error;
 
 cleanup:
@@ -696,7 +776,7 @@ agrport_cleanup(struct agr_softc *sc, struct agr_port *port)
 		    port->port_origlladdr, ifp_port->if_addrlen);
 		memset(&ifa, 0, sizeof(ifa));
 		ifa.ifa_addr = &u.sa;
-		error = agrport_ioctl(port, SIOCSIFADDR, &ifa);
+		error = agrport_ioctl(port, SIOCINITIFADDR, &ifa);
 #endif
 		if (error) {
 			printf("%s: if_init error %d\n", __func__, error);
@@ -735,7 +815,13 @@ agr_ioctl_multi(struct ifnet *ifp, u_long cmd, struct ifreq *ifr)
 	return error;
 }
 
-/* XXX an incomplete hack; can't filter ioctls handled ifioctl(). */
+/*
+ * XXX an incomplete hack; can't filter ioctls handled ifioctl().
+ *
+ * the intention here is to prevent operations on underlying interfaces
+ * so that their states are not changed in the way that agr(4) doesn't
+ * expect.  cf. the BUGS section in the agr(4) manual page.
+ */
 static int
 agr_ioctl_filter(struct ifnet *ifp, u_long cmd, void *arg)
 {
@@ -745,13 +831,32 @@ agr_ioctl_filter(struct ifnet *ifp, u_long cmd, void *arg)
 	KASSERT(port);
 
 	switch (cmd) {
-	case SIOCGIFADDR:
-	case SIOCGIFMEDIA:
-	case SIOCSIFFLAGS: /* XXX */
-		error = agrport_ioctl(port, cmd, arg);
-		break;
-	default:
+	case SIOCADDMULTI: /* add m'cast addr */
+	case SIOCAIFADDR: /* add/chg IF alias */
+	case SIOCALIFADDR: /* add IF addr */
+	case SIOCDELMULTI: /* del m'cast addr */
+	case SIOCDIFADDR: /* delete IF addr */
+	case SIOCDIFPHYADDR: /* delete gif addrs */
+	case SIOCDLIFADDR: /* delete IF addr */
+	case SIOCINITIFADDR:
+	case SIOCSDRVSPEC: /* set driver-specific parameters */
+	case SIOCSIFADDR: /* set ifnet address */
+	case SIOCSIFBRDADDR: /* set broadcast addr */
+	case SIOCSIFDSTADDR: /* set p-p address */
+	case SIOCSIFGENERIC: /* generic IF set op */
+	case SIOCSIFMEDIA: /* set net media */
+	case SIOCSIFMETRIC: /* set IF metric */
+	case SIOCSIFMTU: /* set ifnet mtu */
+	case SIOCSIFNETMASK: /* set net addr mask */
+	case SIOCSIFPHYADDR: /* set gif addres */
+	case SIOCSLIFPHYADDR: /* set gif addrs */
+	case SIOCSVH: /* set carp param */
 		error = EBUSY;
+		break;
+	case SIOCSIFCAP: /* XXX */
+	case SIOCSIFFLAGS: /* XXX */
+	default:
+		error = agrport_ioctl(port, cmd, arg);
 		break;
 	}
 	return error;
@@ -789,23 +894,142 @@ agrreq_copyout(void *ubuf, struct agrreq *ar)
 	return 0;
 }
 
+/* Make sure that if any interrupt handlers are out of the softc. */
+static void
+agr_sync(void)
+{
+	uint64_t h;
+
+	if (!mp_online)
+		return;
+
+	h = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
+	xc_wait(h);
+}
+
 static int
-agr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+agr_pause(struct agr_softc *sc)
+{
+	int error;
+
+	mutex_enter(&sc->sc_entry_mtx);
+	if ((error = sc->sc_noentry) != 0)
+		goto out;
+
+	sc->sc_noentry = EBUSY;
+
+	while (sc->sc_insc != 0)
+		cv_wait(&sc->sc_insc_cv, &sc->sc_entry_mtx);
+
+	if (sc->sc_nports == 0) {
+		sc->sc_noentry = ENXIO;
+	} else {
+		sc->sc_noentry = 0;
+		error = EBUSY;
+	}
+	cv_broadcast(&sc->sc_insc_cv);
+out:
+	mutex_exit(&sc->sc_entry_mtx);
+	return error;
+}
+
+static void
+agr_evacuate(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	cv_broadcast(&sc->sc_insc_cv);
+	while (sc->sc_insc != 0 || sc->sc_paused != 0)
+		cv_wait(&sc->sc_insc_cv, &sc->sc_entry_mtx);
+	mutex_exit(&sc->sc_entry_mtx);
+
+	agr_sync();
+}
+
+static int
+agr_enter(struct agr_softc *sc)
+{
+	int error;
+
+	mutex_enter(&sc->sc_entry_mtx);
+	sc->sc_paused++;
+	while ((error = sc->sc_noentry) == EBUSY)
+		cv_wait(&sc->sc_insc_cv, &sc->sc_entry_mtx);
+	sc->sc_paused--;
+	if (error == 0)
+		sc->sc_insc++;
+	mutex_exit(&sc->sc_entry_mtx);
+
+	return error;
+}
+
+static void
+agr_exit(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	if (--sc->sc_insc == 0)
+		cv_signal(&sc->sc_insc_cv);
+	mutex_exit(&sc->sc_entry_mtx);
+}
+
+static bool
+agr_ports_enter(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	while (sc->sc_wrports)
+		cv_wait(&sc->sc_ports_cv, &sc->sc_entry_mtx);
+	sc->sc_rdports++;
+	mutex_exit(&sc->sc_entry_mtx);
+
+	return true;
+}
+
+static void
+agr_ports_exit(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	if (--sc->sc_rdports == 0)
+		cv_signal(&sc->sc_ports_cv);
+	mutex_exit(&sc->sc_entry_mtx);
+}
+
+static void
+agr_ports_lock(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	while (sc->sc_rdports != 0)
+		cv_wait(&sc->sc_ports_cv, &sc->sc_entry_mtx);
+	sc->sc_wrports = true;
+	mutex_exit(&sc->sc_entry_mtx);
+}
+
+static void
+agr_ports_unlock(struct agr_softc *sc)
+{
+	mutex_enter(&sc->sc_entry_mtx);
+	sc->sc_wrports = false;
+	cv_signal(&sc->sc_ports_cv);
+	mutex_exit(&sc->sc_entry_mtx);
+}
+
+static int
+agr_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 {
 	struct agr_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	struct sockaddr *sa;
 	struct agrreq ar;
-	int error = 0;
+	int error;
+	bool in_ports = false;
 	int s;
 
-	agr_ioctl_lock(sc);
+	if ((error = agr_enter(sc)) != 0)
+		return error;
 
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
+		in_ports = agr_ports_enter(sc);
 		if (sc->sc_nports == 0) {
 			error = EINVAL;
 			break;
@@ -822,16 +1046,20 @@ agr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 
-	case SIOCGIFADDR:
-		sa = (struct sockaddr *)&ifr->ifr_data;
-		memcpy(sa->sa_data, CLLADDR(ifp->if_sadl), ifp->if_addrlen);
-		break;
-
 #if 0 /* notyet */
 	case SIOCSIFMTU:
 #endif
 
 	case SIOCSIFFLAGS:
+		/*
+		 * Check for a change in vlan status.  This ioctl is the
+		 * only way we can tell that a vlan has attached or detached.
+		 * Note the agr interface must be up.
+		 */
+		agr_vlan_check(ifp, sc);
+
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		agr_config_promisc(sc);
 		break;
 
@@ -845,7 +1073,7 @@ agr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = agrreq_copyin(ifr->ifr_data, &ar);
 		}
 		if (!error) {
-			error = agr_setconfig(ifp, &ar);
+			error = agr_setconfig(sc, &ar);
 		}
 		s = splnet();
 		break;
@@ -854,7 +1082,7 @@ agr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		splx(s);
 		error = agrreq_copyin(ifr->ifr_data, &ar);
 		if (!error) {
-			error = agr_getconfig(ifp, &ar);
+			error = agr_getconfig(sc, &ar);
 		}
 		if (!error) {
 			error = agrreq_copyout(ifr->ifr_data, &ar);
@@ -864,21 +1092,24 @@ agr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		if (sc->sc_nports == 0) {
+		in_ports = agr_ports_enter(sc);
+		if (sc->sc_nports == 0)
 			error = EINVAL;
-			break;
-		}
-		error = agr_ioctl_multi(ifp, cmd, ifr);
+		else
+			error = agr_ioctl_multi(ifp, cmd, ifr);
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 		break;
 	}
 
+	if (in_ports)
+		agr_ports_exit(sc);
+
 	splx(s);
 
-	agr_ioctl_unlock(sc);
+	agr_exit(sc);
 
 	return error;
 }
@@ -932,3 +1163,10 @@ agrport_config_promisc(struct agr_port *port, bool promisc)
 
 	return error;
 }
+
+/*
+ * Module infrastructure
+ */
+#include <net/if_module.h>
+
+IF_MODULE(MODULE_CLASS_DRIVER, agr, "if_vlan")

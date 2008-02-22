@@ -1,4 +1,4 @@
-/* 	$NetBSD: rasops_masks.h,v 1.6 2001/01/12 23:03:52 bjh21 Exp $	*/
+/* 	$NetBSD: rasops_masks.h,v 1.8 2013/12/02 14:05:51 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,8 +46,8 @@
  */
 #if BYTE_ORDER == BIG_ENDIAN
 
-#define MBL(x,y)	((y) > 31 ? 0 : (x) >> (y))
-#define MBR(x,y)    	((y) > 31 ? 0 : (x) << (y))
+#define MBL(x,y)	((y) > 31 ? 0 : (x) << (y))
+#define MBR(x,y)    	((y) > 31 ? 0 : (x) >> (y))
 #define MBE(x)		(x)
 
 #else
@@ -95,8 +88,8 @@
 } while(0);
 
 /* rasops_masks.c */
-extern const int32_t	rasops_lmask[32+1];
-extern const int32_t	rasops_rmask[32+1];
-extern const int32_t	rasops_pmask[32][32];
+extern const uint32_t	rasops_lmask[32+1];
+extern const uint32_t	rasops_rmask[32+1];
+extern const uint32_t	rasops_pmask[32][32];
 
 #endif /* _RASOPS_MASKS_H_ */

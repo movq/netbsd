@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_i2s.c,v 1.7 2007/10/17 19:53:44 garbled Exp $	*/
+/*	$NetBSD: pxa2x0_i2s.c,v 1.12 2017/06/01 02:45:06 chs Exp $	*/
 /*	$OpenBSD: pxa2x0_i2s.c,v 1.7 2006/04/04 11:45:40 pascoe Exp $	*/
 
 /*
@@ -18,14 +18,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_i2s.c,v 1.7 2007/10/17 19:53:44 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_i2s.c,v 1.12 2017/06/01 02:45:06 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
-
-#include <machine/bus.h>
+#include <sys/kmem.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
@@ -66,6 +65,8 @@ int
 pxa2x0_i2s_attach_sub(struct pxa2x0_i2s_softc *sc)
 {
 	int rv;
+
+	KASSERT(sc->sc_intr_lock != NULL);
 
 	rv = bus_space_map(sc->sc_iot, PXA2X0_I2S_BASE, PXA2X0_I2S_SIZE, 0,
 	    &sc->sc_ioh);
@@ -191,19 +192,16 @@ pxa2x0_i2s_setspeed(struct pxa2x0_i2s_softc *sc, u_int *argp)
 }
 
 void *
-pxa2x0_i2s_allocm(void *hdl, int direction, size_t size,
-    struct malloc_type *type, int flags)
+pxa2x0_i2s_allocm(void *hdl, int direction, size_t size)
 {
 	struct pxa2x0_i2s_softc *sc = hdl;
 	struct pxa2x0_i2s_dma *p;
 	struct dmac_xfer *dx;
 	int error;
 
-	p = malloc(sizeof(*p), type, flags);
-	if (p == NULL)
-		return NULL;
+	p = kmem_alloc(sizeof(*p), KM_SLEEP);
 
-	dx = pxa2x0_dmac_allocate_xfer(M_NOWAIT);
+	dx = pxa2x0_dmac_allocate_xfer();
 	if (dx == NULL) {
 		goto fail_alloc;
 	}
@@ -211,29 +209,29 @@ pxa2x0_i2s_allocm(void *hdl, int direction, size_t size,
 
 	p->size = size;
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, size, NBPG, 0, p->segs,
-	    I2S_N_SEGS, &p->nsegs, BUS_DMA_NOWAIT)) != 0) {
+	    I2S_N_SEGS, &p->nsegs, BUS_DMA_WAITOK)) != 0) {
 		goto fail_xfer;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, p->segs, p->nsegs, size,
-	    &p->addr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
+	    &p->addr, BUS_DMA_WAITOK | BUS_DMA_COHERENT)) != 0) {
 		goto fail_map;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT, &p->map)) != 0) {
+	    BUS_DMA_WAITOK, &p->map)) != 0) {
 		goto fail_create;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, p->map, p->addr, size, NULL,
-	    BUS_DMA_NOWAIT)) != 0) {
+	    BUS_DMA_WAITOK)) != 0) {
 		goto fail_load;
 	}
 
 	dx->dx_cookie = sc;
 	dx->dx_priority = DMAC_PRIORITY_NORMAL;
-	dx->dx_dev_width = DCMD_WIDTH_4;
-	dx->dx_burst_size = DCMD_SIZE_32;
+	dx->dx_dev_width = DMAC_DEV_WIDTH_4;
+	dx->dx_burst_size = DMAC_BURST_SIZE_32;
 
 	p->next = sc->sc_dmas;
 	sc->sc_dmas = p;
@@ -249,17 +247,17 @@ fail_map:
 fail_xfer:
 	pxa2x0_dmac_free_xfer(dx);
 fail_alloc:
-	free(p, type);
+	kmem_free(p, sizeof(*p));
 	return NULL;
 }
 
 void
-pxa2x0_i2s_freem(void *hdl, void *ptr, struct malloc_type *type)
+pxa2x0_i2s_freem(void *hdl, void *ptr, size_t size)
 {
 	struct pxa2x0_i2s_softc *sc = hdl;
 	struct pxa2x0_i2s_dma **pp, *p;
 
-	for (pp = &(sc->sc_dmas); (p = *pp) != NULL; pp = &p->next) {
+	for (pp = &sc->sc_dmas; (p = *pp) != NULL; pp = &p->next) {
 		if (p->addr == ptr) {
 			pxa2x0_dmac_abort_xfer(p->dx);
 			pxa2x0_dmac_free_xfer(p->dx);
@@ -270,7 +268,7 @@ pxa2x0_i2s_freem(void *hdl, void *ptr, struct malloc_type *type)
 			bus_dmamem_free(sc->sc_dmat, p->segs, p->nsegs);
 
 			*pp = p->next;
-			free(p, type);
+			kmem_free(p, sizeof(*p));
 			return;
 		}
 	}
@@ -305,9 +303,9 @@ pxa2x0_i2s_round_blocksize(void *hdl, int bs, int mode,
 
 	/* Enforce individual DMA block size limit */
 	if (bs > DCMD_LENGTH_MASK)
-		return (DCMD_LENGTH_MASK & ~0x03);
+		return (DCMD_LENGTH_MASK & ~0x07);
 
-	return (bs + 0x03) & ~0x03;	/* 32-bit multiples */
+	return (bs + 0x07) & ~0x07;	/* XXX: 64-bit multiples */
 }
 
 size_t
@@ -321,14 +319,11 @@ int
 pxa2x0_i2s_halt_output(void *hdl)
 {
 	struct pxa2x0_i2s_softc *sc = hdl;
-	int s;
 
-	s = splaudio();
 	if (sc->sc_txdma) {
 		pxa2x0_dmac_abort_xfer(sc->sc_txdma->dx);
 		sc->sc_txdma = NULL;
 	}
-	splx(s);
 
 	return 0;
 }
@@ -337,14 +332,11 @@ int
 pxa2x0_i2s_halt_input(void *hdl)
 {
 	struct pxa2x0_i2s_softc *sc = hdl;
-	int s;
 
-	s = splaudio();
 	if (sc->sc_rxdma) {
 		pxa2x0_dmac_abort_xfer(sc->sc_rxdma->dx);
 		sc->sc_rxdma = NULL;
 	}
-	splx(s);
 
 	return 0;
 }
@@ -356,28 +348,28 @@ pxa2x0_i2s_start_output(void *hdl, void *block, int bsize,
 	struct pxa2x0_i2s_softc *sc = hdl;
 	struct pxa2x0_i2s_dma *p;
 	struct dmac_xfer *dx;
-	int rv;
 
 	if (sc->sc_txdma)
 		return EBUSY;
 
-	sc->sc_txfunc = tx_func;
-	sc->sc_txarg = tx_arg;
-
 	/* Find mapping which contains block completely */
-	for (p = sc->sc_dmas; p != NULL && (((char *)block < (char *)p->addr) ||
-	    ((char *)block + bsize > (char *)p->addr + p->size)); p = p->next)
+	for (p = sc->sc_dmas;
+	     p != NULL && 
+	       (((char*)block < (char *)p->addr) ||
+	        ((char *)block + bsize > (char *)p->addr + p->size));
+	     p = p->next) {
 		continue;	/* Nothing */
-
+	}
 	if (p == NULL) {
-		printf("pxa2x0_i2s_start_output: request with bad start "
-		    "address: %p, size: %d)\n", block, bsize);
+		aprint_error("pxa2x0_i2s_start_output: "
+		    "request with bad start address: %p, size: %d\n",
+		    block, bsize);
 		return ENXIO;
 	}
 	sc->sc_txdma = p;
 
-	p->segs[0].ds_addr = p->map->dm_segs[0].ds_addr
-	                         + ((char *)block - (char *)p->addr);
+	p->segs[0].ds_addr = p->map->dm_segs[0].ds_addr +
+	                         ((char *)block - (char *)p->addr);
 	p->segs[0].ds_len = bsize;
 
 	dx = p->dx;
@@ -392,10 +384,11 @@ pxa2x0_i2s_start_output(void *hdl, void *block, int bsize,
 	dx->dx_desc[DMAC_DESC_DST].xd_nsegs = 1;
 	dx->dx_desc[DMAC_DESC_DST].xd_dma_segs = &sc->sc_dr;
 
-	/* Start DMA */
-	rv = pxa2x0_dmac_start_xfer(dx);
+	sc->sc_txfunc = tx_func;
+	sc->sc_txarg = tx_arg;
 
-	return rv;
+	/* Start DMA */
+	return pxa2x0_dmac_start_xfer(dx);
 }
 
 int
@@ -405,28 +398,28 @@ pxa2x0_i2s_start_input(void *hdl, void *block, int bsize,
 	struct pxa2x0_i2s_softc *sc = hdl;
 	struct pxa2x0_i2s_dma *p;
 	struct dmac_xfer *dx;
-	int rv;
 
 	if (sc->sc_rxdma)
 		return EBUSY;
 
-	sc->sc_rxfunc = rx_func;
-	sc->sc_rxarg = rx_arg;
-
 	/* Find mapping which contains block completely */
-	for (p = sc->sc_dmas; p != NULL && (((char *)block < (char *)p->addr) ||
-	    ((char *)block + bsize > (char *)p->addr + p->size)); p = p->next)
+	for (p = sc->sc_dmas;
+	     p != NULL && 
+	       (((char*)block < (char *)p->addr) ||
+	        ((char *)block + bsize > (char *)p->addr + p->size));
+	     p = p->next) {
 		continue;	/* Nothing */
-
+	}
 	if (p == NULL) {
-		printf("pxa2x0_i2s_start_input: request with bad start "
-		    "address: %p, size: %d)\n", block, bsize);
+		aprint_error("pxa2x0_i2s_start_input: "
+		    "request with bad start address: %p, size: %d\n",
+		    block, bsize);
 		return ENXIO;
 	}
-
 	sc->sc_rxdma = p;
-	p->segs[0].ds_addr = p->map->dm_segs[0].ds_addr
-	                         + ((char *)block - (char *)p->addr);
+
+	p->segs[0].ds_addr = p->map->dm_segs[0].ds_addr +
+	                         ((char *)block - (char *)p->addr);
 	p->segs[0].ds_len = bsize;
 
 	dx = p->dx;
@@ -441,60 +434,56 @@ pxa2x0_i2s_start_input(void *hdl, void *block, int bsize,
 	dx->dx_desc[DMAC_DESC_DST].xd_nsegs = p->nsegs;
 	dx->dx_desc[DMAC_DESC_DST].xd_dma_segs = p->segs;
 
-	/* Start DMA */
-	rv = pxa2x0_dmac_start_xfer(dx);
+	sc->sc_rxfunc = rx_func;
+	sc->sc_rxarg = rx_arg;
 
-	return rv;
+	/* Start DMA */
+	return pxa2x0_dmac_start_xfer(dx);
 }
 
 static void
 pxa2x0_i2s_dmac_ointr(struct dmac_xfer *dx, int status)
 {
 	struct pxa2x0_i2s_softc *sc = dx->dx_cookie;
-	struct pxa2x0_i2s_dma *p = sc->sc_txdma;
-	int s;
 
-	if (p == NULL) {
+	if (sc->sc_txdma == NULL) {
 		panic("pxa2x_i2s_dmac_ointr: bad TX DMA descriptor!");
 	}
-
-	if (p->dx != dx) {
+	if (sc->sc_txdma->dx != dx) {
 		panic("pxa2x_i2s_dmac_ointr: xfer mismatch!");
 	}
+	sc->sc_txdma = NULL;
 
 	if (status) {
-		printf("%s: pxa2x0_i2s_dmac_ointr: "
-		    "non-zero completion status %d\n",
-		    sc->sc_dev.dv_xname, status);
+		aprint_error("pxa2x0_i2s_dmac_ointr: "
+		    "non-zero completion status %d\n", status);
 	}
 
-	s = splaudio();
+	mutex_spin_enter(sc->sc_intr_lock);
 	(sc->sc_txfunc)(sc->sc_txarg);
-	splx(s);
+	mutex_spin_exit(sc->sc_intr_lock);
 }
 
 static void
 pxa2x0_i2s_dmac_iintr(struct dmac_xfer *dx, int status)
 {
 	struct pxa2x0_i2s_softc *sc = dx->dx_cookie;
-	struct pxa2x0_i2s_dma *p = sc->sc_rxdma;
-	int s;
 
-	if (p == NULL) {
+	if (sc->sc_rxdma == NULL) {
 		panic("pxa2x_i2s_dmac_iintr: bad RX DMA descriptor!");
 	}
-
-	if (p->dx != dx) {
+	if (sc->sc_rxdma->dx != dx) {
 		panic("pxa2x_i2s_dmac_iintr: xfer mismatch!");
 	}
+	sc->sc_rxdma = NULL;
 
 	if (status) {
-		printf("%s: pxa2x0_i2s_dmac_iintr: "
-		    "non-zero completion status %d\n",
-		    sc->sc_dev.dv_xname, status);
+		aprint_error("pxa2x0_i2s_dmac_iintr: "
+		    "non-zero completion status %d\n", status);
 	}
 
-	s = splaudio();
+
+	mutex_spin_enter(sc->sc_intr_lock);
 	(sc->sc_rxfunc)(sc->sc_rxarg);
-	splx(s);
+	mutex_spin_exit(sc->sc_intr_lock);
 }

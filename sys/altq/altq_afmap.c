@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_afmap.c,v 1.18 2007/03/04 05:59:00 christos Exp $	*/
+/*	$NetBSD: altq_afmap.c,v 1.20 2014/03/20 20:51:54 christos Exp $	*/
 /*	$KAME: altq_afmap.c,v 1.12 2005/04/13 03:44:24 suz Exp $	*/
 
 /*
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.18 2007/03/04 05:59:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.20 2014/03/20 20:51:54 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -334,7 +334,8 @@ afmclose(dev_t dev, int flag, int fmt, struct lwp *l)
 	     head = head->afh_chain.le_next) {
 
 		/* call interface to clean up maps */
-		sprintf(fmap.af_ifname, "%s", head->afh_ifp->if_xname);
+		snprintf(fmap.af_ifname, sizeof(fmap.af_ifname),
+		    "%s", head->afh_ifp->if_xname);
 		err = afmioctl(dev, AFM_CLEANFMAP, (void *)&fmap, flag, l);
 		if (err && error == 0)
 			error = err;
@@ -371,8 +372,7 @@ afmioctl(dev_t dev, ioctlcmd_t cmd, void *addr, int flag,
 	flowmap = (struct atm_flowmap *)addr;
 	flowmap->af_ifname[IFNAMSIZ-1] = '\0';
 	ifp = ifunit(flowmap->af_ifname);
-	if (ifp == NULL || ifp->if_ioctl == NULL ||
-	    (ifp->if_flags & IFF_RUNNING) == 0)
+	if (ifp == NULL || (ifp->if_flags & IFF_RUNNING) == 0)
 		error = ENXIO;
 	else
 		error = ifp->if_ioctl(ifp, cmd, addr);

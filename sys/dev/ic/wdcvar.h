@@ -1,4 +1,4 @@
-/*	$NetBSD: wdcvar.h,v 1.88 2008/01/10 07:44:08 dyoung Exp $	*/
+/*	$NetBSD: wdcvar.h,v 1.98 2017/10/07 16:05:32 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,13 +43,17 @@
 #define WDC_NREG	8 /* number of command registers */
 #define	WDC_NSHADOWREG	2 /* number of command "shadow" registers */
 
+#define WDC_MAXDRIVES	2 /* absolute max number of drives per channel */
+
 struct wdc_regs {
 	/* Our registers */
 	bus_space_tag_t       cmd_iot;
 	bus_space_handle_t    cmd_baseioh;
+	bus_size_t            cmd_ios;
 	bus_space_handle_t    cmd_iohs[WDC_NREG+WDC_NSHADOWREG];
 	bus_space_tag_t       ctl_iot;
 	bus_space_handle_t    ctl_ioh;
+	bus_size_t            ctl_ios;
 
 	/* data32{iot,ioh} are only used for 32-bit data xfers */
 	bus_space_tag_t       data32iot;
@@ -79,10 +76,13 @@ struct wdc_softc {
 
 	struct wdc_regs *regs;		/* register array (per-channel) */
 
-	int           cap;		/* controller capabilities */
+	int		wdc_maxdrives;	/* max number of drives per channel */
+
+	int		cap;		/* controller capabilities */
 #define WDC_CAPABILITY_NO_EXTRA_RESETS 0x0100 /* only reset once */
 #define WDC_CAPABILITY_PREATA	0x0200	/* ctrl can be a pre-ata one */
-#define WDC_CAPABILITY_WIDEREGS 0x0400  /* Ctrl has wide (16bit) registers  */
+#define WDC_CAPABILITY_WIDEREGS 0x0400  /* ctrl has wide (16bit) registers  */
+#define WDC_CAPABILITY_NO_AUXCTL 0x0800 /* ctrl has no aux control registers */
 
 #if NATA_DMA || NATA_PIOBM
 	/* if WDC_CAPABILITY_DMA set in 'cap' */
@@ -142,13 +142,12 @@ struct wdc_softc {
  */
 
 void	wdc_allocate_regs(struct wdc_softc *);
-void	wdc_init_shadow_regs(struct ata_channel *);
+void	wdc_init_shadow_regs(struct wdc_regs *);
 
-int	wdcprobe(struct ata_channel *);
+int	wdcprobe(struct wdc_regs *);
 void	wdcattach(struct ata_channel *);
 int	wdcdetach(device_t, int);
 void	wdc_childdetached(device_t, device_t);
-int	wdcactivate(device_t, enum devact);
 int	wdcintr(void *);
 
 void	wdc_sataprobe(struct ata_channel *);
@@ -156,7 +155,7 @@ void	wdc_drvprobe(struct ata_channel *);
 
 void	wdcrestart(void*);
 
-int	wdcwait(struct ata_channel *, int, int, int, int);
+int	wdcwait(struct ata_channel *, int, int, int, int, int *);
 #define WDCWAIT_OK	0  /* we have what we asked */
 #define WDCWAIT_TOUT	-1 /* timed out */
 #define WDCWAIT_THR	1  /* return, the kernel thread has been awakened */
@@ -167,25 +166,25 @@ int	wdc_dmawait(struct ata_channel *, struct ata_xfer *, int);
 void	wdccommand(struct ata_channel *, u_int8_t, u_int8_t, u_int16_t,
 		   u_int8_t, u_int8_t, u_int8_t, u_int8_t);
 void	wdccommandext(struct ata_channel *, u_int8_t, u_int8_t, u_int64_t,
-		      u_int16_t);
+		      u_int16_t, u_int16_t, u_int8_t);
 void	wdccommandshort(struct ata_channel *, int, int);
 void	wdctimeout(void *arg);
-void	wdc_reset_drive(struct ata_drive_datas *, int);
+void	wdc_reset_drive(struct ata_drive_datas *, int, uint32_t *);
 void	wdc_reset_channel(struct ata_channel *, int);
 void	wdc_do_reset(struct ata_channel *, int);
 
-int	wdc_exec_command(struct ata_drive_datas *, struct ata_command*);
+int	wdc_exec_command(struct ata_drive_datas *, struct ata_xfer *);
 
 /*
  * ST506 spec says that if READY or SEEKCMPLT go off, then the read or write
  * command is aborted.
  */
-#define wdc_wait_for_drq(chp, timeout, flags) \
-		wdcwait((chp), WDCS_DRQ, WDCS_DRQ, (timeout), (flags))
-#define wdc_wait_for_unbusy(chp, timeout, flags) \
-		wdcwait((chp), 0, 0, (timeout), (flags))
-#define wdc_wait_for_ready(chp, timeout, flags) \
-		wdcwait((chp), WDCS_DRDY, WDCS_DRDY, (timeout), (flags))
+#define wdc_wait_for_drq(chp, timeout, flags, tfd) \
+		wdcwait((chp), WDCS_DRQ, WDCS_DRQ, (timeout), (flags), (tfd))
+#define wdc_wait_for_unbusy(chp, timeout, flags, tfd) \
+		wdcwait((chp), 0, 0, (timeout), (flags), (tfd))
+#define wdc_wait_for_ready(chp, timeout, flags, tfd) \
+		wdcwait((chp), WDCS_DRDY, WDCS_DRDY, (timeout), (flags), (tfd))
 
 /* ATA/ATAPI specs says a device can take 31s to reset */
 #define WDC_RESET_WAIT 31000

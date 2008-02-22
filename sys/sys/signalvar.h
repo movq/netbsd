@@ -1,4 +1,4 @@
-/*	$NetBSD: signalvar.h,v 1.73 2008/02/19 12:24:34 yamt Exp $	*/
+/*	$NetBSD: signalvar.h,v 1.91 2018/05/20 04:00:35 kamil Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -31,12 +31,13 @@
  *	@(#)signalvar.h	8.6 (Berkeley) 2/19/95
  */
 
-#ifndef	_SYS_SIGNALVAR_H_		/* tmp for user.h */
+#ifndef	_SYS_SIGNALVAR_H_
 #define	_SYS_SIGNALVAR_H_
 
 #include <sys/siginfo.h>
 #include <sys/queue.h>
 #include <sys/mutex.h>
+#include <sys/stdbool.h>
 
 /*
  * Kernel signal definitions and data structures,
@@ -46,7 +47,7 @@
 /*
  * Queue of signals.
  */
-typedef CIRCLEQ_HEAD(ksiginfoq, ksiginfo) ksiginfoq_t;
+typedef TAILQ_HEAD(ksiginfoq, ksiginfo) ksiginfoq_t;
 
 /*
  * Process signal actions, possibly shared between processes.
@@ -74,22 +75,13 @@ typedef struct sigpend {
  * Process signal state.
  */
 struct sigctx {
-	int		ps_signo;	/* for core dump/debugger XXX */
-	int		ps_code;	/* for core dump/debugger XXX */
-	int		ps_lwp;		/* for core dump/debugger XXX */
+	struct _ksiginfo ps_info;	/* for core dump/debugger XXX */
+	int		 ps_lwp;	/* for core dump/debugger XXX */
+	bool		 ps_faked;	/* for core dump/debugger XXX */
 	void		*ps_sigcode;	/* address of signal trampoline */
-	sigset_t	ps_sigignore;	/* Signals being ignored. */
-	sigset_t	ps_sigcatch;	/* Signals being caught by user. */
+	sigset_t	 ps_sigignore;	/* Signals being ignored. */
+	sigset_t	 ps_sigcatch;	/* Signals being caught by user. */
 };
-
-/*
- * Storage for items that may be either per-LWP (1:1 threads) or
- * per-process (SA threads).
- */
-typedef struct sigstore {
-	stack_t		ss_stk;		/* p: sp & on stack state variable */
-	sigset_t	ss_mask;	/* p: signal mask */
-} sigstore_t;
 
 /* additional signal action values, used only temporarily/internally */
 #define	SIG_CATCH	(void (*)(int))2
@@ -123,15 +115,13 @@ typedef struct sigstore {
 extern sigset_t contsigmask, stopsigmask, sigcantmask;
 
 struct vnode;
+struct coredump_iostate;
 
 /*
  * Machine-independent functions:
  */
-int	coredump(struct lwp *, const char *);
-int	coredump_netbsd(struct lwp *, void *);
+int	coredump_netbsd(struct lwp *, struct coredump_iostate *);
 void	execsigs(struct proc *);
-void	gsignal(int, int);
-void	kgsignal(int, struct ksiginfo *, void *);
 int	issignal(struct lwp *);
 void	pgsignal(struct pgrp *, int, int);
 void	kpgsignal(struct pgrp *, struct ksiginfo *, void *, int);
@@ -141,16 +131,20 @@ void	kpsignal(struct proc *, struct ksiginfo *, void *);
 void	child_psignal(struct proc *, int);
 void	siginit(struct proc *);
 void	trapsignal(struct lwp *, struct ksiginfo *);
-void	sigexit(struct lwp *, int);
+void	sigexit(struct lwp *, int) __dead;
 void	killproc(struct proc *, const char *);
 void	setsigvec(struct proc *, int, struct sigaction *);
 int	killpg1(struct lwp *, struct ksiginfo *, int, int);
 void	proc_unstop(struct proc *p);
+void	sigswitch(int, int, bool);
+
 
 int	sigaction1(struct lwp *, int, const struct sigaction *,
 	    struct sigaction *, const void *, int);
 int	sigprocmask1(struct lwp *, int, const sigset_t *, sigset_t *);
 void	sigpending1(struct lwp *, sigset_t *);
+void	sigsuspendsetup(struct lwp *, const sigset_t *);
+void	sigsuspendteardown(struct lwp *);
 int	sigsuspend1(struct lwp *, const sigset_t *);
 int	sigaltstack1(struct lwp *, const struct sigaltstack *,
 	    struct sigaltstack *);
@@ -160,7 +154,7 @@ int	sigget(sigpend_t *, ksiginfo_t *, int, const sigset_t *);
 void	sigclear(sigpend_t *, const sigset_t *, ksiginfoq_t *);
 void	sigclearall(struct proc *, const sigset_t *, ksiginfoq_t *);
 
-void	kpsignal2(struct proc *, ksiginfo_t *);
+int	kpsignal2(struct proc *, ksiginfo_t *);
 
 void	signal_init(void);
 
@@ -170,17 +164,15 @@ void	sigactsfree(struct sigacts *);
 
 void	kpsendsig(struct lwp *, const struct ksiginfo *, const sigset_t *);
 void	sendsig_reset(struct lwp *, int);
-
-siginfo_t *siginfo_alloc(int);
-void	siginfo_free(void *);
+void	sendsig(const struct ksiginfo *, const sigset_t *);
 
 ksiginfo_t	*ksiginfo_alloc(struct proc *, ksiginfo_t *, int);
 void	ksiginfo_free(ksiginfo_t *);
 void	ksiginfo_queue_drain0(ksiginfoq_t *);
 
-struct sys___sigtimedwait_args;
-int	__sigtimedwait1(struct lwp *, const struct sys___sigtimedwait_args *, register_t *, copyout_t,
-    copyin_t, copyout_t);
+struct sys_____sigtimedwait50_args;
+int	sigtimedwait1(struct lwp *, const struct sys_____sigtimedwait50_args *,
+    register_t *, copyin_t, copyout_t, copyin_t, copyout_t);
 
 void	signotify(struct lwp *);
 int	sigispending(struct lwp *, int);
@@ -188,16 +180,24 @@ int	sigispending(struct lwp *, int);
 /*
  * Machine-dependent functions:
  */
-void	sendsig(const struct ksiginfo *, const sigset_t *);
+void	sendsig_sigcontext(const struct ksiginfo *, const sigset_t *);
+void	sendsig_siginfo(const struct ksiginfo *, const sigset_t *);
 
 extern	struct pool ksiginfo_pool;
+
+/*
+ * Modularity / compatibility.
+ */
+extern void	(*sendsig_sigcontext_vec)(const struct ksiginfo *,
+					  const sigset_t *);
+extern int	(*coredump_vec)(struct lwp *, const char *);
 
 /*
  * firstsig:
  *
  * 	Return the first signal in a signal set.
  */
-static inline int
+static __inline int
 firstsig(const sigset_t *ss)
 {
 	int sig;
@@ -223,16 +223,16 @@ firstsig(const sigset_t *ss)
 	return (0);
 }
 
-static inline void
+static __inline void
 ksiginfo_queue_init(ksiginfoq_t *kq)
 {
-	CIRCLEQ_INIT(kq);
+	TAILQ_INIT(kq);
 }
 
-static inline void
+static __inline void
 ksiginfo_queue_drain(ksiginfoq_t *kq)
 {
-	if (!CIRCLEQ_EMPTY(kq))
+	if (!TAILQ_EMPTY(kq))
 		ksiginfo_queue_drain0(kq);
 }
 

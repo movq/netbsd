@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3var.h,v 1.34 2006/07/11 22:49:47 peter Exp $	*/
+/*	$NetBSD: elink3var.h,v 1.39 2015/04/13 16:33:24 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1994 Herb Peyerl <hpeyerl@beer.org>
@@ -30,17 +30,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rnd.h"
-
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /*
  * Ethernet software status per interface.
  */
 struct ep_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 
 	struct ethercom sc_ethercom;	/* Ethernet common part		*/
@@ -101,11 +97,7 @@ struct ep_softc {
 #define	ELINK_IS_BUS_32(a)	((a) & 0x2)
 	int ep_pktlenshift;		/* scale factor for pkt lengths */
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
-
-	void *sd_hook;
+	krndsource_t rnd_source;
 
 	/* power management hooks */
 	int (*enable)(struct ep_softc *);
@@ -122,7 +114,7 @@ int	epintr(void *);
 int	epenable(struct ep_softc *);
 void	epdisable(struct ep_softc *);
 
-int	ep_activate(struct device *, enum devact);
-int	ep_detach(struct device *, int);
+int	ep_activate(device_t, enum devact);
+int	ep_detach(device_t, int);
 
 void	ep_power(int, void *);

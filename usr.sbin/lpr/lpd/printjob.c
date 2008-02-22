@@ -1,4 +1,4 @@
-/*	$NetBSD: printjob.c,v 1.51 2008/02/16 07:33:25 matt Exp $	*/
+/*	$NetBSD: printjob.c,v 1.56 2011/08/30 19:27:37 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -33,15 +33,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)printjob.c	8.7 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: printjob.c,v 1.51 2008/02/16 07:33:25 matt Exp $");
+__RCSID("$NetBSD: printjob.c,v 1.56 2011/08/30 19:27:37 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -117,7 +117,7 @@ static char	tempfile[] = "errsXXXXXX"; /* file name for filter output */
 static char	tempremote[] = "remoteXXXXXX"; /* file name for remote filter */
 static char	width[10] = "-w";	/* page width in static characters */
 
-static void	abortpr(int);
+__dead static void	abortpr(int);
 static void	banner(char *, char *);
 static int	dofork(int);
 static int	dropit(int);
@@ -173,9 +173,6 @@ printjob(void)
 	signal(SIGQUIT, abortpr);
 	signal(SIGTERM, abortpr);
 
-	(void)mktemp(tempfile);		/* XXX */
-	(void)mktemp(tempremote);	/* XXX */
-
 	/*
 	 * uses short form file names
 	 */
@@ -205,6 +202,21 @@ printjob(void)
 		syslog(LOG_ERR, "%s: %s: %m", printer, LO);
 		exit(1);
 	}
+
+	/*
+	 * create the temp filenames.
+	 * XXX	arguably we should keep the fds open and fdopen(3) dup()s,
+	 * XXX	but we're in a protected directory so it shouldn't matter.
+	 */
+	if ((fd = mkstemp(tempfile)) != -1) {
+		(void)close(fd);
+		(void)unlink(tempfile);
+	}
+	if ((fd = mkstemp(tempremote)) != -1) {
+		(void)close(fd);
+		(void)unlink(tempremote);
+	}
+
 	/*
 	 * search the spool directory for work and sort by queue order.
 	 */
@@ -380,12 +392,12 @@ printit(char *file)
 	 *                    (after we print it. (Pass 2 only)).
 	 *		M -- "mail" to user when done printing
 	 *
-	 *      getline reads a line and expands tabs to blanks
+	 *      get_line reads a line and expands tabs to blanks
 	 */
 
 	/* pass 1 */
 
-	while (getline(cfp))
+	while (get_line(cfp))
 		switch (line[0]) {
 		case 'H':
 			strlcpy(fromhost, line+1, sizeof(fromhost));
@@ -490,7 +502,7 @@ printit(char *file)
 
 pass2:
 	fseek(cfp, 0L, 0);
-	while (getline(cfp))
+	while (get_line(cfp))
 		switch (line[0]) {
 		case 'L':	/* identification line */
 			if (!SH && HL)
@@ -531,7 +543,7 @@ print(int format, char *file)
 	FILE *fp;
 	int status;
 	struct stat stb;
-	const char *prog, *av[15];
+	const char *prog, *av[17];
 	char buf[BUFSIZ];
 	int n, fi, fo, child_pid, p[2], stopped = 0, nofile;
 
@@ -690,6 +702,10 @@ print(int format, char *file)
 		av[0] = prog;
 	av[n++] = "-n";
 	av[n++] = logname;
+	if (*jobname != '\0' && strcmp(jobname, " ") != 0) {
+		av[n++] = "-j";
+		av[n++] = jobname;
+	}
 	av[n++] = "-h";
 	av[n++] = fromhost;
 	av[n++] = AF;
@@ -804,7 +820,7 @@ sendit(char *file)
 	/*
 	 * pass 1
 	 */
-	while (getline(cfp)) {
+	while (get_line(cfp)) {
 	again:
 		if (line[0] == 'S') {
 			cp = line+1;
@@ -821,7 +837,7 @@ sendit(char *file)
 		}
 		if (line[0] >= 'a' && line[0] <= 'z') {
 			strlcpy(last, line, sizeof(last));
-			while ((i = getline(cfp)) != 0)
+			while ((i = get_line(cfp)) != 0)
 				if (strcmp(last, line))
 					break;
 			switch (sendfile('\3', last+1)) {
@@ -848,7 +864,7 @@ sendit(char *file)
 	 * pass 2
 	 */
 	fseek(cfp, 0L, 0);
-	while (getline(cfp))
+	while (get_line(cfp))
 		if (line[0] == 'U' && strchr(line+1, '/') == 0)
 			(void)unlink(line+1);
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: environment.c,v 1.1 2006/04/07 14:21:29 cherry Exp $	*/
+/*	$NetBSD: environment.c,v 1.4 2014/10/18 08:33:25 snj Exp $	*/
 
 
 /* 
@@ -36,6 +36,7 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include <bootstrap.h>
@@ -45,7 +46,7 @@ static void	env_discard(struct env_var *ev);
 struct env_var	*environ = NULL;
 
 /*
- * Look up (name) and return it's env_var structure.
+ * Look up (name) and return its env_var structure.
  */
 struct env_var	*
 env_getenv(const char *name)
@@ -62,7 +63,7 @@ env_getenv(const char *name)
  * Some notes:
  *
  * If the EV_VOLATILE flag is set, a copy of the variable is made.
- * If EV_DYNAMIC is set, the the variable has been allocated with
+ * If EV_DYNAMIC is set, the variable has been allocated with
  * malloc and ownership transferred to the environment.
  * If (value) is NULL, the variable is set but has no value.
  */

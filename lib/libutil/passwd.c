@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd.c,v 1.45 2006/12/20 16:47:13 christos Exp $	*/
+/*	$NetBSD: passwd.c,v 1.53 2018/06/24 01:53:14 kamil Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: passwd.c,v 1.45 2006/12/20 16:47:13 christos Exp $");
+__RCSID("$NetBSD: passwd.c,v 1.53 2018/06/24 01:53:14 kamil Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: passwd.c,v 1.45 2006/12/20 16:47:13 christos Exp $");
 
 static const char      *pw_filename(const char *filename);
 static void		pw_cont(int sig);
-static int		pw_equal(char *buf, struct passwd *old_pw);
+static const char *	pw_equal(char *buf, struct passwd *old_pw);
 static const char      *pw_default(const char *option);
 static int		read_line(FILE *fp, char *line, int max);
 static void		trim_whitespace(char *line);
@@ -134,9 +134,7 @@ pw_lock(int retries)
 }
 
 int
-pw_mkdb(username, secureonly)
-	const char *username;
-	int secureonly;
+pw_mkdb(const char *username, int secureonly)
 {
 	const char *args[9];
 	int pstat, i;
@@ -144,13 +142,13 @@ pw_mkdb(username, secureonly)
 
 	pid = vfork();
 	if (pid == -1)
-		return (-1);
+		return -1;
 
 	if (pid == 0) {
 		args[0] = "pwd_mkdb";
 		args[1] = "-d";
 		args[2] = pw_prefix;
-		args[3] = "-p";
+		args[3] = "-pl";
 		i = 4;
 
 		if (secureonly)
@@ -166,9 +164,21 @@ pw_mkdb(username, secureonly)
 		_exit(1);
 	}
 	pid = waitpid(pid, &pstat, 0);
-	if (pid == -1 || !WIFEXITED(pstat) || WEXITSTATUS(pstat) != 0)
-		return(-1);
-	return(0);
+	if (pid == -1) {
+		warn("error waiting for pid %lu", (unsigned long)pid);
+		return -1;
+	}
+	if (WIFEXITED(pstat)) {
+		if (WEXITSTATUS(pstat) != 0) {
+			warnx("pwd_mkdb exited with status %d",
+			    WEXITSTATUS(pstat));
+			return -1;
+		}
+	} else if (WIFSIGNALED(pstat)) {
+		warnx("pwd_mkdb exited with signal %d", WTERMSIG(pstat));
+		return -1;
+	}
+	return 0;
 }
 
 int
@@ -290,7 +300,8 @@ pw_prompt(void)
 }
 
 /* for use in pw_copy(). Compare a pw entry to a pw struct. */
-static int
+/* returns a character string labelling the miscompared field or 0 */
+static const char *
 pw_equal(char *buf, struct passwd *pw)
 {
 	struct passwd buf_pw;
@@ -303,16 +314,26 @@ pw_equal(char *buf, struct passwd *pw)
 	if (buf[len-1] == '\n')
 		buf[len-1] = '\0';
 	if (!pw_scan(buf, &buf_pw, NULL))
-		return 0;
-	return !strcmp(pw->pw_name, buf_pw.pw_name)
-		&& pw->pw_uid == buf_pw.pw_uid
-		&& pw->pw_gid == buf_pw.pw_gid
-		&& !strcmp(pw->pw_class, buf_pw.pw_class)
-		&& (long)pw->pw_change == (long)buf_pw.pw_change
-		&& (long)pw->pw_expire == (long)buf_pw.pw_expire
-		&& !strcmp(pw->pw_gecos, buf_pw.pw_gecos)
-		&& !strcmp(pw->pw_dir, buf_pw.pw_dir)
-		&& !strcmp(pw->pw_shell, buf_pw.pw_shell);
+		return "corrupt line";
+	if (strcmp(pw->pw_name, buf_pw.pw_name) != 0)
+		return "name";
+	if (pw->pw_uid != buf_pw.pw_uid)
+		return "uid";
+	if (pw->pw_gid != buf_pw.pw_gid)
+		return "gid";
+	if (strcmp( pw->pw_class, buf_pw.pw_class) != 0)
+		return "class";
+	if (pw->pw_change != buf_pw.pw_change)
+		return "change";
+	if (pw->pw_expire != buf_pw.pw_expire)
+		return "expire";
+	if (strcmp( pw->pw_gecos, buf_pw.pw_gecos) != 0)
+		return "gecos";
+	if (strcmp( pw->pw_dir, buf_pw.pw_dir) != 0)
+		return "dir";
+	if (strcmp( pw->pw_shell, buf_pw.pw_shell) != 0)
+		return "shell";
+	return (char *)0;
 }
 
 void
@@ -326,6 +347,16 @@ pw_copy(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw)
 		warnx("%s", errbuf);
 		pw_error(NULL, 0, 1);
 	}
+}
+
+static void
+pw_print(FILE *to, const struct passwd *pw)
+{
+	(void)fprintf(to, "%s:%s:%d:%d:%s:%lld:%lld:%s:%s:%s\n",
+	    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
+	    pw->pw_class, (long long)pw->pw_change,
+	    (long long)pw->pw_expire,
+	    pw->pw_gecos, pw->pw_dir, pw->pw_shell);
 }
 
 int
@@ -365,6 +396,7 @@ pw_copyx(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw,
 	}
 
 	for (done = 0; fgets(buf, (int)sizeof(buf), from);) {
+		const char *neq;
 		if (!strchr(buf, '\n')) {
 			snprintf(errbuf, errbufsz, "%s: line too long", mpwd);
 			(void)fclose(from);
@@ -402,17 +434,20 @@ pw_copyx(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw,
 			continue;
 		}
 		*p = ':';
-		if (old_pw && !pw_equal(buf, old_pw)) {
-			snprintf(errbuf, errbufsz, "%s: entry inconsistent",
-			    mpwd);
+		if (old_pw && (neq = pw_equal(buf, old_pw)) != NULL) {
+			if (strcmp(neq, "corrupt line") == 0)
+				(void)snprintf(errbuf, errbufsz,
+				    "%s: entry %s corrupted", mpwd,
+				    pw->pw_name);
+			else
+				(void)snprintf(errbuf, errbufsz,
+				    "%s: entry %s inconsistent %s",
+				    mpwd, pw->pw_name, neq);
 			(void)fclose(from);
 			(void)fclose(to);
 			return (0);
 		}
-		(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
-		    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
-		    pw->pw_class, (long)pw->pw_change, (long)pw->pw_expire,
-		    pw->pw_gecos, pw->pw_dir, pw->pw_shell);
+		pw_print(to, pw);
 		done = 1;
 		if (ferror(to)) {
 			snprintf(errbuf, errbufsz, "%s", strerror(errno));
@@ -424,11 +459,7 @@ pw_copyx(int ffd, int tfd, struct passwd *pw, struct passwd *old_pw,
 	/* Only append a new entry if real uid is root! */
 	if (!done) {
 		if (getuid() == 0) {
-			(void)fprintf(to, "%s:%s:%d:%d:%s:%ld:%ld:%s:%s:%s\n",
-			    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid,
-			    pw->pw_class, (long)pw->pw_change,
-			    (long)pw->pw_expire, pw->pw_gecos, pw->pw_dir,
-			    pw->pw_shell);
+			pw_print(to, pw);
 			done = 1;
 		} else {
 			snprintf(errbuf, errbufsz,
@@ -472,13 +503,21 @@ trim_whitespace(char *line)
 
 	_DIAGASSERT(line != NULL);
 
+	/* Handle empty string */
+	if (*line == '\0')
+		return;
+
 	/* Remove leading spaces */
 	p = line;
 	while (isspace((unsigned char) *p))
 		p++;
 	memmove(line, p, strlen(p) + 1);
 
-	/* Remove trailing spaces */
+	/* Handle empty string after removal of whitespace characters */
+	if (*line == '\0')
+		return;
+
+	/* Remove trailing spaces, line must not be empty string here */
 	p = line + strlen(line) - 1;
 	while (isspace((unsigned char) *p))
 		p--;
@@ -520,7 +559,7 @@ pw_default(const char *option)
 		{ "localcipher",	"old" },
 		{ "ypcipher",		"old" },
 	};
-	int i;
+	size_t i;
 
 	_DIAGASSERT(option != NULL);
 	for (i = 0; i < sizeof(options) / sizeof(options[0]); i++)

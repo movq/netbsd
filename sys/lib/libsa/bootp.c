@@ -1,4 +1,4 @@
-/*	$NetBSD: bootp.c,v 1.31 2007/11/24 13:20:53 isaki Exp $	*/
+/*	$NetBSD: bootp.c,v 1.41 2016/06/25 04:53:32 isaki Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -63,7 +63,7 @@ char linuxcmdline[256];
 
 static n_long	nmask, smask;
 
-static time_t	bot;
+static satime_t	bot;
 
 static	char vm_rfc1048[4] = VM_RFC1048;
 #ifdef BOOTP_VEND_CMU
@@ -71,11 +71,11 @@ static	char vm_cmu[4] = VM_CMU;
 #endif
 
 /* Local forwards */
-static	ssize_t bootpsend __P((struct iodesc *, void *, size_t));
-static	ssize_t bootprecv __P((struct iodesc *, void *, size_t, time_t));
-static	int vend_rfc1048 __P((u_char *, u_int));
+static	ssize_t bootpsend(struct iodesc *, void *, size_t);
+static	ssize_t bootprecv(struct iodesc *, void *, size_t, saseconds_t);
+static	int vend_rfc1048(u_char *, u_int);
 #ifdef BOOTP_VEND_CMU
-static	void vend_cmu __P((u_char *));
+static	void vend_cmu(u_char *);
 #endif
 
 #ifdef SUPPORT_DHCP
@@ -89,6 +89,33 @@ struct in_addr dhcp_serverip;
  */
 int bootp_flags;
 
+static void
+bootp_addvend(u_char *area)
+{
+#ifdef SUPPORT_DHCP
+	char vci[64];
+	int vcilen;
+	
+	*area++ = TAG_PARAM_REQ;
+	*area++ = 6;
+	*area++ = TAG_SUBNET_MASK;
+	*area++ = TAG_GATEWAY;
+	*area++ = TAG_HOSTNAME;
+	*area++ = TAG_DOMAINNAME;
+	*area++ = TAG_ROOTPATH;
+	*area++ = TAG_SWAPSERVER;
+
+	/* Insert a NetBSD Vendor Class Identifier option. */
+	snprintf(vci, sizeof(vci), "NetBSD:%s:libsa", MACHINE);
+	vcilen = strlen(vci);
+	*area++ = TAG_CLASSID;
+	*area++ = vcilen;
+	(void)memcpy(area, vci, vcilen);
+	area += vcilen;
+#endif
+	*area = TAG_END;
+}
+
 /* Fetch required bootp information */
 void
 bootp(int sock)
@@ -96,17 +123,14 @@ bootp(int sock)
 	struct iodesc *d;
 	struct bootp *bp;
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct bootp wbootp;
 	} wbuf;
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct bootp rbootp;
 	} rbuf;
-#ifdef SUPPORT_DHCP
-	char vci[64];
-	int vcilen;
-#endif
+	unsigned int index;
 
 #ifdef BOOTP_DEBUG
  	if (debug)
@@ -125,31 +149,22 @@ bootp(int sock)
 #endif
 
 	bp = &wbuf.wbootp;
-	bzero(bp, sizeof(*bp));
+	(void)memset(bp, 0, sizeof(*bp));
 
 	bp->bp_op = BOOTREQUEST;
 	bp->bp_htype = 1;		/* 10Mb Ethernet (48 bits) */
 	bp->bp_hlen = 6;
 	bp->bp_xid = htonl(d->xid);
 	MACPY(d->myea, bp->bp_chaddr);
-	strncpy((char *)bp->bp_file, bootfile, sizeof(bp->bp_file));
-	bcopy(vm_rfc1048, bp->bp_vend, sizeof(vm_rfc1048));
+	(void)strncpy((char *)bp->bp_file, bootfile, sizeof(bp->bp_file));
+	(void)memcpy(bp->bp_vend, vm_rfc1048, sizeof(vm_rfc1048));
+	index = 4;
 #ifdef SUPPORT_DHCP
-	bp->bp_vend[4] = TAG_DHCP_MSGTYPE;
-	bp->bp_vend[5] = 1;
-	bp->bp_vend[6] = DHCPDISCOVER;
-	/*
-	 * Insert a NetBSD Vendor Class Identifier option.
-	 */
-	sprintf(vci, "NetBSD:%s:libsa", MACHINE);
-	vcilen = strlen(vci);
-	bp->bp_vend[7] = TAG_CLASSID;
-	bp->bp_vend[8] = vcilen;
-	bcopy(vci, &bp->bp_vend[9], vcilen);
-	bp->bp_vend[9 + vcilen] = TAG_END;
-#else
-	bp->bp_vend[4] = TAG_END;
+	bp->bp_vend[index++] = TAG_DHCP_MSGTYPE;
+	bp->bp_vend[index++] = 1;
+	bp->bp_vend[index++] = DHCPDISCOVER;
 #endif
+	bootp_addvend(&bp->bp_vend[index]);
 
 	d->myip.s_addr = INADDR_ANY;
 	d->myport = htons(IPPORT_BOOTPC);
@@ -172,26 +187,22 @@ bootp(int sock)
 #ifdef SUPPORT_DHCP
 	if (dhcp_ok) {
 		u_int32_t leasetime;
-		bp->bp_vend[6] = DHCPREQUEST;
-		bp->bp_vend[7] = TAG_REQ_ADDR;
-		bp->bp_vend[8] = 4;
-		bcopy(&rbuf.rbootp.bp_yiaddr, &bp->bp_vend[9], 4);
-		bp->bp_vend[13] = TAG_SERVERID;
-		bp->bp_vend[14] = 4;
-		bcopy(&dhcp_serverip.s_addr, &bp->bp_vend[15], 4);
-		bp->bp_vend[19] = TAG_LEASETIME;
-		bp->bp_vend[20] = 4;
+		index = 6;
+		bp->bp_vend[index++] = DHCPREQUEST;
+		bp->bp_vend[index++] = TAG_REQ_ADDR;
+		bp->bp_vend[index++] = 4;
+		(void)memcpy(&bp->bp_vend[9], &rbuf.rbootp.bp_yiaddr, 4);
+		index += 4;
+		bp->bp_vend[index++] = TAG_SERVERID;
+		bp->bp_vend[index++] = 4;
+		(void)memcpy(&bp->bp_vend[index], &dhcp_serverip.s_addr, 4);
+		index += 4;
+		bp->bp_vend[index++] = TAG_LEASETIME;
+		bp->bp_vend[index++] = 4;
 		leasetime = htonl(300);
-		bcopy(&leasetime, &bp->bp_vend[21], 4);
-		/*
-		 * Insert a NetBSD Vendor Class Identifier option.
-		 */
-		sprintf(vci, "NetBSD:%s:libsa", MACHINE);
-		vcilen = strlen(vci);
-		bp->bp_vend[25] = TAG_CLASSID;
-		bp->bp_vend[26] = vcilen;
-		bcopy(vci, &bp->bp_vend[27], vcilen);
-		bp->bp_vend[27 + vcilen] = TAG_END;
+		(void)memcpy(&bp->bp_vend[index], &leasetime, 4);
+		index += 4;
+		bootp_addvend(&bp->bp_vend[index]);
 
 		expected_dhcpmsgtype = DHCPACK;
 
@@ -209,7 +220,7 @@ bootp(int sock)
 	servip = rbuf.rbootp.bp_siaddr;
 	if (rootip.s_addr == INADDR_ANY)
 		rootip = servip;
-	bcopy(rbuf.rbootp.bp_file, bootfile, sizeof(bootfile));
+	(void)memcpy(bootfile, rbuf.rbootp.bp_file, sizeof(bootfile));
 	bootfile[sizeof(bootfile) - 1] = '\0';
 
 	if (IN_CLASSA(myip.s_addr))
@@ -291,14 +302,14 @@ bootpsend(struct iodesc *d, void *pkt, size_t len)
 }
 
 static ssize_t
-bootprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+bootprecv(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	ssize_t n;
 	struct bootp *bp;
 
-#ifdef BOOTP_DEBUGx
+#ifdef BOOTP_DEBUG
 	if (debug)
-		printf("bootp_recvoffer: called\n");
+		printf("bootprecv: called\n");
 #endif
 
 	n = readudp(d, pkt, len, tleft);
@@ -372,21 +383,21 @@ vend_rfc1048(u_char *cp, u_int len)
 		if (tag == TAG_END)
 			break;
 
-		if (tag == TAG_SUBNET_MASK) {
-			bcopy(cp, &smask, sizeof(smask));
+		if (tag == TAG_SUBNET_MASK && size >= sizeof(smask)) {
+			(void)memcpy(&smask, cp, sizeof(smask));
 		}
-		if (tag == TAG_GATEWAY) {
-			bcopy(cp, &gateip.s_addr, sizeof(gateip.s_addr));
+		if (tag == TAG_GATEWAY && size >= sizeof(gateip.s_addr)) {
+			(void)memcpy(&gateip.s_addr, cp, sizeof(gateip.s_addr));
 		}
-		if (tag == TAG_SWAPSERVER) {
+		if (tag == TAG_SWAPSERVER && size >= sizeof(rootip.s_addr)) {
 			/* let it override bp_siaddr */
-			bcopy(cp, &rootip.s_addr, sizeof(rootip.s_addr));
+			(void)memcpy(&rootip.s_addr, cp, sizeof(rootip.s_addr));
 		}
-		if (tag == TAG_ROOTPATH) {
+		if (tag == TAG_ROOTPATH && size < sizeof(rootpath)) {
 			strncpy(rootpath, (char *)cp, sizeof(rootpath));
 			rootpath[size] = '\0';
 		}
-		if (tag == TAG_HOSTNAME) {
+		if (tag == TAG_HOSTNAME && size < sizeof(hostname)) {
 			strncpy(hostname, (char *)cp, sizeof(hostname));
 			hostname[size] = '\0';
 		}
@@ -396,13 +407,15 @@ vend_rfc1048(u_char *cp, u_int len)
 				return -1;
 			dhcp_ok = 1;
 		}
-		if (tag == TAG_SERVERID) {
-			bcopy(cp, &dhcp_serverip.s_addr,
+		if (tag == TAG_SERVERID &&
+		    size >= sizeof(dhcp_serverip.s_addr))
+		{
+			(void)memcpy(&dhcp_serverip.s_addr, cp, 
 			      sizeof(dhcp_serverip.s_addr));
 		}
 #endif
 #ifdef SUPPORT_LINUX
-		if (tag == TAG_LINUX_CMDLINE) {
+		if (tag == TAG_LINUX_CMDLINE && size < sizeof(linuxcmdline)) {
 			strncpy(linuxcmdline, (char *)cp, sizeof(linuxcmdline));
 			linuxcmdline[size] = '\0';
 		}

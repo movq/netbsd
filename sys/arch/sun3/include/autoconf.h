@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.25 2007/03/04 06:00:54 christos Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.27 2012/10/13 06:37:16 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,7 +72,7 @@ extern struct sun68k_bus_space_tag mainbus_space_tag;
 #define cf_intpri	cf_loc[1]
 #define cf_intvec	cf_loc[2]
 
-int bus_scan(struct device *, struct cfdata *, const int *, void *);
+int bus_scan(device_t, cfdata_t, const int *, void *);
 int bus_print(void *, const char *);
 int bus_peek(int, int, int);
 void *bus_mapin(int, int, int);

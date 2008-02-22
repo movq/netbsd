@@ -1,4 +1,4 @@
-.\"	$NetBSD: ibus.4,v 1.3 2003/06/26 10:12:18 wiz Exp $
+.\"	$NetBSD: ibus.4,v 1.7 2017/07/25 08:30:45 wiz Exp $
 .\"
 .\" Copyright (c) 1998 MINOURA Makoto
 .\" Copyright (c) 1998 NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 12, 2001
+.Dd February 17, 2017
 .Dt IBUS 4 pmax
 .Os
 .Sh NAME
@@ -37,7 +37,7 @@
 .Nd pmax internal I/O space driver
 .Sh SYNOPSIS
 .Cd "ibus0 at mainbus0"
-.Cd "ibus0 at tc? slot ? offset ?
+.Cd "ibus0 at tc? slot ? offset ?"
 .Sh DESCRIPTION
 .Nm
 is a virtual device corresponding to the pmax internal I/O space found
@@ -49,7 +49,6 @@ of the kernel startup procedure.
 .Pp
 .Nm
 driver manages the internal I/O space of pmax.
-.Pp
 .Bl -bullet -offset indent
 .It
 Address range management to avoid confliction of address space of
@@ -70,6 +69,6 @@ is always required to run the
 .Nx
 kernel.
 .Sh SEE ALSO
-.Xr intro 4 ,
+.Xr pmax/intro 4 ,
 .Xr bus_dma 9 ,
 .Xr bus_space 9

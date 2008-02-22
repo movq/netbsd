@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_extern.h,v 1.38 2007/12/08 19:29:53 pooka Exp $	*/
+/*	$NetBSD: ext2fs_extern.h,v 1.56 2017/05/28 16:38:55 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -43,11 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -82,6 +77,9 @@ struct uio;
 struct vnode;
 struct mbuf;
 struct componentname;
+struct ufs_lookup_results;
+struct ext2fs_searchslot;
+struct ext2fs_direct;
 
 extern struct pool ext2fs_inode_pool;		/* memory pool for inodes */
 extern struct pool ext2fs_dinode_pool;		/* memory pool for dinodes */
@@ -97,11 +95,12 @@ int ext2fs_alloc(struct inode *, daddr_t, daddr_t , kauth_cred_t,
 		   daddr_t *);
 int ext2fs_realloccg(struct inode *, daddr_t, daddr_t, int, int ,
 			  kauth_cred_t, struct buf **);
-int ext2fs_valloc(struct vnode *, int, kauth_cred_t, struct vnode **);
+int ext2fs_valloc(struct vnode *, int, kauth_cred_t, ino_t *);
 /* XXX ondisk32 */
 daddr_t ext2fs_blkpref(struct inode *, daddr_t, int, int32_t *);
 void ext2fs_blkfree(struct inode *, daddr_t);
 int ext2fs_vfree(struct vnode *, ino_t, int);
+int ext2fs_cg_verify_and_initialize(struct vnode *, struct m_ext2fs *, int);
 
 /* ext2fs_balloc.c */
 int ext2fs_balloc(struct inode *, daddr_t, int, kauth_cred_t,
@@ -112,8 +111,10 @@ int ext2fs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 int ext2fs_bmap(void *);
 
 /* ext2fs_inode.c */
-u_int64_t ext2fs_size(struct inode *);
-int ext2fs_setsize(struct inode *, u_int64_t);
+uint64_t ext2fs_size(struct inode *);
+int ext2fs_setsize(struct inode *, uint64_t);
+uint64_t ext2fs_nblock(struct inode *);
+int ext2fs_setnblock(struct inode *, uint64_t);
 int ext2fs_update(struct vnode *, const struct timespec *,
     const struct timespec *, int);
 int ext2fs_truncate(struct vnode *, off_t, int, kauth_cred_t);
@@ -122,13 +123,19 @@ int ext2fs_inactive(void *);
 /* ext2fs_lookup.c */
 int ext2fs_readdir(void *);
 int ext2fs_lookup(void *);
+int ext2fs_search_dirblock(struct inode *, void *, int *,
+    const char *, int , int *, doff_t *, doff_t *, doff_t *,
+    struct ext2fs_searchslot *);
 int ext2fs_direnter(struct inode *, struct vnode *,
+			 const struct ufs_lookup_results *,
 			 struct componentname *);
-int ext2fs_dirremove(struct vnode *, struct componentname *);
-int ext2fs_dirrewrite(struct inode *, struct inode *,
-			   struct componentname *);
+int ext2fs_dirremove(struct vnode *, const struct ufs_lookup_results *,
+		     struct componentname *);
+int ext2fs_dirrewrite(struct inode *, const struct ufs_lookup_results *,
+			   struct inode *, struct componentname *);
 int ext2fs_dirempty(struct inode *, ino_t, kauth_cred_t);
-int ext2fs_checkpath(struct inode *, struct inode *, kauth_cred_t);
+int ext2fs_add_entry(struct vnode *, struct ext2fs_direct *,
+    const struct ufs_lookup_results *, size_t); 
 
 /* ext2fs_subr.c */
 int ext2fs_blkatoff(struct vnode *, off_t, char **, struct buf **);
@@ -138,15 +145,18 @@ void ext2fs_itimes(struct inode *, const struct timespec *,
 
 /* ext2fs_vfsops.c */
 VFS_PROTOS(ext2fs);
-int ext2fs_reload(struct mount *, kauth_cred_t);
+int ext2fs_reload(struct mount *, kauth_cred_t, struct lwp *);
 int ext2fs_mountfs(struct vnode *, struct mount *);
 int ext2fs_flushfiles(struct mount *, int);
 int ext2fs_sbupdate(struct ufsmount *, int);
 int ext2fs_cgupdate(struct ufsmount *, int);
+void ext2fs_set_inode_guid(struct inode *);
 
 /* ext2fs_readwrite.c */
 int ext2fs_read(void *);
 int ext2fs_write(void *);
+int ext2fs_bufrd(struct vnode *, struct uio *, int, kauth_cred_t);
+int ext2fs_bufwr(struct vnode *, struct uio *, int, kauth_cred_t);
 
 /* ext2fs_vnops.c */
 int ext2fs_create(void *);
@@ -166,13 +176,21 @@ int ext2fs_advlock(void *);
 int ext2fs_fsync(void *);
 int ext2fs_vinit(struct mount *, int (**specops)(void *),
 		      int (**fifoops)(void *), struct vnode **);
-int ext2fs_makeinode(int, struct vnode *, struct vnode **,
-			  struct componentname *cnp);
 int ext2fs_reclaim(void *);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_ext2fs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
+/* ext2fs_hash.c */
+int ext2fs_htree_hash(const char *, int, uint32_t *, int, uint32_t *,
+    uint32_t *);
+       
+/* ext2fs_htree.c */        
+int ext2fs_htree_has_idx(struct inode *);
+int ext2fs_htree_lookup(struct inode *, const char *, int, struct buf **,
+    int *, doff_t *, doff_t *, doff_t *, struct ext2fs_searchslot *);
+int ext2fs_htree_create_index(struct vnode *, struct componentname *,
+    struct ext2fs_direct *);
+int ext2fs_htree_add_entry(struct vnode *, struct ext2fs_direct *,
+    struct componentname *, size_t);
+
 __END_DECLS
 
 #define IS_EXT2_VNODE(vp)   (vp->v_tag == VT_EXT2FS)

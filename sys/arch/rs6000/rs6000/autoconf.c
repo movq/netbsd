@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 2007/12/17 19:09:41 garbled Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4 2012/07/29 18:05:47 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 2007/12/17 19:09:41 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2012/07/29 18:05:47 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +55,7 @@ extern char bootpath[256];
 
 /* STUB */
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	return;
 }
@@ -83,7 +76,7 @@ void
 cpu_rootconf(void)
 {
 	aprint_normal("boot device: %s\n",
-	    booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.30 2006/12/14 20:09:36 he Exp $	*/
+/*	$NetBSD: extern.h,v 1.39 2014/04/24 17:22:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,6 +42,7 @@
 #include <err.h> 
 #include <fts.h>
 #include <util.h>
+#include <stdbool.h>
 
 #if HAVE_NETDB_H
 /* For MAXHOSTNAMELEN on some platforms. */
@@ -52,27 +53,36 @@
 #define MAXHOSTNAMELEN 256
 #endif
 
+enum flavor {
+	F_MTREE,
+	F_FREEBSD9,
+	F_NETBSD6
+};
+
 void	 addtag(slist_t *, char *);
 int	 check_excludes(const char *, const char *);
 int	 compare(NODE *, FTSENT *);
 int	 crc(int, u_int32_t *, u_int32_t *);
-void	 cwalk(void);
-void	 dump_nodes(const char *, NODE *, int);
+void	 cwalk(FILE *);
+void	 dump_nodes(FILE *, const char *, NODE *, int);
 void	 init_excludes(void);
 int	 matchtags(NODE *);
-void	 mtree_err(const char *, ...)
-	    __attribute__((__format__(__printf__, 1, 2)));
+__dead __printflike(1,2) void	 mtree_err(const char *, ...);
 const char *nodetype(u_int);
 u_int	 parsekey(const char *, int *);
 void	 parsetags(slist_t *, char *);
 u_int	 parsetype(const char *);
 void	 read_excludes_file(const char *);
 const char *rlink(const char *);
-int	 verify(void);
+int	 verify(FILE *);
+void	 load_only(const char *fname);
+bool	 find_only(const char *path);
 
-extern int	dflag, eflag, iflag, lflag, mflag, rflag, sflag, tflag, uflag;
-extern int	mtree_Mflag, mtree_Wflag;
+extern int	bflag, dflag, eflag, iflag, jflag, lflag, mflag,
+		nflag, qflag, rflag, sflag, tflag, uflag;
+extern int	mtree_Mflag, mtree_Sflag, mtree_Wflag;
 extern size_t	mtree_lineno;
+extern enum flavor	flavor;
 extern u_int32_t crc_total;
 extern int	ftsoptions, keys;
 extern char	fullpath[];

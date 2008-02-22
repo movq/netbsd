@@ -1,4 +1,4 @@
-/* $NetBSD: spivar.h,v 1.3 2008/01/08 13:28:22 dogcow Exp $ */
+/* $NetBSD: spivar.h,v 1.6 2014/07/13 17:12:23 dholland Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -45,12 +45,11 @@
 #define	_DEV_SPI_SPIVAR_H_
 
 #include <sys/queue.h>
-#include <sys/simplelock.h>
 
 /*
  * Serial Peripheral Interface bus.  This is a 4-wire bus common for
  * connecting flash, clocks, sensors, and various other low-speed
- * peripherials.
+ * peripherals.
  */
 
 struct spi_handle;
@@ -109,7 +108,8 @@ struct spi_transfer {
 	int		st_slave;
 	void		*st_private;
 	void		(*st_done)(struct spi_transfer *);
-	struct simplelock	st_lock;
+	kmutex_t	st_lock;
+	kcondvar_t	st_cv;
 	void		*st_busprivate;
 };
 

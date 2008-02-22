@@ -1,4 +1,4 @@
-/*	$NetBSD: db_run.c,v 1.31 2007/09/23 23:55:55 martin Exp $	*/
+/*	$NetBSD: db_run.c,v 1.33 2014/09/19 17:29:01 matt Exp $	*/
 
 /*
  * Mach Operating System
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_run.c,v 1.31 2007/09/23 23:55:55 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_run.c,v 1.33 2014/09/19 17:29:01 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -197,7 +197,7 @@ db_restart_at_pc(db_regs_t *regs, bool watchpt)
 	if ((db_run_mode == STEP_COUNT) ||
 	    (db_run_mode == STEP_RETURN) ||
 	    (db_run_mode == STEP_CALLT)) {
-		db_expr_t		ins;
+		db_expr_t		ins __unused;
 
 		/*
 		 * We are about to execute this instruction,
@@ -344,6 +344,9 @@ db_continue_cmd(db_expr_t addr, bool have_addr,
  * bool inst_branch(int inst)
  * bool inst_call(int inst)
  *	returns true if the instruction might branch
+ *
+ * bool inst_return(int inst)
+ *	returns true is the instruction will return to its caller
  *
  * bool inst_unconditional_flow_transfer(int inst)
  *	returns true if the instruction is an unconditional

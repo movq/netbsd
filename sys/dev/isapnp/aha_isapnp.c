@@ -1,4 +1,4 @@
-/*	$NetBSD: aha_isapnp.c,v 1.13 2007/10/19 12:00:30 ad Exp $	*/
+/*	$NetBSD: aha_isapnp.c,v 1.20 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aha_isapnp.c,v 1.13 2007/10/19 12:00:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aha_isapnp.c,v 1.20 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,15 +53,14 @@ __KERNEL_RCSID(0, "$NetBSD: aha_isapnp.c,v 1.13 2007/10/19 12:00:30 ad Exp $");
 #include <dev/ic/ahareg.h>
 #include <dev/ic/ahavar.h>
 
-int	aha_isapnp_probe(struct device *, struct cfdata *, void *);
-void	aha_isapnp_attach(struct device *, struct device *, void *);
+static int	aha_isapnp_probe(device_t, cfdata_t, void *);
+static void	aha_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(aha_isapnp, sizeof(struct aha_softc),
+CFATTACH_DECL_NEW(aha_isapnp, sizeof(struct aha_softc),
     aha_isapnp_probe, aha_isapnp_attach, NULL, NULL);
 
 int
-aha_isapnp_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+aha_isapnp_probe(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -79,18 +71,18 @@ aha_isapnp_probe(struct device *parent, struct cfdata *match,
 }
 
 void
-aha_isapnp_attach(struct device *parent, struct device *self, 
-    void *aux)
+aha_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct aha_softc *sc = device_private(self);
 	struct aha_probe_data apd;
 	struct isapnp_attach_args *ipa = aux;
 
+	sc->sc_dev = self;
+
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
@@ -99,32 +91,32 @@ aha_isapnp_attach(struct device *parent, struct device *self,
 	sc->sc_dmat = ipa->ipa_dmat;
 
 	if (!aha_find(sc->sc_iot, sc->sc_ioh, &apd)) {
-		printf("%s: aha_find failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "aha_find failed\n");
 		return;
 	}
 
 	if (ipa->ipa_ndrq == 0) {
 		if (apd.sc_drq != -1) {
-			printf("%s: no PnP drq, but card has one\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(self,
+			    "no PnP drq, but card has one\n");
 			return;
 		}
 	} else if (apd.sc_drq != ipa->ipa_drq[0].num) {
-		printf("%s: card drq # (%d) != PnP # (%d)\n",
-		    sc->sc_dev.dv_xname, apd.sc_drq, ipa->ipa_drq[0].num);
+		aprint_error_dev(self, "card drq # (%d) != PnP # (%d)\n",
+		    apd.sc_drq, ipa->ipa_drq[0].num);
 		return;
 	} else {
 		int error = isa_dmacascade(ipa->ipa_ic, ipa->ipa_drq[0].num);
 		if (error) {
-			printf("%s: unable to cascade DRQ, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(self,
+			    "unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	}
 
 	if (apd.sc_irq != ipa->ipa_irq[0].num) {
-		printf("%s: card irq # (%d) != PnP # (%d)\n",
-		    sc->sc_dev.dv_xname, apd.sc_irq, ipa->ipa_irq[0].num);
+		aprint_error_dev(self, "card irq # (%d) != PnP # (%d)\n",
+		    apd.sc_irq, ipa->ipa_irq[0].num);
 		return;
 	}
 
@@ -133,8 +125,7 @@ aha_isapnp_attach(struct device *parent, struct device *self,
 	    ipa->ipa_irq[0].type, IPL_BIO, aha_intr, sc);
 
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt\n");
 		return;
 	}
 

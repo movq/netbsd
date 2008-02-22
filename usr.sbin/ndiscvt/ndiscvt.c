@@ -35,7 +35,7 @@
 __FBSDID("$FreeBSD: src/usr.sbin/ndiscvt/ndiscvt.c,v 1.9.2.2 2005/02/23 16:31:47 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__RCSID("$NetBSD: ndiscvt.c,v 1.9 2006/05/28 11:33:56 jnemeth Exp $");
+__RCSID("$NetBSD: ndiscvt.c,v 1.12 2015/06/16 23:04:14 christos Exp $");
 #endif
 
 
@@ -110,7 +110,7 @@ int insert_padding(imgbase, imglen)
         image_dos_header	*dos_hdr;
         image_nt_header		*nt_hdr;
 	image_optional_header	opt_hdr;
-        int			i = 0, sections, curlen = 0;
+        int			i = 0, sections;
 	int			offaccum = 0, oldraddr, oldrlen;
 	uint8_t			*newimg, *tmp;
 
@@ -120,7 +120,6 @@ int insert_padding(imgbase, imglen)
 		return(ENOMEM);
 
 	bcopy(*imgbase, newimg, *imglen);
-	curlen = *imglen;
 
 	if (pe_get_optional_header((vm_offset_t)newimg, &opt_hdr))
 		return(0);
@@ -164,7 +163,7 @@ int insert_padding(imgbase, imglen)
 	return(0);
 }
 
-static void
+__dead static void
 usage(void)
 {
 	fprintf(stderr, "Usage: %s [-O] [-i <inffile>] -s <sysfile> "
@@ -239,7 +238,7 @@ bincvt(char *sysfile, char *outfile, void *img, int fsize)
 	return;
 }
    
-static void
+__dead static void
 firmcvt(char *firmfile)
 {
 	char			*basefile, *outfile, *ptr;
@@ -362,8 +361,7 @@ main(int argc, char *argv[])
 	fp = NULL;
 
 	if (insert_padding(&img, &fsize)) {
-		fprintf(stderr, "section relocation failed\n");
-		exit(1);
+		errx(1, "section relocation failed");
 	}
 
 	if (outfile == NULL || strcmp(outfile, "-") == 0)

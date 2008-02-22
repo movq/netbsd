@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkey_dump.c,v 1.16 2007/07/18 12:07:50 vanhu Exp $	*/
+/*	$NetBSD: pfkey_dump.c,v 1.24 2018/05/28 20:45:38 maxv Exp $	*/
 
 /*	$KAME: pfkey_dump.c,v 1.45 2003/09/08 10:14:56 itojun Exp $	*/
 
@@ -105,12 +105,12 @@ do { \
 		printf("%u ", (num)); \
 } while (/*CONSTCOND*/0)
 
-static char *str_ipaddr __P((struct sockaddr *));
-static char *str_ipport __P((struct sockaddr *));
-static char *str_prefport __P((u_int, u_int, u_int, u_int));
-static void str_upperspec __P((u_int, u_int, u_int));
-static char *str_time __P((time_t));
-static void str_lifetime_byte __P((struct sadb_lifetime *, char *));
+static const char *str_ipaddr(struct sockaddr *);
+static const char *str_ipport(struct sockaddr *);
+static const char *str_prefport(u_int, u_int, u_int, u_int);
+static void str_upperspec(u_int, u_int, u_int);
+static char *str_time(time_t);
+static void str_lifetime_byte(struct sadb_lifetime *, const char *);
 static void pfkey_sadump1(struct sadb_msg *, int);
 static void pfkey_spdump1(struct sadb_msg *, int);
 
@@ -122,7 +122,7 @@ struct val2str {
 /*
  * Must to be re-written about following strings.
  */
-static char *str_satype[] = {
+static const char *str_satype[] = {
 	"unspec",
 	"unknown",
 	"ah",
@@ -137,13 +137,13 @@ static char *str_satype[] = {
 	"tcp",
 };
 
-static char *str_mode[] = {
+static const char *str_mode[] = {
 	"any",
 	"transport",
 	"tunnel",
 };
 
-static char *str_state[] = {
+static const char *str_state[] = {
 	"larval",
 	"mature",
 	"dying",
@@ -197,6 +197,12 @@ static struct val2str str_alg_enc[] = {
 #ifdef SADB_X_EALG_AESCTR
 	{ SADB_X_EALG_AESCTR, "aes-ctr", },
 #endif
+#ifdef SADB_X_EALG_AESGCM16
+	{ SADB_X_EALG_AESGCM16, "aes-gcm-16", },
+#endif
+#ifdef SADB_X_EALG_AESGMAC
+	{ SADB_X_EALG_AESGMAC, "aes-gmac", },
+#endif
 #ifdef SADB_X_EALG_CAMELLIACBC
 	{ SADB_X_EALG_CAMELLIACBC, "camellia-cbc", },
 #endif
@@ -216,23 +222,19 @@ static struct val2str str_alg_comp[] = {
  */
 
 void
-pfkey_sadump(m)
-	struct sadb_msg *m;
+pfkey_sadump(struct sadb_msg *m)
 {
 	pfkey_sadump1(m, 0);
 }
 
 void
-pfkey_sadump_withports(m)
-	struct sadb_msg *m;
+pfkey_sadump_withports(struct sadb_msg *m)
 {
 	pfkey_sadump1(m, 1);
 }
 
 void
-pfkey_sadump1(m, withports)
-	struct sadb_msg *m;
-	int withports;
+pfkey_sadump1(struct sadb_msg *m, int withports)
 {
 	caddr_t mhp[SADB_EXT_MAX + 1];
 	struct sadb_sa *m_sa;
@@ -254,6 +256,9 @@ pfkey_sadump1(m, withports)
 	struct sadb_x_nat_t_type *natt_type;
 	struct sadb_x_nat_t_port *natt_sport, *natt_dport;
 	struct sadb_address *natt_oa;
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	struct sadb_x_nat_t_frag *esp_frag;
+#endif
 
 	int use_natt = 0;
 #endif
@@ -294,6 +299,9 @@ pfkey_sadump1(m, withports)
 	natt_sport = (void *)mhp[SADB_X_EXT_NAT_T_SPORT];
 	natt_dport = (void *)mhp[SADB_X_EXT_NAT_T_DPORT];
 	natt_oa = (void *)mhp[SADB_X_EXT_NAT_T_OA];
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	esp_frag = (void *)mhp[SADB_X_EXT_NAT_T_FRAG];
+#endif
 
 	if (natt_type && natt_type->sadb_x_nat_t_type_type)
 		use_natt = 1;
@@ -365,6 +373,11 @@ pfkey_sadump1(m, withports)
 	if (use_natt && natt_oa)
 		printf("\tNAT OA=%s\n",
 		       str_ipaddr((void *)(natt_oa + 1)));
+
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	if (use_natt && esp_frag && esp_frag->sadb_x_nat_t_frag_fraglen != 0)
+		printf("\tNAT-T esp_frag=%u\n", esp_frag->sadb_x_nat_t_frag_fraglen);
+#endif
 #endif
 
 	/* encryption key */
@@ -467,23 +480,19 @@ pfkey_sadump1(m, withports)
 }
 
 void
-pfkey_spdump(m)
-	struct sadb_msg *m;
+pfkey_spdump(struct sadb_msg *m)
 {
 	pfkey_spdump1(m, 0);
 }
 
 void
-pfkey_spdump_withports(m)
-	struct sadb_msg *m;
+pfkey_spdump_withports(struct sadb_msg *m)
 {
 	pfkey_spdump1(m, 1);
 }
 
 static void
-pfkey_spdump1(m, withports)
-	struct sadb_msg *m;
-	int withports;
+pfkey_spdump1(struct sadb_msg *m, int withports)
 {
 	char pbuf[NI_MAXSERV];
 	caddr_t mhp[SADB_EXT_MAX + 1];
@@ -652,9 +661,8 @@ pfkey_spdump1(m, withports)
 /*
  * set "ipaddress" to buffer.
  */
-static char *
-str_ipaddr(sa)
-	struct sockaddr *sa;
+static const char *
+str_ipaddr(struct sockaddr *sa)
 {
 	static char buf[NI_MAXHOST];
 	const int niflag = NI_NUMERICHOST;
@@ -671,9 +679,8 @@ str_ipaddr(sa)
 /*
  * set "port" to buffer.
  */
-static char *
-str_ipport(sa)
-	struct sockaddr *sa;
+static const char *
+str_ipport(struct sockaddr *sa)
 {
 	static char buf[NI_MAXHOST];
 	const int niflag = NI_NUMERICSERV;
@@ -691,9 +698,8 @@ str_ipport(sa)
 /*
  * set "/prefix[port number]" to buffer.
  */
-static char *
-str_prefport(family, pref, port, ulp)
-	u_int family, pref, port, ulp;
+static const char *
+str_prefport(u_int family, u_int pref, u_int port, u_int ulp)
 {
 	static char buf[128];
 	char prefbuf[128];
@@ -716,13 +722,19 @@ str_prefport(family, pref, port, ulp)
 	else
 		snprintf(prefbuf, sizeof(prefbuf), "/%u", pref);
 
-	if (ulp == IPPROTO_ICMPV6)
+	switch (ulp) {
+	case IPPROTO_ICMP:
+	case IPPROTO_ICMPV6:
+	case IPPROTO_MH:
+	case IPPROTO_GRE:
 		memset(portbuf, 0, sizeof(portbuf));
-	else {
+		break;
+	default:
 		if (port == IPSEC_PORT_ANY)
-			snprintf(portbuf, sizeof(portbuf), "[%s]", "any");
+			strcpy(portbuf, "[any]");
 		else
 			snprintf(portbuf, sizeof(portbuf), "[%u]", port);
+		break;
 	}
 
 	snprintf(buf, sizeof(buf), "%s%s", prefbuf, portbuf);
@@ -731,32 +743,28 @@ str_prefport(family, pref, port, ulp)
 }
 
 static void
-str_upperspec(ulp, p1, p2)
-	u_int ulp, p1, p2;
+str_upperspec(u_int ulp, u_int p1, u_int p2)
 {
-	if (ulp == IPSEC_ULPROTO_ANY)
-		printf("any");
-	else if (ulp == IPPROTO_ICMPV6) {
-		printf("icmp6");
-		if (!(p1 == IPSEC_PORT_ANY && p2 == IPSEC_PORT_ANY))
-			printf(" %u,%u", p1, p2);
-	} else {
-		struct protoent *ent;
+	struct protoent *ent;
 
-		switch (ulp) {
-		case IPPROTO_IPV4:
-			printf("ip4");
-			break;
-		default:
-			ent = getprotobynumber((int)ulp);
-			if (ent)
-				printf("%s", ent->p_name);
-			else
-				printf("%u", ulp);
+	ent = getprotobynumber((int)ulp);
+	if (ent)
+		printf("%u(%s)", ulp, ent->p_name);
+	else
+		printf("%u", ulp);
 
-			endprotoent();
-			break;
-		}
+	if (p1 == IPSEC_PORT_ANY && p2 == IPSEC_PORT_ANY)
+		return;
+
+	switch (ulp) {
+	case IPPROTO_ICMP:
+	case IPPROTO_ICMPV6:
+	case IPPROTO_MH:
+		printf(" %u,%u", p1, p2);
+		break;
+	case IPPROTO_GRE:
+		printf(" %u", (p1 << 16) + p2);
+		break;
 	}
 }
 
@@ -764,8 +772,7 @@ str_upperspec(ulp, p1, p2)
  * set "Mon Day Time Year" to buffer
  */
 static char *
-str_time(t)
-	time_t t;
+str_time(time_t t)
 {
 	static char buf[128];
 
@@ -774,8 +781,10 @@ str_time(t)
 		for (;i < 20;) buf[i++] = ' ';
 	} else {
 		char *t0;
-		t0 = ctime(&t);
-		memcpy(buf, t0 + 4, 20);
+		if ((t0 = ctime(&t)) == NULL)
+			memset(buf, '?', 20);
+		else
+			memcpy(buf, t0 + 4, 20);
 	}
 
 	buf[20] = '\0';
@@ -784,12 +793,10 @@ str_time(t)
 }
 
 static void
-str_lifetime_byte(x, str)
-	struct sadb_lifetime *x;
-	char *str;
+str_lifetime_byte(struct sadb_lifetime *x, const char *str)
 {
 	double y;
-	char *unit;
+	const char *unit;
 	int w;
 
 	if (x == NULL) {

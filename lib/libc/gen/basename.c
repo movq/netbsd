@@ -1,4 +1,4 @@
-/*	$NetBSD: basename.c,v 1.5 2002/10/17 02:06:04 thorpej Exp $	*/
+/*	$NetBSD: basename.c,v 1.11 2014/07/16 10:52:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,11 +31,13 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: basename.c,v 1.5 2002/10/17 02:06:04 thorpej Exp $");
+__RCSID("$NetBSD: basename.c,v 1.11 2014/07/16 10:52:26 christos Exp $");
 #endif /* !LIBC_SCCS && !lint */
 
 #include "namespace.h"
+#include <sys/param.h>
 #include <libgen.h>
+#include <string.h>
 #include <limits.h>
 #include <string.h>
 
@@ -50,41 +45,57 @@ __RCSID("$NetBSD: basename.c,v 1.5 2002/10/17 02:06:04 thorpej Exp $");
 __weak_alias(basename,_basename)
 #endif
 
-#if !HAVE_BASENAME
-char *
-basename(path)
-	char *path;
+static size_t
+xbasename_r(const char *path, char *buf, size_t buflen)
 {
-	static char singledot[] = ".";
-	static char result[PATH_MAX];
-	char *p, *lastp;
+	const char *startp, *endp;
 	size_t len;
 
 	/*
 	 * If `path' is a null pointer or points to an empty string,
 	 * return a pointer to the string ".".
 	 */
-	if ((path == NULL) || (*path == '\0'))
-		return (singledot);
+	if (path == NULL || *path == '\0') {
+		startp = ".";
+		len = 1;
+		goto out;
+	}
 
 	/* Strip trailing slashes, if any. */
-	lastp = path + strlen(path) - 1;
-	while (lastp != path && *lastp == '/')
-		lastp--;
+	endp = path + strlen(path) - 1;
+	while (endp != path && *endp == '/')
+		endp--;
+
+	/* Only slashes -> "/" */
+	if (endp == path && *endp == '/') {
+		startp = "/";
+		len = 1;
+		goto out;
+	}
 
 	/* Now find the beginning of this (final) component. */
-	p = lastp;
-	while (p != path && *(p - 1) != '/')
-		p--;
+	for (startp = endp; startp > path && *(startp - 1) != '/'; startp--)
+		continue;
 
 	/* ...and copy the result into the result buffer. */
-	len = (lastp - p) + 1 /* last char */;
-	if (len > (PATH_MAX - 1))
-		len = PATH_MAX - 1;
-
-	memcpy(result, p, len);
-	result[len] = '\0';
-
-	return (result);
+	len = (endp - startp) + 1 /* last char */;
+out:
+	if (buf != NULL && buflen != 0) {
+		buflen = MIN(len, buflen - 1);
+		memcpy(buf, startp, buflen);
+		buf[buflen] = '\0';
+	}
+	return len;
 }
+
+#if !HAVE_BASENAME
+
+char *
+basename(char *path) {
+	static char result[PATH_MAX];
+
+	(void)xbasename_r(path, result, sizeof(result));
+	return result;
+}
+
 #endif

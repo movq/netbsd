@@ -1,4 +1,4 @@
-#       $NetBSD: MAKEDEV2manpage.awk,v 1.11 2005/05/17 14:01:41 wiz Exp $
+#       $NetBSD: MAKEDEV2manpage.awk,v 1.13 2010/03/23 19:19:03 jakllsch Exp $
 #
 # Copyright (c) 2002
 #	Dieter Baron <dillo@NetBSD.org>.  All rights reserved.

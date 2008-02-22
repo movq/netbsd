@@ -1,4 +1,4 @@
-/*	$NetBSD: quiz.c,v 1.22 2007/12/15 19:44:42 perry Exp $	*/
+/*	$NetBSD: quiz.c,v 1.27 2014/03/23 00:07:15 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -35,15 +35,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)quiz.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: quiz.c,v 1.22 2007/12/15 19:44:42 perry Exp $");
+__RCSID("$NetBSD: quiz.c,v 1.27 2014/03/23 00:07:15 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,23 +62,20 @@ __RCSID("$NetBSD: quiz.c,v 1.22 2007/12/15 19:44:42 perry Exp $");
 
 static QE qlist;
 static int catone, cattwo, tflag;
-static u_int qsize;
+static unsigned qsize;
 
-char	*appdstr(char *, const char *, size_t);
-void	 downcase(char *);
-void	 get_cats(char *, char *);
-void	 get_file(const char *);
-int	 main(int, char *[]);
-const char	*next_cat(const char *);
-void	 quiz(void);
-void	 score(u_int, u_int, u_int);
-void	 show_index(void);
-void	 usage(void) __dead;
+static char *appdstr(char *, const char *, size_t);
+static void downcase(char *);
+static void get_cats(char *, char *);
+static void get_file(const char *);
+static const char *next_cat(const char *);
+static void quiz(void);
+static void score(unsigned, unsigned, unsigned);
+static void show_index(void);
+static void usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch;
 	const char *indexfile;
@@ -118,9 +115,8 @@ main(argc, argv)
 	exit(0);
 }
 
-void
-get_file(file)
-	const char *file;
+static void
+get_file(const char *file)
 {
 	FILE *fp;
 	QE *qp;
@@ -158,8 +154,8 @@ get_file(file)
 	(void)fclose(fp);
 }
 
-void
-show_index()
+static void
+show_index(void)
 {
 	QE *qp;
 	const char *p, *s;
@@ -191,9 +187,8 @@ show_index()
 	(void)pclose(pf);
 }
 
-void
-get_cats(cat1, cat2)
-	char *cat1, *cat2;
+static void
+get_cats(char *cat1, char *cat2)
 {
 	QE *qp;
 	int i;
@@ -224,14 +219,14 @@ get_cats(cat1, cat2)
 	errx(1, "invalid categories");
 }
 
-void
-quiz()
+static void
+quiz(void)
 {
 	QE *qp;
 	int i;
 	size_t len;
-	u_int guesses, rights, wrongs;
-	int next;
+	unsigned guesses, rights, wrongs;
+	unsigned next, j;
 	char *answer, *t, question[LINE_SZ];
 	const char *s;
 
@@ -242,7 +237,7 @@ quiz()
 			break;
 		next = random() % qsize;
 		qp = qlist.q_next;
-		for (i = 0; i < next; i++)
+		for (j = 0; j < next; j++)
 			qp = qp->q_next;
 		while (qp && qp->q_answered)
 			qp = qp->q_next;
@@ -307,9 +302,8 @@ quiz()
 	score(rights, wrongs, guesses);
 }
 
-const char *
-next_cat(s)
-	const char *	s;
+static const char *
+next_cat(const char *s)
 {
 	int esc;
 
@@ -331,11 +325,8 @@ next_cat(s)
 	/* NOTREACHED */
 }
 
-char *
-appdstr(s, tp, len)
-	char *s;
-	const char *tp;
-	size_t len;
+static char *
+appdstr(char *s, const char *tp, size_t len)
 {
 	char *mp;
 	const char *sp;
@@ -358,9 +349,8 @@ appdstr(s, tp, len)
 	return (m);
 }
 
-void
-score(r, w, g)
-	u_int r, w, g;
+static void
+score(unsigned r, unsigned w, unsigned g)
 {
 	(void)printf("Rights %d, wrongs %d,", r, w);
 	if (g)
@@ -368,9 +358,8 @@ score(r, w, g)
 	(void)printf(" score %d%%\n", (r + w + g) ? r * 100 / (r + w + g) : 0);
 }
 
-void
-downcase(p)
-	char *p;
+static void
+downcase(char *p)
 {
 	int ch;
 
@@ -379,8 +368,8 @@ downcase(p)
 			*p = tolower(ch);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr, "quiz [-t] [-i file] category1 category2\n");
 	exit(1);

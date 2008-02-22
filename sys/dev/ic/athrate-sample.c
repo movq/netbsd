@@ -1,4 +1,4 @@
-/*	$NetBSD: athrate-sample.c,v 1.14 2008/01/04 21:17:57 ad Exp $ */
+/*	$NetBSD: athrate-sample.c,v 1.19 2012/11/08 20:43:55 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2005 John Bicket
@@ -41,14 +41,16 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/ath_rate/sample/sample.c,v 1.9 2005/07/22 16:50:17 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: athrate-sample.c,v 1.14 2008/01/04 21:17:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athrate-sample.c,v 1.19 2012/11/08 20:43:55 dyoung Exp $");
 #endif
 
 
 /*
  * John Bicket's SampleRate control algorithm.
  */
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -74,9 +76,9 @@ __KERNEL_RCSID(0, "$NetBSD: athrate-sample.c,v 1.14 2008/01/04 21:17:57 ad Exp $
 #include <netinet/in.h> 
 #endif
 
+#include "ah_desc.h"
 #include <dev/ic/athvar.h>
 #include <dev/ic/athrate-sample.h>
-#include <contrib/dev/ath/ah_desc.h>
 
 #define	SAMPLE_DEBUG
 #ifdef SAMPLE_DEBUG
@@ -349,7 +351,7 @@ ath_rate_findrate(struct ath_softc *sc, struct ath_node *an,
 		}
 	}
 
-	KASSERT(ndx >= 0 && ndx < sn->num_rates, ("ndx is %d", ndx));
+	KASSERTMSG(ndx >= 0 && ndx < sn->num_rates, "ndx is %d", ndx);
 
 	*rix = sn->rates[ndx].rix;
 	if (shortPreamble) {
@@ -652,7 +654,7 @@ ath_rate_ctl_reset(struct ath_softc *sc, struct ieee80211_node *ni)
 	const HAL_RATE_TABLE *rt = sc->sc_currates;
 	int x, y, srate;
 
-	KASSERT(rt != NULL, ("no rate table, mode %u", sc->sc_curmode));
+	KASSERTMSG(rt != NULL, "no rate table, mode %u", sc->sc_curmode);
         sn->static_rate_ndx = -1;
 	if (ic->ic_fixed_rate != IEEE80211_FIXED_RATE_NONE) {
 		/*
@@ -669,8 +671,8 @@ ath_rate_ctl_reset(struct ath_softc *sc, struct ieee80211_node *ni)
 		srate = ni->ni_rates.rs_nrates - 1;
 		for (; srate >= 0 && RATE(srate) != r; srate--)
 			;
-		KASSERT(srate >= 0,
-			("fixed rate %d not in rate set", ic->ic_fixed_rate));
+		KASSERTMSG(srate >= 0,
+			"fixed rate %d not in rate set", ic->ic_fixed_rate);
                 sn->static_rate_ndx = srate;
 	}
 
@@ -773,7 +775,7 @@ ath_rate_sysctlattach(struct ath_softc *sc, struct sample_softc *osc)
 	struct sysctllog **log = &sc->sc_sysctllog;
 	const struct sysctlnode *cnode, *rnode;
 
-	if ((rnode = ath_sysctl_instance(sc->sc_dev.dv_xname, log)) == NULL)
+	if ((rnode = ath_sysctl_instance(device_xname(sc->sc_dev), log)) == NULL)
 		return;
 
 	/* XXX bounds check [0..100] */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: mt.4,v 1.10 2003/08/07 10:31:13 agc Exp $
+.\"	$NetBSD: mt.4,v 1.16 2017/08/01 11:11:37 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)mt.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd February 17, 2017
 .Dt MT 4 vax
 .Os
 .Sh NAME
@@ -59,42 +59,38 @@ and autoloads tapes.
 An attempt was made to write on the tape drive
 when no write ring was present; this message is written on the terminal of
 the user who tried to access the tape.
-.Pp
 .It mu%d: not online.
 An attempt was made to access the tape while it
 was offline; this message is written on the terminal of the user
 who tried to access the tape.
-.Pp
 .It "mu%d: can't change density in mid-tape."
 An attempt was made to write
 on a tape at a different density than is already recorded on the tape.
 This message is written on the terminal of the user who tried to switch
 the density.
-.Pp
 .It "mu%d: hard error bn%d mbsr=%b er=%x ds=%b."
 A tape error occurred
 at block
 .Em bn ;
 the mt error register and drive status register are
-printed in octal with the bits symbolically decoded.  Any error is
+printed in octal with the bits symbolically decoded.
+Any error is
 fatal on non-raw tape; when possible the driver will have retried
 the operation which failed several times before reporting the error.
-.Pp
 .It mu%d: blank tape.
 An attempt was made to read a blank tape (a tape without even
 end-of-file marks).
-.Pp
 .It mu%d: offline.
-During an i/o operation the device was set offline.  If a
-non-raw tape was used in the access it is closed.
+During an i/o operation the device was set offline.
+If a non-raw tape was used in the access it is closed.
 .El
 .Sh SEE ALSO
 .Xr mt 1 ,
 .Xr tar 1 ,
 .Xr mtio 4 ,
-.Xr tm 4 ,
-.Xr ts 4 ,
-.Xr ut 4
+.Xr vax/tm 4 ,
+.Xr vax/ts 4 ,
+.Xr vax/ut 4
 .Sh HISTORY
 The
 .Nm

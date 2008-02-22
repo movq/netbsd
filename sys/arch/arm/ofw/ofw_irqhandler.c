@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_irqhandler.c,v 1.13 2008/01/06 03:45:27 matt Exp $	*/
+/*	$NetBSD: ofw_irqhandler.c,v 1.21 2014/09/21 15:47:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,16 +42,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_irqhandler.c,v 1.13 2008/01/06 03:45:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_irqhandler.c,v 1.21 2014/09/21 15:47:29 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/intr.h>
+#include <sys/intr.h>
 #include <machine/irqhandler.h>
 #include <machine/cpu.h>
 
@@ -60,15 +58,12 @@ irqhandler_t *irqhandlers[NIRQS];
 u_int current_mask;
 u_int actual_mask;
 u_int disabled_mask;
-u_int irqmasks[IPL_LEVELS];
-extern u_int intrcnt[];
-
-extern char *_intrnames;
+u_int irqmasks[NIPL];
 
 /* Prototypes */
 
-int podule_irqhandler		__P((void));
-extern void set_spl_masks	__P((void));
+int podule_irqhandler(void);
+extern void set_spl_masks(void);
 
 /*
  * void irq_init(void)
@@ -77,7 +72,7 @@ extern void set_spl_masks	__P((void));
  */
 
 void
-irq_init()
+irq_init(void)
 {
 	int loop;
 
@@ -91,7 +86,7 @@ irq_init()
 	 * We will start with no bits set and these will be updated as handlers
 	 * are installed at different IPL's.
 	 */
-	for (loop = 0; loop < IPL_LEVELS; ++loop)
+	for (loop = 0; loop < NIPL; ++loop)
 		irqmasks[loop] = 0;
 
 	current_mask = 0x00000000;
@@ -112,11 +107,7 @@ irq_init()
  */
 
 int
-irq_claim(irq, handler, group, name)
-	int irq;
-	irqhandler_t *handler;
-	const char *group;
-	const char *name;
+irq_claim(int irq, irqhandler_t *handler, const char *group, const char *name)
 {
 	int level;
 
@@ -140,7 +131,7 @@ irq_claim(irq, handler, group, name)
 		return(-1);
 
 	/* Make sure the level is valid */
-	if (handler->ih_level < 0 || handler->ih_level >= IPL_LEVELS)
+	if (handler->ih_level < 0 || handler->ih_level >= NIPL)
     	        return(-1);
 
 	evcnt_attach_dynamic(&handler->ih_ev, EVCNT_TYPE_INTR, NULL,
@@ -170,7 +161,7 @@ irq_claim(irq, handler, group, name)
 	 * If ih_level is out of range then don't bother to update
 	 * the masks.
 	 */
-	if (handler->ih_level >= 0 && handler->ih_level < IPL_LEVELS) {
+	if (handler->ih_level >= 0 && handler->ih_level < NIPL) {
 		irqhandler_t *ptr;
 
 		/*
@@ -213,9 +204,7 @@ irq_claim(irq, handler, group, name)
  */
 
 int
-irq_release(irq, handler)
-	int irq;
-	irqhandler_t *handler;
+irq_release(int irq, irqhandler_t *handler)
 {
 	int level;
 	irqhandler_t *irqhand;
@@ -259,11 +248,11 @@ irq_release(irq, handler)
 	 * If ih_level is out of range then don't bother to update
 	 * the masks.
 	 */
-	if (handler->ih_level >= 0 && handler->ih_level < IPL_LEVELS) {
+	if (handler->ih_level >= 0 && handler->ih_level < NIPL) {
 		irqhandler_t *ptr;
 
 		/* Clean the bit from all the masks */
-		for (level = 0; level < IPL_LEVELS; ++level)
+		for (level = 0; level < NIPL; ++level)
 			irqmasks[level] &= ~(1 << irq);
 
 		/*
@@ -299,13 +288,7 @@ irq_release(irq, handler)
 
 
 void *
-intr_claim(irq, level, ih_func, ih_arg, group, name)
-	int irq;
-	int level;
-	int (*ih_func) __P((void *));
-	void *ih_arg;
-	const char *group;
-	const char *name;
+intr_claim(int irq, int level, int (*ih_func)(void *), void *ih_arg, const char *group, const char *name)
 {
 	irqhandler_t *ih;
 
@@ -318,15 +301,16 @@ intr_claim(irq, level, ih_func, ih_arg, group, name)
 	ih->ih_arg = ih_arg;
 	ih->ih_flags = 0;
 
-	if (irq_claim(irq, ih, group, name) != 0)
+	if (irq_claim(irq, ih, group, name) != 0) {
+		free(ih, M_DEVBUF);
 		return(NULL);
+	}
 	return(ih);
 }
 
 
 int
-intr_release(arg)
-	void *arg;
+intr_release(void *arg)
 {
 	irqhandler_t *ih = (irqhandler_t *)arg;
 
@@ -345,8 +329,7 @@ intr_release(arg)
  */
 
 void
-disable_irq(irq)
-	int irq;
+disable_irq(int irq)
 {
 	register int oldirqstate; 
 
@@ -366,8 +349,7 @@ disable_irq(irq)
  */
 
 void
-enable_irq(irq)
-	int irq;
+enable_irq(int irq)
 {
 	register u_int oldirqstate; 
 
@@ -388,8 +370,7 @@ enable_irq(irq)
 void	stray_irqhandler(u_int);	/* called from assembly */
 
 void
-stray_irqhandler(mask)
-	u_int mask;
+stray_irqhandler(u_int mask)
 {
 	static u_int stray_irqs = 0;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: test.c,v 1.2 2004/01/05 23:23:38 jmmv Exp $	*/
+/*	$NetBSD: test.c,v 1.4 2011/08/30 20:29:41 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: test.c,v 1.2 2004/01/05 23:23:38 jmmv Exp $");
+__RCSID("$NetBSD: test.c,v 1.4 2011/08/30 20:29:41 joerg Exp $");
 #endif
 
 #include <stdio.h>
@@ -52,12 +45,8 @@ __RCSID("$NetBSD: test.c,v 1.2 2004/01/05 23:23:38 jmmv Exp $");
 /* Default timeout can be changed using clnt_control() */
 static struct timeval TIMEOUT = {25, 0};
 
-int main(int, char *[]);
-
 bp_whoami_res *
-bootparamproc_whoami_1(argp, clnt)
-	bp_whoami_arg *argp;
-	CLIENT *clnt;
+bootparamproc_whoami_1(bp_whoami_arg *argp, CLIENT *clnt)
 {
 	static bp_whoami_res res;
 	enum clnt_stat st;
@@ -73,10 +62,8 @@ bootparamproc_whoami_1(argp, clnt)
 }
 
 
-int 
-main(argc, argv)
-	int argc;
-	char **argv;
+int
+main(int argc, char **argv)
 {
 	CLIENT *cli;
 	bp_whoami_res *out;

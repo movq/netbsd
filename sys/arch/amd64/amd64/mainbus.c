@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.20 2007/12/09 20:27:43 jmcneill Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.38 2017/05/23 08:54:38 nonaka Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,13 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2007/12/09 20:27:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.38 2017/05/23 08:54:38 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
-#include <machine/bus.h>
+#include <sys/reboot.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcivar.h>
@@ -47,18 +47,19 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2007/12/09 20:27:43 jmcneill Exp $"
 #include "pci.h"
 #include "isa.h"
 #include "isadma.h"
-#include "acpi.h"
+#include "acpica.h"
 #include "ipmi.h"
 
 #include "opt_acpi.h"
 #include "opt_mpbios.h"
+#include "opt_pcifixup.h"
 
 #include <machine/cpuvar.h>
 #include <machine/i82093var.h>
 #include <machine/mpbiosvar.h>
 #include <machine/mpacpi.h>
 
-#if NACPI > 0
+#if NACPICA > 0
 #include <dev/acpi/acpivar.h>
 #endif
 
@@ -66,14 +67,24 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2007/12/09 20:27:43 jmcneill Exp $"
 #include <x86/ipmivar.h>
 #endif
 
+#if NPCI > 0
+#if defined(PCI_BUS_FIXUP)
+#include <arch/x86/pci/pci_bus_fixup.h>
+#if defined(PCI_ADDR_FIXUP)
+#include <arch/x86/pci/pci_addr_fixup.h>
+#endif
+#endif
+#include <arch/x86/pci/msipic.h>
+#endif
+
 /*
  * XXXfvdl ACPI
  */
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
@@ -83,7 +94,7 @@ union mainbus_attach_args {
 	struct pcibus_attach_args mba_pba;
 	struct isabus_attach_args mba_iba;
 	struct cpu_attach_args mba_caa;
-#if NACPI > 0
+#if NACPICA > 0
 	struct acpibus_attach_args mba_acpi;
 #endif
 	struct apic_attach_args aaa_caa;
@@ -99,15 +110,14 @@ union mainbus_attach_args {
 int	isa_has_been_seen;
 struct x86_isa_chipset x86_isa_chipset;
 #if NISA > 0
-struct isabus_attach_args mba_iba = {
-	"isa",
-	X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM,
-	&isa_bus_dma_tag,
-	&x86_isa_chipset
+static const struct isabus_attach_args mba_iba = {
+	._iba_busname = "isa",
+	.iba_dmat = &isa_bus_dma_tag,
+	.iba_ic = &x86_isa_chipset
 };
 #endif
 
-#if defined(MPBIOS) || NACPI > 0
+#if defined(MPBIOS) || NACPICA > 0
 struct mp_bus *mp_busses;
 int mp_nbus;
 struct mp_intr_map *mp_intrs;
@@ -116,11 +126,18 @@ int mp_nintr;
 int mp_isa_bus = -1;
 int mp_eisa_bus = -1;
 
-#ifdef MPVERBOSE
+bool acpi_present;
+bool mpacpi_active;
+
+# ifdef MPVERBOSE
+#  if MPVERBOSE > 0
+int mp_verbose = MPVERBOSE;
+#  else
 int mp_verbose = 1;
-#else
+#  endif
+# else
 int mp_verbose = 0;
-#endif
+# endif
 #endif
 
 
@@ -128,7 +145,7 @@ int mp_verbose = 0;
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
@@ -138,21 +155,20 @@ mainbus_match(struct device *parent, struct cfdata *match, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
-#if NPCI > 0
+#if NPCI > 0 || NACPICA > 0 || NIPMI > 0
 	union mainbus_attach_args mba;
 #endif
-#if NACPI > 0
-	int acpi_present = 0;
+#if NPCI > 0
+	int mode;
 #endif
 #ifdef MPBIOS
 	int mpbios_present = 0;
 #endif
-	int mpacpi_active = 0;
 	int numcpus = 0;
-#if NACPI > 0 || defined(MPBIOS)
-	int numioapics = 0;
+#if defined(PCI_BUS_FIXUP)
+	int pci_maxbus = 0;
 #endif
 
 	aprint_naive("\n");
@@ -163,25 +179,42 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 #if NPCI > 0
-	pci_mode = pci_mode_detect();
+	msipic_init();
+
+	/*
+	 * ACPI needs to be able to access PCI configuration space.
+	 */
+	mode = pci_mode_detect();
+#if defined(PCI_BUS_FIXUP)
+	if (mode != 0) {
+		pci_maxbus = pci_bus_fixup(NULL, 0);
+		aprint_debug("PCI bus max, after pci_bus_fixup: %i\n",
+		    pci_maxbus);
+#if defined(PCI_ADDR_FIXUP)
+		pciaddr.extent_port = NULL;
+		pciaddr.extent_mem = NULL;
+		pci_addr_fixup(NULL, pci_maxbus);
+#endif
+	}
+#endif
 #endif
 
-#if NACPI > 0
-	if (acpi_check(self, "acpibus"))
-		acpi_present = acpi_probe();
+#if NACPICA > 0
+	if ((boothowto & RB_MD2) == 0 && acpi_check(self, "acpibus"))
+		acpi_present = acpi_probe() != 0;
 	/*
 	 * First, see if the MADT contains CPUs, and possibly I/O APICs.
 	 * Building the interrupt routing structures can only
 	 * be done later (via a callback).
 	 */
 	if (acpi_present)
-		mpacpi_active = mpacpi_scan_apics(self, &numcpus, &numioapics);
+		mpacpi_active = mpacpi_scan_apics(self, &numcpus) != 0;
 #endif
 
 	if (!mpacpi_active) {
 #ifdef MPBIOS
 		if (mpbios_present)
-			mpbios_scan(self, &numcpus, &numioapics);
+			mpbios_scan(self, &numcpus);
 		else
 #endif
 		if (numcpus == 0) {
@@ -196,60 +229,66 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 
-#if NISADMA > 0 && NACPI > 0
+#if NISADMA > 0 && NACPICA > 0
 	/*
 	 * ACPI needs ISA DMA initialized before they start probing.
 	 */
-	isa_dmainit(&x86_isa_chipset, X86_BUS_SPACE_IO, &isa_bus_dma_tag,
+	isa_dmainit(&x86_isa_chipset, x86_bus_space_io, &isa_bus_dma_tag,
 	    self);
 #endif
 
-
-#if NACPI > 0
+#if NACPICA > 0
 	if (acpi_present) {
-		mba.mba_acpi.aa_iot = X86_BUS_SPACE_IO;
-		mba.mba_acpi.aa_memt = X86_BUS_SPACE_MEM;
+		mba.mba_acpi.aa_iot = x86_bus_space_io;
+		mba.mba_acpi.aa_memt = x86_bus_space_mem;
 		mba.mba_acpi.aa_pc = NULL;
 		mba.mba_acpi.aa_pciflags =
-		    PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+		    PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 		    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 		    PCI_FLAGS_MWI_OKAY;
 		mba.mba_acpi.aa_ic = &x86_isa_chipset;
+		mba.mba_acpi.aa_dmat = &pci_bus_dma_tag;
+		mba.mba_acpi.aa_dmat64 = &pci_bus_dma64_tag;
 		config_found_ia(self, "acpibus", &mba.mba_acpi, 0);
 	}
 #endif
 
 #if NIPMI > 0
 	memset(&mba.mba_ipmi, 0, sizeof(mba.mba_ipmi));
-	mba.mba_ipmi.iaa_iot = X86_BUS_SPACE_IO;
-	mba.mba_ipmi.iaa_memt = X86_BUS_SPACE_MEM;
+	mba.mba_ipmi.iaa_iot = x86_bus_space_io;
+	mba.mba_ipmi.iaa_memt = x86_bus_space_mem;
 	if (ipmi_probe(&mba.mba_ipmi))
 		config_found_ia(self, "ipmibus", &mba.mba_ipmi, 0);
 #endif
 
 #if NPCI > 0
-	if (pci_mode != 0) {
-		mba.mba_pba.pba_iot = X86_BUS_SPACE_IO;
-		mba.mba_pba.pba_memt = X86_BUS_SPACE_MEM;
+	if (mode != 0) {
+		int npcibus = 0;
+
+		mba.mba_pba.pba_iot = x86_bus_space_io;
+		mba.mba_pba.pba_memt = x86_bus_space_mem;
 		mba.mba_pba.pba_dmat = &pci_bus_dma_tag;
 		mba.mba_pba.pba_dmat64 = &pci_bus_dma64_tag;
 		mba.mba_pba.pba_pc = NULL;
-		mba.mba_pba.pba_flags = pci_bus_flags();
+		mba.mba_pba.pba_flags =
+		    PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
+		    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
+		    PCI_FLAGS_MWI_OKAY;
 		mba.mba_pba.pba_bus = 0;
 		mba.mba_pba.pba_bridgetag = NULL;
-#if NACPI > 0 && defined(ACPI_SCANPCI)
-		if (mpacpi_active)
-			mpacpi_scan_pci(self, &mba.mba_pba, pcibusprint);
-		else
+#if NACPICA > 0 && defined(ACPI_SCANPCI)
+		if (npcibus == 0 && mpacpi_active)
+			npcibus = mp_pci_scan(self, &mba.mba_pba, pcibusprint);
 #endif
 #if defined(MPBIOS) && defined(MPBIOS_SCANPCI)
-		if (mpbios_scanned != 0)
-			mpbios_scan_pci(self, &mba.mba_pba, pcibusprint);
-		else
+		if (npcibus == 0 && mpbios_scanned != 0)
+			npcibus = mp_pci_scan(self, &mba.mba_pba, pcibusprint);
 #endif
-		config_found_ia(self, "pcibus", &mba.mba_pba, pcibusprint);
+		if (npcibus == 0)
+			config_found_ia(self, "pcibus", &mba.mba_pba,
+			    pcibusprint);
 
-#if NACPI > 0
+#if NACPICA > 0
 		if (mp_verbose)
 			acpi_pci_link_state();
 #endif
@@ -258,8 +297,12 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 #if NISA > 0
-	if (isa_has_been_seen == 0)
-		config_found_ia(self, "isabus", &mba_iba, isabusprint);
+	if (isa_has_been_seen == 0) {
+		mba.mba_iba = mba_iba;
+		mba.mba_iba.iba_iot = x86_bus_space_io;
+		mba.mba_iba.iba_memt = x86_bus_space_mem;
+		config_found_ia(self, "isabus", &mba.mba_iba, isabusprint);
+	}
 #endif
 
 	if (!pmf_device_register(self, NULL, NULL))

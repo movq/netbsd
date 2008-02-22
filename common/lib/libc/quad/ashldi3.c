@@ -1,4 +1,4 @@
-/*	$NetBSD: ashldi3.c,v 1.1 2005/12/20 19:28:51 christos Exp $	*/
+/*	$NetBSD: ashldi3.c,v 1.3 2012/03/09 15:41:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)ashldi3.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: ashldi3.c,v 1.1 2005/12/20 19:28:51 christos Exp $");
+__RCSID("$NetBSD: ashldi3.c,v 1.3 2012/03/09 15:41:16 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,9 +49,7 @@ __RCSID("$NetBSD: ashldi3.c,v 1.1 2005/12/20 19:28:51 christos Exp $");
  * This is the same as logical shift left!
  */
 quad_t
-__ashldi3(a, shift)
-	quad_t a;
-	qshift_t shift;
+__ashldi3(quad_t a, qshift_t shift)
 {
 	union uu aa;
 
@@ -59,7 +57,7 @@ __ashldi3(a, shift)
 		return(a);
 	aa.q = a;
 	if (shift >= INT_BITS) {
-		aa.ul[H] = aa.ul[L] << (shift - INT_BITS);
+		aa.ul[H] = aa.ul[L] << (unsigned int)(shift - INT_BITS);
 		aa.ul[L] = 0;
 	} else {
 		aa.ul[H] = (aa.ul[H] << shift) |

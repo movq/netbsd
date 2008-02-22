@@ -1,4 +1,4 @@
-/*	$NetBSD: vme.c,v 1.13 2007/02/03 16:58:08 tsutsui Exp $	*/
+/*	$NetBSD: vme.c,v 1.17 2013/09/06 17:43:19 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.13 2007/02/03 16:58:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.17 2013/09/06 17:43:19 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,17 +70,17 @@ static const struct {
 	{ BUS_VME32D32, "A32/D32", PMAP_VME32, VME32_BASE, VME32_MASK },
 };
 
-static int  vme_match(struct device *, struct cfdata *, void *);
-static void vme_attach(struct device *, struct device *, void *);
+static int  vme_match(device_t, cfdata_t, void *);
+static void vme_attach(device_t, device_t, void *);
 
 struct vme_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
 	int		sc_bustype;
 };
 
-CFATTACH_DECL(vme, sizeof(struct vme_softc),
+CFATTACH_DECL_NEW(vme, sizeof(struct vme_softc),
     vme_match, vme_attach, NULL, NULL);
 
 static int vme_bus_map(bus_space_tag_t, bus_type_t, bus_addr_t, bus_size_t,
@@ -112,35 +105,37 @@ static struct sun68k_bus_space_tag vme_space_tag = {
 
 static struct sun68k_bus_dma_tag vme_dma_tag;
 
-static int 
-vme_match(struct device *parent, struct cfdata *cf, void *aux)
+static int
+vme_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	int unit;
 
 	if (cpu_has_vme == 0)
-		return (0);
+		return 0;
 
 	unit = cf->cf_unit;
 	if (unit >= VME_UNITS)
-		return (0);
+		return 0;
 
 	if (ca->ca_bustype != vme_info[unit].bustype)
-		return (0);
+		return 0;
 
-	return (1);
+	return 1;
 }
 
-static void 
-vme_attach(struct device *parent, struct device *self, void *args)
+static void
+vme_attach(device_t parent, device_t self, void *args)
 {
 	struct confargs *ca = aux;
-	struct vme_softc *sc = (void *)self;
+	struct vme_softc *sc = device_private(self);
 	struct confargs vmea;
 	int unit;
 
+	sc->sc_dev = self;
+
 	unit = device_unit(self);
-	printf(": (%s)\n", vme_info[unit].name);
+	aprint_normal(": (%s)\n", vme_info[unit].name);
 
 	sc->sc_bustag = ca->ca_bustag;
 	sc->sc_dmatag = ca->ca_dmatag;

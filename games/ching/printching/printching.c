@@ -1,4 +1,4 @@
-/*	$NetBSD: printching.c,v 1.2 2005/06/30 13:44:48 martin Exp $	*/
+/*	$NetBSD: printching.c,v 1.5 2011/08/31 16:24:55 plunky Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -38,15 +38,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ching.phx.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: printching.c,v 1.2 2005/06/30 13:44:48 martin Exp $");
+__RCSID("$NetBSD: printching.c,v 1.5 2011/08/31 16:24:55 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,12 +59,12 @@ __RCSID("$NetBSD: printching.c,v 1.2 2005/06/30 13:44:48 martin Exp $");
 #include "ching.h"
 #include "pathnames.h"
 
-int changes(void);
-int codem(int a);
-int doahex(void);
-void phx(int hexagram, int flag);
+static int changes(void);
+static int codem(int a);
+static int doahex(void);
+static void phx(int hexagram, int flag);
 
-struct {
+static const struct {
 	int	lines;		/* encoded value of lines */
 	int	trinum;		/* trigram number */
 } table[] = {
@@ -81,7 +81,7 @@ struct {
 /*
  * Gives hexagram number from two component trigrams.
  */
-int	crosstab[8][8] = {
+static const int crosstab[8][8] = {
 	{1,  34, 5,  26, 11, 9,  14, 43},
 	{25, 51, 3,  27, 24, 42, 21, 17},
 	{6,  40, 29, 4,  7,  59, 64, 47},
@@ -92,10 +92,10 @@ int	crosstab[8][8] = {
 	{10, 54, 60, 41, 19, 61, 38, 58}
 };
 
-int	trigrams[6];
-int	moving[6];
+static int trigrams[6];
+static int moving[6];
 
-FILE	*chingf;		/* stream to read the hexagram file */
+static FILE *chingf;		/* stream to read the hexagram file */
 
 /*ARGSUSED*/
 int
@@ -109,7 +109,7 @@ main(int argc, char **argv)
 		hexptr = fgets(hexstr, 6+1, stdin);
 	else
 		hexptr = argv[1];
-	if (hexptr == (char *)NULL || strlen(hexptr) != 6) {
+	if (hexptr == NULL || strlen(hexptr) != 6) {
 		fprintf(stderr, "What kind of a change is THAT?!?\n");
 		exit(1);
 	}
@@ -120,7 +120,7 @@ main(int argc, char **argv)
 		else
 			moving[i] = 0;
 	}
-	if ((chingf = fopen(_PATH_HEX, "r")) == (FILE *)NULL) {
+	if ((chingf = fopen(_PATH_HEX, "r")) == NULL) {
 		fprintf(stderr, "ching: can't read %s\n", _PATH_HEX);
 		exit(2);
 	}
@@ -133,7 +133,7 @@ main(int argc, char **argv)
 /*
  * Compute the hexagram number, given the trigrams.
  */
-int
+static int
 doahex(void)
 {
 	int lower, upper;	/* encoded values of lower and upper trigrams */
@@ -155,7 +155,7 @@ doahex(void)
  * Encode a trigram as a 3-digit number; the digits, from left to right,
  * represent the lines.  7 is a solid (yang) line, 8 is a broken (yin) line.
  */
-int
+static int
 codem(int a)
 {
 	int code, i;
@@ -187,7 +187,7 @@ codem(int a)
  * Compute the changes based on moving lines; return 1 if any lines moved,
  * 0 if no lines moved.
  */
-int
+static int
 changes(void)
 {
 	int cflag;
@@ -211,7 +211,7 @@ changes(void)
  * if flag is 0, print the entire source; if flag is 1, ignore the meanings
  * of the lines.
  */
-void
+static void
 phx(int hexagram, int flag)
 {
 	char textln[128+1];		/* buffer for text line */
@@ -227,7 +227,7 @@ phx(int hexagram, int flag)
 	 */
 	rewind(chingf);
 	for (;;) {
-		if (fgets(textln, sizeof(textln), chingf) == (char *)NULL) {
+		if (fgets(textln, sizeof(textln), chingf) == NULL) {
 			fprintf(stderr, "ching: Hexagram %d missing\n",
 			    hexagram);
 			exit(3);
@@ -251,7 +251,7 @@ phx(int hexagram, int flag)
 	 */
 	fputs(textln, stdout);
 	for (;;) {
-		if (fgets(textln, sizeof(textln), chingf) == (char *)NULL) {
+		if (fgets(textln, sizeof(textln), chingf) == NULL) {
 			fprintf(stderr, "ching: Hexagram %d malformed\n",
 			    hexagram);
 			exit(3);
@@ -295,7 +295,7 @@ phx(int hexagram, int flag)
 		else
 			allmoving = 0;
 		for (;;) {
-			if (fgets(textln, sizeof(textln), chingf) == (char *)NULL)
+			if (fgets(textln, sizeof(textln), chingf) == NULL)
 				break;
 			lp = &textln[0];
 			if (*lp++ == '.' && (*lp == 'L' || *lp == 'H')) {
@@ -315,7 +315,7 @@ phx(int hexagram, int flag)
 	if (*lp == 'A' && allmoving) {
 		fputs(textln, stdout);
 		for (;;) {
-			if (fgets(textln, sizeof(textln), chingf) == (char *)NULL)
+			if (fgets(textln, sizeof(textln), chingf) == NULL)
 				break;
 			lp = &textln[0];
 			if (*lp++ == '.' || *lp++ == 'H')

@@ -1,4 +1,4 @@
-/*	$NetBSD: icside.c,v 1.26 2006/10/09 21:12:44 bjh21 Exp $	*/
+/*	$NetBSD: icside.c,v 1.34 2017/10/20 07:06:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe
@@ -42,16 +42,16 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: icside.c,v 1.26 2006/10/09 21:12:44 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icside.c,v 1.34 2017/10/20 07:06:06 jdolecek Exp $");
 
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
-#include <machine/bus.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/icsidereg.h>
 
@@ -86,7 +86,6 @@ struct icside_softc {
 	struct ata_channel *sc_chp[ICSIDE_MAX_CHANNELS];
 	struct icside_channel {
 		struct ata_channel	ic_channel;	/* generic part */
-		struct ata_queue	ic_chqueue;	/* channel queue */
 		void			*ic_ih;		/* interrupt handler */
 		struct evcnt		ic_intrcnt;	/* interrupt count */
 		u_int			ic_irqaddr;	/* interrupt flag */
@@ -97,12 +96,12 @@ struct icside_softc {
 	struct wdc_regs sc_wdc_regs[ICSIDE_MAX_CHANNELS];
 };
 
-int	icside_probe(struct device *, struct cfdata *, void *);
-void	icside_attach(struct device *, struct device *, void *);
+int	icside_probe(device_t, cfdata_t, void *);
+void	icside_attach(device_t, device_t, void *);
 int	icside_intr(void *);
 void	icside_v6_shutdown(void *);
 
-CFATTACH_DECL(icside, sizeof(struct icside_softc),
+CFATTACH_DECL_NEW(icside, sizeof(struct icside_softc),
     icside_probe, icside_attach, NULL, NULL);
 
 /*
@@ -155,7 +154,7 @@ struct ide_version {
  */
 
 int
-icside_probe(struct device *parent, struct cfdata *cf, void *aux)
+icside_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct podule_attach_args *pa = (void *)aux;
 
@@ -169,9 +168,9 @@ icside_probe(struct device *parent, struct cfdata *cf, void *aux)
  */
 
 void
-icside_attach(struct device *parent, struct device *self, void *aux)
+icside_attach(device_t parent, device_t self, void *aux)
 {
-	struct icside_softc *sc = (void *)self;
+	struct icside_softc *sc = device_private(self);
 	struct podule_attach_args *pa = (void *)aux;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -189,6 +188,7 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_podule_number = pa->pa_podule_number;
 	sc->sc_podule = pa->pa_podule;
 	podules[sc->sc_podule_number].attached = 1;
@@ -199,7 +199,7 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 	iot = pa->pa_iot;
 	if (bus_space_map(iot, pa->pa_podule->fast_base +
 	    ID_REGISTER_OFFSET, ID_REGISTER_SPACE, 0, &ioh)) {
-		printf("%s: cannot map ID register\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map ID register\n");
 		return;
 	}
 
@@ -217,17 +217,17 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Report the version and name */
 	if (ide == NULL || ide->name == NULL) {
-		printf(": rev %d is unsupported\n", id);
+		aprint_error(": rev %d is unsupported\n", id);
 		return;
 	} else
-		printf(": %s\n", ide->name);
+		aprint_normal(": %s\n", ide->name);
 
 	if (ide->latchreg != -1) {
 		sc->sc_latchiot = pa->pa_iot;
 		if (bus_space_map(iot, pa->pa_podule->fast_base +
 			ide->latchreg, 1, 0, &sc->sc_latchioh)) {
-			printf("%s: cannot map latch register\n",
-			    self->dv_xname);
+			aprint_error_dev(self,
+			    "cannot map latch register\n");
 			return;
 		}
 		sc->sc_shutdownhook =
@@ -258,6 +258,7 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_wdcdev.sc_atac.atac_nchannels = ide->channels;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_pa = pa;
 
 	for (channel = 0; channel < ide->channels; ++channel) {
@@ -268,8 +269,6 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 
 		cp->ch_channel = channel;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
-		cp->ch_queue = &icp->ic_chqueue;
-		cp->ch_ndrive = 2;
 		wdr->cmd_iot = &sc->sc_tag;
 		wdr->ctl_iot = &sc->sc_tag;
 		if (ide->modspace)
@@ -285,7 +284,7 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 				i, i == 0 ? 4 : 1, &wdr->cmd_iohs[i]) != 0)
 				return;
 		}
-		wdc_init_shadow_regs(cp);
+		wdc_init_shadow_regs(wdr);
 		if (bus_space_map(iot, iobase + ide->auxregs[channel],
 		    AUX_REGISTER_SPACE, 0, &wdr->ctl_ioh))
 			return;
@@ -300,12 +299,11 @@ icside_attach(struct device *parent, struct device *self, void *aux)
 		icp->ic_irqaddr = pa->pa_podule->irq_addr;
 		icp->ic_irqmask = pa->pa_podule->irq_mask;
 		evcnt_attach_dynamic(&icp->ic_intrcnt, EVCNT_TYPE_INTR, NULL,
-		    self->dv_xname, "intr");
+		    device_xname(self), "intr");
 		icp->ic_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 		    icside_intr, icp, &icp->ic_intrcnt);
 		if (icp->ic_ih == NULL) {
-			printf("%s: Cannot claim interrupt %d\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+			aprint_error_dev(self, "Cannot claim interrupt %d\n",
 			    pa->pa_podule->interrupt);
 			continue;
 		}

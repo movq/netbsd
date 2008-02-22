@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep.OPENFIRMWARE,v 1.9 2007/12/14 21:15:59 pavel Exp $
+.\"	$NetBSD: prep.OPENFIRMWARE,v 1.19 2017/06/07 09:14:32 he Exp $
 .if \*[OF_VERSION_3] \{\
 .
 .Ss2 Updating your BootROM
@@ -15,9 +15,9 @@ The BootROM is what is first executed when you power on or reset your system.
 The BootROM then loads Open Firmware, which boots your operating system.
 .Pp
 Go to the
-.Sq "Apple Software Downloads"
-web site at
-.Lk http://www.info.apple.com/support/downloads.html
+.Sq "Apple Support Downloads"
+website at
+.Lk http://support.apple.com/downloads/
 and search for
 .Sq firmware
 and install the most recent version for your model. For most G3 and G4
@@ -67,13 +67,13 @@ Welcome to Open Firmware.
 To continue booting, type "mac-boot" and press return.
 To shut down, type "shut-down" and press return.
  ok
-0 \*>
+0 \*[Gt]
 .disp)
 .Pp
 Now, set your system to always stop at the Open Firmware prompt.
 .Pp
 .(disp
-.No 0 \*> Ic "setenv auto-boot? false
+.No 0 \*[Gt] Ic "setenv auto-boot? false
 .disp)
 .Pp
 Alternatively, if you are currently running
@@ -122,7 +122,7 @@ until you see some introductory text and the Open Firmware
 command prompt on your serial terminal:
 .Pp
 .(disp
-.No 0 \*>
+.No 0 \*[Gt]
 .disp)
 .Pp
 Your Apple Network Server's screen will remain black.
@@ -130,7 +130,7 @@ Your Apple Network Server's screen will remain black.
 Now, set your system to always stop at the Open Firmware prompt.
 .Pp
 .(disp
-.No 0 \*> Ic "setenv auto-boot? false
+.No 0 \*[Gt] Ic "setenv auto-boot? false
 .disp)
 .Pp
 Skip down to the section on
@@ -260,11 +260,11 @@ You should now see the Open Firmware command prompt on your screen:
 .(disp
 Open Firmware, 1.0.5
 To continue booting the MacOS type:
-BYE\*<return\*>
+BYE\*[Lt]return\*[Gt]
 To continue booting from the default boot device type:
-BOOT\*<return\*>
+BOOT\*[Lt]return\*[Gt]
  ok
-0 \*>
+0 \*[Gt]
 .disp)
 .Pp
 If your screen is black, then your model has defaulted to using a serial
@@ -319,11 +319,11 @@ You should now see the Open Firmware command prompt on your screen:
 .(disp
 Open Firmware, 1.0.5
 To continue booting the MacOS type:
-BYE\*<return\*>
+BYE\*[Lt]return\*[Gt]
 To continue booting from the default boot device type:
-BOOT\*<return\*>
+BOOT\*[Lt]return\*[Gt]
  ok
-0 \*>
+0 \*[Gt]
 .disp)
 .Pp
 If your screen is black, then your model does not support using the
@@ -340,7 +340,7 @@ setting is persistent.
 It is equivalent to the Open Firmware command
 .Pp
 .(disp
-.No 0 \*> Ic "setenv auto-boot? false
+.No 0 \*[Gt] Ic "setenv auto-boot? false
 .disp)
 .Note)
 .(Note
@@ -349,8 +349,8 @@ Disk patches.
 If you find that your machine doesn't boot, then try:
 .Pp
 .(disp
-.No 0 \*> Ic "setenv use-nvramrc? false"
-.No 0 \*> Ic "reset-all"
+.No 0 \*[Gt] Ic "setenv use-nvramrc? false"
+.No 0 \*[Gt] Ic "reset-all"
 .disp)
 .Note)
 .
@@ -429,11 +429,11 @@ You should now see the Open Firmware command prompt on your screen:
 .(disp
 Open Firmware, 1.0.5
 To continue booting the MacOS type:
-BYE\*<return\*>
+BYE\*[Lt]return\*[Gt]
 To continue booting from the default boot device type:
-BOOT\*<return\*>
+BOOT\*[Lt]return\*[Gt]
  ok
-0 \*>
+0 \*[Gt]
 .disp)
 .Pp
 If your screen is black, then your model has defaulted to using a serial
@@ -450,7 +450,7 @@ Your system will always stop at the Open Firmware prompt.
 It is equivalent to the Open Firmware command
 .Pp
 .(disp
-.No 0 \*> Ic "setenv auto-boot? false
+.No 0 \*[Gt] Ic "setenv auto-boot? false
 .disp)
 .Note)
 .
@@ -487,11 +487,11 @@ your screen or serial console:
 .(disp
 Open Firmware, 1.0.5
 To continue booting the MacOS type:
-BYE\*<return\*>
+BYE\*[Lt]return\*[Gt]
 To continue booting from the default boot device type:
-BOOT\*<return\*>
+BOOT\*[Lt]return\*[Gt]
  ok
-0 \*>
+0 \*[Gt]
 .disp)
 .Pp
 If your screen is black, then your system has defaulted to using a serial
@@ -504,7 +504,7 @@ You must hook up a serial console
 Now, set your system to always stop at the Open Firmware prompt.
 .Pp
 .(disp
-.No 0 \*> Ic "setenv auto-boot? false
+.No 0 \*[Gt] Ic "setenv auto-boot? false
 .disp)
 .Pp
 To use your on-board video and keyboard, look up the proper
@@ -522,9 +522,9 @@ with the correct
 for your model):
 .Pp
 .(disp
-.No 0 \*> Ic "setenv output-device screen"
-.No 0 \*> Ic "setenv input-device kbd"
-.No 0 \*> Ic "reset-all"
+.No 0 \*[Gt] Ic "setenv output-device screen"
+.No 0 \*[Gt] Ic "setenv input-device kbd"
+.No 0 \*[Gt] Ic "reset-all"
 .disp)
 .Pp
 Now you should see the Open Firmware prompt on your screen.
@@ -554,8 +554,8 @@ you may be using:
 Double-check your Open Firmware version:
 .Pp
 .(disp
-.No 0 \*> Ic "dev /openprom"
-.No 0 \*> Ic ".properties"
+.No 0 \*[Gt] Ic "dev /openprom"
+.No 0 \*[Gt] Ic ".properties"
 name                    openprom
 model                   Open Firmware, 1.0.5
 relative-addressing
@@ -572,9 +572,9 @@ run these commands on Open Firmware 3 machines, as you may overwrite your
 firmware requiring a trip to Apple for repairs.
 .Pp
 .(disp
-.No 0 \*> Ic "setenv load-base 600000"
-.No 0 \*> Ic "setenv real-base F00000"
-.No 0 \*> Ic "reset-all"
+.No 0 \*[Gt] Ic "setenv load-base 600000"
+.No 0 \*[Gt] Ic "setenv real-base F00000"
+.No 0 \*[Gt] Ic "reset-all"
 .disp)
 .Pp
 The last command reboots your machine so that the
@@ -583,8 +583,8 @@ settings are stored.
 If you will be netbooting your system, you can look up your MAC address.
 .Pp
 .(disp
-.No 0 \*> Ic "dev enet"
-.No 0 \*> Ic ".properties"
+.No 0 \*[Gt] Ic "dev enet"
+.No 0 \*[Gt] Ic ".properties"
 [...]
 local-mac-address   CCCCCCCC CCCC
 [...]
@@ -603,7 +603,7 @@ You can check your Open Firmware settings with the
 .Pa printenv
 command:
 .(disp
-.No 0 \*> Ic "printenv"
+.No 0 \*[Gt] Ic "printenv"
 little-endian?      false               false
 real-mode?          false               false
 auto-boot?          false               true
@@ -653,8 +653,8 @@ you may be using:
 Double-check your Open Firmware version:
 .Pp
 .(disp
-.No 0 \*> Ic "dev /openprom"
-.No 0 \*> Ic ".properties"
+.No 0 \*[Gt] Ic "dev /openprom"
+.No 0 \*[Gt] Ic ".properties"
 name                    openprom
 device_type             BootROM
 model                   OpenFirmware 3
@@ -666,8 +666,8 @@ supports-bootinfo
 If you will be netbooting your system, you can look up your MAC address.
 .Pp
 .(disp
-.No 0 \*> Ic "dev enet"
-.No 0 \*> Ic ".properties"
+.No 0 \*[Gt] Ic "dev enet"
+.No 0 \*[Gt] Ic ".properties"
 [...]
 local-mac-address   CCCCCCCC CCCC
 [...]
@@ -688,7 +688,7 @@ You can check your Open Firmware settings with the
 .Pa printenv
 command:
 .(disp
-.No 0 \*> Ic "printenv"
+.No 0 \*[Gt] Ic "printenv"
 -------------- Partition: common -------- Signature: 0x70 ---------------
 little-endian?      false               false
 real-mode?          false               false
@@ -717,7 +717,7 @@ and MS-DOS FAT).  Unfortunately, Open Firmware is
 able to directly boot from the
 .Nx
 file system (FFS) or Apple's 
-.if \*[OF_VERSION_3] new BSD-based file system (UFS),
+.if \*[OF_VERSION_3] BSD-based file system (UFS),
 .if \*[OF_VERSION_12] file systems (HFS, HFS+, or UFS),
 so we must put the bootloader in a location that Open Firmware is capable 
 of understanding.
@@ -746,12 +746,20 @@ from a disk which then loads the secondary bootloader
 which then loads the kernel.
 .\}
 .(Note
+Despite a note to the contrary in earlier releases that
 .Pa ofwboot.elf
-is obsoleted.  All users should be using
+is obsoleted, that is no longer the case.
+It has been observed that on some newish machines (notably at least
+some Mac Minis), use of
 .Pa ofwboot.xcf
-instead of
+will result in an early kernel panic when loading the GENERIC kernel
+from disk.
+For these machines it appears to be a workaround to use
 .Pa ofwboot.elf
-now.
+instead of
+.Pa ofwboot.xcf
+as the boot loader.
+The root cause for this problem has unfortunately yet to be found.
 .Note)
 .Pp
 The following bootable media are available for loading the bootloader:
@@ -759,7 +767,7 @@ The following bootable media are available for loading the bootloader:
 .(bullet -offset indent
 .
 .if \*[OF_VERSION_12] \{\
-.Em Sq "Partition zero"
+.Sq Em "Partition zero"
 .Pp
 This method loads the primary bootloader
 .Pa bootxx
@@ -890,13 +898,13 @@ In theory, Open Firmware 2.4 systems should be able to load the
 bootloader from an HFS or HFS+ partition or a hybrid CD-R, but users have 
 reported that it doesn't work.
 .Pp
-The boot floppy images provided with the distribution sets have a
+The boot floppy images provided have a
 .Sq "partition zero"
 bootloader and a
 .Nx
 file system with an installation kernel.
 .\}
-The boot CD-R images provided with the distribution sets has both a
+The boot CD image provided has both a
 .Sq "partition zero"
 bootloader and
 .Pa ofwboot.xcf
@@ -922,8 +930,7 @@ You can use the instructions in this section to partition a disk that may
 also be used with
 .Tn MacOS ,
 although a disk prepared in this way
-.Em "will not boot"
-.Em Nx .
+.Em "will not boot" Nx .
 That means, your root partition
 .Pq Pa /
 must be on a drive prepared with the
@@ -1063,8 +1070,7 @@ usage.
 Must be at least 20 MB.
 Alternatively, you may decide to use one partition for your entire
 .Nx
-installation, in which case it should be at least 200 MB without X, or 260
-MB with X.
+installation, in which case it should be at least 200 MB.
 .Nx
 interprets an
 .Em "A/UX Root"
@@ -1095,7 +1101,7 @@ or
 .Pa /usr/pkg .
 .Nx
 interprets these partitions as normal
-.Nx No Ns -style
+.Nx Ns -style
 partitions.
 These partitions are not readable from
 .Tn MacOS .
@@ -1177,9 +1183,9 @@ system to boot the installer
 Go to one of the
 .Nx
 mirror sites and download the CD-R image
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 from the
-.Pa pub/NetBSD/iso
+.Pa pub/NetBSD/images
 directory.
 .Lk http://www.NetBSD.org/mirrors/#iso
 .Pp
@@ -1198,7 +1204,7 @@ systems should get it from the official website:
 .Lk http://www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private/cdrecord.html
 .Pp
 .(disp
-.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c macppccd-\*V.iso"
+.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c NetBSD-\*V-macppc.iso"
 .disp)
 .Pp
 You will need to substitute the correct name of the disk image file,
@@ -1270,7 +1276,7 @@ program from the
 distribution or
 .Ic rawrite32.exe
 from
-.Lk http://www.duskware.com/rawrite32/
+.Lk http://www.NetBSD.org/~martin/rawrite32/
 .Pp
 .It
 .Em "From a MacOS 9 (or earlier) machine"
@@ -1387,12 +1393,12 @@ systems should get it from the official website:
 .Pp
 .(disp
 .if \*[OF_VERSION_12] \{\
-.No # Ic "mkisofs -o output.iso -l -J -r -L -N /cdsources"
+.No # Ic "mkisofs -o NetBSD-\*V-macppc.iso -l -J -r -L -N /cdsources"
 .\}
 .if \*[OF_VERSION_3] \{\
-.No # Ic "mkisofs -o output.iso -hfs -part -l -J -r -L -N /cdsources"
+.No # Ic "mkisofs -o NetBSD-\*V-macppc.iso -hfs -part -l -J -r -L -N /cdsources"
 .\}
-.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c output.iso"
+.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c NetBSD-\*V-macppc.iso"
 .disp)
 .Pp
 You will need to substitute the correct speed for your CD writer, and the
@@ -1537,7 +1543,7 @@ CD-R image is compressed, then you will need to uncompress it first.
 .Pp
 Find a spare bootable drive (i.e. SCSI or IDE), and use some tool to write
 the disk image
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 to your spare drive, and boot from that drive.
 For example, you could use a Zip drive, a Jaz drive,
 a Compact Flash drive, or even a spare hard drive.
@@ -1558,7 +1564,7 @@ loads the installation kernel from the ISO file system on the disk image.
 .Em From an UNIX-like machine (including MacOS X)
 .Pp
 .(disp
-.No # Ic "dd if=macppccd-\*V.iso of=/dev/rsd0c"
+.No # Ic "dd if=NetBSD-\*V-macppc.iso of=/dev/rsd0c"
 .disp)
 .Pp
 where
@@ -1574,7 +1580,7 @@ Be certain you have typed this correctly, as it will erase the disk.
 Get
 .Ic rawrite32.exe
 from
-.Lk http://www.duskware.com/rawrite32/
+.Lk http://www.NetBSD.org/~martin/rawrite32/
 .Pp
 Be certain you have selected the correct disk, as it will erase the
 contents.
@@ -1618,7 +1624,7 @@ Hit return (i.e. start at sector number zero)
 .Pp
 .It
 Select
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 and click
 .Dq Open
 .Pp

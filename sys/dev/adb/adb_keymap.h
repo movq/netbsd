@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_keymap.h,v 1.2 2007/08/06 03:40:10 macallan Exp $	*/
+/*	$NetBSD: adb_keymap.h,v 1.6 2016/06/20 00:05:58 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -155,8 +148,54 @@ static const keysym_t akbd_keydesc_us[] = {
     KC(120),KS_Cmd_Screen1,	KS_f2,
     KC(121),KS_Cmd_ScrollFastDown, KS_Next,
     KC(122),KS_Cmd_Screen0,	KS_f1,
-
+    KC(123),			KS_Shift_R,
+    KC(124),			KS_Alt_R,
+    KC(125),			KS_Control_R,
     KC(127),  KS_Cmd_Debugger,
+};
+
+static const keysym_t akbd_keydesc_us_dvorak[] = {
+/*  pos      command		normal		shifted */
+    KC(0),			KS_a,
+    KC(1),			KS_o,
+    KC(2),			KS_e,
+    KC(3),			KS_u,
+    KC(4),			KS_d,
+    KC(5),			KS_i,
+    KC(6),			KS_semicolon,	KS_colon,
+    KC(7),			KS_q,
+    KC(8),			KS_j,
+    KC(9),			KS_k,
+
+    KC(11),			KS_x,
+    KC(12),			KS_apostrophe,	KS_quotedbl,
+    KC(13),			KS_comma,	KS_less,
+    KC(14),			KS_period,	KS_greater,
+    KC(15),			KS_p,
+    KC(16),			KS_f,
+    KC(17),			KS_y,
+
+    KC(24),			KS_bracketright, KS_braceright,
+    KC(27),			KS_bracketleft,	KS_braceleft,
+
+    KC(30),			KS_equal,	KS_plus,
+    KC(31),			KS_r,
+    KC(32),			KS_g,
+    KC(33),			KS_slash,	KS_question,
+    KC(34),			KS_c,
+    KC(35),			KS_l,
+
+    KC(37),			KS_n,
+    KC(38),			KS_h,
+    KC(39),			KS_minus,	KS_underscore,
+    KC(40),			KS_t,
+    KC(41),			KS_s,
+
+    KC(43),			KS_w,
+    KC(44),			KS_z,
+    KC(45),			KS_b,
+    KC(46),			KS_m,
+    KC(47),			KS_v,
 };
 
 static const keysym_t akbd_keydesc_fr[] = {
@@ -411,6 +450,7 @@ static const keysym_t akbd_keydesc_pt[] = {
 
 static const struct wscons_keydesc akbd_keydesctab[] = {
 	KBD_MAP(KB_US,			0,	akbd_keydesc_us),
+	KBD_MAP(KB_US | KB_DVORAK,      KB_US,  akbd_keydesc_us_dvorak),
 	KBD_MAP(KB_FR,			KB_US,	akbd_keydesc_fr),
 	KBD_MAP(KB_JP,			KB_US,	akbd_keydesc_jp),
 	KBD_MAP(KB_FR | KB_NODEAD,	KB_FR,	akbd_keydesc_fr_nodead),
@@ -428,3 +468,4 @@ static const struct wscons_keydesc akbd_keydesctab[] = {
 #undef KBD_MAP
 #undef KC
 
+extern keysym_t adb_to_usb[];

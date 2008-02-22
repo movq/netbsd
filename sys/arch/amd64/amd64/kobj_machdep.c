@@ -1,8 +1,11 @@
-/*	$NetBSD: kobj_machdep.c,v 1.2 2008/01/06 14:33:27 ad Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.6 2017/11/03 09:59:08 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software developed for The NetBSD Foundation
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.2 2008/01/06 14:33:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.6 2017/11/03 09:59:08 maxv Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -84,6 +80,7 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 	uintptr_t rtype, symidx;
 	const Elf_Rel *rel;
 	const Elf_Rela *rela;
+	int error;
 
 	if (isrela) {
 		rela = (const Elf_Rela *)data;
@@ -99,6 +96,7 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		/* Addend is 32 bit on 32 bit relocs */
 		switch (rtype) {
 		case R_X86_64_PC32:
+		case R_X86_64_32:
 		case R_X86_64_32S:
 			addend = *(Elf32_Addr *)where;
 			break;
@@ -113,56 +111,44 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 		break;
 
 	case R_X86_64_64:		/* S + A */
-		addr = kobj_sym_lookup(ko, symidx);
-		val = addr + addend;
-		if (addr == 0)
+		error = kobj_sym_lookup(ko, symidx, &addr);
+		if (error)
 			return -1;
-		if (*where != val)
-			*where = val;
+		val = addr + addend;
+		*where = val;
 		break;
 
 	case R_X86_64_PC32:	/* S + A - P */
-		addr = kobj_sym_lookup(ko, symidx);
+		error = kobj_sym_lookup(ko, symidx, &addr);
+		if (error)
+			return -1;
 		where32 = (Elf32_Addr *)where;
 		val32 = (Elf32_Addr)(addr + addend - (Elf64_Addr)where);
-		if (addr == 0)
-			return -1;
-		if (*where32 != val32)
-			*where32 = val32;
+		*where32 = val32;
 		break;
 
+	case R_X86_64_32:	/* S + A */
 	case R_X86_64_32S:	/* S + A sign extend */
-		addr = kobj_sym_lookup(ko, symidx);
+		error = kobj_sym_lookup(ko, symidx, &addr);
+		if (error)
+			return -1;
 		val32 = (Elf32_Addr)(addr + addend);
 		where32 = (Elf32_Addr *)where;
-		if (addr == 0)
-			return -1;
-		if (*where32 != val32)
-			*where32 = val32;
+		*where32 = val32;
 		break;
-
-	case R_X86_64_COPY:	/* none */
-		/*
-		 * There shouldn't be copy relocations in kernel
-		 * objects.
-		 */
-		printf("kobj_reloc: unexpected R_COPY relocation\n");
-		return -1;
 
 	case R_X86_64_GLOB_DAT:	/* S */
 	case R_X86_64_JUMP_SLOT:/* XXX need addend + offset */
-		addr = kobj_sym_lookup(ko, symidx);
-		if (addr == 0)
+		error = kobj_sym_lookup(ko, symidx, &addr);
+		if (error)
 			return -1;
-		if (*where != addr)
-			*where = addr;
+		*where = addr;
 		break;
 
 	case R_X86_64_RELATIVE:	/* B + A */
 		addr = relocbase + addend;
 		val = addr;
-		if (*where != val)
-			*where = val;
+		*where = val;
 		break;
 
 	default:

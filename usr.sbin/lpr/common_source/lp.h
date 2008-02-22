@@ -1,4 +1,4 @@
-/*	$NetBSD: lp.h,v 1.22 2006/03/21 22:47:26 christos Exp $	*/
+/*	$NetBSD: lp.h,v 1.25 2011/08/30 19:27:37 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -105,9 +105,8 @@ const char *checkremote(void);
 int      chk(const char *);
 void     displayq(int);
 void     dump(const char *, const char *, int);
-void	 fatal(const char *, ...)
-	__attribute__((__format__(__printf__, 1, 2)));
-int	 getline(FILE *);
+void	 fatal(const char *, ...) __dead __printflike(1, 2);
+size_t	 get_line(FILE *);
 const char *gethost(const char *);
 int	 getport(const char *);
 int	 getq(struct queue *(*[]));
@@ -121,7 +120,7 @@ void     ldump(const char *, const char *, int);
 int      lockchk(const char *);
 void     prank(int);
 void     process(const char *);
-void     rmjob(void);
+void     rmjob(void) __dead;
 void     rmremote(void);
 void     show(const char *, const char *, int);
 int      startdaemon(const char *);

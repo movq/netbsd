@@ -1,4 +1,4 @@
-.\"	$NetBSD: uname.3,v 1.10 2003/08/07 16:42:59 agc Exp $
+.\"	$NetBSD: uname.3,v 1.13 2014/06/14 14:32:43 apb Exp $
 .\"
 .\" Copyright (c) 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)uname.3	8.1 (Berkeley) 1/4/94
 .\"
-.Dd January 4, 1994
+.Dd June 14, 2014
 .Dt UNAME 3
 .Os
 .Sh NAME
@@ -49,21 +49,42 @@ the current system into the structure referenced by
 .Fa name .
 .Pp
 The
-.Li utsname
+.Em utsname
 structure is defined in the
-.Li \*[Lt]sys/utsname.h\*[Gt]
+.In sys/utsname.h
 header file, and contains the following members:
 .Bl -tag -width nodenameXXXX -offset indent
-.It sysname
+.It Va sysname
 Name of the operating system implementation.
-.It nodename
+Equivalent to the
+.Xr sysctl 7
+.Va kern.ostype
+variable.
+.It Va nodename
 Network name of this machine.
-.It release
+Equivalent to the
+.Xr sysctl 7
+.Va kern.hostname
+variable.
+.It Va release
 Release level of the operating system.
-.It version
+Equivalent to the
+.Xr sysctl 7
+.Va kern.osrelease
+variable.
+.It Va version
 Version level of the operating system.
-.It machine
+Equivalent to the
+.Xr sysctl 7
+.Va kern.version
+variable, except that very long values are truncated,
+and newlines are converted to spaces.
+.It Va machine
 Machine hardware platform.
+Equivalent to the
+.Xr sysctl 7
+.Va hw.machine
+variable.
 .El
 .Sh RETURN VALUES
 If

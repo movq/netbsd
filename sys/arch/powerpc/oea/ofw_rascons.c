@@ -1,21 +1,21 @@
-/*	$NetBSD: ofw_rascons.c,v 1.1 2007/11/26 19:58:31 garbled Exp $	*/
+/*	$NetBSD: ofw_rascons.c,v 1.12 2018/03/02 14:45:23 macallan Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -28,50 +28,42 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_rascons.c,v 1.1 2007/11/26 19:58:31 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_rascons.c,v 1.12 2018/03/02 14:45:23 macallan Exp $");
+
+#include "wsdisplay.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/systm.h>
-#include <powerpc/oea/bat.h>
 
 #include <dev/ofw/openfirm.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/rasops/rasops.h>
-#include <dev/wsfont/wsfont.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/wsfont/wsfont.h>
 
+#include <powerpc/oea/bat.h>
+#include <powerpc/oea/cpufeat.h>
 #include <powerpc/oea/ofw_rasconsvar.h>
-#include "wsdisplay.h"
 
 /* we need a wsdisplay to do anything halfway useful */
 #if NWSDISPLAY > 0
-
-#if defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
-int rascons_enable_cache = 0;
-#else
-#ifdef OFB_ENABLE_CACHE
-int rascons_enable_cache = 1;
-#else
-int rascons_enable_cache = 0;
-#endif
-#endif /* PPC_OEA64 */
 
 static int copy_rom_font(void);
 static struct wsdisplay_font openfirm6x11;
 static vaddr_t fbaddr;
 static int romfont_loaded = 0;
+static int needs_finalize = 0;
 
 struct vcons_screen rascons_console_screen;
 
@@ -89,23 +81,20 @@ rascons_cnattach(void)
 	struct rasops_info *ri = &rascons_console_screen.scr_ri;
 	long defattr;
 	int crow = 0;
-	char type[16];
-
-	OF_getprop(console_node, "device_type", type, sizeof(type));
-	if (strcmp(type, "display") != 0)
-		return -1;
 
 	/* get current cursor position */
 	OF_interpret("line#", 0, 1, &crow);
 
 	/* move (rom monitor) cursor to the lowest line - 1 */
 	OF_interpret("#lines 2 - to line#", 0, 0);
-	
+
 	wsfont_init();
 	if (copy_rom_font() == 0) {
+#if !defined(OFWOEA_WSCONS_NO_ROM_FONT)
 		romfont_loaded = 1;
+#endif /* !OFWOEA_WSCONS_NO_ROM_FONT */
 	}
-	
+
 	/* set up rasops */
 	rascons_init_rasops(console_node, ri);
 
@@ -122,16 +111,29 @@ rascons_cnattach(void)
 		crow = 0;
 	}
 #endif
-	
+
 	rascons_stdscreen.nrows = ri->ri_rows;
 	rascons_stdscreen.ncols = ri->ri_cols;
 	rascons_stdscreen.textops = &ri->ri_ops;
 	rascons_stdscreen.capabilities = ri->ri_caps;
 
-	ri->ri_ops.allocattr(ri, 0, 0, 0, &defattr);
-	wsdisplay_preattach(&rascons_stdscreen, ri, 0, max(0,
-	    min(crow, ri->ri_rows - 1)), defattr);
-	
+	/*
+	 * XXX
+	 * On some G5 models ( so far, 970FX but not 970MP ) we can't seem to
+	 * access video memory in real mode, but a lot of code relies on rasops
+	 * data structures being set up early so we can't just push the whole
+	 * thing further down. Instead set things up but don't actually attach
+	 * the console until later.
+	 * This needs a better trigger but for now I can't reliably tell which
+	 * exact models / CPUs / other hardware actually need it.
+	 */
+	if ((oeacpufeat & OEACPU_64_BRIDGE) != 0) {
+		needs_finalize = 1;
+	} else {
+		ri->ri_ops.allocattr(ri, 0, 0, 0, &defattr);
+		wsdisplay_preattach(&rascons_stdscreen, ri, 0, max(0,
+		    min(crow, ri->ri_rows - 1)), defattr);
+	}
 #if notyet
 	rascons_init_cmap(NULL);
 #endif
@@ -139,8 +141,20 @@ rascons_cnattach(void)
 	return 0;
 }
 
+void
+rascons_finalize(void)
+{
+	struct rasops_info *ri = &rascons_console_screen.scr_ri;
+	long defattr;
+
+	if (needs_finalize == 0) return;
+	
+	ri->ri_ops.allocattr(ri, 0, 0, 0, &defattr);
+	wsdisplay_preattach(&rascons_stdscreen, ri, 0, 0, defattr);
+}
+
 static int
-copy_rom_font()
+copy_rom_font(void)
 {
 	u_char *romfont;
 	int char_width, char_height;
@@ -159,7 +173,7 @@ copy_rom_font()
 	 * virtual address space.
 	 */
 	OF_call_method("translate", mmu, 1, 3, romfont, &romfont, &m, &e);
- 
+
 	/* Get character size */
 	OF_interpret("char-width", 0, 1, &char_width);
 	OF_interpret("char-height", 0, 1, &char_height);
@@ -199,44 +213,21 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 	if (width == -1 || height == -1 || fbaddr == 0 || fbaddr == -1)
 		return false;
 
-	/* Enable write-through cache. */
-#if defined (PPC_OEA) && !defined (PPC_OEA64) && !defined (PPC_OEA64_BRIDGE)
-	if (rascons_enable_cache) {
-		vaddr_t va;
-		/*
-		 * Let's try to find an empty BAT to use 
-		 */
-		for (va = SEGMENT_LENGTH; va < (USER_SR << ADDR_SR_SHFT);
-		     va += SEGMENT_LENGTH) {
-			if (battable[va >> ADDR_SR_SHFT].batu == 0) {
-				battable[va >> ADDR_SR_SHFT].batl =
-				    BATL(fbaddr & 0xf0000000,
-					 BAT_G | BAT_W | BAT_M, BAT_PP_RW);
-				battable[va >> ADDR_SR_SHFT].batu =
-				    BATL(va, BAT_BL_256M, BAT_Vs);
-				fbaddr &= 0x0fffffff;
-				fbaddr |= va;
-				break;
-			}
-		}
-	}
-#endif /* PPC_OEA64 */
-
 	/* initialize rasops */
 	ri->ri_width = width;
 	ri->ri_height = height;
 	ri->ri_depth = depth;
 	ri->ri_stride = linebytes;
 	ri->ri_bits = (char *)fbaddr;
-	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
+	ri->ri_flg = RI_CENTER | RI_FULLCLEAR | RI_NO_AUTO;
 
 	/* mimic firmware output if we can find the ROM font */
 	if (romfont_loaded) {
 		int cols, rows;
 
-		/* 
-		 * XXX this assumes we're the console which may or may not 
-		 * be the case 
+		/*
+		 * XXX this assumes we're the console which may or may not
+		 * be the case
 		 */
 		OF_interpret("#lines", 0, 1, &rows);
 		OF_interpret("#columns", 0, 1, &cols);
@@ -245,7 +236,7 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 		rasops_init(ri, rows, cols);
 
 		ri->ri_xorigin = (width - cols * ri->ri_font->fontwidth) >> 1;
-		ri->ri_yorigin = (height - rows * ri->ri_font->fontheight) 
+		ri->ri_yorigin = (height - rows * ri->ri_font->fontheight)
 		    >> 1;
 		ri->ri_bits = (char *)fbaddr + ri->ri_xorigin +
 			      ri->ri_stride * ri->ri_yorigin;
@@ -261,7 +252,7 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 }
 #else	/* NWSDISPLAY > 0 */
 int
-rascons_cnattach()
+rascons_cnattach(void)
 {
 	return -1;
 }

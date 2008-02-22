@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.h,v 1.2 2007/10/17 19:54:20 garbled Exp $	*/
+/*	$NetBSD: mainbus.h,v 1.5 2011/06/22 18:06:32 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _PMPPC_DEV_MAINBUS_H_
+#define _PMPPC_DEV_MAINBUS_H_
+
+#include <dev/pci/pcivar.h>
+#include <machine/pci_machdep.h>
 
 struct mainbus_attach_args {
 	const char *mb_name;
@@ -53,3 +52,10 @@ struct mainbus_attach_args {
 
 extern struct powerpc_bus_space pmppc_mem_tag;
 extern struct powerpc_bus_space pmppc_pci_io_tag;
+extern struct powerpc_bus_dma_tag pci_bus_dma_tag;
+
+int pmppc_pci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
+void pmppc_pci_conf_interrupt(void *, int, int, int, int, int *);
+void pmppc_pci_get_chipset_tag(pci_chipset_tag_t);
+
+#endif /* _PMPPC_DEV_MAINBUS_H_ */

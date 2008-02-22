@@ -1,4 +1,4 @@
-/*	$NetBSD: un.h,v 1.40 2007/08/09 15:23:01 he Exp $	*/
+/*	$NetBSD: un.h,v 1.58 2018/05/05 19:58:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -56,9 +56,10 @@ struct	sockaddr_un {
  * Socket options for UNIX IPC domain.
  */
 #if defined(_NETBSD_SOURCE)
-#define	LOCAL_CREDS	0x0001		/* pass credentials to receiver */
+#define	LOCAL_OCREDS	0x0001		/* pass credentials to receiver */
 #define	LOCAL_CONNWAIT	0x0002		/* connects block until accepted */
 #define	LOCAL_PEEREID	0x0003		/* get peer identification */
+#define	LOCAL_CREDS	0x0004		/* pass credentials to receiver */
 #endif
 
 /*
@@ -71,39 +72,33 @@ struct unpcbid {
 };
 
 #ifdef _KERNEL
+
 struct unpcb;
 struct socket;
+struct sockopt;
+struct sockaddr;
 
-int	uipc_usrreq(struct socket *, int, struct mbuf *,
-	    struct mbuf *, struct mbuf *, struct lwp *);
-int	uipc_ctloutput(int, struct socket *, int, int, struct mbuf **);
+extern const struct pr_usrreqs unp_usrreqs;
 
-int	unp_attach (struct socket *);
-int	unp_bind (struct unpcb *, struct mbuf *, struct lwp *);
-int	unp_connect (struct socket *, struct mbuf *, struct lwp *);
-int	unp_connect2 (struct socket *, struct socket *, int);
-void	unp_detach (struct unpcb *);
-void	unp_discard (struct file *);
-void	unp_disconnect (struct unpcb *);
-void	unp_drop (struct unpcb *, int);
-void	unp_gc (void);
-void	unp_mark (struct file *);
-void	unp_scan (struct mbuf *, void (*)(struct file *), int);
-void	unp_shutdown (struct unpcb *);
-int 	unp_externalize (struct mbuf *, struct lwp *);
-int	unp_internalize (struct mbuf *, struct lwp *);
-void 	unp_dispose (struct mbuf *);
-int	unp_output (struct mbuf *, struct mbuf *, struct unpcb *,
-	    struct lwp *);
-void	unp_setsockaddr (struct unpcb *, struct mbuf *);
-void	unp_setpeeraddr (struct unpcb *, struct mbuf *);
+int	uipc_ctloutput(int, struct socket *, struct sockopt *);
+void	uipc_init(void);
+kmutex_t *uipc_dgramlock(void);
+kmutex_t *uipc_streamlock(void);
+kmutex_t *uipc_rawlock(void);
+
+int	unp_connect(struct socket *, struct sockaddr *, struct lwp *);
+int	unp_connect2(struct socket *, struct socket *);
+void 	unp_dispose(struct mbuf *);
+int 	unp_externalize(struct mbuf *, struct lwp *, int);
+void	unp_sysctl_create(struct sysctllog **);
+
 #else /* !_KERNEL */
 
 /* actual length of an initialized sockaddr_un */
 #if defined(_NETBSD_SOURCE)
 #define SUN_LEN(su) \
 	(sizeof(*(su)) - sizeof((su)->sun_path) + strlen((su)->sun_path))
-#endif /* !_XOPEN_SOURCE */
+#endif /* !_NetBSD_SOURCE */
 #endif /* _KERNEL */
 
 #endif /* !_SYS_UN_H_ */

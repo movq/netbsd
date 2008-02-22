@@ -1,4 +1,4 @@
-/*	$NetBSD: pool.h,v 1.62 2007/12/26 16:01:38 ad Exp $	*/
+/*	$NetBSD: pool.h,v 1.82 2017/12/16 03:13:29 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,26 +33,56 @@
 #ifndef _SYS_POOL_H_
 #define _SYS_POOL_H_
 
+#include <sys/stdbool.h>
+#include <sys/stdint.h>
+
+struct pool_sysctl {
+	char pr_wchan[16];
+	uint64_t pr_flags;
+	uint64_t pr_size;
+	uint64_t pr_pagesize;
+	uint64_t pr_itemsperpage;
+	uint64_t pr_nitems;
+	uint64_t pr_nout;
+	uint64_t pr_hardlimit;
+	uint64_t pr_npages;
+	uint64_t pr_minpages;
+	uint64_t pr_maxpages;
+
+	uint64_t pr_nget;
+	uint64_t pr_nfail;
+	uint64_t pr_nput;
+	uint64_t pr_npagealloc;
+	uint64_t pr_npagefree;
+	uint64_t pr_hiwat;
+	uint64_t pr_nidle;
+
+	uint64_t pr_cache_meta_size;
+	uint64_t pr_cache_nfull;
+	uint64_t pr_cache_npartial;
+	uint64_t pr_cache_nempty;
+	uint64_t pr_cache_ncontended;
+	uint64_t pr_cache_nmiss_global;
+	uint64_t pr_cache_nhit_global;
+	uint64_t pr_cache_nmiss_pcpu;
+	uint64_t pr_cache_nhit_pcpu;
+};
+
 #ifdef _KERNEL
 #define	__POOL_EXPOSE
 #endif
 
-#if defined(_KERNEL_OPT)
-#include "opt_pool.h"
-#endif
-
 #ifdef __POOL_EXPOSE
+#include <sys/param.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
 #include <sys/queue.h>
 #include <sys/time.h>
 #include <sys/tree.h>
 #include <sys/callback.h>
-#endif
 
 #define	POOL_PADDR_INVALID	((paddr_t) -1)
 
-#ifdef __POOL_EXPOSE
 struct pool;
 
 struct pool_allocator {
@@ -70,18 +93,13 @@ struct pool_allocator {
 	/* The following fields are for internal use only. */
 	kmutex_t	pa_lock;
 	TAILQ_HEAD(, pool) pa_list;	/* list of pools using this allocator */
-	int		pa_flags;
-#define	PA_INITIALIZED	0x01
+	uint32_t	pa_refcnt;	/* number of pools using this allocator */
 	int		pa_pagemask;
 	int		pa_pageshift;
-	struct vm_map *pa_backingmap;
-#if defined(_KERNEL)
-	struct vm_map **pa_backingmapptr;
-	SLIST_ENTRY(pool_allocator) pa_q;
-#endif /* defined(_KERNEL) */
 };
 
 LIST_HEAD(pool_pagelist,pool_item_header);
+SPLAY_HEAD(phtree, pool_item_header);
 
 struct pool {
 	TAILQ_ENTRY(pool)
@@ -129,6 +147,8 @@ struct pool {
 #define PR_NOTOUCH	0x400	/* don't use free items to keep internal state*/
 #define PR_NOALIGN	0x800	/* don't assume backend alignment */
 #define	PR_LARGECACHE	0x1000	/* use large cache groups */
+#define	PR_GROWING	0x2000	/* pool_grow in progress */
+#define	PR_GROWINGNOWAIT 0x4000	/* pool_grow in progress by PR_NOWAIT alloc */
 
 	/*
 	 * `pr_lock' protects the pool's data structures when removing
@@ -143,7 +163,7 @@ struct pool {
 	kcondvar_t	pr_cv;
 	int		pr_ipl;
 
-	SPLAY_HEAD(phtree, pool_item_header) pr_phtree;
+	struct phtree	pr_phtree;
 
 	int		pr_maxcolor;	/* Cache colouring */
 	int		pr_curcolor;
@@ -171,16 +191,10 @@ struct pool {
 	/*
 	 * Diagnostic aides.
 	 */
-	struct pool_log	*pr_log;
-	int		pr_curlogentry;
-	int		pr_logsize;
-
-	const char	*pr_entered_file; /* reentrancy check */
-	long		pr_entered_line;
-
-	struct callback_entry pr_reclaimerentry;
 	void		*pr_freecheck;
 	void		*pr_qcache;
+	bool		pr_redzone;
+	size_t		pr_reqsize;
 };
 
 /*
@@ -232,6 +246,7 @@ struct pool_cache {
 	pcg_t		*pc_emptygroups;/* list of empty cache groups */
 	pcg_t		*pc_fullgroups;	/* list of full cache groups */
 	pcg_t		*pc_partgroups;	/* groups for reclamation */
+	struct pool	*pc_pcgpool;	/* Pool of cache groups */
 	int		pc_pcgsize;	/* Use large cache groups? */
 	int		pc_ncpu;	/* number cpus set up */
 	int		(*pc_ctor)(void *, void *, int);
@@ -244,7 +259,11 @@ struct pool_cache {
 	unsigned int	pc_nfull;	/* full groups in cache */
 	unsigned int	pc_npart;	/* partial groups in cache */
 	unsigned int	pc_refcnt;	/* ref count for pagedaemon, etc */
+
+	/* Diagnostic aides. */
 	void		*pc_freecheck;
+	bool		pc_redzone;
+	size_t		pc_reqsize;
 
 	/* CPU layer. */
 	pool_cache_cpu_t pc_cpu0 __aligned(CACHE_LINE_SIZE);
@@ -271,23 +290,6 @@ extern struct pool_allocator pool_allocator_kmem_fullpage;
 extern struct pool_allocator pool_allocator_nointr_fullpage;
 #endif
 
-struct link_pool_init {	/* same as args to pool_init() */
-	struct pool *pp;
-	size_t size;
-	u_int align;
-	u_int align_offset;
-	int flags;
-	const char *wchan;
-	struct pool_allocator *palloc;
-	int ipl;
-};
-#define	POOL_INIT(pp, size, align, align_offset, flags, wchan, palloc, ipl)\
-struct pool pp;								\
-static const struct link_pool_init _link_ ## pp[1] = {			\
-	{ &pp, size, align, align_offset, flags, wchan, palloc, ipl }	\
-};									\
-__link_set_add_rodata(pools, _link_ ## pp)
-
 void		pool_subsystem_init(void);
 
 void		pool_init(struct pool *, size_t, u_int, u_int,
@@ -301,32 +303,20 @@ void		*pool_get(struct pool *, int);
 void		pool_put(struct pool *, void *);
 int		pool_reclaim(struct pool *);
 
-#ifdef POOL_DIAGNOSTIC
-/*
- * These versions do reentrancy checking.
- */
-void		*_pool_get(struct pool *, int, const char *, long);
-void		_pool_put(struct pool *, void *, const char *, long);
-int		_pool_reclaim(struct pool *, const char *, long);
-#define		pool_get(h, f)	_pool_get((h), (f), __FILE__, __LINE__)
-#define		pool_put(h, v)	_pool_put((h), (v), __FILE__, __LINE__)
-#define		pool_reclaim(h)	_pool_reclaim((h), __FILE__, __LINE__)
-#endif /* POOL_DIAGNOSTIC */
-
 int		pool_prime(struct pool *, int);
 void		pool_setlowat(struct pool *, int);
 void		pool_sethiwat(struct pool *, int);
 void		pool_sethardlimit(struct pool *, int, const char *, int);
-void		pool_drain_start(struct pool **, uint64_t *);
-void		pool_drain_end(struct pool *, uint64_t);
+bool		pool_drain(struct pool **);
+int		pool_totalpages(void);
 
 /*
  * Debugging and diagnostic aides.
  */
-void		pool_print(struct pool *, const char *);
 void		pool_printit(struct pool *, const char *,
-		    void (*)(const char *, ...));
-void		pool_printall(const char *, void (*)(const char *, ...));
+    void (*)(const char *, ...) __printflike(1, 2));
+void		pool_printall(const char *, void (*)(const char *, ...)
+    __printflike(1, 2));
 int		pool_chk(struct pool *, const char *);
 
 /*
@@ -340,6 +330,7 @@ void		pool_cache_bootstrap(pool_cache_t, size_t, u_int, u_int, u_int,
 		    int (*)(void *, void *, int), void (*)(void *, void *),
 		    void *);
 void		pool_cache_destroy(pool_cache_t);
+void		pool_cache_bootstrap_destroy(pool_cache_t);
 void		*pool_cache_get_paddr(pool_cache_t, int, paddr_t *);
 void		pool_cache_put_paddr(pool_cache_t, void *, paddr_t);
 void		pool_cache_destruct_object(pool_cache_t, void *);
@@ -356,7 +347,8 @@ void		pool_cache_cpu_init(struct cpu_info *);
 #define		pool_cache_put(pc, o) pool_cache_put_paddr((pc), (o), \
 				          POOL_PADDR_INVALID)
 
-void 		pool_whatis(uintptr_t, void (*)(const char *, ...));
+void 		pool_whatis(uintptr_t, void (*)(const char *, ...)
+    __printflike(1, 2));
 #endif /* _KERNEL */
 
 #endif /* _SYS_POOL_H_ */

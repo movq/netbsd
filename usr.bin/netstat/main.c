@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.64 2007/04/27 18:37:53 mlelstv Exp $	*/
+/*	$NetBSD: main.c,v 1.99 2016/07/14 20:13:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.64 2007/04/27 18:37:53 mlelstv Exp $");
+__RCSID("$NetBSD: main.c,v 1.99 2016/07/14 20:13:10 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,149 +64,107 @@ __RCSID("$NetBSD: main.c,v 1.64 2007/04/27 18:37:53 mlelstv Exp $");
 #include <string.h>
 #include <unistd.h>
 #include "netstat.h"
+#include "rtutil.h"
+#include "prog_ops.h"
 
 struct nlist nl[] = {
 #define	N_MBSTAT	0
-	{ "_mbstat" },
+	{ "_mbstat", 0, 0, 0, 0 },
 #define	N_IPSTAT	1
-	{ "_ipstat" },
+	{ "_ipstat", 0, 0, 0, 0 },	/* not available via kvm */
 #define	N_TCBTABLE	2
-	{ "_tcbtable" },
+	{ "_tcbtable", 0, 0, 0, 0 },
 #define	N_TCPSTAT	3
-	{ "_tcpstat" },
+	{ "_tcpstat", 0, 0, 0, 0 },	/* not available via kvm */
 #define	N_UDBTABLE	4
-	{ "_udbtable" },
+	{ "_udbtable", 0, 0, 0, 0 },
 #define	N_UDPSTAT	5
-	{ "_udpstat" },
-#define	N_IFNET		6
-	{ "_ifnet" },
-#define	N_IMP		7
-	{ "_imp_softc" },
-#define	N_ICMPSTAT	8
-	{ "_icmpstat" },
-#define	N_RTSTAT	9
-	{ "_rtstat" },
-#define	N_UNIXSW	10
-	{ "_unixsw" },
-#define N_IDP		11
-	{ "_nspcb"},
-#define N_IDPSTAT	12
-	{ "_idpstat"},
-#define N_SPPSTAT	13
-	{ "_spp_istat"},
-#define N_NSERR		14
-	{ "_ns_errstat"},
-#define	N_CLNPSTAT	15
-	{ "_clnp_stat"},
-#define	IN_NOTUSED	16
-	{ "_tp_inpcb" },
-#define	ISO_TP		17
-	{ "_tp_refinfo" },
-#define	N_TPSTAT	18
-	{ "_tp_stat" },
-#define	N_ESISSTAT	19
-	{ "_esis_stat"},
-#define N_NIMP		20
-	{ "_nimp"},
-#define N_RTREE		21
-	{ "_rt_tables"},
-#define N_CLTP		22
-	{ "_cltb"},
-#define N_CLTPSTAT	23
-	{ "_cltpstat"},
-#define	N_NFILE		24
-	{ "_nfile" },
-#define	N_FILE		25
-	{ "_file" },
-#define N_IGMPSTAT	26
-	{ "_igmpstat" },
-#define N_MRTPROTO	27
-	{ "_ip_mrtproto" },
-#define N_MRTSTAT	28
-	{ "_mrtstat" },
-#define N_MFCHASHTBL	29
-	{ "_mfchashtbl" },
-#define	N_MFCHASH	30
-	{ "_mfchash" },
-#define N_VIFTABLE	31
-	{ "_viftable" },
-#define N_MSIZE		32
-	{ "_msize" },
-#define N_MCLBYTES	33
-	{ "_mclbytes" },
-#define N_DDPSTAT	34
-	{ "_ddpstat"},
-#define N_DDPCB		35
-	{ "_ddpcb"},
-#define N_MBPOOL	36
-	{ "_mbpool" },
-#define N_MCLPOOL	37
-	{ "_mclpool" },
-#define N_DIVPCB	38
-	{ "_divcb"},
-#define N_DIVSTAT	39
-	{ "_divstat"},
-#define N_IP6STAT	40
-	{ "_ip6stat" },
-#define N_TCP6STAT	41
-	{ "_tcp6stat" },
-#define N_UDP6STAT	42
-	{ "_udp6stat" },
-#define N_ICMP6STAT	43
-	{ "_icmp6stat" },
-#define N_IPSECSTAT	44
-	{ "_ipsecstat" },
-#define N_IPSEC6STAT	45
-	{ "_ipsec6stat" },
-#define N_PIM6STAT	46
-	{ "_pim6stat" },
-#define N_MRT6PROTO	47
-	{ "_ip6_mrtproto" },
-#define N_MRT6STAT	48
-	{ "_mrt6stat" },
-#define N_MF6CTABLE	49
-	{ "_mf6ctable" },
-#define N_MIF6TABLE	50
-	{ "_mif6table" },
-#define N_PFKEYSTAT	51
-	{ "_pfkeystat" },
-#define N_ARPSTAT	52
-	{ "_arpstat" },
-#define N_RIP6STAT	53
-	{ "_rip6stat" },
-#define	N_ARPINTRQ	54
-	{ "_arpintrq" },
-#define	N_IPINTRQ	55
-	{ "_ipintrq" },
-#define	N_IP6INTRQ	56
-	{ "_ip6intrq" },
-#define	N_ATINTRQ1	57
-	{ "_atintrq1" },
-#define	N_ATINTRQ2	58
-	{ "_atintrq2" },
-#define	N_NSINTRQ	59
-	{ "_nsintrq" },
-#define	N_CLNLINTRQ	60
-	{ "_clnlintrq" },
-#define	N_LLCINTRQ	61
-	{ "_llcintrq" },
-#define	N_HDINTRQ	62
-	{ "_hdintrq" },
-#define	N_NATMINTRQ	63
-	{ "_natmintrq" },
-#define	N_PPPOEDISCINQ	64
-	{ "_ppoediscinq" },
-#define	N_PPPOEINQ	65
-	{ "_ppoeinq" },
-#define	N_PKINTRQ	66
-	{ "_pkintrq" },
-#define	N_HARDCLOCK_TICKS 67
-	{ "_hardclock_ticks" },
-#define N_PIMSTAT	68
-	{ "_pimstat" },
-#define N_CARPSTAT	69
-	{ "_carpstats" },
-	{ "" },
+	{ "_udpstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define	N_IFNET_LIST		6
+	{ "_ifnet_list", 0, 0, 0, 0 },
+#define	N_ICMPSTAT	7
+	{ "_icmpstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define	N_RTSTAT	8
+	{ "_rtstat", 0, 0, 0, 0 },
+#define	N_UNIXSW	9
+	{ "_unixsw", 0, 0, 0, 0 },
+#define N_RTREE		10
+	{ "_rt_tables", 0, 0, 0, 0 },
+#define	N_NFILE		11
+	{ "_nfile", 0, 0, 0, 0 },
+#define N_IGMPSTAT	12
+	{ "_igmpstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_MRTPROTO	13
+	{ "_ip_mrtproto", 0, 0, 0, 0 },
+#define N_MRTSTAT	14
+	{ "_mrtstat", 0, 0, 0, 0 },
+#define N_MFCHASHTBL	15
+	{ "_mfchashtbl", 0, 0, 0, 0 },
+#define	N_MFCHASH	16
+	{ "_mfchash", 0, 0, 0, 0 },
+#define N_VIFTABLE	17
+	{ "_viftable", 0, 0, 0, 0 },
+#define N_MSIZE		18
+	{ "_msize", 0, 0, 0, 0 },
+#define N_MCLBYTES	19
+	{ "_mclbytes", 0, 0, 0, 0 },
+#define N_DDPSTAT	20
+	{ "_ddpstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_DDPCB		21
+	{ "_ddpcb", 0, 0, 0, 0 },
+#define N_MBPOOL	22
+	{ "_mbpool", 0, 0, 0, 0 },
+#define N_MCLPOOL	23
+	{ "_mclpool", 0, 0, 0, 0 },
+#define N_IP6STAT	24
+	{ "_ip6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_TCP6STAT	25
+	{ "_tcp6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_UDP6STAT	26
+	{ "_udp6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_ICMP6STAT	27
+	{ "_icmp6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_IPSECSTAT	28
+	{ "_ipsecstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_IPSEC6STAT	29
+	{ "_ipsec6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_PIM6STAT	30
+	{ "_pim6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_MRT6PROTO	31
+	{ "_ip6_mrtproto", 0, 0, 0, 0 },
+#define N_MRT6STAT	32
+	{ "_mrt6stat", 0, 0, 0, 0 },
+#define N_MF6CTABLE	33
+	{ "_mf6ctable", 0, 0, 0, 0 },
+#define N_MIF6TABLE	34
+	{ "_mif6table", 0, 0, 0, 0 },
+#define N_PFKEYSTAT	35
+	{ "_pfkeystat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_ARPSTAT	36
+	{ "_arpstat", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_RIP6STAT	37
+	{ "_rip6stat", 0, 0, 0, 0 },	/* not available via kvm */
+#define	N_ARPINTRQ	38
+	{ "_arpintrq", 0, 0, 0, 0 },
+#define	N_ATINTRQ1	39
+	{ "_atintrq1", 0, 0, 0, 0 },
+#define	N_ATINTRQ2	40
+	{ "_atintrq2", 0, 0, 0, 0 },
+#define	N_NATMINTRQ	41
+	{ "_natmintrq", 0, 0, 0, 0 },
+#define	N_PPPOEDISCINQ	42
+	{ "_ppoediscinq", 0, 0, 0, 0 },
+#define	N_PPPOEINQ	43
+	{ "_ppoeinq", 0, 0, 0, 0 },
+#define	N_HARDCLOCK_TICKS 44
+	{ "_hardclock_ticks", 0, 0, 0, 0 },
+#define N_PIMSTAT	45
+	{ "_pimstat", 0, 0, 0, 0 },
+#define N_CARPSTAT	46
+	{ "_carpstats", 0, 0, 0, 0 },	/* not available via kvm */
+#define N_PFSYNCSTAT	47
+	{ "_pfsyncstats", 0, 0, 0, 0},  /* not available via kvm */
+	{ "", 0, 0, 0, 0 },
 };
 
 struct protox {
@@ -214,14 +172,14 @@ struct protox {
 	u_char	pr_sindex;		/* index into nlist of stat block */
 	u_char	pr_wanted;		/* 1 if wanted, 0 otherwise */
 	void	(*pr_cblocks)		/* control blocks printing routine */
-			__P((u_long, char *));
+			(u_long, const char *);
 	void	(*pr_stats)		/* statistics printing routine */
-			__P((u_long, char *));
+			(u_long, const char *);
 	void	(*pr_istats)
-			__P((char *));	/* per/if statistics printing routine */
+			(const char *);	/* per/if statistics printing routine */
 	void	(*pr_dump)		/* PCB state dump routine */
-			__P((u_long));
-	char	*pr_name;		/* well-known name */
+			(u_long, const char *, u_long);
+	const char *pr_name;		/* well-known name */
 } protox[] = {
 	{ N_TCBTABLE,	N_TCPSTAT,	1,	protopr,
 	  tcp_stats,	NULL,		tcp_dump,	"tcp" },
@@ -237,10 +195,12 @@ struct protox {
 	  carp_stats,	NULL,		0,	"carp" },
 #ifdef IPSEC
 	{ -1,		N_IPSECSTAT,	1,	0,
-	  ipsec_switch,	NULL,		0,	"ipsec" },
+	  fast_ipsec_stats, NULL,	0,	"ipsec" },
 #endif
 	{ -1,		N_PIMSTAT,	1,	0,
 	  pim_stats,	NULL,		0,	"pim" },
+	{ -1,		N_PFSYNCSTAT,  1,  0,
+	  pfsync_stats,  NULL,		0,  "pfsync" },	
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0,	0 }
 };
@@ -256,13 +216,13 @@ struct protox ip6protox[] = {
 	  tcp6_stats,	NULL,		tcp6_dump,	"tcp6" },
 #else
 	{ N_TCBTABLE,	N_TCP6STAT,	1,	ip6protopr,
-	  tcp_stats,	NULL,		tcp_dump,	"tcp6" },
+	  tcp_stats,	NULL,		tcp6_dump,	"tcp6" },
 #endif
 	{ N_UDBTABLE,	N_UDP6STAT,	1,	ip6protopr,
 	  udp6_stats,	NULL,		0,	"udp6" },
 #ifdef IPSEC
 	{ -1,		N_IPSEC6STAT,	1,	0,
-	  ipsec_switch,	NULL,		0,	"ipsec6" },
+	  fast_ipsec_stats, NULL,	0,	"ipsec6" },
 #endif
 	{ -1,		N_PIM6STAT,	1,	0,
 	  pim6_stats,	NULL,		0,	"pim6" },
@@ -294,33 +254,7 @@ struct protox atalkprotox[] = {
 	{ N_DDPCB,	N_DDPSTAT,	1,	atalkprotopr,
 	  ddp_stats,	NULL,		0,	"ddp" },
 	{ -1,		-1,		0,	0,
-	  0,		NULL,		0 }
-};
-
-#ifdef NS
-struct protox nsprotox[] = {
-	{ N_IDP,	N_IDPSTAT,	1,	nsprotopr,
-	  idp_stats,	NULL,		0,	"idp" },
-	{ N_IDP,	N_SPPSTAT,	1,	nsprotopr,
-	  spp_stats,	NULL,		0,	"spp" },
-	{ -1,		N_NSERR,	1,	0,
-	  nserr_stats,	NULL,		0,	"ns_err" },
-	{ -1,		-1,		0,	0,
-	  0,		NULL,		0 }
-};
-#endif
-
-struct protox isoprotox[] = {
-	{ ISO_TP,	N_TPSTAT,	1,	iso_protopr,
-	  tp_stats,	NULL,		0,	"tp" },
-	{ N_CLTP,	N_CLTPSTAT,	1,	iso_protopr,
-	  cltp_stats,	NULL,		0,	"cltp" },
-	{ -1,		N_CLNPSTAT,	1,	 0,
-	  clnp_stats,	NULL,		0,	"clnp"},
-	{ -1,		N_ESISSTAT,	1,	 0,
-	  esis_stats,	NULL,		0,	"esis"},
-	{ -1,		-1,		0,	0,
-	  0,		NULL,		0,	0 }
+	  0,		NULL,		0,	NULL }
 };
 #endif
 
@@ -334,10 +268,6 @@ struct protox *protoprotox[] = { protox,
 #endif
 #ifndef SMALL
 				 atalkprotox,
-#ifdef NS
-				 nsprotox,
-#endif
-				 isoprotox,
 #endif
 				 NULL };
 
@@ -346,71 +276,74 @@ const struct softintrq {
 	int siq_index;
 } softintrq[] = {
 	{ "arpintrq", N_ARPINTRQ },
-	{ "ipintrq", N_IPINTRQ },
-	{ "ip6intrq", N_IP6INTRQ },
 	{ "atintrq1", N_ATINTRQ1 },
 	{ "atintrq2", N_ATINTRQ2 },
-#ifdef NS
-	{ "nsintrq", N_NSINTRQ },
-#endif
-	{ "clnlintrq", N_CLNLINTRQ },
-	{ "llcintrq", N_LLCINTRQ },
-	{ "hdintrq", N_HDINTRQ },
 	{ "natmintrq", N_NATMINTRQ },
 	{ "ppoediscinq", N_PPPOEDISCINQ },
 	{ "ppoeinq", N_PPPOEINQ },
-	{ "pkintrq", N_PKINTRQ },
 	{ NULL, -1 },
 };
 
-int main __P((int, char *[]));
-static void printproto __P((struct protox *, char *));
-static void print_softintrq __P((void));
-static void usage __P((void));
-static struct protox *name2protox __P((char *));
-static struct protox *knownname __P((char *));
-static void prepare(char *, char *, struct protox *tp);
+static void printproto(struct protox *, const char *);
+static void print_softintrq(void);
+__dead static void usage(void);
+static struct protox *name2protox(const char *);
+static struct protox *knownname(const char *);
+static void prepare(const char *, const char *, struct protox *tp);
+static kvm_t *prepare_kvmd(const char *, const char *, char *);
 
-kvm_t *kvmd;
+static kvm_t *kvmd = NULL;
 gid_t egid;
+int interval;	/* repeat interval for i/f stats */
+static const char *nlistf = NULL, *memf = NULL;
 
-void
-prepare(char *nlistf, char *memf, struct protox *tp)
+kvm_t *
+get_kvmd(void)
 {
 	char buf[_POSIX2_LINE_MAX];
 
+	if (kvmd != NULL)
+		return kvmd;
+	if ((kvmd = prepare_kvmd(nlistf, memf, buf)) == NULL)
+		errx(1, "kvm error: %s", buf);
+	return kvmd;
+}
+
+static kvm_t *
+prepare_kvmd(const char *nf, const char *mf, char *errbuf)
+{
+	kvm_t *k;
+
+	(void)setegid(egid);
+	k = kvm_openfiles(nf, mf, NULL, O_RDONLY, errbuf);
+	(void)setgid(getgid());
+	return k;
+}
+
+void
+prepare(const char *nf, const char *mf, struct protox *tp)
+{
+	char buf[_POSIX2_LINE_MAX];
 	/*
 	 * Try to figure out if we can use sysctl or not.
 	 */
-	if (nlistf != NULL && memf != NULL) {
-		/* If we have -M and -N, we're not dealing with live memory. */
+	if (nf != NULL || mf != NULL) {
+		/* Of course, we can't use sysctl with dumps. */
+		if (force_sysctl)
+			errx(EXIT_FAILURE, "can't use sysctl with dumps");
+
+		/*
+		 * If we have -M or -N, we're not dealing with live memory
+		 * or want to use kvm interface explicitly.  It is sometimes
+		 * useful to dig inside of kernel without extending
+		 * sysctl interface (i.e., without rebuilding kernel).
+		 */
 		use_sysctl = 0;
 	} else if (qflag ||
-		   rflag ||
-		   iflag ||
 #ifndef SMALL
 		   gflag ||
-		   (pflag && tp->pr_sindex == N_DDPSTAT) ||
-#ifdef NS
-		   (pflag && tp->pr_sindex == N_IDPSTAT) ||
-		   (pflag && tp->pr_sindex == N_SPPSTAT) ||
-		   (pflag && tp->pr_sindex == N_NSERR) ||
 #endif
-		   (pflag && tp->pr_sindex == N_TPSTAT) ||
-		   (pflag && tp->pr_sindex == N_CLTPSTAT) ||
-		   (pflag && tp->pr_sindex == N_CLNPSTAT) ||
-		   (pflag && tp->pr_sindex == N_ESISSTAT) ||
-#endif
-		   (pflag && tp->pr_sindex == N_ARPSTAT) ||
-		   (pflag && tp->pr_sindex == N_IGMPSTAT) ||
 		   (pflag && tp->pr_sindex == N_PIMSTAT) ||
-#ifdef IPSEC
-		   (pflag && tp->pr_sindex == N_IPSECSTAT) ||
-		   (pflag && tp->pr_sindex == N_PFKEYSTAT) ||
-#ifdef INET6
-		   (pflag && tp->pr_sindex == N_IPSEC6STAT) ||
-#endif
-#endif
 		   Pflag) {
 		/* These flags are not yet supported via sysctl(3). */
 		use_sysctl = 0;
@@ -419,16 +352,22 @@ prepare(char *nlistf, char *memf, struct protox *tp)
 		use_sysctl = 1;
 	}
 
+	if (force_sysctl && !use_sysctl) {
+		/* Let the user know what's about to happen. */
+		warnx("forcing sysctl usage even though it might not be "\
+		    "supported");
+		use_sysctl = 1;
+	}
+
+	kvmd = prepare_kvmd(nf, mf, buf);
+
 	if (!use_sysctl) {
-		(void)setegid(egid);
-		kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, buf);
-		(void)setgid(getgid());
+
 		if (kvmd == NULL)
-			err(1, "kvm error: %s", buf);
-	
+			errx(1, "kvm error: %s", buf);
 		if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
-			if (nlistf)
-				errx(1, "%s: no namelist", nlistf);
+			if (nf)
+				errx(1, "%s: no namelist", nf);
 			else
 				errx(1, "no namelist");
 		}
@@ -437,28 +376,33 @@ prepare(char *nlistf, char *memf, struct protox *tp)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct protoent *p;
 	struct protox *tp;	/* for printing cblocks & stats */
 	int ch;
-	char *nlistf = NULL, *memf = NULL;
 	char *cp;
+	char *afname, *afnames;
 	u_long pcbaddr;
+
+	if (prog_init) {
+		if (prog_init() == -1)
+			err(1, "init failed");
+		force_sysctl = 1; /* cheap trick */
+	}
 
 	egid = getegid();
 	(void)setegid(getgid());
 	tp = NULL;
 	af = AF_UNSPEC;
+	afnames = NULL;
 	pcbaddr = 0;
 
 	while ((ch = getopt(argc, argv,
-	    "AabBdf:ghI:LliM:mN:nP:p:qrsStuvw:")) != -1)
+	    "AabBdf:ghI:LliM:mN:nP:p:qrsStTuVvw:X")) != -1)
 		switch (ch) {
 		case 'A':
-			Aflag = 1;
+			Aflag = RT_AFLAG;
 			break;
 		case 'a':
 			aflag = 1;
@@ -473,36 +417,16 @@ main(argc, argv)
 			dflag = 1;
 			break;
 		case 'f':
-#ifdef NS
-			if (strcmp(optarg, "ns") == 0) {
-				af = AF_NS;
-				break;
-			}
-#endif
-			if (strcmp(optarg, "inet") == 0)
-				af = AF_INET;
-			else if (strcmp(optarg, "inet6") == 0)
-				af = AF_INET6;
-			else if (strcmp(optarg, "arp") == 0)
-				af = AF_ARP;
-			else if (strcmp(optarg, "pfkey") == 0)
-				af = PF_KEY;
-			else if (strcmp(optarg, "unix") == 0
-			    || strcmp(optarg, "local") == 0)
-				af = AF_LOCAL;
-			else if (strcmp(optarg, "iso") == 0)
-				af = AF_ISO;
-			else if (strcmp(optarg, "atalk") == 0)
-				af = AF_APPLETALK;
-			else
-				errx(1, "%s: unknown address family",
-				    optarg);
+			afnames = optarg;
 			break;
 #ifndef SMALL
 		case 'g':
 			gflag = 1;
 			break;
 #endif
+		case 'h':
+			hflag = 1;
+			break;
 		case 'I':
 			iflag = 1;
 			interface = optarg;
@@ -511,7 +435,7 @@ main(argc, argv)
 			iflag = 1;
 			break;
 		case 'L':
-			Lflag = 1;
+			Lflag = RT_LFLAG;
 			break;
 		case 'l':
 			lflag = 1;
@@ -526,7 +450,7 @@ main(argc, argv)
 			nlistf = optarg;
 			break;
 		case 'n':
-			numeric_addr = numeric_port = nflag = 1;
+			numeric_addr = numeric_port = nflag = RT_NFLAG;
 			break;
 		case 'P':
 			errno = 0;
@@ -557,15 +481,24 @@ main(argc, argv)
 		case 't':
 			tflag = 1;
 			break;
+		case 'T':
+			tagflag = RT_TFLAG;
+			break;
 		case 'u':
 			af = AF_LOCAL;
 			break;
+		case 'V':
+			Vflag++;
+			break;
 		case 'v':
-			vflag++;
+			vflag = RT_VFLAG;
 			break;
 		case 'w':
 			interval = atoi(optarg);
 			iflag = 1;
+			break;
+		case 'X':
+			force_sysctl = 1;
 			break;
 		case '?':
 		default:
@@ -616,14 +549,15 @@ main(argc, argv)
 			tp = name2protox("tcp");
 		}
 		if (tp->pr_dump)
-			(*tp->pr_dump)(pcbaddr);
+			(*tp->pr_dump)(nl[tp->pr_index].n_value, tp->pr_name,
+			    pcbaddr);
 		else
 			printf("%s: no PCB dump routine\n", tp->pr_name);
 		exit(0);
 	}
 	if (pflag) {
 		if (iflag && tp->pr_istats)
-			intpr(interval, nl[N_IFNET].n_value, tp->pr_istats);
+			intpr(interval, nl[N_IFNET_LIST].n_value, tp->pr_istats);
 		else if (tp->pr_stats)
 			(*tp->pr_stats)(nl[tp->pr_sindex].n_value,
 				tp->pr_name);
@@ -641,99 +575,125 @@ main(argc, argv)
 	 */
 	sethostent(1);
 	setnetent(1);
-	if (iflag) {
-		if (af != AF_UNSPEC)
-			goto protostat;
-
-		intpr(interval, nl[N_IFNET].n_value, NULL);
-		exit(0);
-	}
-	if (rflag) {
-		if (sflag)
-			rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
-		else {
-			if (use_sysctl)
-				p_rttables(af);
-			else
-				routepr(nl[N_RTREE].n_value);
-		}
-		exit(0);
-	}
-#ifndef SMALL
-	if (gflag) {
-		if (sflag) {
-			if (af == AF_INET || af == AF_UNSPEC)
-				mrt_stats(nl[N_MRTPROTO].n_value,
-					  nl[N_MRTSTAT].n_value);
-#ifdef INET6
-			if (af == AF_INET6 || af == AF_UNSPEC)
-				mrt6_stats(nl[N_MRT6PROTO].n_value,
-					   nl[N_MRT6STAT].n_value);
-#endif
-		}
-		else {
-			if (af == AF_INET || af == AF_UNSPEC)
-				mroutepr(nl[N_MRTPROTO].n_value,
-					 nl[N_MFCHASHTBL].n_value,
-					 nl[N_MFCHASH].n_value,
-					 nl[N_VIFTABLE].n_value);
-#ifdef INET6
-			if (af == AF_INET6 || af == AF_UNSPEC)
-				mroute6pr(nl[N_MRT6PROTO].n_value,
-					  nl[N_MF6CTABLE].n_value,
-					  nl[N_MIF6TABLE].n_value);
-#endif
-		}
-		exit(0);
-	}
-#endif
-  protostat:
-	if (af == AF_INET || af == AF_UNSPEC) {
-		setprotoent(1);
-		setservent(1);
-		/* ugh, this is O(MN) ... why do we do this? */
-		while ((p = getprotoent()) != NULL) {
-			for (tp = protox; tp->pr_name; tp++)
-				if (strcmp(tp->pr_name, p->p_name) == 0)
-					break;
-			if (tp->pr_name == 0 || tp->pr_wanted == 0)
+	/*
+	 * If -f was used afnames != NULL, loop over the address families.
+	 * Otherwise do this at least once (with af == AF_UNSPEC).
+	 */
+	afname = NULL;
+	do {
+		if (afnames != NULL) {
+			afname = strsep(&afnames, ",");
+			if (afname == NULL)
+				break;		/* Exit early */
+			if (strcmp(afname, "inet") == 0)
+				af = AF_INET;
+			else if (strcmp(afname, "inet6") == 0)
+				af = AF_INET6;
+			else if (strcmp(afname, "arp") == 0)
+				af = AF_ARP;
+			else if (strcmp(afname, "pfkey") == 0)
+				af = PF_KEY;
+			else if (strcmp(afname, "unix") == 0
+			    || strcmp(afname, "local") == 0)
+				af = AF_LOCAL;
+			else if (strcmp(afname, "atalk") == 0)
+				af = AF_APPLETALK;
+			else if (strcmp(afname, "mpls") == 0)
+				af = AF_MPLS;
+			else {
+				warnx("%s: unknown address family",
+				    afname);
 				continue;
-			printproto(tp, p->p_name);
-			tp->pr_wanted = 0;
+			}
 		}
-		endprotoent();
-		for (tp = protox; tp->pr_name; tp++)
-			if (tp->pr_wanted)
-				printproto(tp, tp->pr_name);
-	}
+
+		if (iflag) {
+			if (af != AF_UNSPEC)
+				goto protostat;
+
+			intpr(interval, nl[N_IFNET_LIST].n_value, NULL);
+			break;
+		}
+		if (rflag) {
+			if (sflag)
+				rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
+			else {
+				if (use_sysctl)
+					p_rttables(af,
+					    nflag|tagflag|vflag|Lflag, 0, ~0);
+				else
+					routepr(nl[N_RTREE].n_value);
+			}
+			break;
+		}
+#ifndef SMALL
+		if (gflag) {
+			if (sflag) {
+				if (af == AF_INET || af == AF_UNSPEC)
+					mrt_stats(nl[N_MRTPROTO].n_value,
+						  nl[N_MRTSTAT].n_value);
 #ifdef INET6
-	if (af == AF_INET6 || af == AF_UNSPEC)
-		for (tp = ip6protox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
+				if (af == AF_INET6 || af == AF_UNSPEC)
+					mrt6_stats(nl[N_MRT6PROTO].n_value,
+						   nl[N_MRT6STAT].n_value);
 #endif
-	if (af == AF_ARP || af == AF_UNSPEC)
-		for (tp = arpprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
+			}
+			else {
+				if (af == AF_INET || af == AF_UNSPEC)
+					mroutepr(nl[N_MRTPROTO].n_value,
+						 nl[N_MFCHASHTBL].n_value,
+						 nl[N_MFCHASH].n_value,
+						 nl[N_VIFTABLE].n_value);
+#ifdef INET6
+				if (af == AF_INET6 || af == AF_UNSPEC)
+					mroute6pr(nl[N_MRT6PROTO].n_value,
+						  nl[N_MF6CTABLE].n_value,
+						  nl[N_MIF6TABLE].n_value);
+#endif
+			}
+			break;
+		}
+#endif
+	  protostat:
+		if (af == AF_INET || af == AF_UNSPEC) {
+			setprotoent(1);
+			setservent(1);
+			/* ugh, this is O(MN) ... why do we do this? */
+			while ((p = getprotoent()) != NULL) {
+				for (tp = protox; tp->pr_name; tp++)
+					if (strcmp(tp->pr_name, p->p_name) == 0)
+						break;
+				if (tp->pr_name == 0 || tp->pr_wanted == 0)
+					continue;
+				printproto(tp, p->p_name);
+				tp->pr_wanted = 0;
+			}
+			endprotoent();
+			for (tp = protox; tp->pr_name; tp++)
+				if (tp->pr_wanted)
+					printproto(tp, tp->pr_name);
+		}
+#ifdef INET6
+		if (af == AF_INET6 || af == AF_UNSPEC)
+			for (tp = ip6protox; tp->pr_name; tp++)
+				printproto(tp, tp->pr_name);
+#endif
+		if (af == AF_ARP || af == AF_UNSPEC)
+			for (tp = arpprotox; tp->pr_name; tp++)
+				printproto(tp, tp->pr_name);
 #ifdef IPSEC
-	if (af == PF_KEY || af == AF_UNSPEC)
-		for (tp = pfkeyprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
+		if (af == PF_KEY || af == AF_UNSPEC)
+			for (tp = pfkeyprotox; tp->pr_name; tp++)
+				printproto(tp, tp->pr_name);
 #endif
 #ifndef SMALL
-	if (af == AF_APPLETALK || af == AF_UNSPEC)
-		for (tp = atalkprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
-#ifdef NS
-	if (af == AF_NS || af == AF_UNSPEC)
-		for (tp = nsprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
+		if (af == AF_APPLETALK || af == AF_UNSPEC)
+			for (tp = atalkprotox; tp->pr_name; tp++)
+				printproto(tp, tp->pr_name);
+		if ((af == AF_LOCAL || af == AF_UNSPEC) && !sflag)
+			unixpr(nl[N_UNIXSW].n_value);
 #endif
-	if (af == AF_ISO || af == AF_UNSPEC)
-		for (tp = isoprotox; tp->pr_name; tp++)
-			printproto(tp, tp->pr_name);
-	if ((af == AF_LOCAL || af == AF_UNSPEC) && !sflag)
-		unixpr(nl[N_UNIXSW].n_value);
-#endif
+	} while (afnames != NULL && afname != NULL);
 	exit(0);
 }
 
@@ -743,17 +703,15 @@ main(argc, argv)
  * is not in the namelist, ignore this one.
  */
 static void
-printproto(tp, name)
-	struct protox *tp;
-	char *name;
+printproto(struct protox *tp, const char *name)
 {
-	void (*pr) __P((u_long, char *));
+	void (*pr)(u_long, const char *);
 	u_long off;
 
 	if (sflag) {
 		if (iflag) {
 			if (tp->pr_istats)
-				intpr(interval, nl[N_IFNET].n_value,
+				intpr(interval, nl[N_IFNET_LIST].n_value,
 				      tp->pr_istats);
 			return;
 		}
@@ -774,7 +732,7 @@ printproto(tp, name)
  * Print softintrq status.
  */
 void
-print_softintrq()
+print_softintrq(void)
 {
 	struct ifqueue intrq, *ifq = &intrq;
 	const struct softintrq *siq;
@@ -797,10 +755,7 @@ print_softintrq()
  * Read kernel memory, return 0 on success.
  */
 int
-kread(addr, buf, size)
-	u_long addr;
-	char *buf;
-	int size;
+kread(u_long addr, char *buf, int size)
 {
 
 	if (kvm_read(kvmd, addr, buf, size) != size) {
@@ -810,17 +765,15 @@ kread(addr, buf, size)
 	return (0);
 }
 
-char *
-plural(n)
-	int n;
+const char *
+plural(int n)
 {
 
 	return (n != 1 ? "s" : "");
 }
 
-char *
-plurales(n)
-	int n;
+const char *
+plurales(int n)
 {
 
 	return (n != 1 ? "es" : "");
@@ -840,8 +793,7 @@ get_hardticks(void)
  * Find the protox for the given "well-known" name.
  */
 static struct protox *
-knownname(name)
-	char *name;
+knownname(const char *name)
 {
 	struct protox **tpp, *tp;
 
@@ -856,8 +808,7 @@ knownname(name)
  * Find the protox corresponding to name.
  */
 static struct protox *
-name2protox(name)
-	char *name;
+name2protox(const char *name)
 {
 	struct protox *tp;
 	char **alias;			/* alias from p->aliases */
@@ -884,14 +835,14 @@ name2protox(name)
 }
 
 static void
-usage()
+usage(void)
 {
 	const char *progname = getprogname();
 
 	(void)fprintf(stderr,
-"usage: %s [-Aan] [-f address_family] [-M core] [-N system]\n", progname);
+"usage: %s [-Aan] [-f address_family[,family ...]] [-M core] [-N system]\n", progname);
 	(void)fprintf(stderr,
-"       %s [-bdgiLmnqrsSv] [-f address_family] [-M core] [-N system]\n", 
+"       %s [-bdgiLmnqrsSv] [-f address_family[,family ...]] [-M core] [-N system]\n", 
 	progname);
 	(void)fprintf(stderr,
 "       %s [-dn] [-I interface] [-M core] [-N system] [-w wait]\n", progname);
@@ -902,7 +853,7 @@ usage()
 	(void)fprintf(stderr,
 "       %s [-p protocol] [-i] [-I Interface] \n", progname);
 	(void)fprintf(stderr,
-"       %s [-s] [-f address_family] [-i] [-I Interface]\n", progname);
+"       %s [-s] [-f address_family[,family ...]] [-i] [-I Interface]\n", progname);
 	(void)fprintf(stderr,
 "       %s [-s] [-B] [-I interface]\n", progname);
 	exit(1);

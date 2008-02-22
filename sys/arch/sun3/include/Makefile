@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2007/02/09 21:55:13 ad Exp $
+#	$NetBSD: Makefile,v 1.26 2015/12/24 14:13:36 christos Exp $
 
 INCSDIR= /usr/include/sun3
 
@@ -7,7 +7,7 @@ INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
 	cdefs.h cg2reg.h cpu.h \
 	disklabel.h dvma.h dvma3.h dvma3x.h \
 	eeprom.h elf_machdep.h endian.h endian_machdep.h \
-	float.h frame.h \
+	fenv.h float.h frame.h \
 	idprom.h ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	intr.h \
@@ -17,9 +17,9 @@ INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
 	param.h param3.h param3x.h pcb.h pmap.h pmap3.h pmap3x.h pmc.h \
 	proc.h profile.h psl.h pte.h pte3.h pte3x.h ptrace.h \
 	reg.h rwlock.h \
-	setjmp.h signal.h stdarg.h \
+	setjmp.h signal.h \
 	trap.h types.h \
-	varargs.h vmparam.h vmparam3.h vmparam3x.h vuid_event.h \
+	vmparam.h vmparam3.h vmparam3x.h vuid_event.h \
 	wchar_limits.h \
 	z8530var.h
 

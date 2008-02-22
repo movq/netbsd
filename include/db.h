@@ -1,4 +1,4 @@
-/*	$NetBSD: db.h,v 1.23 2007/02/03 23:48:21 christos Exp $	*/
+/*	$NetBSD: db.h,v 1.27 2016/09/24 20:11:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -69,6 +69,23 @@ typedef struct {
 #define	R_SETCURSOR	10		/* put (RECNO) */
 #define	R_RECNOSYNC	11		/* sync (RECNO) */
 
+/*
+ * Recursive sequential scan.
+ *
+ * This avoids using sibling pointers, permitting (possibly partial)
+ * recovery from some kinds of btree corruption.  Start a sequential
+ * scan as usual, but use R_RNEXT or R_RPREV to move forward or
+ * backward.
+ *
+ * This probably doesn't work with btrees that allow duplicate keys.
+ * Database modifications during the scan can also modify the parent
+ * page stack needed for correct functioning.  Intermixing
+ * non-recursive traversal by using R_NEXT or R_PREV can also make the
+ * page stack inconsistent with the cursor and cause problems.
+ */
+#define R_RNEXT		128		/* seq (BTREE, RECNO) */
+#define R_RPREV		129		/* seq (BTREE, RECNO) */
+
 typedef enum { DB_BTREE, DB_HASH, DB_RECNO } DBTYPE;
 
 /*
@@ -98,11 +115,11 @@ typedef enum { DB_BTREE, DB_HASH, DB_RECNO } DBTYPE;
 typedef struct __db {
 	DBTYPE type;			/* Underlying db type. */
 	int (*close)	(struct __db *);
-	int (*del)	(const struct __db *, const DBT *, u_int);
-	int (*get)	(const struct __db *, const DBT *, DBT *, u_int);
-	int (*put)	(const struct __db *, DBT *, const DBT *, u_int);
-	int (*seq)	(const struct __db *, DBT *, DBT *, u_int);
-	int (*sync)	(const struct __db *, u_int);
+	int (*del)	(const struct __db *, const DBT *, unsigned int);
+	int (*get)	(const struct __db *, const DBT *, DBT *, unsigned int);
+	int (*put)	(const struct __db *, DBT *, const DBT *, unsigned int);
+	int (*seq)	(const struct __db *, DBT *, DBT *, unsigned int);
+	int (*sync)	(const struct __db *, unsigned int);
 	void *internal;			/* Access method private. */
 	int (*fd)	(const struct __db *);
 } DB;
@@ -113,11 +130,11 @@ typedef struct __db {
 /* Structure used to pass parameters to the btree routines. */
 typedef struct {
 #define	R_DUP		0x01	/* duplicate keys */
-	u_long	flags;
-	u_int	cachesize;	/* bytes to cache */
-	int	maxkeypage;	/* maximum keys per page */
-	int	minkeypage;	/* minimum keys per page */
-	u_int	psize;		/* page size */
+	unsigned long	flags;
+	unsigned int	cachesize;	/* bytes to cache */
+	int		maxkeypage;	/* maximum keys per page */
+	int		minkeypage;	/* minimum keys per page */
+	unsigned int	psize;		/* page size */
 	int	(*compare)	/* comparison function */
 		(const DBT *, const DBT *);
 	size_t	(*prefix)	/* prefix function */
@@ -130,10 +147,10 @@ typedef struct {
 
 /* Structure used to pass parameters to the hashing routines. */
 typedef struct {
-	u_int	bsize;		/* bucket size */
-	u_int	ffactor;	/* fill factor */
-	u_int	nelem;		/* number of elements */
-	u_int	cachesize;	/* bytes to cache */
+	unsigned int	bsize;		/* bucket size */
+	unsigned int	ffactor;	/* fill factor */
+	unsigned int	nelem;		/* number of elements */
+	unsigned int	cachesize;	/* bytes to cache */
 	uint32_t		/* hash function */
 		(*hash)(const void *, size_t);
 	int	lorder;		/* byte order */
@@ -144,13 +161,13 @@ typedef struct {
 #define	R_FIXEDLEN	0x01	/* fixed-length records */
 #define	R_NOKEY		0x02	/* key not required */
 #define	R_SNAPSHOT	0x04	/* snapshot the input */
-	u_long	flags;
-	u_int	cachesize;	/* bytes to cache */
-	u_int	psize;		/* page size */
-	int	lorder;		/* byte order */
-	size_t	reclen;		/* record length (fixed-length records) */
-	u_char	bval;		/* delimiting byte (variable-length records */
-	char	*bfname;	/* btree file name */ 
+	unsigned long	flags;
+	unsigned int	cachesize;	/* bytes to cache */
+	unsigned int	psize;		/* page size */
+	int		lorder;		/* byte order */
+	size_t		reclen;		/* record length (fixed-length records) */
+	uint8_t		bval;		/* delimiting byte (variable-length records */
+	char		*bfname;	/* btree file name */ 
 } RECNOINFO;
 
 #ifdef __DBINTERFACE_PRIVATE
@@ -214,13 +231,15 @@ DB *dbopen(const char *, int, mode_t, DBTYPE, const void *);
 
 #ifdef __DBINTERFACE_PRIVATE
 
-#define _DBMASK(a) (~((1ULL << (sizeof(a) * NBBY)) - 1))
-#define _DBFIT(a, t) _DIAGASSERT(((a) & _DBMASK(t)) == 0)
+#define _DBFIT(a, t) _DIAGASSERT(__type_fit(t, a))
 
 DB	*__bt_open(const char *, int, mode_t, const BTREEINFO *, int);
 DB	*__hash_open(const char *, int, mode_t, const HASHINFO *, int);
 DB	*__rec_open(const char *, int, mode_t, const RECNOINFO *, int);
 void	 __dbpanic(DB *);
+struct stat;
+int	 __dbopen(const char *, int, mode_t, struct stat *);
+int	 __dbtemp(const char *, struct stat *);
 #endif
 __END_DECLS
 #endif /* !_DB_H_ */

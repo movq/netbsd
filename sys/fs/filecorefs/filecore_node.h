@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_node.h,v 1.4 2005/12/03 17:34:43 christos Exp $	*/
+/*	$NetBSD: filecore_node.h,v 1.6 2014/10/04 13:27:24 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -98,8 +98,6 @@ struct filecore_node {
 	struct	filecore_direntry i_dirent; /* directory entry */
 };
 
-#define	i_forw		i_chain[0]
-#define	i_back		i_chain[1]
 #define i_size		i_dirent.len
 
 /* flags */
@@ -113,35 +111,31 @@ struct filecore_node {
 /*
  * Prototypes for Filecore vnode operations
  */
-int	filecore_lookup		__P((void *));
+int	filecore_lookup(void *);
 #define	filecore_open		genfs_nullop
 #define	filecore_close		genfs_nullop
-int	filecore_access		__P((void *));
-int	filecore_getattr	__P((void *));
-int	filecore_read		__P((void *));
+int	filecore_access(void *);
+int	filecore_getattr(void *);
+int	filecore_read(void *);
 #define	filecore_poll		genfs_poll
 #define	filecore_mmap		genfs_mmap
 #define	filecore_seek		genfs_seek
-int	filecore_readdir	__P((void *));
-int	filecore_readlink	__P((void *));
+int	filecore_readdir(void *);
+int	filecore_readlink(void *);
 #define	filecore_abortop	genfs_abortop
-int	filecore_inactive	__P((void *));
-int	filecore_reclaim	__P((void *));
-int	filecore_link		__P((void *));
-int	filecore_symlink	__P((void *));
-int	filecore_bmap		__P((void *));
-int	filecore_strategy	__P((void *));
-int	filecore_print		__P((void *));
-int	filecore_pathconf	__P((void *));
-int	filecore_blkatoff	__P((void *));
+int	filecore_inactive(void *);
+int	filecore_reclaim(void *);
+int	filecore_link(void *);
+int	filecore_symlink(void *);
+int	filecore_bmap(void *);
+int	filecore_strategy(void *);
+int	filecore_print(void *);
+int	filecore_pathconf(void *);
+int	filecore_blkatoff(void *);
 
-struct	vnode *filecore_ihashget __P((dev_t, ino_t));
-void	filecore_ihashins __P((struct filecore_node *));
-void	filecore_ihashrem __P((struct filecore_node *));
-
-mode_t	filecore_mode	__P((struct filecore_node *));
-struct timespec	filecore_time	__P((struct filecore_node *));
-ino_t	filecore_getparent	__P((struct filecore_node *));
-int	filecore_fn2unix	__P((char *, char *, u_int16_t *));
-int	filecore_fncmp		__P((const char *, const char *, u_short));
-int	filecore_dbread		__P((struct filecore_node *, struct buf **));
+mode_t	filecore_mode(struct filecore_node *);
+struct timespec	filecore_time(struct filecore_node *);
+ino_t	filecore_getparent(struct filecore_node *);
+int	filecore_fn2unix(char *, char *, u_int16_t *);
+int	filecore_fncmp(const char *, const char *, u_short);
+int	filecore_dbread(struct filecore_node *, struct buf **);

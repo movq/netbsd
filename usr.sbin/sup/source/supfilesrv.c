@@ -1,4 +1,4 @@
-/*	$NetBSD: supfilesrv.c,v 1.41 2007/12/20 20:17:52 christos Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.51 2017/05/04 16:26:10 sevan Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -340,7 +340,6 @@ HASH *inodeH[HASHSIZE];		/* for inode lookup for linked file check */
 
 
 /* supfilesrv.c */
-int main(int, char **);
 void chldsig(int);
 void usage(void);
 void init(int, char **);
@@ -363,12 +362,57 @@ TREE *linkcheck(TREE *, int, int);
 char *uconvert(int);
 char *gconvert(int);
 char *changeuid(char *, char *, int, int);
-void goaway(char *, ...);
+void goaway(const char *, ...);
 char *fmttime(time_t);
 int local_file(int, struct stat *);
 int stat_info_ok(struct stat *, struct stat *);
 int link_nofollow(int);
 int link_nofollow(int);
+
+struct hostpid {
+	char name[MAXHOSTNAMELEN];
+	pid_t pid;
+} *hp;
+
+static void
+addchild(pid_t pid)
+{
+	size_t i;
+	for (i = 0; i < maxchildren; i++)
+		if (hp[i].pid == 0) {
+			hp[i].pid = pid;
+			strcpy(hp[i].name, remotehost());
+			nchildren++;
+			return;
+		}
+	logerr("Out of space adding child %s", remotehost());
+}
+
+static void
+removechild(pid_t pid)
+{
+	size_t i;
+	for (i = 0; i < maxchildren; i++)
+		if (hp[i].pid == pid) {
+			hp[i].pid = 0;
+			nchildren--;
+			return;
+		}
+	logerr("Child with pid %jd not found", (intmax_t)pid);
+}
+
+static int
+checkchild(void)
+{
+	const char *h = remotehost();
+	size_t i;
+	for (i = 0; i < maxchildren; i++)
+		if (hp[i].pid && strcmp(hp[i].name, h) == 0) {
+			logerr("Ignoring connection frm %s", h);
+			return 0;
+		}
+	return 1;
+}
 
 /*************************************
  ***    M A I N   R O U T I N E    ***
@@ -387,7 +431,7 @@ main(int argc, char **argv)
 
 	/* initialize global variables */
 	pgmversion = PGMVERSION;/* export version number */
-	server = TRUE;		/* export that we're not a server */
+	isserver = TRUE;	/* export that we're not a server */
 	collname = NULL;	/* no current collection yet */
 	maxchildren = MAXCHILDREN;	/* defined in sup.h */
 
@@ -395,11 +439,15 @@ main(int argc, char **argv)
 
 #ifdef HAS_DAEMON
 	if (!live)		/* if not debugging, turn into daemon */
-		daemon(0, 0);
+		if (daemon(0, 0) == -1)
+		    goaway("Daemon failed (%s)", strerror(errno));
 #endif
+	hp = malloc(sizeof(*hp) * maxchildren);
+	if (hp == NULL)
+		goaway("Cannot allocate memory");
 
 	logopen("supfile");
-	tloc = time((time_t *) NULL);
+	tloc = time(NULL);
 	loginfo("SUP File Server Version %d.%d (%s) starting at %s",
 	    PROTOVERSION, PGMVERSION, scmversion, fmttime(tloc));
 	if (live) {
@@ -443,6 +491,14 @@ main(int argc, char **argv)
 			(void) servicekill();
 			continue;
 		}
+		/*
+		 * If we are being bombarded, don't even spend time forking
+		 * or conversing
+		 */
+		if (nchildren > maxchildren) {
+			(void) servicekill();
+			continue;
+		}
 		sigemptyset(&nset);
 		sigaddset(&nset, SIGCHLD);
 		sigprocmask(SIG_BLOCK, &nset, &oset);
@@ -468,8 +524,10 @@ main(int argc, char **argv)
 			exit(0);
 		}
 		(void) servicekill();	/* parent */
-		if (pid > 0)
-			nchildren++;
+		if (pid > 0) {
+			addchild(pid);
+			setproctitle("Master [%d/%d]", nchildren, maxchildren);
+		}
 		(void) sigprocmask(SIG_SETMASK, &oset, NULL);
 	}
 }
@@ -481,10 +539,25 @@ void
 chldsig(int snum __unused)
 {
 	int w;
+	pid_t pid;
 
-	while (wait3((int *) &w, WNOHANG, (struct rusage *) 0) > 0) {
-		if (nchildren)
-			nchildren--;
+	while ((pid = waitpid(-1, &w, WNOHANG)) > 0) {
+		if (kill(pid, 0) == -1)
+			switch (errno) {
+			case ESRCH:
+				if (nchildren == 0) {
+					logerr("no children but pid %jd\n",
+					    (intmax_t)pid);
+					break;
+				}
+				removechild(pid);
+				break;
+			default:
+				logerr("killing pid %jd: (%s)\n", (intmax_t)
+				    pid, strerror(errno));
+				break;
+			}
+
 	}
 }
 /*****************************************
@@ -593,14 +666,14 @@ init(int argc, char **argv)
 			uidH[i] = gidH[i] = inodeH[i] = NULL;
 		return;
 	}
-	server = FALSE;
+	isserver = FALSE;
 	if (argc < 1)
 		usage();
 	f = fopen(cryptkey, "r");
 	if (f == NULL)
 		quit(1, "Unable to open cryptfile %s\n", cryptkey);
 	if ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-		if ((q = index(p, '\n')) != NULL)
+		if ((q = strchr(p, '\n')) != NULL)
 			*q = '\0';
 		if (*p == '\0')
 			quit(1, "No cryptkey found in %s\n", cryptkey);
@@ -657,7 +730,7 @@ init(int argc, char **argv)
 	if (netcrypt(PSWDCRYPT) != SCMOK)	/* encrypt password data */
 		quit(1, "Running non-crypting fileserver\n");
 	x = msglogin();
-	(void) netcrypt((char *) NULL);	/* turn off encryption */
+	(void) netcrypt(NULL);	/* turn off encryption */
 	if (x != SCMOK)
 		quit(1, "Error sending login request to file server\n");
 	x = msglogack();
@@ -695,7 +768,7 @@ answer(void)
 	goawayreason = NULL;
 	donereason = NULL;
 	lockfd = -1;
-	starttime = time((time_t *) NULL);
+	starttime = time(NULL);
 	if (!setjmp(sjbuf)) {
 		srvsignon();
 		srvsetup();
@@ -709,7 +782,7 @@ answer(void)
 				exit(0);
 			xargv[0] = "sup";
 			xargv[1] = "-X";
-			xargv[xargc] = (char *) NULL;
+			xargv[xargc] = NULL;
 			(void) dup2(netfile, 0);
 			(void) dup2(netfile, 1);
 			(void) dup2(netfile, 2);
@@ -783,7 +856,7 @@ srvsetup(void)
 {
 	int x;
 	char *p, *q;
-	char buf[STRINGLENGTH];
+	char buf[STRINGLENGTH], filename[MAXPATHLEN];
 	FILE *f;
 	struct stat sbuf;
 	TREELIST *tl;
@@ -829,10 +902,10 @@ srvsetup(void)
 				struct stat fsbuf;
 
 				while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-					q = index(p, '\n');
+					q = strchr(p, '\n');
 					if (q)
 						*q = 0;
-					if (index("#;:", *p))
+					if (strchr("#;:", *p))
 						continue;
 					q = nxtarg(&p, " \t");
 					if (*p == '\0')
@@ -882,14 +955,14 @@ srvsetup(void)
 		release = estrdup(DEFRELEASE);
 	if (basedir == NULL || *basedir == '\0') {
 		basedir = NULL;
-		(void) sprintf(buf, FILEDIRS, DEFDIR);
-		f = fopen(buf, "r");
+		(void) sprintf(filename, FILEDIRS, DEFDIR);
+		f = fopen(filename, "r");
 		if (f) {
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-				q = index(p, '\n');
+				q = strchr(p, '\n');
 				if (q)
 					*q = 0;
-				if (index("#;:", *p))
+				if (strchr("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t=");
 				if (strcmp(q, collname) == 0) {
@@ -906,30 +979,38 @@ srvsetup(void)
 		}
 	}
 	if (chdir(basedir) < 0)
-		goaway("Can't chdir to base directory %s", basedir);
-	(void) sprintf(buf, FILEPREFIX, collname);
-	f = fopen(buf, "r");
+		goaway("Can't chdir to base directory %s (%s)", basedir,
+		    strerror(errno));
+	(void) sprintf(filename, FILEPREFIX, collname);
+	f = fopen(filename, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			prefix = estrdup(p);
 			if (chdir(prefix) < 0)
-				goaway("Can't chdir to %s from base directory %s",
-				    prefix, basedir);
+				goaway("%s: Can't chdir to %s from base "
+				    "directory %s (%s)", filename, prefix,
+				    basedir, strerror(errno));
 			break;
 		}
 		(void) fclose(f);
 	}
 	x = stat(".", &sbuf);
-	if (prefix)
-		(void) chdir(basedir);
+	if (prefix) {
+		int serrno = errno;
+		if (chdir(basedir) < 0)
+			goaway("Can't chdir to %s (%s)", basedir,
+			    strerror(errno));
+		errno = serrno;
+	}
 	if (x < 0)
-		goaway("Can't stat base/prefix directory");
-	if (nchildren >= maxchildren) {
+		goaway("Can't stat base/prefix directory (%s)",
+		    strerror(errno));
+	if (nchildren >= maxchildren || !checkchild()) {
 		setupack = FSETUPBUSY;
 		(void) msgsetupack();
 		if (protver >= 6)
@@ -963,10 +1044,10 @@ srvsetup(void)
 			int hostok = FALSE;
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
 				int not;
-				q = index(p, '\n');
+				q = strchr(p, '\n');
 				if (q)
 					*q = 0;
-				if (index("#;:", *p))
+				if (strchr("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t");
 				if ((not = (*q == '!')) && *++q == '\0')
@@ -1039,7 +1120,7 @@ docrypt(void)
 
 				if (cryptkey == NULL &&
 				    (p = fgets(buf, STRINGLENGTH, f))) {
-					if ((q = index(p, '\n')) != NULL)
+					if ((q = strchr(p, '\n')) != NULL)
 						*q = '\0';
 					if (*p)
 						cryptkey = estrdup(buf);
@@ -1061,7 +1142,7 @@ docrypt(void)
 	x = msgcrypt();
 	if (x != SCMOK)
 		goaway("Error reading encryption test request from client");
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 	if (strcmp(crypttest, CRYPTTEST) != 0)
 		goaway("Client not encrypting data properly");
 	free(crypttest);
@@ -1081,7 +1162,7 @@ srvlogin(void)
 
 	(void) netcrypt(PSWDCRYPT);	/* encrypt acct name and password */
 	x = msglogin();
-	(void) netcrypt((char *) NULL);	/* turn off encryption */
+	(void) netcrypt(NULL);		/* turn off encryption */
 	if (x != SCMOK)
 		goaway("Error reading login request from client");
 	if (logcrypt) {
@@ -1442,15 +1523,15 @@ srvfinishup(time_t starttime)
 	time_t finishtime;
 	char *releasename;
 
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 	if (protver < 6) {
 		if (goawayreason != NULL)
 			free(goawayreason);
-		goawayreason = (char *) NULL;
+		goawayreason = NULL;
 		x = msggoaway();
 		doneack = FDONESUCCESS;
 		donereason = estrdup("Unknown");
-	} else if (goawayreason == (char *) NULL)
+	} else if (goawayreason == NULL)
 		x = msgdone();
 	else {
 		doneack = FDONEGOAWAY;
@@ -1468,21 +1549,21 @@ srvfinishup(time_t starttime)
 	if (donereason == NULL)
 		donereason = estrdup("No reason");
 	if (doneack == FDONESRVERROR || doneack == FDONEUSRERROR)
-		logerr("%s", donereason);
+		logerr("%s: %s", remotehost(), donereason);
 	else if (doneack == FDONEGOAWAY)
-		logerr("GOAWAY: %s", donereason);
+		logerr("GOAWAY: %s: %s", remotehost(), donereason);
 	else if (doneack != FDONESUCCESS)
-		logerr("Reason %d:  %s", doneack, donereason);
+		logerr("%s: Reason %d: %s", remotehost(), doneack, donereason);
 	goawayreason = donereason;
-	cdprefix((char *) NULL);
+	cdprefix(NULL);
 	if (collname == NULL) {
-		logerr("NULL collection in svrfinishup");
+		logerr("%s: NULL collection in svrfinishup", remotehost());
 		return;
 	}
 	(void) sprintf(lognam, FILELOGFILE, collname);
 	if ((logfd = open(lognam, O_APPEND | O_WRONLY, 0644)) < 0)
 		return;		/* can not open file up...error */
-	finishtime = time((time_t *) NULL);
+	finishtime = time(NULL);
 	p = tmpbuf;
 	(void) sprintf(p, "%s ", fmttime(lasttime));
 	p += strlen(p);
@@ -1502,7 +1583,8 @@ srvfinishup(time_t starttime)
 		ioctl(logfd, FIOCNOSPC, &l);
 	}
 #endif				/* MACH */
-	(void) write(logfd, tmpbuf, (p - tmpbuf));
+	if (write(logfd, tmpbuf, (p - tmpbuf)) == -1)
+		logerr("%s: write failed (%s)", remotehost(), strerror(errno));
 	(void) close(logfd);
 }
 /***************************************************
@@ -1539,7 +1621,7 @@ Hinsert(HASH ** table, int num1, int num2, char *name, TREE * tree)
 	HASH *h;
 	int hno;
 	hno = HASHFUNC(num1, num2);
-	h = (HASH *) malloc(sizeof(HASH));
+	h = malloc(sizeof(*h));
 	if (h == NULL)
 		goaway("Cannot allocate memory");
 	h->Hnum1 = num1;
@@ -1561,8 +1643,8 @@ linkcheck(TREE * t, int d, int i)
 	h = Hlookup(inodeH, i, d);
 	if (h)
 		return (h->Htree);
-	Hinsert(inodeH, i, d, (char *) NULL, t);
-	return ((TREE *) NULL);
+	Hinsert(inodeH, i, d, NULL, t);
+	return (NULL);
 }
 
 char *
@@ -1578,7 +1660,7 @@ uconvert(int uid)
 	if (pw == NULL)
 		return ("");
 	p = estrdup(pw->pw_name);
-	Hinsert(uidH, uid, 0, p, (TREE *) NULL);
+	Hinsert(uidH, uid, 0, p, NULL);
 	return (p);
 }
 
@@ -1595,7 +1677,7 @@ gconvert(int gid)
 	if (gr == NULL)
 		return ("");
 	p = estrdup(gr->gr_name);
-	Hinsert(gidH, gid, 0, p, (TREE *) NULL);
+	Hinsert(gidH, gid, 0, p, NULL);
 	return (p);
 }
 
@@ -1633,10 +1715,10 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 		pswdp = NULL;
 	} else {
 		(void) strcpy(nbuf, namep);
-		account = group = index(nbuf, ',');
+		account = group = strchr(nbuf, ',');
 		if (group != NULL) {
 			*group++ = '\0';
-			account = index(group, ',');
+			account = strchr(group, ',');
 			if (account != NULL) {
 				*account++ = '\0';
 				if (*account == '\0')
@@ -1777,19 +1859,19 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 }
 
 void
-goaway(char *fmt, ...)
+goaway(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 
 	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	goawayreason = estrdup(buf);
 	(void) msggoaway();
-	logerr("%s", buf);
+	logerr("%s: %s", remotehost(), buf);
 	longjmp(sjbuf, TRUE);
 }
 
@@ -1799,10 +1881,10 @@ fmttime(time_t time)
 	static char buf[STRINGLENGTH];
 	unsigned int len;
 
-	(void) strcpy(buf, ctime(&time));
-	len = strlen(buf + 4) - 6;
-	(void) strncpy(buf, buf + 4, len);
-	buf[len] = '\0';
+	(void) strcpy(buf, ctime(&time) + 4);
+	len = strlen(buf);
+	if (len > 2)
+		buf[len - 2] = '\0';
 	return (buf);
 }
 /*

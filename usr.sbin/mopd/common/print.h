@@ -1,4 +1,4 @@
-/*	$NetBSD: print.h,v 1.4 2001/01/16 02:50:31 cgd Exp $	*/
+/*	$NetBSD: print.h,v 1.7 2011/08/30 19:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: print.h,v 1.4 2001/01/16 02:50:31 cgd Exp $
+ *	$NetBSD: print.h,v 1.7 2011/08/30 19:49:11 joerg Exp $
  *
  */
 
@@ -36,16 +31,15 @@
 #define _PRINT_H_
 
 __BEGIN_DECLS
-void	mopPrintHWA	  __P((FILE *, u_char *));
-void	mopPrintBPTY	  __P((FILE *, u_char));
-void	mopPrintPGTY      __P((FILE *, u_char));
-void	mopPrintOneline   __P((FILE *, u_char *, int));
-void	mopPrintHeader    __P((FILE *, u_char *, int));
-void	mopPrintMopHeader __P((FILE *, u_char *, int));
-void	mopPrintDevice    __P((FILE *, u_char));
-void	mopPrintTime      __P((FILE *, u_char *));
-void	mopPrintInfo      __P((FILE *, u_char *, int *, u_short,
-			       u_char, int));
+void	mopPrintHWA(FILE *, const u_char *);
+void	mopPrintBPTY(FILE *, u_char);
+void	mopPrintPGTY(FILE *, u_char);
+void	mopPrintOneline(FILE *, const u_char *, int);
+void	mopPrintHeader(FILE *, const u_char *, int);
+void	mopPrintMopHeader(FILE *, const u_char *, int);
+void	mopPrintDevice(FILE *, u_char);
+void	mopPrintTime(FILE *, const u_char *);
+void	mopPrintInfo(FILE *, const u_char *, int *, u_short, u_char, int);
 __END_DECLS
 
 #endif /* _PRINT_H_ */

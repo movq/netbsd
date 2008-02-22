@@ -1,4 +1,4 @@
-/*	$NetBSD: login_cap.h,v 1.10 2007/10/07 01:23:17 christos Exp $	*/
+/*	$NetBSD: login_cap.h,v 1.13 2016/01/23 01:26:14 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -68,16 +68,22 @@ __BEGIN_DECLS
 struct passwd;
 
 login_cap_t *login_getclass(const char *);
-login_cap_t *login_getpwclass(const struct passwd *);
+#ifndef __LIBC12_SOURCE__
+login_cap_t *login_getpwclass(const struct passwd *)
+    __RENAME(__login_getpwclass50);
+#endif
 void	 login_close(login_cap_t *);
-int	 login_getcapbool(login_cap_t *, const char *, u_int);
+int	 login_getcapbool(login_cap_t *, const char *, unsigned int);
 quad_t	 login_getcapnum(login_cap_t *, const char *, quad_t, quad_t);
 quad_t	 login_getcapsize(login_cap_t *, const char *, quad_t, quad_t);
 char	*login_getcapstr(login_cap_t *, const char *, char *, char *);
 quad_t	 login_getcaptime(login_cap_t *, const char *, quad_t, quad_t);
 
-int	setclasscontext(const char *, u_int);
-int	setusercontext(login_cap_t *, struct passwd *, uid_t, u_int);
+int	setclasscontext(const char *, unsigned int);
+#ifndef __LIBC12_SOURCE__
+int	setusercontext(login_cap_t *, struct passwd *, uid_t, unsigned int)
+    __RENAME(__setusercontext50);
+#endif
 void	setuserpath(login_cap_t *, const char *, envfunc_t, void *);
 int	setuserenv(login_cap_t *, envfunc_t, void *);
 

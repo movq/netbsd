@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0.c,v 1.16 2007/02/21 22:59:39 thorpej Exp $ */
+/*	$NetBSD: pxa2x0.c,v 1.22 2012/11/12 18:00:38 skrll Exp $ */
 
 /*
  * Copyright (c) 2002, 2005  Genetec Corporation.  All rights reserved.
@@ -51,13 +51,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 /*-
  * Copyright (c) 1999
@@ -94,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0.c,v 1.16 2007/02/21 22:59:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0.c,v 1.22 2012/11/12 18:00:38 skrll Exp $");
 
 #include "pxaintc.h"
 #include "pxagpio.h"
@@ -111,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0.c,v 1.16 2007/02/21 22:59:39 thorpej Exp $");
 #include <sys/reboot.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/cpufunc.h>
 #include <arm/mainbus/mainbus.h>
@@ -121,7 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0.c,v 1.16 2007/02/21 22:59:39 thorpej Exp $");
 #include <arm/xscale/xscalereg.h>
 
 struct pxaip_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_dma_tag_t sc_dmat;
 	bus_space_handle_t sc_bush_clk;
@@ -129,10 +134,9 @@ struct pxaip_softc {
 };
 
 /* prototypes */
-static int	pxaip_match(struct device *, struct cfdata *, void *);
-static void	pxaip_attach(struct device *, struct device *, void *);
-static int 	pxaip_search(struct device *, struct cfdata *,
-			     const int *, void *);
+static int	pxaip_match(device_t, cfdata_t, void *);
+static void	pxaip_attach(device_t, device_t, void *);
+static int 	pxaip_search(device_t, cfdata_t, const int *, void *);
 static void	pxaip_attach_critical(struct pxaip_softc *);
 static int	pxaip_print(void *, const char *);
 
@@ -149,7 +153,7 @@ static int	pxaip_measure_cpuclock(struct pxaip_softc *);
 #endif
 
 /* attach structures */
-CFATTACH_DECL(pxaip, sizeof(struct pxaip_softc),
+CFATTACH_DECL_NEW(pxaip, sizeof(struct pxaip_softc),
     pxaip_match, pxaip_attach, NULL, NULL);
 
 static struct pxaip_softc *pxaip_sc;
@@ -161,7 +165,7 @@ static vaddr_t pxaclkman_regs;
 	(*((volatile uint32_t *)(pxaclkman_regs + (reg))))
 
 static int
-pxaip_match(struct device *parent, struct cfdata *match, void *aux)
+pxaip_match(device_t parent, cfdata_t match, void *aux)
 {
 
 #if	!defined(CPU_XSCALE_PXA270)
@@ -185,16 +189,17 @@ pxaip_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-pxaip_attach(struct device *parent, struct device *self, void *aux)
+pxaip_attach(device_t parent, device_t self, void *aux)
 {
-	struct pxaip_softc *sc = (struct pxaip_softc *)self;
+	struct pxaip_softc *sc = device_private(self);
 	int cpuclock;
 
 	pxaip_sc = sc;
+	sc->sc_dev = self;
 	sc->sc_bust = &pxa2x0_bs_tag;
 	sc->sc_dmat = &pxa2x0_bus_dma_tag;
 
-	aprint_normal(": PXA2x0 Onchip Peripheral Bus\n");
+	aprint_normal(": Onchip Peripheral Bus\n");
 
 	if (bus_space_map(sc->sc_bust, PXA2X0_CLKMAN_BASE, PXA2X0_CLKMAN_SIZE,
 	    0, &sc->sc_bush_clk))
@@ -209,12 +214,12 @@ pxaip_attach(struct device *parent, struct device *self, void *aux)
 	 * This takes 2 secs at most.
 	 */
 	cpuclock = pxaip_measure_cpuclock(sc) / 1000;
-	printf("%s: CPU clock = %d.%03d MHz\n", self->dv_xname,
+	printf("%s: CPU clock = %d.%03d MHz\n", device_xname(self),
 	    cpuclock/1000, cpuclock%1000 );
 
 	aprint_normal("%s: kernel is configured for " SUPPORTED_CPU
 		      ", cpu type is %s\n",
-		      self->dv_xname,
+		      device_xname(self),
 		      __CPU_IS_PXA270 ? "PXA270" : "PXA250");
 
 	/*
@@ -229,14 +234,14 @@ pxaip_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-pxaip_search(struct device *parent, struct cfdata *cf,
-	     const int *ldesc, void *aux)
+pxaip_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct pxaip_softc *sc = aux;
 	struct pxaip_attach_args aa;
 
 	aa.pxa_iot = sc->sc_bust;
 	aa.pxa_dmat = sc->sc_dmat;
+	aa.pxa_name = cf->cf_name;
 	aa.pxa_addr = cf->cf_loc[PXAIPCF_ADDR];
 	aa.pxa_size = cf->cf_loc[PXAIPCF_SIZE];
 	aa.pxa_index = cf->cf_loc[PXAIPCF_INDEX];
@@ -255,29 +260,32 @@ pxaip_attach_critical(struct pxaip_softc *sc)
 
 	aa.pxa_iot = sc->sc_bust;
 	aa.pxa_dmat = sc->sc_dmat;
+	aa.pxa_name = "pxaintc";
 	aa.pxa_addr = PXA2X0_INTCTL_BASE;
 	aa.pxa_size = PXA2X0_INTCTL_SIZE;
 	aa.pxa_intr = PXAIPCF_INTR_DEFAULT;
-	if (config_found(&sc->sc_dev, &aa, pxaip_print) == NULL)
+	if (config_found(sc->sc_dev, &aa, pxaip_print) == NULL)
 		panic("pxaip_attach_critical: failed to attach INTC!");
 
 #if NPXAGPIO > 0
 	aa.pxa_iot = sc->sc_bust;
 	aa.pxa_dmat = sc->sc_dmat;
+	aa.pxa_name = "pxagpio";
 	aa.pxa_addr = PXA2X0_GPIO_BASE;
 	aa.pxa_size = PXA2X0_GPIO_SIZE;
 	aa.pxa_intr = PXAIPCF_INTR_DEFAULT;
-	if (config_found(&sc->sc_dev, &aa, pxaip_print) == NULL)
+	if (config_found(sc->sc_dev, &aa, pxaip_print) == NULL)
 		panic("pxaip_attach_critical: failed to attach GPIO!");
 #endif
 
 #if NPXADMAC > 0
 	aa.pxa_iot = sc->sc_bust;
 	aa.pxa_dmat = sc->sc_dmat;
+	aa.pxa_name = "pxaidmac";
 	aa.pxa_addr = PXA2X0_DMAC_BASE;
 	aa.pxa_size = PXA2X0_DMAC_SIZE;
 	aa.pxa_intr = PXA2X0_INT_DMA;
-	if (config_found(&sc->sc_dev, &aa, pxaip_print) == NULL)
+	if (config_found(sc->sc_dev, &aa, pxaip_print) == NULL)
 		panic("pxaip_attach_critical: failed to attach DMAC!");
 #endif
 }
@@ -285,7 +293,7 @@ pxaip_attach_critical(struct pxaip_softc *sc)
 static int
 pxaip_print(void *aux, const char *name)
 {
-	struct pxaip_attach_args *sa = (struct pxaip_attach_args*)aux;
+	struct pxaip_attach_args *sa = (struct pxaip_attach_args *)aux;
 
 	if (sa->pxa_addr != PXAIPCF_ADDR_DEFAULT) {
 		aprint_normal(" addr 0x%lx", sa->pxa_addr);
@@ -379,10 +387,10 @@ pxa2x0_turbo_mode(int f)
 void
 pxa2x0_probe_sdram(vaddr_t memctl_va, paddr_t *start, paddr_t *size)
 {
-	u_int32_t mdcnfg, dwid, dcac, drac, dnb;
+	uint32_t mdcnfg, dwid, dcac, drac, dnb;
 	int i;
 
-	mdcnfg = *((volatile u_int32_t *)(memctl_va + MEMCTL_MDCNFG));
+	mdcnfg = *((volatile uint32_t *)(memctl_va + MEMCTL_MDCNFG));
 
 	/*
 	 * Scan all 4 SDRAM banks

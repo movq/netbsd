@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.36 2007/12/20 23:02:53 dsl Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.42 2010/07/07 01:30:34 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.36 2007/12/20 23:02:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.42 2010/07/07 01:30:34 chs Exp $");
 
 #define COMPAT_LINUX 1
 
@@ -95,7 +88,7 @@ void setup_linux_rt_sigframe(struct frame *frame, int sig,
  * Setup registers on program execution.
  */
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 
 	setregs(l, epp, stack);
@@ -147,7 +140,7 @@ setup_linux_sigframe(struct frame *frame, int sig, const sigset_t *mask, void *u
 	kf.sf_c.c_sc.sc_a1 = frame->f_regs[A1];
 
 	/* Clear for security (and initialize ss_format). */
-	bzero(&kf.sf_c.c_sc.sc_ss, sizeof kf.sf_c.c_sc.sc_ss);
+	memset(&kf.sf_c.c_sc.sc_ss, 0, sizeof kf.sf_c.c_sc.sc_ss);
 
 	if (ft >= FMT4) {
 #ifdef DEBUG
@@ -156,7 +149,7 @@ setup_linux_sigframe(struct frame *frame, int sig, const sigset_t *mask, void *u
 #endif
 		kf.sf_c.c_sc.sc_ss.ss_format = ft;
 		kf.sf_c.c_sc.sc_ss.ss_vector = frame->f_vector;
-		bcopy(&frame->F_u, &kf.sf_c.c_sc.sc_ss.ss_frame,
+		memcpy( &kf.sf_c.c_sc.sc_ss.ss_frame, &frame->F_u,
 			(size_t) exframesize[ft]);
 		/*
 		 * Leave an indicator that we need to clean up the kernel
@@ -229,9 +222,9 @@ setup_linux_sigframe(struct frame *frame, int sig, const sigset_t *mask, void *u
 	kf.sf_c.c_sc.sc_ps = frame->f_sr;
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(struct linux_sigframe));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 #ifdef DEBUG
@@ -298,7 +291,7 @@ setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void
 	kf.sf_sigtramp[1] = LINUX_RT_SF_SIGTRAMP1;
 
 	/* clear for security (and initialize uc_flags, ss_format, etc.). */
-	bzero(&kf.sf_uc, sizeof(struct linux_ucontext));
+	memset(&kf.sf_uc, 0, sizeof(struct linux_ucontext));
 
 	/*
 	 * Save necessary hardware state.  Currently this includes:
@@ -310,7 +303,7 @@ setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void
 	kf.sf_uc.uc_mc.mc_version = LINUX_MCONTEXT_VERSION;
 
 	/* general registers and pc/sr */
-	bcopy(frame->f_regs, kf.sf_uc.uc_mc.mc_gregs.gr_regs, sizeof(u_int)*16);
+	memcpy( kf.sf_uc.uc_mc.mc_gregs.gr_regs, frame->f_regs, sizeof(u_int)*16);
 	kf.sf_uc.uc_mc.mc_gregs.gr_pc = frame->f_pc;
 	kf.sf_uc.uc_mc.mc_gregs.gr_sr = frame->f_sr;
 
@@ -321,7 +314,7 @@ setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void
 #endif
 		kf.sf_uc.uc_ss.ss_format = ft;
 		kf.sf_uc.uc_ss.ss_vector = frame->f_vector;
-		bcopy(&frame->F_u, &kf.sf_uc.uc_ss.ss_frame,
+		memcpy( &kf.sf_uc.uc_ss.ss_frame, &frame->F_u,
 			(size_t) exframesize[ft]);
 		/*
 		 * Leave an indicator that we need to clean up the kernel
@@ -396,7 +389,7 @@ setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void
 	 * XXX Or we do the emuldata thing.
 	 * XXX -erh
 	 */
-	bzero(&kf.sf_info, sizeof(struct linux_siginfo));
+	memset(&kf.sf_info, 0, sizeof(struct linux_siginfo));
 	kf.sf_info.lsi_signo = sig;
 	kf.sf_info.lsi_code = LINUX_SI_USER;
 	kf.sf_info.lsi_pid = p->p_pid;
@@ -411,9 +404,9 @@ setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void
 	kf.sf_uc.uc_stack.ss_size = l->l_sigstk.ss_size;
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(struct linux_rt_sigframe));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 #ifdef DEBUG
@@ -528,7 +521,7 @@ linux_sys_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	/* Grab whole of the sigcontext. */
 	if (copyin((void *) usp, &tsigc2, sizeof tsigc2)) {
 bad:
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		sigexit(l, SIGSEGV);
 	}
 
@@ -556,7 +549,7 @@ bad:
 			sz, frame->f_stackadj);
 #endif
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
@@ -570,7 +563,7 @@ bad:
 #endif
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Restore the user supplied information.
@@ -599,7 +592,7 @@ bad:
 		if (frame->f_stackadj < sz)	/* just in case... */
 			goto bad;
 		frame->f_stackadj -= sz;
-		bcopy(&scp->sc_ss.ss_frame, &frame->F_u, sz);
+		memcpy( &frame->F_u, &scp->sc_ss.ss_frame, sz);
 #ifdef DEBUG
 		if (sigdebug & SDB_FOLLOW)
 			printf("linux_sys_sigreturn(%d): copy in %d of frame type %d\n",
@@ -684,7 +677,7 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	/* Grab whole of the ucontext. */
 	if (copyin(ucp, &tuc, sizeof tuc)) {
 bad:		
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		sigexit(l, SIGSEGV);
 	}
 
@@ -713,7 +706,7 @@ bad:
 	if (tuc.uc_mc.mc_version != LINUX_MCONTEXT_VERSION)
 		goto bad;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	l->l_sigstk.ss_flags =
@@ -724,12 +717,12 @@ bad:
 	linux_to_native_sigset(&mask, &tuc.uc_sigmask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Restore the user supplied information.
 	 */
-	bcopy(tuc.uc_mc.mc_gregs.gr_regs, frame->f_regs, sizeof(u_int)*16);
+	memcpy( frame->f_regs, tuc.uc_mc.mc_gregs.gr_regs, sizeof(u_int)*16);
 	frame->f_pc = tuc.uc_mc.mc_gregs.gr_pc;
 	/* Privileged bits of  sr  are silently ignored on Linux/m68k. */
 	frame->f_sr = tuc.uc_mc.mc_gregs.gr_sr & ~(PSL_MBZ|PSL_IPL|PSL_S);
@@ -745,7 +738,7 @@ bad:
 		if (frame->f_stackadj < sz)	/* just in case... */
 			goto bad;
 		frame->f_stackadj -= sz;
-		bcopy(&tuc.uc_ss.ss_frame, &frame->F_u, sz);
+		memcpy( &frame->F_u, &tuc.uc_ss.ss_frame, sz);
 #ifdef DEBUG
 		if (sigdebug & SDB_FOLLOW)
 			printf("linux_sys_rt_sigreturn(%d): copy in %d of frame type %d\n",
@@ -853,8 +846,8 @@ linux_sys_cacheflush(struct lwp *l, const struct linux_sys_cacheflush_args *uap,
 	 * LINUX_FLUSH_SCOPE_ALL (flush whole cache) is limited to super users.
 	 */
 	if (scope == LINUX_FLUSH_SCOPE_ALL) {
-		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		if ((error = kauth_authorize_machdep(l->l_cred,
+		    KAUTH_MACHDEP_CACHEFLUSH, NULL, NULL, NULL, NULL)) != 0)
 			return error;
 #if defined(M68040) || defined(M68060)
 		/* entire cache */

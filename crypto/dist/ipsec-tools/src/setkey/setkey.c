@@ -1,4 +1,4 @@
-/*	$NetBSD: setkey.c,v 1.12 2007/07/18 12:07:52 vanhu Exp $	*/
+/*	$NetBSD: setkey.c,v 1.18 2018/05/28 20:34:45 maxv Exp $	*/
 
 /*	$KAME: setkey.c,v 1.36 2003/09/24 23:52:51 itojun Exp $	*/
 
@@ -71,20 +71,20 @@
 
 #define strlcpy(d,s,l) (strncpy(d,s,l), (d)[(l)-1] = '\0')
 
-void usage __P((int));
-int main __P((int, char **));
-int get_supported __P((void));
-void sendkeyshort __P((u_int));
-void promisc __P((void));
-int postproc __P((struct sadb_msg *, int));
-int verifypriority __P((struct sadb_msg *m));
-int fileproc __P((const char *));
-const char *numstr __P((int));
-void shortdump_hdr __P((void));
-void shortdump __P((struct sadb_msg *));
-static void printdate __P((void));
-static int32_t gmt2local __P((time_t));
-void stdin_loop __P((void));
+void usage(int);
+int main(int, char **);
+int get_supported(void);
+void sendkeyshort(u_int);
+void promisc(void);
+int postproc(struct sadb_msg *, int);
+int verifypriority(struct sadb_msg *m);
+int fileproc(const char *);
+const char *numstr(int);
+void shortdump_hdr(void);
+void shortdump(struct sadb_msg *);
+static void printdate(void);
+static int32_t gmt2local(time_t);
+void stdin_loop(void);
 
 #define MODE_SCRIPT	1
 #define MODE_CMDDUMP	2
@@ -140,9 +140,7 @@ usage(int only_version)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	FILE *fp = stdin;
 	int c;
@@ -165,8 +163,10 @@ main(argc, argv)
 			break;
 		case 'f':
 			f_mode = MODE_SCRIPT;
-			if ((fp = fopen(optarg, "r")) == NULL) {
-				err(1, "fopen");
+			if (strcmp(optarg, "-") == 0)
+				fp = stdin;
+			else if ((fp = fopen(optarg, "r")) == NULL) {
+				err(1, "Can't open `%s'", optarg);
 				/*NOTREACHED*/
 			}
 			break;
@@ -284,7 +284,7 @@ main(argc, argv)
 }
 
 int
-get_supported()
+get_supported(void)
 {
 
 	if (pfkey_send_register(so, SADB_SATYPE_UNSPEC) < 0)
@@ -297,7 +297,7 @@ get_supported()
 }
 
 void
-stdin_loop()
+stdin_loop(void)
 {
 	char line[1024], *semicolon, *comment;
 	size_t linelen = 0;
@@ -314,8 +314,7 @@ stdin_loop()
 #else
 		char rbuf[1024];
 		rbuf[0] = '\0';
-		fgets (rbuf, sizeof(rbuf), stdin);
-		if (!rbuf[0])
+		if (fgets(rbuf, sizeof(rbuf), stdin) == NULL)
 			break;
 		if (rbuf[strlen(rbuf)-1] == '\n')
 			rbuf[strlen(rbuf)-1] = '\0';
@@ -360,8 +359,7 @@ stdin_loop()
 }
 
 void
-sendkeyshort(type)
-        u_int type;
+sendkeyshort(u_int type)
 {
 	struct sadb_msg msg;
 
@@ -380,7 +378,7 @@ sendkeyshort(type)
 }
 
 void
-promisc()
+promisc(void)
 {
 	struct sadb_msg msg;
 	u_char rbuf[1024 * 32];	/* XXX: Enough ? Should I do MSG_PEEK ? */
@@ -445,10 +443,166 @@ promisc()
 	}
 }
 
-int
-sendkeymsg(buf, len)
+/* Generate 'spi' array with SPIs matching 'satype', 'srcs', and 'dsts'
+ * Return value is dynamically generated array of SPIs, also number of
+ * SPIs through num_spi pointer.
+ * On any error, set *num_spi to 0 and return NULL.
+ */
+u_int32_t *
+sendkeymsg_spigrep(unsigned int satype, struct addrinfo *srcs,
+    struct addrinfo *dsts, int *num_spi)
+{
+	struct sadb_msg msg, *m;
 	char *buf;
 	size_t len;
+	ssize_t l;
+	u_char rbuf[1024 * 32];
+	caddr_t mhp[SADB_EXT_MAX + 1];
+	struct sadb_address *saddr;
+	struct sockaddr *s;
+	struct addrinfo *a;
+	struct sadb_sa *sa;
+	u_int32_t *spi = NULL;
+	int max_spi = 0, fail = 0;
+
+	*num_spi = 0;
+
+	if (f_notreally) {
+		return NULL;
+	}
+
+    {
+	struct timeval tv;
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	if (setsockopt(so, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+		perror("setsockopt");
+		return NULL;
+	}
+    }
+
+	msg.sadb_msg_version = PF_KEY_V2;
+	msg.sadb_msg_type = SADB_DUMP;
+	msg.sadb_msg_errno = 0;
+	msg.sadb_msg_satype = satype;
+	msg.sadb_msg_len = PFKEY_UNIT64(sizeof(msg));
+	msg.sadb_msg_reserved = 0;
+	msg.sadb_msg_seq = 0;
+	msg.sadb_msg_pid = getpid();
+	buf = (char *)&msg;
+	len = sizeof(msg);
+
+	if (f_verbose) {
+		kdebug_sadb(&msg);
+		printf("\n");
+	}
+	if (f_hexdump) {
+		int i;
+		for (i = 0; i < len; i++) {
+			if (i % 16 == 0)
+				printf("%08x: ", i);
+			printf("%02x ", buf[i] & 0xff);
+			if (i % 16 == 15)
+				printf("\n");
+		}
+		if (len % 16)
+			printf("\n");
+	}
+
+	if ((l = send(so, buf, len, 0)) < 0) {
+		perror("send");
+		return NULL;
+	}
+
+	m = (struct sadb_msg *)rbuf;
+	do {
+		if ((l = recv(so, rbuf, sizeof(rbuf), 0)) < 0) {
+			perror("recv");
+			fail = 1;
+			break;
+		}
+
+		if (PFKEY_UNUNIT64(m->sadb_msg_len) != l) {
+			warnx("invalid keymsg length");
+			fail = 1;
+			break;
+		}
+
+		if (f_verbose) {
+			kdebug_sadb(m);
+			printf("\n");
+		}
+
+		if (m->sadb_msg_type != SADB_DUMP) {
+			warnx("unexpected message type");
+			fail = 1;
+			break;
+		}
+
+		if (m->sadb_msg_errno != 0) {
+			warnx("error encountered");
+			fail = 1;
+			break;
+		}
+
+		/* match satype */
+		if (m->sadb_msg_satype != satype)
+			continue;
+
+		pfkey_align(m, mhp);
+		pfkey_check(mhp);
+
+		/* match src */
+		saddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_SRC];
+		if (saddr == NULL)
+			continue;
+		s = (struct sockaddr *)(saddr + 1);
+		for (a = srcs; a; a = a->ai_next)
+			if (memcmp(a->ai_addr, s, a->ai_addrlen) == 0)
+				break;
+		if (a == NULL)
+			continue;
+
+		/* match dst */
+		saddr = (struct sadb_address *)mhp[SADB_EXT_ADDRESS_DST];
+		if (saddr == NULL)
+			continue;
+		s = (struct sockaddr *)(saddr + 1);
+		for (a = dsts; a; a = a->ai_next)
+			if (memcmp(a->ai_addr, s, a->ai_addrlen) == 0)
+				break;
+		if (a == NULL)
+			continue;
+
+		if (*num_spi >= max_spi) {
+			max_spi += 512;
+			spi = realloc(spi, max_spi * sizeof(u_int32_t));
+		}
+
+		sa = (struct sadb_sa *)mhp[SADB_EXT_SA];
+		if (sa != NULL)
+			spi[(*num_spi)++] = (u_int32_t)ntohl(sa->sadb_sa_spi);
+
+		m = (struct sadb_msg *)((caddr_t)m + PFKEY_UNUNIT64(m->sadb_msg_len));
+
+		if (f_verbose) {
+			kdebug_sadb(m);
+			printf("\n");
+		}
+
+	} while (m->sadb_msg_seq);
+
+	if (fail) {
+		free(spi);
+		*num_spi = 0;
+		return NULL;
+	}
+
+	return spi;
+}
+
+int
+sendkeymsg(char *buf, size_t len)
 {
 	u_char rbuf[1024 * 32];	/* XXX: Enough ? Should I do MSG_PEEK ? */
 	ssize_t l;
@@ -506,7 +660,7 @@ again:
 		}
 
 		if (f_verbose) {
-			kdebug_sadb((struct sadb_msg *)rbuf);
+			kdebug_sadb(msg);
 			printf("\n");
 		}
 		if (postproc(msg, l) < 0)
@@ -524,9 +678,7 @@ end:
 }
 
 int
-postproc(msg, len)
-	struct sadb_msg *msg;
-	int len;
+postproc(struct sadb_msg *msg, int len)
 {
 #ifdef HAVE_PFKEY_POLICY_PRIORITY
 	static int priority_support_check = 0;
@@ -593,12 +745,6 @@ postproc(msg, len)
 			else
 				pfkey_sadump(msg);
 		}
-		msg = (struct sadb_msg *)((caddr_t)msg +
-				     PFKEY_UNUNIT64(msg->sadb_msg_len));
-		if (f_verbose) {
-			kdebug_sadb((struct sadb_msg *)msg);
-			printf("\n");
-		}
 		break;
 
 	case SADB_X_SPDGET:
@@ -613,13 +759,6 @@ postproc(msg, len)
 			pfkey_spdump_withports(msg);
 		else
 			pfkey_spdump(msg);
-		if (msg->sadb_msg_seq == 0) break;
-		msg = (struct sadb_msg *)((caddr_t)msg +
-				     PFKEY_UNUNIT64(msg->sadb_msg_len));
-		if (f_verbose) {
-			kdebug_sadb((struct sadb_msg *)msg);
-			printf("\n");
-		}
 		break;
 #ifdef HAVE_PFKEY_POLICY_PRIORITY
 	case SADB_X_SPDADD:
@@ -638,8 +777,7 @@ postproc(msg, len)
 
 #ifdef HAVE_PFKEY_POLICY_PRIORITY
 int
-verifypriority(m)
-	struct sadb_msg *m;
+verifypriority(struct sadb_msg *m)
 {
 	caddr_t mhp[SADB_EXT_MAX + 1];
 	struct sadb_x_policy *xpl;
@@ -670,8 +808,7 @@ verifypriority(m)
 #endif
 
 int
-fileproc(filename)
-	const char *filename;
+fileproc(const char *filename)
 {
 	int fd;
 	ssize_t len, l;
@@ -707,6 +844,10 @@ fileproc(filename)
 	while (p < ep) {
 		msg = (struct sadb_msg *)p;
 		len = PFKEY_UNUNIT64(msg->sadb_msg_len);
+		if (f_verbose) {
+			kdebug_sadb((struct sadb_msg *)msg);
+			printf("\n");
+		}
 		postproc(msg, len);
 		p += len;
 	}
@@ -742,8 +883,7 @@ static const char *ipproto[] = {
 	(((x) < sizeof(tab)/sizeof(tab[0]) && tab[(x)])	? tab[(x)] : numstr(x))
 
 const char *
-numstr(x)
-	int x;
+numstr(int x)
 {
 	static char buf[20];
 	snprintf(buf, sizeof(buf), "#%d", x);
@@ -751,15 +891,14 @@ numstr(x)
 }
 
 void
-shortdump_hdr()
+shortdump_hdr(void)
 {
 	printf("%-4s %-3s %-1s %-8s %-7s %s -> %s\n",
 		"time", "p", "s", "spi", "ltime", "src", "dst");
 }
 
 void
-shortdump(msg)
-	struct sadb_msg *msg;
+shortdump(struct sadb_msg *msg)
 {
 	caddr_t mhp[SADB_EXT_MAX + 1];
 	char buf[NI_MAXHOST], pbuf[NI_MAXSERV];
@@ -845,7 +984,7 @@ shortdump(msg)
  * Print the timestamp
  */
 static void
-printdate()
+printdate(void)
 {
 	struct timeval tp;
 	int s;

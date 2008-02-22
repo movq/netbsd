@@ -1,4 +1,4 @@
-.\"	$NetBSD: install,v 1.39 2007/12/14 21:16:00 pavel Exp $
+.\"	$NetBSD: install,v 1.42 2017/06/22 16:46:52 flxd Exp $
 .\"
 .\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -94,7 +87,7 @@ section later in these INSTALL notes.
 You should familiarize yourself with the console PROM environment
 and the hardware configuration.
 The PROMs on the older DECstation 2100 and 3100 use one syntax.
-The PROMs on the TurboChannel machines use a completely different syntax.
+The PROMs on the TURBOchannel machines use a completely different syntax.
 Be sure you know how to print the configuration of your machine,
 and how to boot from disk or network, as appropriate.
 .Pp
@@ -161,7 +154,7 @@ and
 file systems, a comfortable size for the
 .Nx
 .Pa /
-partition is about 64 MB.
+partition is about 100 MB.
 A good initial size for the swap partition is twice the
 amount of physical memory in your machine (though, unlike
 .Tn Ultrix ,
@@ -169,11 +162,6 @@ there are no restrictions on the size of the swap partition that would render
 part of your memory unusable).
 The default swap size is 64 MB, which
 is adequate for doing a full system build.
-A full binary installation, with X11R6 takes about 315 MB in
-.Pa /usr ;
-a 350 MB
-.Pa /usr
-should be ample.
 .
 .Ss2 Install via a NetBSD CD-ROM
 .
@@ -227,34 +215,8 @@ section later in the INSTALL notes.
 .
 .Ss2 Installing from an existing system
 .
-.(Note
-If you are installing
-.Nx
-using an existing
-.Nx
-system that is older than
-.Nx 1.4 , you will need to install new bootblocks
-before installing
-.Nx \*V.
-New bootblocks are in the tar file:
 .Pp
-.Dl Pa \*M/binary/sets/base.tgz
-.Pp
-in the
-.Nx \*V
-distribution.
-To install the new bootblocks, use the following commands:
-.Pp
-.Dl # Ic "cd /"
-.Dl # Ic "tar -zxpvf .../\*M/binary/sets/base.tgz ./boot.pmax ./usr/mdec"
-.Dl # Ic "/usr/sbin/installboot /dev/rrz" Ns Ar X Ns Ic "c /usr/mdec/bootxx_ffs"
-.Pp
-where
-.Ar X
-is your boot disk SCSI-ID.
-.Note)
-.Pp
-With new
+With the
 .Nx
 bootblocks or using the
 .Tn Ultrix

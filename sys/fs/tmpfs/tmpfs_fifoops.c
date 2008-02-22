@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_fifoops.c,v 1.6 2008/01/25 14:32:13 ad Exp $	*/
+/*	$NetBSD: tmpfs_fifoops.c,v 1.11 2014/07/25 08:20:52 dholland Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,15 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_fifoops.c,v 1.6 2008/01/25 14:32:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_fifoops.c,v 1.11 2014/07/25 08:20:52 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/vnode.h>
 
 #include <fs/tmpfs/tmpfs.h>
 #include <fs/tmpfs/tmpfs_fifoops.h>
-
-/* --------------------------------------------------------------------- */
 
 /*
  * vnode operations vector used for fifos stored in a tmpfs file system.
@@ -68,6 +59,8 @@ const struct vnodeopv_entry_desc tmpfs_fifoop_entries[] = {
 	{ &vop_setattr_desc,		tmpfs_fifo_setattr },
 	{ &vop_read_desc,		tmpfs_fifo_read },
 	{ &vop_write_desc,		tmpfs_fifo_write },
+	{ &vop_fallocate_desc,		vn_fifo_bypass },
+	{ &vop_fdiscard_desc,		vn_fifo_bypass },
 	{ &vop_ioctl_desc,		tmpfs_fifo_ioctl },
 	{ &vop_fcntl_desc,		tmpfs_fifo_fcntl },
 	{ &vop_poll_desc,		tmpfs_fifo_poll },
@@ -100,42 +93,49 @@ const struct vnodeopv_entry_desc tmpfs_fifoop_entries[] = {
 	{ &vop_putpages_desc,		tmpfs_fifo_putpages },
 	{ NULL, NULL }
 };
-const struct vnodeopv_desc tmpfs_fifoop_opv_desc =
-	{ &tmpfs_fifoop_p, tmpfs_fifoop_entries };
 
-/* --------------------------------------------------------------------- */
+const struct vnodeopv_desc tmpfs_fifoop_opv_desc = {
+	&tmpfs_fifoop_p, tmpfs_fifoop_entries
+};
 
 int
 tmpfs_fifo_close(void *v)
 {
-	struct vnode *vp = ((struct vop_close_args *)v)->a_vp;
+	struct vop_close_args /* {
+		struct vnode	*a_vp;
+		int		a_fflag;
+		kauth_cred_t	a_cred;
+	} */ *ap __unused = v;
 
-	int error;
-
-	tmpfs_update(vp, NULL, NULL, UPDATE_CLOSE);
-	error = VOCALL(fifo_vnodeop_p, VOFFSET(vop_close), v);
-
-	return error;
+	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_close), v);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 tmpfs_fifo_read(void *v)
 {
-	struct vnode *vp = ((struct vop_read_args *)v)->a_vp;
+	struct vop_read_args /* {
+		struct vnode *a_vp;
+		struct uio *a_uio;
+		int a_ioflag;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
 
-	VP_TO_TMPFS_NODE(vp)->tn_status |= TMPFS_NODE_ACCESSED;
+	tmpfs_update(vp, TMPFS_UPDATE_ATIME);
 	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_read), v);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 tmpfs_fifo_write(void *v)
 {
-	struct vnode *vp = ((struct vop_write_args *)v)->a_vp;
+	struct vop_write_args /* {
+		struct vnode *a_vp;
+		struct uio *a_uio;
+		int a_ioflag;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
 
-	VP_TO_TMPFS_NODE(vp)->tn_status |= TMPFS_NODE_MODIFIED;
+	tmpfs_update(vp, TMPFS_UPDATE_MTIME);
 	return VOCALL(fifo_vnodeop_p, VOFFSET(vop_write), v);
 }

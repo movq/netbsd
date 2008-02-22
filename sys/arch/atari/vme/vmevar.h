@@ -1,4 +1,4 @@
-/*	$NetBSD: vmevar.h,v 1.5 2005/12/11 12:17:02 christos Exp $	*/
+/*	$NetBSD: vmevar.h,v 1.8 2011/07/01 20:34:06 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  * Definitions for VME autoconfiguration.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* 
  * Structures and definitions needed by the machine-dependent header.
@@ -89,7 +82,7 @@ struct vme_attach_args {
  * VME master bus
  */
 struct vme_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	bus_space_tag_t sc_iot;		/* vme io space tag */
 	bus_space_tag_t sc_memt;	/* vme mem space tag */
 

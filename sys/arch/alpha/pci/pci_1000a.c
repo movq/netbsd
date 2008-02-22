@@ -1,4 +1,4 @@
-/* $NetBSD: pci_1000a.c,v 1.19 2007/12/03 15:33:06 ad Exp $ */
+/* $NetBSD: pci_1000a.c,v 1.28 2014/03/21 16:39:29 christos Exp $ */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,17 +36,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -67,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_1000a.c,v 1.19 2007/12/03 15:33:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_1000a.c,v 1.28 2014/03/21 16:39:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_1000a.c,v 1.19 2007/12/03 15:33:06 ad Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -101,27 +92,24 @@ __KERNEL_RCSID(0, "$NetBSD: pci_1000a.c,v 1.19 2007/12/03 15:33:06 ad Exp $");
 static bus_space_tag_t mystery_icu_iot;
 static bus_space_handle_t mystery_icu_ioh[2];
 
-int	dec_1000a_intr_map __P((struct pci_attach_args *,
-	    pci_intr_handle_t *));
-const char *dec_1000a_intr_string __P((void *, pci_intr_handle_t));
-const struct evcnt *dec_1000a_intr_evcnt __P((void *, pci_intr_handle_t));
-void	*dec_1000a_intr_establish __P((void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *));
-void	dec_1000a_intr_disestablish __P((void *, void *));
+int	dec_1000a_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *dec_1000a_intr_string(void *, pci_intr_handle_t, char *, size_t);
+const struct evcnt *dec_1000a_intr_evcnt(void *, pci_intr_handle_t);
+void	*dec_1000a_intr_establish(void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *);
+void	dec_1000a_intr_disestablish(void *, void *);
 
 struct alpha_shared_intr *dec_1000a_pci_intr;
 
-static void dec_1000a_iointr __P((void *arg, unsigned long vec));
-static void dec_1000a_enable_intr __P((int irq));
-static void dec_1000a_disable_intr __P((int irq));
-static void pci_1000a_imi __P((void));
+static void dec_1000a_iointr(void *arg, unsigned long vec);
+static void dec_1000a_enable_intr(int irq);
+static void dec_1000a_disable_intr(int irq);
+static void pci_1000a_imi(void);
 static pci_chipset_tag_t pc_tag;
 
 void
-pci_1000a_pickintr(core, iot, memt, pc)
-	void *core;
-	bus_space_tag_t iot, memt;
-	pci_chipset_tag_t pc;
+pci_1000a_pickintr(void *core, bus_space_tag_t iot, bus_space_tag_t memt, pci_chipset_tag_t pc)
 {
 	char *cp;
 	int i;
@@ -132,22 +120,24 @@ pci_1000a_pickintr(core, iot, memt, pc)
 	if (bus_space_map(iot, 0x54a, 2, 0, mystery_icu_ioh + 0)
 	||  bus_space_map(iot, 0x54c, 2, 0, mystery_icu_ioh + 1))
 		panic("pci_1000a_pickintr");
-        pc->pc_intr_v = core;
-        pc->pc_intr_map = dec_1000a_intr_map;
-        pc->pc_intr_string = dec_1000a_intr_string;
+	pc->pc_intr_v = core;
+	pc->pc_intr_map = dec_1000a_intr_map;
+	pc->pc_intr_string = dec_1000a_intr_string;
 	pc->pc_intr_evcnt = dec_1000a_intr_evcnt;
-        pc->pc_intr_establish = dec_1000a_intr_establish;
-        pc->pc_intr_disestablish = dec_1000a_intr_disestablish;
+	pc->pc_intr_establish = dec_1000a_intr_establish;
+	pc->pc_intr_disestablish = dec_1000a_intr_disestablish;
 
 	pc->pc_pciide_compat_intr_establish = NULL;
 
-	dec_1000a_pci_intr = alpha_shared_intr_alloc(PCI_NIRQ, 8);
+#define PCI_1000A_IRQ_STR	8
+	dec_1000a_pci_intr = alpha_shared_intr_alloc(PCI_NIRQ,
+	    PCI_1000A_IRQ_STR);
 	for (i = 0; i < PCI_NIRQ; i++) {
 		alpha_shared_intr_set_maxstrays(dec_1000a_pci_intr, i,
 		    PCI_STRAY_MAX);
 
 		cp = alpha_shared_intr_string(dec_1000a_pci_intr, i);
-		sprintf(cp, "irq %d", i);
+		snprintf(cp, PCI_1000A_IRQ_STR, "irq %d", i);
 		evcnt_attach_dynamic(alpha_shared_intr_evcnt(
 		    dec_1000a_pci_intr, i), EVCNT_TYPE_INTR, NULL,
 		    "dec_1000a", cp);
@@ -159,15 +149,13 @@ pci_1000a_pickintr(core, iot, memt, pc)
 #endif
 }
 
-int     
-dec_1000a_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-        pci_intr_handle_t *ihp;
+int
+dec_1000a_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
 	pci_chipset_tag_t pc = pa->pa_pc;
-	int imrbit, device;
+	int imrbit, device = 0;	/* XXX gcc */
 	/*
 	 * Get bit number in mystery ICU imr
 	 */
@@ -210,44 +198,39 @@ bad:	printf("dec_1000a_intr_map: can't map dev %d pin %d\n", device, buspin);
 }
 
 const char *
-dec_1000a_intr_string(ccv, ih)
-	void *ccv;
-	pci_intr_handle_t ih;
+dec_1000a_intr_string(void *ccv, pci_intr_handle_t ih, char *buf, size_t len)
 {
 	static const char irqmsg_fmt[] = "dec_1000a irq %ld";
-        static char irqstr[sizeof irqmsg_fmt];
 
+	if (ih >= PCI_NIRQ)
+	        panic("%s: bogus dec_1000a IRQ 0x%lx", __func__, ih);
 
-        if (ih >= PCI_NIRQ)
-                panic("dec_1000a_intr_string: bogus dec_1000a IRQ 0x%lx", ih);
-
-        snprintf(irqstr, sizeof irqstr, irqmsg_fmt, ih);
-        return (irqstr);
+	snprintf(buf, len, irqmsg_fmt, ih);
+	return buf;
 }
 
 const struct evcnt *
-dec_1000a_intr_evcnt(ccv, ih)
-	void *ccv;
-	pci_intr_handle_t ih;
+dec_1000a_intr_evcnt(void *ccv, pci_intr_handle_t ih)
 {
 
 	if (ih >= PCI_NIRQ)
-		panic("dec_1000a_intr_evcnt: bogus dec_1000a IRQ 0x%lx", ih);
+		panic("%s: bogus dec_1000a IRQ 0x%lx", __func__, ih);
 
 	return (alpha_shared_intr_evcnt(dec_1000a_pci_intr, ih));
 }
 
 void *
-dec_1000a_intr_establish(ccv, ih, level, func, arg)
-        void *ccv, *arg;
-        pci_intr_handle_t ih;
-        int level;
-        int (*func) __P((void *));
-{           
+dec_1000a_intr_establish(
+	void *ccv,
+	pci_intr_handle_t ih,
+	int level,
+	int (*func)(void *),
+	void *arg)
+{
 	void *cookie;
 
-        if (ih >= PCI_NIRQ)
-                panic("dec_1000a_intr_establish: IRQ too high, 0x%lx", ih);
+	if (ih >= PCI_NIRQ)
+	        panic("dec_1000a_intr_establish: IRQ too high, 0x%lx", ih);
 
 	cookie = alpha_shared_intr_establish(dec_1000a_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "dec_1000a irq");
@@ -261,14 +244,13 @@ dec_1000a_intr_establish(ccv, ih, level, func, arg)
 	return (cookie);
 }
 
-void    
-dec_1000a_intr_disestablish(ccv, cookie)
-        void *ccv, *cookie;
+void
+dec_1000a_intr_disestablish(void *ccv, void *cookie)
 {
 	struct alpha_shared_intrhand *ih = cookie;
 	unsigned int irq = ih->ih_num;
 	int s;
- 
+
 	s = splhigh();
 
 	alpha_shared_intr_disestablish(dec_1000a_pci_intr, cookie,
@@ -279,14 +261,12 @@ dec_1000a_intr_disestablish(ccv, cookie)
 		    IST_NONE);
 		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
- 
+
 	splx(s);
 }
 
 static void
-dec_1000a_iointr(framep, vec)
-	void *framep;
-	unsigned long vec;
+dec_1000a_iointr(void *framep, unsigned long vec)
 {
 	int irq;
 
@@ -313,8 +293,7 @@ dec_1000a_iointr(framep, vec)
  */
 
 static void
-dec_1000a_enable_intr(irq)
-	int irq;
+dec_1000a_enable_intr(int irq)
 {
 	int imrval = IRQ2IMR(irq);
 	int i = imrval >= 16;
@@ -323,8 +302,7 @@ dec_1000a_enable_intr(irq)
 }
 
 static void
-dec_1000a_disable_intr(irq)
-	int irq;
+dec_1000a_disable_intr(int irq)
 {
 	int imrval = IRQ2IMR(irq);
 	int i = imrval >= 16;
@@ -335,7 +313,7 @@ dec_1000a_disable_intr(irq)
  * Initialize mystery ICU
  */
 static void
-pci_1000a_imi()
+pci_1000a_imi(void)
 {
 	IW(0, IR(0) & 1);
 	IW(1, IR(0) & 3);

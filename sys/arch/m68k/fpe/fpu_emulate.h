@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_emulate.h,v 1.12 2005/12/11 12:17:52 christos Exp $	*/
+/*	$NetBSD: fpu_emulate.h,v 1.26 2016/12/06 05:58:19 isaki Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon Ross
@@ -39,6 +39,7 @@
 #include <sys/time.h>
 #include <sys/signalvar.h>
 #include <sys/siginfo.h>
+#include <m68k/fpreg.h>
 
 /*
  * Floating point emulator (tailored for SPARC/modified for m68k, but
@@ -80,7 +81,7 @@ struct fpn {
 	int	fp_sign;		/* 0 => positive, 1 => negative */
 	int	fp_exp;			/* exponent (unbiased) */
 	int	fp_sticky;		/* nonzero bits lost at right end */
-	u_int	fp_mant[3];		/* 83-bit mantissa */
+	uint32_t fp_mant[3];		/* 83-bit mantissa */
 };
 
 #define	FP_NMANT	83		/* total bits in mantissa (incl g,r) */
@@ -90,15 +91,15 @@ struct fpn {
 #define	FP_1		(1 << FP_LG)		/* 1.0 in fp_mant[0] */
 #define	FP_2		(1 << (FP_LG + 1))	/* 2.0 in fp_mant[0] */
 
-#define CPYFPN(dst, src)						\
-if ((dst) != (src)) {							\
-    (dst)->fp_class = (src)->fp_class;					\
-    (dst)->fp_sign = (src)->fp_sign;					\
-    (dst)->fp_exp = (src)->fp_exp;					\
-    (dst)->fp_sticky = (src)->fp_sticky;				\
-    (dst)->fp_mant[0] = (src)->fp_mant[0];				\
-    (dst)->fp_mant[1] = (src)->fp_mant[1];				\
-    (dst)->fp_mant[2] = (src)->fp_mant[2];				\
+static inline void CPYFPN(struct fpn *, const struct fpn *);
+
+static inline void
+CPYFPN(struct fpn *dst, const struct fpn *src)
+{
+
+	if (dst != src) {
+		*dst = *src;
+	}
 }
 
 /*
@@ -131,11 +132,11 @@ if ((dst) != (src)) {							\
  * then op1 is the one we want; otherwise op2 is the one we want.
  */
 #define	ORDER(x, y) { \
-	if ((u_int)(x)->fp_class > (u_int)(y)->fp_class) \
+	if ((uint32_t)(x)->fp_class > (uint32_t)(y)->fp_class) \
 		SWAP(x, y); \
 }
 #define	SWAP(x, y) {				\
-	register struct fpn *swap;		\
+	struct fpn *swap;			\
 	swap = (x), (x) = (y), (y) = swap;	\
 }
 
@@ -143,13 +144,13 @@ if ((dst) != (src)) {							\
  * Emulator state.
  */
 struct fpemu {
-    struct	frame *fe_frame; /* integer regs, etc */
-    struct	fpframe *fe_fpframe; /* FP registers, etc */
-    u_int	fe_fpsr;	/* fpsr copy (modified during op) */
-    u_int	fe_fpcr;	/* fpcr copy */
-    struct	fpn fe_f1;	/* operand 1 */
-    struct	fpn fe_f2;	/* operand 2, if required */
-    struct	fpn fe_f3;	/* available storage for result */
+	struct frame *fe_frame; /* integer regs, etc */
+	struct fpframe *fe_fpframe; /* FP registers, etc */
+	uint32_t fe_fpsr;	/* fpsr copy (modified during op) */
+	uint32_t fe_fpcr;	/* fpcr copy */
+	struct fpn fe_f1;	/* operand 1 */
+	struct fpn fe_f2;	/* operand 2, if required */
+	struct fpn fe_f3;	/* available storage for result */
 };
 
 /*****************************************************************************
@@ -160,9 +161,9 @@ struct fpemu {
  * Internal info about a decoded effective address.
  */
 struct insn_ea {
-    int	ea_regnum;
-    int	ea_ext[3];		/* extension words if any */
-    int	ea_flags;		/* flags == 0 means mode 2: An@ */
+	int	ea_regnum;
+	int	ea_ext[3];	/* extension words if any */
+	int	ea_flags;	/* flags == 0 means mode 2: An@ */
 #define	EA_DIRECT	0x001	/* mode [01]: Dn or An */
 #define EA_PREDECR	0x002	/* mode 4: An@- */
 #define	EA_POSTINCR	0x004	/* mode 3: An@+ */
@@ -175,7 +176,7 @@ struct insn_ea {
 #define EA_BASE_SUPPRSS	0x200	/* mode 6 or (7,3): base register suppressed */
 #define EA_FRAME_EA	0x400	/* MC68LC040 only: precalculated EA from
 				   format 4 stack frame */
-    int	ea_moffs;		/* offset used for fmoveMulti */
+	int	ea_moffs;	/* offset used for fmoveMulti */
 };
 
 #define ea_offset	ea_ext[0]	/* mode 5: offset word */
@@ -187,13 +188,13 @@ struct insn_ea {
 #define ea_fea		ea_ext[0]	/* MC68LC040 only: frame EA */
 
 struct instruction {
-    u_int		is_pc;		/* insn's address */
-    u_int		is_nextpc;	/* next PC */
-    int			is_advance;	/* length of instruction */
-    int			is_datasize;	/* size of memory operand */
-    int			is_opcode;	/* opcode word */
-    int			is_word1;	/* second word */
-    struct insn_ea	is_ea;	/* decoded effective address mode */
+	uint32_t is_pc;		/* insn's address */
+	uint32_t is_nextpc;	/* next PC */
+	int	is_advance;	/* length of instruction */
+	int	is_datasize;	/* size of memory operand */
+	int	is_opcode;	/* opcode word */
+	int	is_word1;	/* second word */
+	struct insn_ea	is_ea;	/* decoded effective address mode */
 };
 
 /*
@@ -208,112 +209,73 @@ struct instruction {
 #define FTYPE_BYT 6 /* Byte Integer */
 
 /*
- * MC68881/68882 FPcr bit definitions (should these go to <m68k/reg.h>
- * or <m68k/fpu.h> or something?)
- */
-
-/* fpsr */
-#define FPSR_CCB    0xff000000
-# define FPSR_NEG   0x08000000
-# define FPSR_ZERO  0x04000000
-# define FPSR_INF   0x02000000
-# define FPSR_NAN   0x01000000
-#define FPSR_QTT    0x00ff0000
-# define FPSR_QSG   0x00800000
-# define FPSR_QUO   0x007f0000
-#define FPSR_EXCP   0x0000ff00
-# define FPSR_BSUN  0x00008000
-# define FPSR_SNAN  0x00004000
-# define FPSR_OPERR 0x00002000
-# define FPSR_OVFL  0x00001000
-# define FPSR_UNFL  0x00000800
-# define FPSR_DZ    0x00000400
-# define FPSR_INEX2 0x00000200
-# define FPSR_INEX1 0x00000100
-#define FPSR_AEX    0x000000ff
-# define FPSR_AIOP  0x00000080
-# define FPSR_AOVFL 0x00000040
-# define FPSR_AUNFL 0x00000020
-# define FPSR_ADZ   0x00000010
-# define FPSR_AINEX 0x00000008
-
-/* fpcr */
-#define FPCR_EXCP   FPSR_EXCP
-# define FPCR_BSUN  FPSR_BSUN
-# define FPCR_SNAN  FPSR_SNAN
-# define FPCR_OPERR FPSR_OPERR
-# define FPCR_OVFL  FPSR_OVFL
-# define FPCR_UNFL  FPSR_UNFL
-# define FPCR_DZ    FPSR_DZ
-# define FPCR_INEX2 FPSR_INEX2
-# define FPCR_INEX1 FPSR_INEX1
-#define FPCR_MODE   0x000000ff
-# define FPCR_PREC  0x000000c0
-#  define FPCR_EXTD 0x00000000
-#  define FPCR_SNGL 0x00000040
-#  define FPCR_DBL  0x00000080
-# define FPCR_ROUND 0x00000030
-#  define FPCR_NEAR 0x00000000
-#  define FPCR_ZERO 0x00000010
-#  define FPCR_MINF 0x00000020
-#  define FPCR_PINF 0x00000030
-
-/*
  * Other functions.
  */
 
 /* Build a new Quiet NaN (sign=0, frac=all 1's). */
-struct	fpn *fpu_newnan __P((struct fpemu *fe));
+struct	fpn *fpu_newnan(struct fpemu *);
 
 /*
  * Shift a number right some number of bits, taking care of round/sticky.
  * Note that the result is probably not a well-formed number (it will lack
  * the normal 1-bit mant[0]&FP_1).
  */
-int	fpu_shr __P((struct fpn * fp, int shr));
+int	fpu_shr(struct fpn *, int);
 /*
  * Round a number according to the round mode in FPCR
  */
-int	fpu_round __P((register struct fpemu *fe, register struct fpn *fp));
+int	fpu_round(struct fpemu *, struct fpn *);
 
 /* type conversion */
-void	fpu_explode __P((struct fpemu *fe, struct fpn *fp, int t, u_int *src));
-void	fpu_implode __P((struct fpemu *fe, struct fpn *fp, int t, u_int *dst));
+void	fpu_explode(struct fpemu *, struct fpn *, int t, const uint32_t *);
+void	fpu_implode(struct fpemu *, struct fpn *, int t, uint32_t *);
 
 /*
  * non-static emulation functions
  */
 /* type 0 */
-int fpu_emul_fmovecr __P((struct fpemu *fe, struct instruction *insn));
-int fpu_emul_fstore __P((struct fpemu *fe, struct instruction *insn));
-int fpu_emul_fscale __P((struct fpemu *fe, struct instruction *insn));
+int fpu_emul_fmovecr(struct fpemu *, struct instruction *);
+int fpu_emul_fstore(struct fpemu *, struct instruction *);
+int fpu_emul_fscale(struct fpemu *, struct instruction *);
 
 /*
  * include function declarations of those which are called by fpu_emul_arith()
  */
 #include "fpu_arith_proto.h"
 
-int fpu_emulate __P((struct frame *frame, struct fpframe *fpf, ksiginfo_t *ksi));
+int fpu_emulate(struct frame *, struct fpframe *, ksiginfo_t *);
+struct fpn *fpu_cmp(struct fpemu *);
+
+/* fpu_cordic.c */
+extern const struct fpn fpu_cordic_inv_gain1;
+void fpu_cordit1(struct fpemu *,
+	struct fpn *, struct fpn *, struct fpn *, const struct fpn *);
 
 /*
  * "helper" functions
  */
 /* return values from constant rom */
-struct fpn *fpu_const __P((struct fpn *fp, u_int offset));
+struct fpn *fpu_const(struct fpn *, uint32_t);
+#define FPU_CONST_PI	(0x00)	/* pi */
+#define FPU_CONST_0 	(0x0f)	/* 0.0 */
+#define FPU_CONST_LN_2	(0x30)	/* ln(2) */
+#define FPU_CONST_LN_10	(0x31)	/* ln(10) */
+#define FPU_CONST_1 	(0x32)	/* 1.0 */
+
 /* update exceptions and FPSR */
-int fpu_upd_excp __P((struct fpemu *fe));
-u_int fpu_upd_fpsr __P((struct fpemu *fe, struct fpn *fp));
+int fpu_upd_excp(struct fpemu *);
+uint32_t fpu_upd_fpsr(struct fpemu *, struct fpn *);
 
 /* address mode decoder, and load/store */
-int fpu_decode_ea __P((struct frame *frame, struct instruction *insn,
-		   struct insn_ea *ea, int modreg));
-int fpu_load_ea __P((struct frame *frame, struct instruction *insn,
-		 struct insn_ea *ea, char *dst));
-int fpu_store_ea __P((struct frame *frame, struct instruction *insn,
-		  struct insn_ea *ea, char *src));
+int fpu_decode_ea(struct frame *, struct instruction *,
+		   struct insn_ea *, int);
+int fpu_load_ea(struct frame *, struct instruction *,
+		 struct insn_ea *, char *);
+int fpu_store_ea(struct frame *, struct instruction *,
+		  struct insn_ea *, char *);
 
 /* fpu_subr.c */
-void fpu_norm __P((register struct fpn *fp));
+void fpu_norm(struct fpn *);
 
 #if !defined(FPE_DEBUG)
 #  define FPE_DEBUG 0

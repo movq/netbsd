@@ -1,4 +1,4 @@
-/*	$NetBSD: com_puc.c,v 1.17 2007/10/19 12:00:41 ad Exp $	*/
+/*	$NetBSD: com_puc.c,v 1.24 2017/04/27 10:01:54 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_puc.c,v 1.17 2007/10/19 12:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_puc.c,v 1.24 2017/04/27 10:01:54 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,9 +60,19 @@ struct com_puc_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
+/* Interface field in PCI Class register */
+static const char *serialtype[] = {
+	"Generic XT",
+	"16450",
+	"16550",
+	"16650",
+	"16750",
+	"16850",
+	"16950",
+};
+
 static int
-com_puc_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+com_puc_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct puc_attach_args *aa = aux;
 
@@ -76,31 +86,50 @@ com_puc_probe(struct device *parent, struct cfdata *match,
 }
 
 static void
-com_puc_attach(struct device *parent, struct device *self, void *aux)
+com_puc_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_puc_softc *psc = (void *)self;
+	struct com_puc_softc *psc = device_private(self);
 	struct com_softc *sc = &psc->sc_com;
 	struct puc_attach_args *aa = aux;
 	const char *intrstr;
+	char intrbuf[PCI_INTRSTR_LEN];
+	unsigned int iface;
 
-	/*
-	 * XXX This driver assumes that 'com' ports attached to 'puc'
-	 * XXX can not be console.  That isn't unreasonable, because PCI
-	 * XXX devices are supposed to be dynamically mapped, and com
-	 * XXX console ports want fixed addresses.  When/if baseboard
-	 * XXX 'com' ports are identified as PCI/communications/serial
-	 * XXX devices and are known to be mapped at the standard
-	 * XXX addresses, if they can be the system console then we have
-	 * XXX to cope with doing the mapping right.  Then this will get
-	 * XXX really ugly.  Of course, by then we might know the real
-	 * XXX definition of PCI/communications/serial, and attach 'com'
-	 * XXX directly on PCI.
-	 */
+	sc->sc_dev = self;
 
-	aprint_naive(": Serial port\n");
+	iface = PCI_INTERFACE(pci_conf_read(aa->pc, aa->tag, PCI_CLASS_REG));
+	aprint_naive(": Serial port");
+	if (iface < __arraycount(serialtype))
+		aprint_normal(" (%s-compatible)", serialtype[iface]);
+	aprint_normal(": ");
 
 	COM_INIT_REGS(sc->sc_regs, aa->t, aa->h, aa->a);
 	sc->sc_frequency = aa->flags & PUC_COM_CLOCKMASK;
+
+	intrstr = pci_intr_string(aa->pc, aa->intrhandle, intrbuf,
+	    sizeof(intrbuf));
+	psc->sc_ih = pci_intr_establish_xname(aa->pc, aa->intrhandle,
+	    IPL_SERIAL, comintr, sc, device_xname(self));
+	if (psc->sc_ih == NULL) {
+		aprint_error("couldn't establish interrupt");
+		if (intrstr != NULL)
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
+		return;
+	}
+
+#if defined(amd64) || defined(i386)
+	/*
+	 * Since puc(4) serial ports are typically not identified in the
+	 * BIOS COM[1234] table, the I/O address must be manually set using
+	 * installboot(8) in order to enable a serial console.
+	 * Print the address here so the user doesn't have to dig through
+	 * PCI configuration space to find it.
+	 */
+	if (aa->h < 0x10000)
+		aprint_normal("ioaddr 0x%04lx, ", aa->h);
+#endif
+	aprint_normal("interrupting at %s\n", intrstr);
 
 	/* Enable Cyberserial 8X clock. */
 	if (aa->flags & (PUC_COM_SIIG10x|PUC_COM_SIIG20x)) {
@@ -115,23 +144,15 @@ com_puc_attach(struct device *parent, struct device *self, void *aux)
 			write_siig10x_usrreg(aa->pc, aa->tag, usrregno, 1);
 		else
 			write_siig20x_usrreg(aa->pc, aa->tag, usrregno, 1);
+	} else {
+		if (!pmf_device_register(self, NULL, com_resume))
+			aprint_error_dev(self,
+			    "couldn't establish power handler\n");
 	}
 
-	intrstr = pci_intr_string(aa->pc, aa->intrhandle);
-	psc->sc_ih = pci_intr_establish(aa->pc, aa->intrhandle, IPL_SERIAL,
-	    comintr, sc);
-	if (psc->sc_ih == NULL) {
-		aprint_error(": couldn't establish interrupt");
-		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
-		return;
-	}
-	aprint_normal(": interrupting at %s\n", intrstr);
-	aprint_normal("%s", sc->sc_dev.dv_xname);
-
+	aprint_normal("%s", device_xname(self));
 	com_attach_subr(sc);
 }
 
-CFATTACH_DECL(com_puc, sizeof(struct com_puc_softc),
+CFATTACH_DECL_NEW(com_puc, sizeof(struct com_puc_softc),
     com_puc_probe, com_puc_attach, NULL, NULL);

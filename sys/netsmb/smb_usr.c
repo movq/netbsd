@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_usr.c,v 1.14 2007/03/04 06:03:36 christos Exp $	*/
+/*	$NetBSD: smb_usr.c,v 1.19 2017/07/28 14:40:42 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_usr.c,v 1.14 2007/03/04 06:03:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_usr.c,v 1.19 2017/07/28 14:40:42 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -65,25 +65,27 @@ static int
 smb_usr_vc2spec(struct smbioc_ossn *dp, struct smb_vcspec *spec)
 {
 	int flags = 0;
+	int error;
 
-	bzero(spec, sizeof(*spec));
+	memset(spec, 0, sizeof(*spec));
 	if (dp->ioc_user[0] == 0)
 		return EINVAL;
 	if (dp->ioc_server == NULL)
 		return EINVAL;
 	if (dp->ioc_localcs[0] == 0) {
-		SMBERROR("no local charset ?\n");
+		SMBERROR(("no local charset ?\n"));
 		return EINVAL;
 	}
 
-	spec->sap = smb_memdupin(dp->ioc_server, dp->ioc_svlen);
-	if (spec->sap == NULL)
-		return ENOMEM;
+	error = dup_sockaddr_copyin(&spec->sap, dp->ioc_server, dp->ioc_svlen);
+	if (error)
+		return error;
 	if (dp->ioc_local) {
-		spec->lap = smb_memdupin(dp->ioc_local, dp->ioc_lolen);
-		if (spec->lap == NULL) {
+		error = dup_sockaddr_copyin(&spec->lap, dp->ioc_local,
+		    dp->ioc_lolen);
+		if (error) {
 			smb_usr_vcspec_free(spec);
-			return ENOMEM;
+			return error;
 		}
 	}
 	spec->srvname = dp->ioc_srvname;
@@ -116,7 +118,7 @@ smb_usr_vcspec_free(struct smb_vcspec *spec)
 static int
 smb_usr_share2spec(struct smbioc_oshare *dp, struct smb_sharespec *spec)
 {
-	bzero(spec, sizeof(*spec));
+	memset(spec, 0, sizeof(*spec));
 	spec->mode = dp->ioc_mode;
 	spec->rights = dp->ioc_rights;
 	spec->owner = dp->ioc_owner;
@@ -298,7 +300,7 @@ smb_usr_t2request(struct smb_share *ssp, struct smbioc_t2rq *dp,
 	struct mdchain *mdp;
 	int error, len;
 
-	if (dp->ioc_setupcnt > 3)
+	if (dp->ioc_setupcnt < 0 || dp->ioc_setupcnt > 3)
 		return EINVAL;
 	error = smb_t2_alloc(SSTOCP(ssp), dp->ioc_setup[0], scred, &t2p);
 	if (error)

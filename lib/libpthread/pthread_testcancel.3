@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_testcancel.3,v 1.3 2003/11/18 00:56:57 thorpej Exp $
+.\" $NetBSD: pthread_testcancel.3,v 1.9 2014/03/18 18:20:38 riastradh Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -10,9 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -26,7 +23,7 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_testcancel.3,v 1.9 2002/09/16 19:29:29 mini Exp $
-.Dd January 30, 2003
+.Dd August 6, 2010
 .Dt PTHREAD_TESTCANCEL 3
 .Os
 .Sh NAME
@@ -127,21 +124,23 @@ type will be in effect.
 Cancellation points will occur when a thread is executing the following
 functions:
 .Fn accept ,
-.\".Fn aio_suspend ,
-.\".Fn clock_nanosleep ,
+.Fn aio_suspend ,
+.Fn clock_nanosleep ,
 .Fn close ,
 .Fn connect ,
 .Fn creat ,
 .Fn fcntl ,
+.Fn fdatasync ,
 .Fn fsync ,
 .Fn fsync_range ,
 .\".Fn getmsg ,
 .\".Fn getpmsg ,
+.Fn kevent ,
 .\".Fn lockf ,
-.\".Fn mq_receive ,
-.\".Fn mq_send ,
-.\".Fn mq_timedreceive ,
-.\".Fn mq_timedsend ,
+.Fn mq_receive ,
+.Fn mq_send ,
+.Fn mq_timedreceive ,
+.Fn mq_timedsend ,
 .Fn msgrcv ,
 .Fn msgsnd ,
 .Fn msync ,
@@ -149,6 +148,7 @@ functions:
 .Fn open ,
 .Fn pause ,
 .Fn poll ,
+.Fn pollts ,
 .Fn pread ,
 .Fn pselect ,
 .Fn pthread_cond_timedwait ,
@@ -179,6 +179,7 @@ functions:
 .Fn tcdrain ,
 .Fn usleep ,
 .Fn wait ,
+.Fn wait4 ,
 .Fn waitid ,
 .Fn waitpid ,
 .Fn write ,
@@ -259,12 +260,11 @@ or
 .Sh SEE ALSO
 .Xr pthread_cancel 3
 .Sh STANDARDS
-.Fn pthread_testcancel
-conforms to
-.St -p1003.1-96 .
+These functions conform to
+.St -p1003.1-2001 .
 .Sh AUTHORS
 This man page was written by
-.An David Leonard Aq d@openbsd.org
+.An David Leonard Aq Mt d@openbsd.org
 for the
 .Ox
 implementation of

@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.24 2004/01/05 23:23:36 jmmv Exp $	*/
+/*	$NetBSD: yacc.y,v 1.33 2016/09/03 05:56:59 dholland Exp $	*/
 
 %{
 /*-
@@ -43,7 +43,7 @@
 static char sccsid[] = "@(#)yacc.y	8.1 (Berkeley) 6/6/93";
 static char rcsid[] = "$FreeBSD$";
 #else
-__RCSID("$NetBSD: yacc.y,v 1.24 2004/01/05 23:23:36 jmmv Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.33 2016/09/03 05:56:59 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,13 +52,15 @@ __RCSID("$NetBSD: yacc.y,v 1.24 2004/01/05 23:23:36 jmmv Exp $");
 #include <arpa/inet.h>	/* Needed for htonl on POSIX systems. */
 
 #include <err.h>
-#include "locale/runetype.h"
+#include <locale.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+
+#include "runetype_file.h"
 
 #include "ldef.h"
 
@@ -68,7 +70,10 @@ rune_map	maplower = { { 0, }, };
 rune_map	mapupper = { { 0, }, };
 rune_map	types = { { 0, }, };
 
-_NBRuneLocale	new_locale = { { 0, }, };
+_FileRuneLocale new_locale = { { 0, }, };
+
+size_t rl_variable_len = (size_t)0; 
+void *rl_variable = NULL;
 
 __nbrune_t	charsetbits = (__nbrune_t)0x00000000;
 #if 0
@@ -76,18 +81,22 @@ __nbrune_t	charsetmask = (__nbrune_t)0x0000007f;
 #endif
 __nbrune_t	charsetmask = (__nbrune_t)0xffffffff;
 
-void set_map __P((rune_map *, rune_list *, u_int32_t));
-void set_digitmap __P((rune_map *, rune_list *));
-void add_map __P((rune_map *, rune_list *, u_int32_t));
+void set_map(rune_map *, rune_list *, u_int32_t);
+void set_digitmap(rune_map *, rune_list *);
+void add_map(rune_map *, rune_list *, u_int32_t);
 
-int		main __P((int, char *[]));
-int		yyerror __P((const char *s));
-void		*xmalloc __P((unsigned int sz));
-u_int32_t	*xlalloc __P((unsigned int sz));
-u_int32_t	*xrelalloc __P((u_int32_t *old, unsigned int sz));
-void		dump_tables __P((void));
-int		yyparse __P((void));
-extern int	yylex __P((void));
+__dead void	usage(void);
+int		yyerror(const char *s);
+void		*xmalloc(unsigned int sz);
+u_int32_t	*xlalloc(unsigned int sz);
+u_int32_t	*xrelalloc(u_int32_t *old, unsigned int sz);
+void		dump_tables(void);
+int		yyparse(void);
+extern int	yylex(void);
+
+/* mklocaledb.c */
+extern void mklocaledb(const char *, FILE *, FILE *);
+
 %}
 
 %union	{
@@ -128,10 +137,11 @@ table	:	entry
 	;
 
 entry	:	ENCODING STRING
-		{ strncpy(new_locale.rl_encoding, $2, sizeof(new_locale.rl_encoding)); }
+		{ strncpy(new_locale.frl_encoding, $2, sizeof(new_locale.frl_encoding)); }
 	|	VARIABLE
-		{ new_locale.rl_variable_len = strlen($1) + 1;
-		  new_locale.rl_variable = strdup($1);
+		{ rl_variable_len = strlen($1) + 1;
+		  rl_variable = strdup($1);
+		  new_locale.frl_variable_len = htonl((u_int32_t)rl_variable_len);
 		}
 	|	CHARSET RUNE
 		{ charsetbits = $2; charsetmask = 0x0000007f; }
@@ -170,7 +180,7 @@ entry	:	ENCODING STRING
 		  }
 		}
 	|	INVALID RUNE
-		{ new_locale.rl_invalid_rune = $2; }
+		{ new_locale.frl_invalid_rune = htonl((u_int32_t)$2); }
 	|	LIST list
 		{ set_map(&types, $2, $1); }
 	|	MAPLOWER map
@@ -250,16 +260,16 @@ int debug = 0;
 FILE *ofile;
 
 int
-main(ac, av)
-	int ac;
-	char *av[];
+main(int ac, char *av[])
 {
     int x;
+    const char *locale_type;
 
     extern char *optarg;
     extern int optind;
 
-    while ((x = getopt(ac, av, "do:")) != EOF) {
+    locale_type = NULL;
+    while ((x = getopt(ac, av, "do:t:")) != EOF) {
 	switch(x) {
 	case 'd':
 	    debug = 1;
@@ -269,10 +279,11 @@ main(ac, av)
 	    if ((ofile = fopen(locale_file, "w")) == 0)
 		err(1, "unable to open output file %s", locale_file);
 	    break;
+        case 't':
+	    locale_type = optarg;
+            break;
 	default:
-	usage:
-	    fprintf(stderr, "usage: mklocale [-d] [-o output] [source]\n");
-	    exit(1);
+	    usage();
 	}
     }
 
@@ -284,23 +295,41 @@ main(ac, av)
 	    err(1, "unable to open input file %s", av[optind]);
 	break;
     default:
-	goto usage;
+	usage();
     }
-    for (x = 0; x < _NB_CACHED_RUNES; ++x) {
+
+    if (ofile == NULL)
+	ofile = stdout;
+    if (locale_type != NULL && strcasecmp(locale_type, "CTYPE")) {
+	mklocaledb(locale_type, stdin, ofile);
+	return 0;
+    }
+
+    for (x = 0; x < _CTYPE_CACHE_SIZE; ++x) {
 	mapupper.map[x] = x;
 	maplower.map[x] = x;
     }
-    new_locale.rl_invalid_rune = _NB_DEFAULT_INVALID_RUNE;
-    memcpy(new_locale.rl_magic, _NB_RUNE_MAGIC_1, sizeof(new_locale.rl_magic));
+
+    new_locale.frl_invalid_rune = htonl((u_int32_t)_DEFAULT_INVALID_RUNE);
+    memcpy(new_locale.frl_magic, _RUNECT10_MAGIC, sizeof(new_locale.frl_magic));
 
     yyparse();
 
     return 0;
+
+}
+
+void
+usage(void)
+{
+    fprintf(stderr,
+	"usage: mklocale [-d] [-o output] [-t type] [source]\n");
+
+    exit(1);
 }
 
 int
-yyerror(s)
-	const char *s;
+yyerror(const char *s)
 {
     fprintf(stderr, "%s\n", s);
 
@@ -308,8 +337,7 @@ yyerror(s)
 }
 
 void *
-xmalloc(sz)
-	unsigned int sz;
+xmalloc(unsigned int sz)
 {
     void *r = malloc(sz);
     if (!r) {
@@ -320,8 +348,7 @@ xmalloc(sz)
 }
 
 u_int32_t *
-xlalloc(sz)
-	unsigned int sz;
+xlalloc(unsigned int sz)
 {
     u_int32_t *r = (u_int32_t *)malloc(sz * sizeof(u_int32_t));
     if (!r) {
@@ -332,9 +359,7 @@ xlalloc(sz)
 }
 
 u_int32_t *
-xrelalloc(old, sz)
-	u_int32_t *old;
-	unsigned int sz;
+xrelalloc(u_int32_t *old, unsigned int sz)
 {
     u_int32_t *r = (u_int32_t *)realloc((char *)old,
 						sz * sizeof(u_int32_t));
@@ -346,10 +371,7 @@ xrelalloc(old, sz)
 }
 
 void
-set_map(map, list, flag)
-	rune_map *map;
-	rune_list *list;
-	u_int32_t flag;
+set_map(rune_map *map, rune_list *list, u_int32_t flag)
 {
     list->map &= charsetmask;
     list->map |= charsetbits;
@@ -361,9 +383,7 @@ set_map(map, list, flag)
 }
 
 void
-set_digitmap(map, list)
-	rune_map *map;
-	rune_list *list;
+set_digitmap(rune_map *map, rune_list *list)
 {
     __nbrune_t i;
 
@@ -383,17 +403,14 @@ set_digitmap(map, list)
 }
 
 void
-add_map(map, list, flag)
-	rune_map *map;
-	rune_list *list;
-	u_int32_t flag;
+add_map(rune_map *map, rune_list *list, u_int32_t flag)
 {
     __nbrune_t i;
     rune_list *lr = 0;
     rune_list *r;
     __nbrune_t run;
 
-    while (list->min < _NB_CACHED_RUNES && list->min <= list->max) {
+    while (list->min < _CTYPE_CACHE_SIZE && list->min <= list->max) {
 	if (flag)
 	    map->map[list->min++] |= flag;
 	else
@@ -592,14 +609,12 @@ add_map(map, list, flag)
 }
 
 void
-dump_tables()
+dump_tables(void)
 {
     int x, n;
     rune_list *list;
-    _FileRuneLocale file_new_locale;
-    FILE *fp = (ofile ? ofile : stdout);
-
-    memset(&file_new_locale, 0, sizeof(file_new_locale));
+    FILE *fp = ofile;
+    u_int32_t nranges;
 
     /*
      * See if we can compress some of the istype arrays
@@ -614,23 +629,16 @@ dump_tables()
 	}
     }
 
-    memcpy(&file_new_locale.frl_magic, new_locale.rl_magic,
-	sizeof(file_new_locale.frl_magic));
-    memcpy(&file_new_locale.frl_encoding, new_locale.rl_encoding,
-	sizeof(file_new_locale.frl_encoding));
-
-    file_new_locale.frl_invalid_rune = htonl(new_locale.rl_invalid_rune);
-
     /*
      * Fill in our tables.  Do this in network order so that
      * diverse machines have a chance of sharing data.
      * (Machines like Crays cannot share with little machines due to
      *  word size.  Sigh.  We tried.)
      */
-    for (x = 0; x < _NB_CACHED_RUNES; ++x) {
-	file_new_locale.frl_runetype[x] = htonl(types.map[x]);
-	file_new_locale.frl_maplower[x] = htonl(maplower.map[x]);
-	file_new_locale.frl_mapupper[x] = htonl(mapupper.map[x]);
+    for (x = 0; x < _CTYPE_CACHE_SIZE; ++x) {
+	new_locale.frl_runetype[x] = htonl(types.map[x]);
+	new_locale.frl_maplower[x] = htonl(maplower.map[x]);
+	new_locale.frl_mapupper[x] = htonl(mapupper.map[x]);
     }
 
     /*
@@ -638,32 +646,33 @@ dump_tables()
      */
     list = types.root;
 
+    nranges = (u_int32_t)0;
     while (list) {
-	new_locale.rl_runetype_ext.rr_nranges++;
+	++nranges;
 	list = list->next;
     }
-    file_new_locale.frl_runetype_ext.frr_nranges =
-	htonl(new_locale.rl_runetype_ext.rr_nranges);
+    new_locale.frl_runetype_ext.frr_nranges =
+	htonl(nranges);
 
     list = maplower.root;
 
+    nranges = (u_int32_t)0;
     while (list) {
-	new_locale.rl_maplower_ext.rr_nranges++;
+	++nranges;
 	list = list->next;
     }
-    file_new_locale.frl_maplower_ext.frr_nranges =
-	htonl(new_locale.rl_maplower_ext.rr_nranges);
+    new_locale.frl_maplower_ext.frr_nranges =
+	htonl(nranges);
 
     list = mapupper.root;
 
+    nranges = (u_int32_t)0;
     while (list) {
-	new_locale.rl_mapupper_ext.rr_nranges++;
+	++nranges;
 	list = list->next;
     }
-    file_new_locale.frl_mapupper_ext.frr_nranges =
-	htonl(new_locale.rl_mapupper_ext.rr_nranges);
-
-    file_new_locale.frl_variable_len = htonl(new_locale.rl_variable_len);
+    new_locale.frl_mapupper_ext.frr_nranges =
+	htonl(nranges);
 
     /*
      * Okay, we are now ready to write the new locale file.
@@ -672,8 +681,8 @@ dump_tables()
     /*
      * PART 1: The _RuneLocale structure
      */
-    if (fwrite((char *)&file_new_locale, sizeof(file_new_locale), 1, fp) != 1)
-	err(1, "writing _RuneLocale to %s", locale_file);
+    if (fwrite((char *)&new_locale, sizeof(new_locale), 1, fp) != 1)
+	err(1, "writing _FileRuneLocale to %s", locale_file);
     /*
      * PART 2: The runetype_ext structures (not the actual tables)
      */
@@ -733,24 +742,24 @@ dump_tables()
     /*
      * PART 5: And finally the variable data
      */
-    if (new_locale.rl_variable_len != 0 &&
-	fwrite((char *)new_locale.rl_variable,
-	       new_locale.rl_variable_len, 1, fp) != 1)
+    if (rl_variable_len != 0 &&
+	fwrite((char *)rl_variable, rl_variable_len, 1, fp) != 1)
 	err(1, "writing variable data to %s", locale_file);
     fclose(fp);
 
     if (!debug)
 	return;
 
-    if (new_locale.rl_encoding[0])
-	fprintf(stderr, "ENCODING	%s\n", new_locale.rl_encoding);
-    if (new_locale.rl_variable)
-	fprintf(stderr, "VARIABLE	%s\n",
-		(char *)new_locale.rl_variable);
+    if (new_locale.frl_encoding[0])
+	fprintf(stderr, "ENCODING	%.*s\n",
+	    (int)sizeof(new_locale.frl_encoding), new_locale.frl_encoding);
+    if (rl_variable)
+	fprintf(stderr, "VARIABLE	%.*s\n",
+	    (int)rl_variable_len, (char *)rl_variable);
 
     fprintf(stderr, "\nMAPLOWER:\n\n");
 
-    for (x = 0; x < _NB_CACHED_RUNES; ++x) {
+    for (x = 0; x < _CTYPE_CACHE_SIZE; ++x) {
 	if (isprint(maplower.map[x]))
 	    fprintf(stderr, " '%c'", (int)maplower.map[x]);
 	else if (maplower.map[x])
@@ -769,7 +778,7 @@ dump_tables()
 
     fprintf(stderr, "\nMAPUPPER:\n\n");
 
-    for (x = 0; x < _NB_CACHED_RUNES; ++x) {
+    for (x = 0; x < _CTYPE_CACHE_SIZE; ++x) {
 	if (isprint(mapupper.map[x]))
 	    fprintf(stderr, " '%c'", (int)mapupper.map[x]);
 	else if (mapupper.map[x])
@@ -789,7 +798,7 @@ dump_tables()
 
     fprintf(stderr, "\nTYPES:\n\n");
 
-    for (x = 0; x < _NB_CACHED_RUNES; ++x) {
+    for (x = 0; x < _CTYPE_CACHE_SIZE; ++x) {
 	u_int32_t r = types.map[x];
 
 	if (r) {

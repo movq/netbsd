@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_fcntl.h,v 1.12 2008/02/02 21:54:01 dsl Exp $	*/
+/*	$NetBSD: linux_fcntl.h,v 1.17 2015/03/01 13:19:39 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,16 @@
 #define LINUX_O_WRONLY		0x0001
 #define LINUX_O_RDWR		0x0002
 #define LINUX_O_ACCMODE		0x0003
+
+#define LINUX_AT_FDCWD			-100
+#define LINUX_AT_SYMLINK_NOFOLLOW	0x0100
+#define LINUX_AT_REMOVEDIR		0x0200
+#define LINUX_AT_SYMLINK_FOLLOW		0x0400
+#define LINUX_AT_NO_AUTOMOUNT		0x0800
+#define LINUX_AT_EMPTY_PATH		0x1000
+
+int linux_to_bsd_ioflags(int);
+int linux_to_bsd_atflags(int);
 
 struct linux_flock {
 	short       l_type;
@@ -83,6 +86,16 @@ struct linux_flock64 {
 #else
 #error Undefined linux_fcntl.h machine type.
 #endif
+
+/* Linux specific fcntl(2) commands */
+#define	LINUX_F_SPECIFIC_BASE 	1024
+#define	LINUX_F_SETLEASE 	(LINUX_F_SPECIFIC_BASE + 0)
+#define	LINUX_F_GETLEASE 	(LINUX_F_SPECIFIC_BASE + 1)
+#define	LINUX_F_NOTIFY 		(LINUX_F_SPECIFIC_BASE + 2)
+#define	LINUX_F_CANCELLK 	(LINUX_F_SPECIFIC_BASE + 5)
+#define	LINUX_F_DUPFD_CLOEXEC 	(LINUX_F_SPECIFIC_BASE + 6)
+#define	LINUX_F_SETPIPE_SZ 	(LINUX_F_SPECIFIC_BASE + 7)
+#define	LINUX_F_GETPIPE_SZ 	(LINUX_F_SPECIFIC_BASE + 8)
 
 /*
  * We have to have 4 copies of the code that converts linux fcntl() file
@@ -133,7 +146,7 @@ LINUX##_to_bsd_##FLOCK(struct flock *bfp, const struct LINUX##_##FLOCK *lfp) \
 	if ((fl_error = copyin(arg, &lfl, sizeof lfl))) \
 		return fl_error; \
 	LINUX##_to_bsd_##FLOCK(&bfl, &lfl); \
-	fl_error = do_fcntl_lock(l, fd, F_GETLK, &bfl); \
+	fl_error = do_fcntl_lock(fd, F_GETLK, &bfl); \
 	if (fl_error) \
 		return fl_error; \
 	bsd_to_##LINUX##_##FLOCK(&lfl, &bfl); \
@@ -147,7 +160,7 @@ LINUX##_to_bsd_##FLOCK(struct flock *bfp, const struct LINUX##_##FLOCK *lfp) \
 	if ((fl_error = copyin(arg, &lfl, sizeof lfl))) \
 		return fl_error; \
 	LINUX##_to_bsd_##FLOCK(&bfl, &lfl); \
-	return do_fcntl_lock(l, fd, cmd == setlk ? F_SETLK : F_SETLKW, &bfl); \
+	return do_fcntl_lock(fd, cmd == setlk ? F_SETLK : F_SETLKW, &bfl); \
     } while (0)
 
 

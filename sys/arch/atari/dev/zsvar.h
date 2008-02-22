@@ -1,4 +1,4 @@
-/*	$NetBSD: zsvar.h,v 1.11 2007/03/06 14:13:02 tsutsui Exp $	*/
+/*	$NetBSD: zsvar.h,v 1.17 2014/11/15 19:20:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -55,9 +55,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,14 +74,15 @@
  */
 
 struct zschan {
-	u_char		zc_xxx0;
-	volatile u_char	zc_csr;		/* ctrl,status, and indirect access */
-	u_char		zc_xxx1;
-	volatile u_char	zc_data;	/* data */
+	uint8_t zc_xxx0;
+	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
+	uint8_t zc_xxx1;
+	volatile uint8_t zc_data;	/* data */
 };
 
 struct zsdevice {
-	struct	zschan zs_chan[2];
+	struct	zschan zs_chan_a;
+	struct	zschan zs_chan_b;
 };
 
 /*
@@ -108,8 +106,8 @@ struct zsdevice {
  * When the value is a character + RR1 status, the character is in the
  * upper 8 bits of the RR1 status.
  */
-#define ZLRB_RING_SIZE		4096		/* ZS line ring buffer size */
-#define	ZLRB_RING_MASK		4095		/* mask for same */
+#define ZLRB_RING_SIZE		8192		/* ZS line ring buffer size */
+#define	ZLRB_RING_MASK		8191		/* mask for same */
 
 /* 0 is reserved (means "no interrupt") */
 #define	ZRING_RINT		1		/* receive data interrupt */
@@ -121,8 +119,7 @@ struct zsdevice {
 #define	ZRING_MAKE(t, v)	((t) | (v) << 8)
 
 struct zs_chanstate {
-	struct	zs_chanstate	*cs_next;	/* linked list for zshard() */
-	volatile struct zschan	*cs_zc;		/* points to hardware regs */
+	struct zschan		*cs_zc;		/* points to hardware regs */
 	int			cs_unit;	/* unit number */
 	struct	tty		*cs_ttyp;	/* ### */
 
@@ -139,10 +136,10 @@ struct zs_chanstate {
 	 * rather than (or in addition to) the pending value; for these
 	 * cs_creg[] contains the current value.
 	 */
-	u_char	cs_creg[16];		/* current values */
-	u_char	cs_preg[16];		/* pending values */
-	u_char	cs_heldchange;		/* change pending (creg != preg) */
-	u_char	cs_rr0;			/* last rr0 processed */
+	uint8_t	cs_creg[16];		/* current values */
+	uint8_t	cs_preg[16];		/* pending values */
+	uint8_t	cs_heldchange;		/* change pending (creg != preg) */
+	uint8_t	cs_rr0;			/* last rr0 processed */
 
 	/* pure software data, per channel */
 	char	cs_softcar;		/* software carrier */
@@ -173,9 +170,6 @@ struct zs_chanstate {
 	int		*cs_rbuf;	/* type, value pairs	*/
 };
 
-#define	ZS_CHAN_A	0
-#define	ZS_CHAN_B	1
-
 /*
  * Macros to read and write individual registers (except 0) in a channel.
  */
@@ -185,6 +179,6 @@ struct zs_chanstate {
 /*
  * Split minor into unit, dialin/dialout & flag nibble.
  */
-#define	ZS_UNIT(dev)		((minor(dev) >> 4) & 0xf) 
-#define	ZS_FLAGS(dev)		(minor(dev) & 0xf) 
-#define	ZS_DIALOUT(dev)		(minor(dev) & 0x80000)
+#define	ZS_UNIT(dev)		(TTUNIT(dev) >> 4) 
+#define	ZS_FLAGS(dev)		(TTUNIT(dev) & 0xf) 
+#define	ZS_DIALOUT(dev)		TTDIALOUT(dev)

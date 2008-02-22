@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $	*/
+/*	$NetBSD: rf_evenodd_dagfuncs.c,v 1.22 2014/03/23 09:30:59 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -31,10 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_evenodd_dagfuncs.c,v 1.18 2007/03/04 06:02:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_evenodd_dagfuncs.c,v 1.22 2014/03/23 09:30:59 christos Exp $");
 
 #include "rf_archs.h"
+
+#ifdef _KERNEL_OPT
 #include "opt_raid_diagnostic.h"
+#endif
 
 #if RF_INCLUDE_EVENODD > 0
 
@@ -64,8 +67,7 @@ RF_RedFuncs_t rf_eoERecoveryFuncs = {rf_RecoveryEFunc, "Recovery E Func", rf_Rec
  *   the following encoding node functions is used in  EO_000_CreateLargeWriteDAG
  **********************************************************************************************/
 int
-rf_RegularPEFunc(node)
-	RF_DagNode_t *node;
+rf_RegularPEFunc(RF_DagNode_t *node)
 {
 	rf_RegularESubroutine(node, node->results[1]);
 	rf_RegularXorFunc(node);/* does the wakeup here! */
@@ -94,15 +96,14 @@ rf_RegularPEFunc(node)
    take the same speed as the previous, and need more memory.
 */
 int
-rf_RegularONEFunc(node)
-	RF_DagNode_t *node;
+rf_RegularONEFunc(RF_DagNode_t *node)
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
 	int     EpdaIndex = (node->numParams - 1) / 2 - 1;	/* the parameter of node
 								 * where you can find
 								 * e-pda */
-	int     i, k, retcode = 0;
+	int     i, k;
 	int     suoffset, length;
 	RF_RowCol_t scol;
 	char   *srcbuf, *destbuf;
@@ -113,10 +114,10 @@ rf_RegularONEFunc(node)
 	RF_PhysDiskAddr_t *EPDA =
 	    (RF_PhysDiskAddr_t *) node->params[EpdaIndex].p;
 	int     ESUOffset = rf_StripeUnitOffset(layoutPtr, EPDA->startSector);
-#endif /* RAID_DIAGNOSTIC */
 
 	RF_ASSERT(EPDA->type == RF_PDA_TYPE_Q);
 	RF_ASSERT(ESUOffset == 0);
+#endif /* RAID_DIAGNOSTIC */
 
 	RF_ETIMER_START(timer);
 
@@ -124,7 +125,7 @@ rf_RegularONEFunc(node)
 	 * new data is stored in Rod buffer */
 	for (k = 0; k < EpdaIndex; k += 2) {
 		length = rf_RaidAddressToByte(raidPtr, ((RF_PhysDiskAddr_t *) node->params[k].p)->numSector);
-		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
+		rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
 	}
 	/* Start to encoding the buffer storing the difference of old data and
 	 * new data into 'E' buffer  */
@@ -142,7 +143,7 @@ rf_RegularONEFunc(node)
 	 * function in XorNode */
 	for (k = 0; k < EpdaIndex; k += 2) {
 		length = rf_RaidAddressToByte(raidPtr, ((RF_PhysDiskAddr_t *) node->params[k].p)->numSector);
-		retcode = rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
+		rf_bxor(node->params[k + EpdaIndex + 3].p, node->params[k + 1].p, length);
 	}
 	RF_ETIMER_STOP(timer);
 	RF_ETIMER_EVAL(timer);
@@ -154,8 +155,7 @@ rf_RegularONEFunc(node)
 }
 
 int
-rf_SimpleONEFunc(node)
-	RF_DagNode_t *node;
+rf_SimpleONEFunc(RF_DagNode_t *node)
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -195,9 +195,7 @@ rf_SimpleONEFunc(node)
 
 /****** called by rf_RegularPEFunc(node) and rf_RegularEFunc(node) in f.f. large write  ********/
 void
-rf_RegularESubroutine(node, ebuf)
-	RF_DagNode_t *node;
-	char   *ebuf;
+rf_RegularESubroutine(RF_DagNode_t *node, char *ebuf)
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -228,8 +226,7 @@ rf_RegularESubroutine(node, ebuf)
  *			 Used in  EO_001_CreateLargeWriteDAG
  ******************************************************************************************/
 int
-rf_RegularEFunc(node)
-	RF_DagNode_t *node;
+rf_RegularEFunc(RF_DagNode_t *node)
 {
 	rf_RegularESubroutine(node, node->results[0]);
 	rf_GenericWakeupFunc(node, 0);
@@ -251,9 +248,7 @@ rf_RegularEFunc(node)
  *  DegrESubroutin in the future.
  *******************************************************************************************/
 void
-rf_DegrESubroutine(node, ebuf)
-	RF_DagNode_t *node;
-	char   *ebuf;
+rf_DegrESubroutine(RF_DagNode_t *node, char *ebuf)
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -289,8 +284,7 @@ rf_DegrESubroutine(node, ebuf)
  * the rf_EOWriteDoubleRecoveryFunc().
  **************************************************************************************/
 int
-rf_Degraded_100_EOFunc(node)
-	RF_DagNode_t *node;
+rf_Degraded_100_EOFunc(RF_DagNode_t *node)
 {
 	rf_DegrESubroutine(node, node->results[1]);
 	rf_RecoveryXorFunc(node);	/* does the wakeup here! */
@@ -402,8 +396,7 @@ rf_e_encToBuf(
  * for EO_110_CreateReadDAG
  **************************************************************************************/
 int
-rf_RecoveryEFunc(node)
-	RF_DagNode_t *node;
+rf_RecoveryEFunc(RF_DagNode_t *node)
 {
 	RF_Raid_t *raidPtr = (RF_Raid_t *) node->params[node->numParams - 1].p;
 	RF_RaidLayout_t *layoutPtr = (RF_RaidLayout_t *) & raidPtr->Layout;
@@ -655,8 +648,7 @@ rf_doubleEOdecode(
 *
 ***************************************************************************************/
 int
-rf_EvenOddDoubleRecoveryFunc(node)
-	RF_DagNode_t *node;
+rf_EvenOddDoubleRecoveryFunc(RF_DagNode_t *node)
 {
 	int     ndataParam = 0;
 	int     np = node->numParams;
@@ -666,8 +658,8 @@ rf_EvenOddDoubleRecoveryFunc(node)
 	int     i, prm, sector, nresults = node->numResults;
 	RF_SectorCount_t secPerSU = layoutPtr->sectorsPerStripeUnit;
 	unsigned sosAddr;
-	int     two = 0, mallc_one = 0, mallc_two = 0;	/* flags to indicate if
-							 * memory is allocated */
+	int     mallc_one = 0, mallc_two = 0;	/* flags to indicate if
+						 * memory is allocated */
 	int     bytesPerSector = rf_RaidAddressToByte(raidPtr, 1);
 	RF_PhysDiskAddr_t *ppda, *ppda2, *epda, *epda2, *pda, *pda0, *pda1,
 	        npda;
@@ -703,7 +695,6 @@ rf_EvenOddDoubleRecoveryFunc(node)
 		epda = node->params[np - 4].p;
 		epda2 = node->params[np - 3].p;
 		RF_ASSERT(epda2->type == RF_PDA_TYPE_Q);
-		two = 1;
 	} else {
 		ppda = node->params[np - 4].p;
 		epda = node->params[np - 3].p;
@@ -856,8 +847,7 @@ rf_EvenOddDoubleRecoveryFunc(node)
  */
 
 int
-rf_EOWriteDoubleRecoveryFunc(node)
-	RF_DagNode_t *node;
+rf_EOWriteDoubleRecoveryFunc(RF_DagNode_t *node)
 {
 	int     np = node->numParams;
 	RF_AccessStripeMap_t *asmap = (RF_AccessStripeMap_t *) node->params[np - 1].p;

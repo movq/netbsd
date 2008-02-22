@@ -1,4 +1,4 @@
-/*	$NetBSD: msiiepvar.h,v 1.7 2005/12/11 12:19:08 christos Exp $ */
+/*	$NetBSD: msiiepvar.h,v 1.9 2013/04/16 06:57:06 jdc Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -36,8 +36,6 @@ struct msiiep_attach_args {
 };
 
 struct mspcic_softc {
-	struct	device		sc_dev;
-
 	/* PROM node */
 	int			sc_node;
 
@@ -52,5 +50,18 @@ struct mspcic_softc {
 };
 
 extern int	mspcic_assigned_interrupt(int);
+
+/*
+ * Bus space tags for memory and i/o.
+ */
+
+struct mspcic_pci_map {
+	uint32_t sysbase;
+	uint32_t pcibase;
+	uint32_t size;
+};
+
+#define IOMAP_SIZE 2
+#define MEMMAP_SIZE 3
 
 #endif /* _SPARC_MSIIEP_VAR_H_ */

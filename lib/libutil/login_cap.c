@@ -1,4 +1,4 @@
-/*	$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $	*/
+/*	$NetBSD: login_cap.c,v 1.33 2015/10/29 20:29:24 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1995,1997 Berkeley Software Design, Inc. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: login_cap.c,v 1.29 2007/12/04 22:09:02 mjf Exp $");
+__RCSID("$NetBSD: login_cap.c,v 1.33 2015/10/29 20:29:24 kamil Exp $");
 #endif /* LIBC_SCCS and not lint */
  
 #include <sys/types.h>
@@ -420,9 +420,11 @@ static struct {
 	{ RLIMIT_RSS,		R_CSIZE, "memoryuse", },
 	{ RLIMIT_MEMLOCK,	R_CSIZE, "memorylocked", },
 	{ RLIMIT_NPROC,		R_CNUMB, "maxproc", },
+	{ RLIMIT_NTHR,		R_CNUMB, "maxthread", },
 	{ RLIMIT_NOFILE,	R_CNUMB, "openfiles", },
 	{ RLIMIT_CORE,		R_CSIZE, "coredumpsize", },
 	{ RLIMIT_SBSIZE,	R_CSIZE, "sbsize", },
+	{ RLIMIT_AS,		R_CSIZE, "vmemoryuse", },
 	{ -1, 0, 0 }
 };
 
@@ -444,25 +446,25 @@ gsetrl(login_cap_t *lc, int what, const char *name, int type)
 		return (-1);
 	}
 
-#define	RCUR	r.rlim_cur
-#define	RMAX	r.rlim_max
+#define	RCUR	((quad_t)r.rlim_cur)
+#define	RMAX	((quad_t)r.rlim_max)
 
 	switch (type) {
 	case R_CTIME:
-		RCUR = login_getcaptime(lc, name, RCUR, RCUR);
-		RMAX = login_getcaptime(lc, name, RMAX, RMAX);
+		r.rlim_cur = login_getcaptime(lc, name, RCUR, RCUR);
+		r.rlim_max = login_getcaptime(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcaptime(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcaptime(lc, name_max, RMAX, RMAX);
 		break;
 	case R_CSIZE:
-		RCUR = login_getcapsize(lc, name, RCUR, RCUR);
-		RMAX = login_getcapsize(lc, name, RMAX, RMAX);
+		r.rlim_cur = login_getcapsize(lc, name, RCUR, RCUR);
+		r.rlim_max = login_getcapsize(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcapsize(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcapsize(lc, name_max, RMAX, RMAX);
 		break;
 	case R_CNUMB:
-		RCUR = login_getcapnum(lc, name, RCUR, RCUR);
-		RMAX = login_getcapnum(lc, name, RMAX, RMAX);
+		r.rlim_cur = login_getcapnum(lc, name, RCUR, RCUR);
+		r.rlim_max = login_getcapnum(lc, name, RMAX, RMAX);
 		rl.rlim_cur = login_getcapnum(lc, name_cur, RCUR, RCUR);
 		rl.rlim_max = login_getcapnum(lc, name_max, RMAX, RMAX);
 		break;
@@ -513,7 +515,7 @@ setuserenv(login_cap_t *lc, envfunc_t senv, void *envp)
 
 	/* allocate ptr array and string */
 	count = i;
-	res = malloc(count * sizeof(char *) + strlen(str) + 1);
+	res = malloc(count * sizeof(*res) + strlen(str) + 1);
 
 	if (!res)
 		return -1;
@@ -932,7 +934,7 @@ multiply(u_quad_t n1, u_quad_t n2)
 
 	/*
 	 * First check the magnitude of each number.  If the sum of the
-	 * magnatude is way to high, reject the number.  (If this test
+	 * magnitude is to high, reject the number.  (If this test
 	 * is not done then the first multiply below may overflow.)
 	 */
 	for (b1 = bpw; (((u_quad_t)1 << (b1-1)) & n1) == 0; --b1)
@@ -961,7 +963,7 @@ multiply(u_quad_t n1, u_quad_t n2)
 	 * overflow.
 	 *
 	 * Finally, if MAX - ((h1 * l2) + (l1 * h2) + (l1 * l2)) < (h1*h2)
-	 * then adding in residual amout will cause an overflow.
+	 * then adding in residual amount will cause an overflow.
 	 */
 
 	m = (n1 >> 1) * (n2 >> 1);

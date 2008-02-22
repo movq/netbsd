@@ -29,15 +29,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)id.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: id.c,v 1.29 2007/11/16 18:09:50 jmmv Exp $");
+__RCSID("$NetBSD: id.c,v 1.32 2011/09/16 15:39:26 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: id.c,v 1.29 2007/11/16 18:09:50 jmmv Exp $");
 static void current(void);
 static void pretty(struct passwd *);
 static void group(struct passwd *, int);
-static void usage(void);
+__dead static void usage(void);
 static void user(struct passwd *);
 static struct passwd *who(char *);
 
@@ -291,7 +291,8 @@ static void
 group(struct passwd *pw, int nflag)
 {
 	struct group *gr;
-	int cnt, id, lastid, ngroups;
+	int cnt, ngroups;
+	gid_t id, lastid;
 	const char *fmt;
 	gid_t *glist = groups;
 

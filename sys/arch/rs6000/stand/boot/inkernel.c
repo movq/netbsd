@@ -1,4 +1,4 @@
-/*	$NetBSD: inkernel.c,v 1.1 2007/12/17 19:09:50 garbled Exp $	*/
+/*	$NetBSD: inkernel.c,v 1.3 2009/01/12 07:16:17 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,11 +50,11 @@ init_in(u_long ladr)
 	printf("p=%p start %p edata %p end %p ladr %lx\n", p, _start, _edata, _end, ladr);
 
 	for (i = 0; i < 4096; i++, p++) {
-		if (memcmp(p, magic, MAGICSIZE) == 0) {
-			kern_len = *(int *)(p + MAGICSIZE);
+		if (memcmp(p, rs6000_magic, RS6000_MAGICSIZE) == 0) {
+			kern_len = *(int *)(p + RS6000_MAGICSIZE);
 			printf("Found magic at 0x%x, kernel is size 0x%x\n", i, kern_len);
 			memmove((char *)KERNENTRY,
-				p + MAGICSIZE + KERNLENSIZE, kern_len);
+				p + RS6000_MAGICSIZE + KERNLENSIZE, kern_len);
 			return;
 		}
 	}

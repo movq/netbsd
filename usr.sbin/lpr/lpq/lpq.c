@@ -1,4 +1,4 @@
-/*	$NetBSD: lpq.c,v 1.17 2007/12/15 19:44:55 perry Exp $	*/
+/*	$NetBSD: lpq.c,v 1.19 2008/10/22 07:59:43 mishka Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -32,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpq.c	8.3 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: lpq.c,v 1.17 2007/12/15 19:44:55 perry Exp $");
+__RCSID("$NetBSD: lpq.c,v 1.19 2008/10/22 07:59:43 mishka Exp $");
 #endif
 #endif /* not lint */
 
@@ -153,6 +153,6 @@ main(int argc, char *argv[])
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-a] [-l] [-Pprinter] [-w maxwait] [user ...] [job ...]", getprogname());
+	(void)fprintf(stderr, "Usage: %s [-a] [-l] [-Pprinter] [-w maxwait] [user ...] [job ...]\n", getprogname());
 	exit(1);
 }

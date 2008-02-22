@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide.c,v 1.7 2007/10/17 19:54:09 garbled Exp $	*/
+/*	$NetBSD: pciide.c,v 1.9 2015/07/11 10:32:45 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@ pciide_init(struct wdc_channel *chp, u_int *unit)
 	ctlreg = MIPS_PHYS_TO_KSEG1(COBALT_IO_SPACE_BASE +
 	    PCIIDE_COMPAT_CTL_BASE(compatchan));
 
-	/* set up cmd regsiters */
+	/* set up cmd registers */
 	chp->c_cmdbase = (uint8_t *)cmdreg;
 	chp->c_data = (uint16_t *)(cmdreg + wd_data);
 	for (i = 0; i < WDC_NPORTS; i++)

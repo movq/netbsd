@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2005/12/11 12:18:51 christos Exp $
+# $NetBSD: Makefile,v 1.6 2012/01/19 19:58:17 matt Exp $
 
 PROG = netboot
 
@@ -15,7 +15,8 @@ CPPFLAGS += ${UNIFIED_CPPFLAGS} -DSUPPORT_DHCP \
 
 ${PROG}: ${PROG}.sym
 	@echo creating ${PROG} from ${PROG}.sym...
-	@${OBJCOPY} --output-target=binary -R .reginfo ${PROG}.sym ${PROG}
+	@${OBJCOPY} --output-target=binary -R .reginfo -R .rel.dyn \
+	    ${PROG}.sym ${PROG}
 	@chmod 644 ${PROG}
 	@ls -l ${PROG}
 	@${CHECKSIZE_CMD} ${PROG}.sym ${PROG} ${UNIFIED_MAX_LOAD} \
@@ -24,7 +25,8 @@ ${PROG}: ${PROG}.sym
 SAMISCMAKEFLAGS= SA_INCLUDE_NET=yes SA_USE_CREAD=yes
 .include "../Makefile.bootprogs"
 
-${PROG}.sym: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${LD} -Ttext ${BOOT_RELOC} -N -e start -o ${PROG}.sym \
+${PROG}.sym: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LDSCRIPT}
+	${_MKTARGET_LINK}
+	${LD} -T ${LDSCRIPT} -N -e start -o ${PROG}.sym \
 	    ${OBJS} ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} 
 	${SIZE} ${PROG}.sym

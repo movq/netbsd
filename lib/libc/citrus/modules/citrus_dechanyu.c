@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_dechanyu.c,v 1.2 2007/04/24 15:42:08 tnozaki Exp $ */
+/* $NetBSD: citrus_dechanyu.c,v 1.5 2013/05/28 16:57:56 joerg Exp $ */
 
 /*-
  * Copyright (c)2007 Citrus Project,
@@ -27,7 +27,7 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_dechanyu.c,v 1.2 2007/04/24 15:42:08 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_dechanyu.c,v 1.5 2013/05/28 16:57:56 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -38,7 +38,6 @@ __RCSID("$NetBSD: citrus_dechanyu.c,v 1.2 2007/04/24 15:42:08 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <limits.h>
 
@@ -72,8 +71,10 @@ typedef struct {
 		_DECHanyuState	s_mbrtowc;
 		_DECHanyuState	s_mbtowc;
 		_DECHanyuState	s_mbsrtowcs;
+		_DECHanyuState	s_mbsnrtowcs;
 		_DECHanyuState	s_wcrtomb;
 		_DECHanyuState	s_wcsrtombs;
+		_DECHanyuState	s_wcsnrtombs;
 		_DECHanyuState	s_wctomb;
 	} states;
 } _DECHanyuCTypeInfo;
@@ -188,7 +189,7 @@ _citrus_DECHanyu_mbrtowc_priv(_DECHanyuEncodingInfo * __restrict ei,
 	_DECHanyuState * __restrict psenc, size_t * __restrict nresult)
 {
 	const char *s0;
-	int ch, i;
+	int ch;
 	wchar_t wc;
 
 	/* ei may be unused */

@@ -1,4 +1,4 @@
-.\"     $NetBSD: efun.3,v 1.6 2007/11/21 09:17:24 rillig Exp $
+.\"     $NetBSD: efun.3,v 1.14 2015/07/26 17:37:38 kamil Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd July 1, 2007
+.Dd July 26, 2015
 .Dt EFUN 3
 .Os
 .Sh NAME
@@ -44,10 +37,13 @@
 .Nm emalloc ,
 .Nm ecalloc ,
 .Nm erealloc ,
+.Nm ereallocarr ,
 .Nm estrdup ,
 .Nm estrndup ,
 .Nm estrlcat ,
 .Nm estrlcpy ,
+.Nm estrtoi ,
+.Nm estrtou ,
 .Nm evasprintf
 .Nd error-checked utility functions
 .Sh LIBRARY
@@ -61,11 +57,13 @@
 .Ft FILE *
 .Fn efopen "const char *p" "const char *m"
 .Ft void *
-.Fn ecalloc "size_t n" "size_t c"
+.Fn ecalloc "size_t n" "size_t s"
 .Ft void *
 .Fn emalloc "size_t n"
 .Ft void *
 .Fn erealloc "void *p" "size_t n"
+.Ft void
+.Fn ereallocarr "void *p" "size_t n" "size_t s"
 .Ft char *
 .Fn estrdup "const char *s"
 .Ft char *
@@ -74,27 +72,35 @@
 .Fn estrlcat "char *dst" "const char *src" "size_t len"
 .Ft size_t
 .Fn estrlcpy "char *dst" "const char *src" "size_t len"
+.Ft intmax_t
+.Fn estrtoi "const char * nptr" "int base" "intmax_t lo" "intmax_t hi"
+.Ft uintmax_t
+.Fn estrtou "const char * nptr" "int base" "uintmax_t lo" "uintmax_t hi"
 .Ft int
 .Fn evasprintf "char ** restrict str" "const char * restrict fmt" "..."
 .Sh DESCRIPTION
 The
-.Nm easprintf ,
-.Nm efopen ,
-.Nm ecalloc ,
-.Nm emalloc ,
-.Nm erealloc ,
-.Nm estrdup ,
-.Nm estrndup ,
-.Nm estrlcat ,
-.Nm estrlcpy ,
+.Fn easprintf ,
+.Fn efopen ,
+.Fn ecalloc ,
+.Fn emalloc ,
+.Fn erealloc ,
+.Fn ereallocarr ,
+.Fn estrdup ,
+.Fn estrndup ,
+.Fn estrlcat ,
+.Fn estrlcpy ,
+.Fn estrtoi ,
+.Fn estrtou ,
 and
-.Nm evasprintf
+.Fn evasprintf
 functions
-operate exactly as the correspoding functions that do not start with an
+operate exactly as the corresponding functions that do not start with an
 .Sq e
 except that in case of an error, they call
 the installed error handler that can be configured with
-.Nm esetfunc .
+.Fn esetfunc .
+.Pp
 For the string handling functions, it is an error when the destination
 buffer is not large enough to hold the complete string.
 For functions that allocate memory or open a file, it is an error when
@@ -102,7 +108,7 @@ they would return a null pointer.
 The default error handler is
 .Xr err 3 .
 The function
-.Nm esetfunc
+.Fn esetfunc
 returns the previous error handler function.
 A
 .Dv NULL
@@ -116,8 +122,19 @@ error handler will just call
 .Xr fopen 3 ,
 .Xr malloc 3 ,
 .Xr realloc 3 ,
+.Xr reallocarr 3 ,
 .Xr strdup 3 ,
-.Xr strndup 3 ,
 .Xr strlcat 3 ,
 .Xr strlcpy 3 ,
+.Xr strndup 3 ,
+.Xr strtoi 3 ,
+.Xr strtou 3 ,
 .Xr vasprintf 3
+.Sh HISTORY
+The
+.Fn estrtoi ,
+.Fn estrtou
+and
+.Fn ereallocarr
+functions were added in
+.Nx 8 .

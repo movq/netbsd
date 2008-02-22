@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.27 2008/01/08 22:07:29 elad Exp $	*/
+/*	$NetBSD: svr4_machdep.c,v 1.33 2011/12/22 15:47:15 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,13 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.27 2008/01/08 22:07:29 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.33 2011/12/22 15:47:15 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
@@ -68,13 +60,11 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.27 2008/01/08 22:07:29 elad Exp $
 #include <machine/vmparam.h>
 
 extern short exframesize[];
-extern void	m68881_restore(struct fpframe *);
-extern void	m68881_save(struct fpframe *);
 static void	svr4_getsiginfo(union svr4_siginfo *, int, unsigned long,
 		    void *);
 
 void
-svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+svr4_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	struct frame *frame = (struct frame *)l->l_md.md_regs;
 
@@ -264,9 +254,9 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&sf, sfp, sizeof (sf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -312,4 +302,16 @@ svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, registe
 	}
 
 	return error;
+}
+
+void
+svr4_md_init(void)
+{
+
+}
+
+void
+svr4_md_fini(void)
+{
+
 }

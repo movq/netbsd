@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.8 2004/08/21 11:12:03 rearnsha Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.12 2013/12/03 00:19:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,55 +31,52 @@
 
 #include <machine/asm.h>
 
-	.text
-	.align	0
-	.globl	_rtld_start
-	.type	_rtld_start,%function
-_rtld_start:
+RCSID("$NetBSD: rtld_start.S,v 1.12 2013/12/03 00:19:56 matt Exp $")
+
+ENTRY_NP(_rtld_start)
 	sub	sp, sp, #8		/* make room for obj_main & exit proc */
-	mov	r4, r0			/* save ps_strings */
+	movs	r4, r0			/* save ps_strings */
 
-	ldr	sl, .L2
-	ldr	r5, .L2+4
-	ldr	r0, .L2+8
-.L1:
-	add	sl, pc, sl
-	ldr	r5, [sl, r5]
-	ldr	r0, [sl, r0]
-
-	sub	r1, sl, r5		/* relocbase */
-	add	r0, r1, r0		/* &_DYNAMIC */
+	ldr	r6, .Lgot
+	ldr	r5, .Ldynamic
+	add	r6, r6, pc		/* r6 = &GOT[0]; pc = &LPIC1; */
+	adds	r0, r6, r5		/* arg0 = &_DYNAMIC */
+.LPIC1:
+	ldr	r5, [r6]		/* GOT[0] = &_DYNAMIC */
+	subs	r5, r0, r5		/* relocbase = GOT[0] - &_DYNAMIC */
+	movs	r1, r5			/* arg1 = relocabase */
 	bl	_rtld_relocate_nonplt_self
 
-	sub	r1, sl, r5		/* relocbase */
+	movs	r1, r5			/* relocbase */
 	mov	r0, sp			/* sp */
 	bl	_rtld			/* call the shared loader */
-	mov	r3, r0			/* save entry point */
+	movs	r3, r0			/* save entry point */
 
-	ldr	r2, [sp, #0]		/* r2 = cleanup */
-	ldr	r1, [sp, #4]		/* r1 = obj_main */
-	add	sp, sp, #8		/* restore stack */
-	mov	r0, r4			/* restore ps_strings */
-#ifdef _ARM_ARCH_4T
-	bx	r3			/* jump to the entry point */
+#ifdef __thumb__
+	ldr	r2, [sp, #0]		/* pop r2 = cleanup */
+	ldr	r1, [sp, #4]		/* pop r1 = obj_main */
+	add	sp, sp, #8
 #else
-	mov	pc, r3			/* jump to the entry point */
+	ldr	r2, [sp], #4		/* pop r2 = cleanup */
+	ldr	r1, [sp], #4		/* pop r1 = obj_main */
 #endif
-.L2:
-	.word	_GLOBAL_OFFSET_TABLE_ - (.L1+8)
-	.word	_GLOBAL_OFFSET_TABLE_(GOT)
-	.word	_DYNAMIC(GOT)
+	movs	r0, r4			/* restore ps_strings */
+	RETr(r3)
 
 	.align	0
-	.globl	_rtld_bind_start
-	.type	_rtld_bind_start,%function
+.Lgot:
+	.word	_GLOBAL_OFFSET_TABLE_ - .LPIC1
+.Ldynamic:
+	.word	_DYNAMIC(GOTOFF)
+END(_rtld_start)
+
 /*
  *	stack[0] = RA
  *	ip = &GOT[n+3]
  *	lr = &GOT[2]
  */
-_rtld_bind_start:
-	stmdb	sp!,{r0-r4,sl,fp}
+ARM_ENTRY_NP(_rtld_bind_start)
+	stmdb	sp!,{r0-r4,sl,fp}	/* 8 byte aligned (lr already saved) */
 
 	sub	r1, ip, lr		/* r1 = 4 * (n + 1) */
 	sub	r1, r1, #4		/* r1 = 4 * n */
@@ -101,9 +91,5 @@ _rtld_bind_start:
 	mov	ip, r0			/* save new address */
 
 	ldmia	sp!,{r0-r4,sl,fp,lr}	/* restore the stack */
-#ifdef _ARM_ARCH_4T
-	bx	ip			/* jump to the new address */
-#else
-	mov	pc, ip			/* jump to the new address */
-#endif
-
+	RETr(ip)			/* jump to the new address */
+END(_rtld_bind_start)

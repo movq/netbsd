@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.25 2007/12/21 02:28:35 matt Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.32 2014/11/09 17:48:07 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1995, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,21 +31,19 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.25 2007/12/21 02:28:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.32 2014/11/09 17:48:07 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
 #include <sys/exec.h>
 #include <sys/file.h>
 #include <sys/callout.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
 #include <sys/mount.h>
@@ -63,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.25 2007/12/21 02:28:35 matt Exp 
 #include <sys/exec_elf.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
+
 #include <miscfs/specfs/specdev.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -74,8 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.25 2007/12/21 02:28:35 matt Exp 
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/linux_syscallargs.h>
 
+#include <arm/locore.h>
+
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 
 	setregs(l, epp, stack);
@@ -84,15 +78,14 @@ linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 void
 linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	struct trapframe *tf;
+	struct lwp * const l = curlwp;
+	struct proc * const p = l->l_proc;
+	struct trapframe * const tf = lwp_trapframe(l);
 	struct linux_sigframe *fp, frame;
 	int onstack, error;
 	const int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
-	tf = process_frame(l);
 
 	/*
 	 * The Linux version of this code is in
@@ -152,9 +145,9 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_sc.sc_fault_address = (u_int32_t) ksi->ksi_addr;
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	
 	if (error != 0) {
 		/*
@@ -203,12 +196,10 @@ int
 linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 	register_t *retval)
 {
+	struct trapframe * const tf = lwp_trapframe(l);
+	struct proc * const p = l->l_proc;
 	struct linux_sigframe *sfp, frame;
-	struct proc *p = l->l_proc;
-	struct trapframe *tf;
 	sigset_t mask;
-
-	tf = process_frame(l);
 
 	/*
 	 * The trampoline code hands us the context.
@@ -227,7 +218,6 @@ linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 		return EINVAL;
 
 	/* Restore register context. */
-	tf = process_frame(l);
 	tf->tf_r0    = frame.sf_sc.sc_r0;
 	tf->tf_r1    = frame.sf_sc.sc_r1;
 	tf->tf_r2    = frame.sf_sc.sc_r2;
@@ -246,7 +236,7 @@ linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 	tf->tf_pc    = frame.sf_sc.sc_pc;
 	tf->tf_spsr  = frame.sf_sc.sc_cpsr;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
@@ -256,7 +246,7 @@ linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *v,
 	    frame.sf_extramask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

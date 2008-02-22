@@ -1,4 +1,4 @@
-/*	$NetBSD: ess_pnpbios.c,v 1.15 2006/11/16 01:32:39 christos Exp $	*/
+/*	$NetBSD: ess_pnpbios.c,v 1.22 2011/07/01 18:14:15 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.15 2006/11/16 01:32:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.22 2011/07/01 18:14:15 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.15 2006/11/16 01:32:39 christos Ex
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -62,15 +55,14 @@ __KERNEL_RCSID(0, "$NetBSD: ess_pnpbios.c,v 1.15 2006/11/16 01:32:39 christos Ex
 #include <dev/isa/essreg.h>
 #include <dev/isa/essvar.h>
 
-int ess_pnpbios_match(struct device *, struct cfdata *, void *);
-void ess_pnpbios_attach(struct device *, struct device *, void *);
+int ess_pnpbios_match(device_t, cfdata_t, void *);
+void ess_pnpbios_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ess_pnpbios, sizeof(struct ess_softc),
+CFATTACH_DECL_NEW(ess_pnpbios, sizeof(struct ess_softc),
     ess_pnpbios_match, ess_pnpbios_attach, NULL, NULL);
 
 int
-ess_pnpbios_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ess_pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -82,6 +74,7 @@ ess_pnpbios_match(struct device *parent, struct cfdata *match,
 	    strcmp(aa->idstr, "CPQB0AC") && /* 1869 */
 	    strcmp(aa->idstr, "CPQB0AD") && /* 1869 */
 	    strcmp(aa->idstr, "CPQB0F1") && /* 1869 */
+	    strcmp(aa->idstr, "ESS1878") && /* 1878 */
 	    strcmp(aa->idstr, "ESS1879"))   /* 1879 */
 		return (0);
 
@@ -89,14 +82,15 @@ ess_pnpbios_match(struct device *parent, struct cfdata *match,
 }
 
 void
-ess_pnpbios_attach(struct device *parent, struct device *self,
-    void *aux)
+ess_pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct ess_softc *sc = (void *)self;
+	struct ess_softc *sc = device_private(self);
 	struct pnpbiosdev_attach_args *aa = aux;
 
+	sc->sc_dev = self;
+
 	if (pnpbios_io_map(aa->pbt, aa->resc, 0, &sc->sc_iot, &sc->sc_ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
@@ -110,7 +104,7 @@ ess_pnpbios_attach(struct device *parent, struct device *self,
 
 	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &sc->sc_audio1.irq,
 	    NULL)) {
-		printf(": can't get IRQ\n");
+		aprint_error(": can't get IRQ\n");
 		return;
 	}
 
@@ -119,20 +113,21 @@ ess_pnpbios_attach(struct device *parent, struct device *self,
 		sc->sc_audio2.irq = -1;
 
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 0, &sc->sc_audio1.drq)) {
-		printf(": can't get DMA channel\n");
+		aprint_error(": can't get DMA channel\n");
 		return;
 	}
 
 	if (pnpbios_getdmachan(aa->pbt, aa->resc, 1, &sc->sc_audio2.drq))
 		sc->sc_audio2.drq = -1;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	aprint_normal_dev(self, "");
 
 	if (!essmatch(sc)) {
-		printf("%s: essmatch failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "essmatch failed\n");
 		pnpbios_io_unmap(aa->pbt, aa->resc, 0, sc->sc_iot, sc->sc_ioh);
 		return;
 	}

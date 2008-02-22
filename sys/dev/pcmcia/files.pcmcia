@@ -1,4 +1,4 @@
-#	$NetBSD: files.pcmcia,v 1.56 2007/08/20 00:29:43 kiyohara Exp $
+#	$NetBSD: files.pcmcia,v 1.58 2012/08/25 08:20:03 kiyohara Exp $
 #
 # Config.new file and device description for machine-independent PCMCIA code.
 # Included by ports that need it.
@@ -127,16 +127,6 @@ file	dev/pcmcia/isic_pcmcia_elsa_isdnmc.c	isic_pcmcia
 file	dev/pcmcia/isic_pcmcia_elsa_mcall.c	isic_pcmcia
 file	dev/pcmcia/isic_pcmcia_sbspeedstar2.c	isic_pcmcia
 
-# Audio devices
-# Eiger Labs with ESS 1688
-device	esl { }: audiobus, midibus, auconv, mulaw
-attach	esl at pcmcia with esl_pcmcia
-file	dev/pcmcia/esl_pcmcia.c			esl_pcmcia
-file	dev/pcmcia/esl.c			esl
-
-attach	opl at esl with opl_esl
-file	dev/pcmcia/opl_esl.c			opl_esl
-
 # 3Com Bluetooth controller 3CRW6096
 device	bt3c: btbus, bluetooth, firmload
 attach	bt3c at pcmcia
@@ -150,3 +140,7 @@ file	dev/pcmcia/slhci_pcmcia.c		slhci_pcmcia
 device	btbc: btbus, bluetooth
 attach	btbc at pcmcia
 file	dev/pcmcia/btbc.c			btbc
+
+# Marvell 88W8385
+attach	malo at pcmcia with malo_pcmcia
+file	dev/pcmcia/if_malo_pcmcia.c		malo_pcmcia

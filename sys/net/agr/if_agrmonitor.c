@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrmonitor.c,v 1.3 2005/12/11 12:24:54 christos Exp $	*/
+/*	$NetBSD: if_agrmonitor.c,v 1.5 2017/01/28 22:56:09 maya Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_agrmonitor.c,v 1.3 2005/12/11 12:24:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_agrmonitor.c,v 1.5 2017/01/28 22:56:09 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -46,12 +46,6 @@ agrport_monitor(struct agr_port *port)
 	u_int media;
 	u_int status;
 
-	/*
-	 * XXX XXX
-	 * assuming that it's safe to use SIOCGIFMEDIA from callout handler.
-	 * maybe it's better to have a worker thread.
-	 */
-
 	media = IFM_ETHER | IFM_NONE;
 	status = IFM_AVALID;
 	if ((~port->port_ifp->if_flags & (IFF_RUNNING | IFF_UP))
@@ -67,6 +61,16 @@ agrport_monitor(struct agr_port *port)
 	}
 
 	if ((status & (IFM_AVALID | IFM_ACTIVE)) == IFM_AVALID) {
+		media = IFM_ETHER | IFM_NONE; /* XXX ether */
+	}
+
+	if (media == IFM_NONE) {
+		/*
+		 * possible eg. when the phy is not configured.
+		 */
+#if defined(DEBUG)
+		printf("%s: IFM_NONE\n", __func__);
+#endif /* defined(DEBUG) */
 		media = IFM_ETHER | IFM_NONE; /* XXX ether */
 	}
 

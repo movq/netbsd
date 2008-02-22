@@ -1,4 +1,4 @@
-/* $NetBSD: db_trace.c,v 1.22 2007/02/22 04:51:26 thorpej Exp $ */
+/* $NetBSD: db_trace.c,v 1.28 2012/02/06 02:14:10 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,19 +35,18 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.22 2007/02/22 04:51:26 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.28 2012/02/06 02:14:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 
 #include <machine/alpha.h>
 #include <machine/db_machdep.h>
 
 #include <alpha/alpha/db_instruction.h>
 
-#include <ddb/db_sym.h> 
+#include <ddb/db_sym.h>
 #include <ddb/db_access.h>
 #include <ddb/db_variables.h>
 #include <ddb/db_output.h>
@@ -65,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.22 2007/02/22 04:51:26 thorpej Exp $"
  */
 struct prologue_info {
 	int	pi_reg_offset[32]; /* offset of registers in stack frame */
-	u_int32_t pi_regmask;	   /* which registers are in frame */
+	uint32_t pi_regmask;	   /* which registers are in frame */
 	int	pi_frame_size;	   /* frame size */
 };
 
@@ -228,19 +220,16 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
-			if ((l->l_flag & LW_INMEM) == 0) {
-				(*pr)("swapped out\n");
-				return;
-			}
-			pcbp = &l->l_addr->u_pcb;
+			pcbp = lwp_getpcb(l);
 			addr = (db_expr_t)pcbp->pcb_hw.apcb_ksp;
 			callpc = pcbp->pcb_context[7];
 			(*pr)("at 0x%lx\n", addr);

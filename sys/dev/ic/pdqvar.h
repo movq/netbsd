@@ -1,4 +1,4 @@
-/*	$NetBSD: pdqvar.h,v 1.39 2007/12/20 21:08:18 dyoung Exp $	*/
+/*	$NetBSD: pdqvar.h,v 1.49 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -39,6 +39,30 @@
 
 #define	PDQ_OS_TX_TIMEOUT		5	/* seconds */
 
+enum _pdq_boolean_t { 
+    PDQ_FALSE=0,
+    PDQ_TRUE=1
+}; 
+
+enum _pdq_type_t {
+    PDQ_DEFPA,		/* PCI-bus */
+    PDQ_DEFEA,		/* EISA-bus */
+    PDQ_DEFTA,		/* TURBOchannel */
+    PDQ_DEFAA,		/* FutureBus+ */
+    PDQ_DEFQA		/* Q-bus */
+};
+
+enum _pdq_state_t {
+    PDQS_RESET=0,
+    PDQS_UPGRADE=1,
+    PDQS_DMA_UNAVAILABLE=2,
+    PDQS_DMA_AVAILABLE=3,
+    PDQS_LINK_AVAILABLE=4,
+    PDQS_LINK_UNAVAILABLE=5,
+    PDQS_HALTED=6,
+    PDQS_RING_MEMBER=7
+}; 
+
 typedef struct _pdq_t pdq_t;
 typedef struct _pdq_csrs_t pdq_csrs_t;
 typedef struct _pdq_pci_csrs_t pdq_pci_csrs_t;
@@ -50,14 +74,6 @@ typedef enum _pdq_boolean_t pdq_boolean_t;
 typedef enum _pdq_type_t pdq_type_t;
 typedef enum _pdq_state_t pdq_state_t;
 
-enum _pdq_type_t {
-    PDQ_DEFPA,		/* PCI-bus */
-    PDQ_DEFEA,		/* EISA-bus */
-    PDQ_DEFTA,		/* TurboChannel */
-    PDQ_DEFAA,		/* FutureBus+ */
-    PDQ_DEFQA		/* Q-bus */
-};
-
 #if defined(PDQTEST)
 #include <pdq_os_test.h>
 #elif defined(__FreeBSD__) || defined(__bsdi__) || defined(__NetBSD__)
@@ -68,8 +84,6 @@ enum _pdq_type_t {
 #include <sys/mbuf.h>
 #endif /* M_CAST */
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #define	PDQ_USE_MBUFS
 #if defined(__NetBSD__)
@@ -116,7 +130,7 @@ typedef	u_int16_t pdq_bus_ioport_t;
 typedef volatile pdq_uint32_t *pdq_bus_memaddr_t;
 typedef pdq_bus_memaddr_t pdq_bus_memoffset_t;
 #if BSD >= 199506	/* __FreeBSD__ */
-#define	PDQ_BPF_MTAP(sc, m)	bpf_mtap(&(sc)->sc_if, m)
+#define	PDQ_BPF_MTAP(sc, m, d)	bpf_mtap(&(sc)->sc_if, m, d)
 #define	PDQ_BPFATTACH(sc, t, s)	bpfattach(&(sc)->sc_if, t, s)
 #endif
 
@@ -233,11 +247,11 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *, struct mbuf *);
 #endif
 
 #if !defined(PDQ_BPF_MTAP)
-#define	PDQ_BPF_MTAP(sc, m)	bpf_mtap((sc)->sc_bpf, m)
+#define	PDQ_BPF_MTAP(sc, m, d)	bpf_mtap3((sc)->sc_bpf, m, d)
 #endif
 
 #if !defined(PDQ_BPFATTACH)
-#define	PDQ_BPFATTACH(sc, t, s)	bpfattach(&(sc)->sc_bpf, &(sc)->sc_if, t, s)
+#define	PDQ_BPFATTACH(sc, t, s)	bpf_attach(&(sc)->sc_bpf, &(sc)->sc_if, t, s)
 #endif
 
 #if !defined(PDQ_OS_SPL_RAISE)
@@ -302,11 +316,12 @@ typedef struct _pdq_os_ctx_t {
     struct arpcom sc_ac;
 #define	sc_if		sc_ac.ac_if
 #elif defined(__NetBSD__)
-    struct device sc_dev;		/* base device */
+    device_t sc_dev;		/* base device */
     void *sc_ih;			/* interrupt vectoring */
     void *sc_ats;			/* shutdown hook */
     struct ethercom sc_ec;
     bus_dma_tag_t sc_dmatag;
+    bool sc_csr_memmapped;
 #define	sc_if		sc_ec.ec_if
 #elif defined(__FreeBSD__)
     struct kern_devconf *sc_kdc;	/* freebsd cruft */
@@ -332,7 +347,7 @@ typedef struct _pdq_os_ctx_t {
 #if !defined(__bsdi__) || _BSDI_VERSION >= 199401
 #define	sc_bpf		sc_if.if_bpf
 #else
-    void *sc_bpf;
+    struct bpf_if *sc_bpf;
 #endif
 #if defined(PDQ_BUS_DMA)
 #if !defined(__NetBSD__)
@@ -366,7 +381,7 @@ extern void pdq_ifattach(pdq_softc_t *, ifnet_ret_t (*ifwatchdog)(int));
 
 #define	PDQ_OS_PAGESIZE			PAGESIZE
 #define	PDQ_OS_USEC_DELAY(n)		drv_usecwait(n)
-#define	PDQ_OS_MEMZERO(p, n)		bzero((void *)(p), (n))
+#define	PDQ_OS_MEMZERO(p, n)		memset((void *)(p), 0, (n))
 #define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((void *)p, NULL)
 #define	PDQ_OS_MEMALLOC(n)		kmem_zalloc(n, KM_NOSLEEP)
 #define	PDQ_OS_MEMFREE(p, n)		kmem_free((void *) p, n)

@@ -1,4 +1,4 @@
-/*	$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $	*/
+/*	$NetBSD: tspld.c,v 1.24 2014/02/25 18:30:08 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2004 Jesse Off
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.24 2014/02/25 18:30:08 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -45,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $");
 #include <sys/device.h>
 #include <sys/wdog.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 #include "isa.h"
@@ -63,16 +56,15 @@ __KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $");
 #include <arm/cpufunc.h>
 #include <dev/sysmon/sysmonvar.h>
 
-int	tspldmatch (struct device *, struct cfdata *, void *);
-void	tspldattach (struct device *, struct device *, void *);
+int	tspldmatch (device_t, cfdata_t, void *);
+void	tspldattach (device_t, device_t, void *);
 static int	tspld_wdog_setmode (struct sysmon_wdog *);
 static int	tspld_wdog_tickle (struct sysmon_wdog *);
-int tspld_search (struct device *, struct cfdata *, const int *, void *);
+int tspld_search (device_t, cfdata_t, const int *, void *);
 int tspld_print (void *, const char *);
 void boardtemp_poll (void *);
 
 struct tspld_softc {
-        struct device           sc_dev;
         bus_space_tag_t         sc_iot;
 	bus_space_handle_t	sc_wdogfeed_ioh;	
 	bus_space_handle_t	sc_wdogctrl_ioh;	
@@ -93,10 +85,10 @@ struct tspld_softc {
 	struct callout		boardtemp_callout;
 };
 
-CFATTACH_DECL(tspld, sizeof(struct tspld_softc),
+CFATTACH_DECL_NEW(tspld, sizeof(struct tspld_softc),
     tspldmatch, tspldattach, NULL, NULL);
 
-void	tspld_callback __P((struct device *));
+void	tspld_callback(device_t);
 
 #define GPIO_GET(x)	bus_space_read_4(sc->sc_iot, sc->sc_gpioh, \
 	(EP93XX_GPIO_ ## x))
@@ -123,21 +115,17 @@ void	tspld_callback __P((struct device *));
 	(EP93XX_SSP_ ## x), SSP_GET(x) & (~(y)))
 
 int
-tspldmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tspldmatch(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
 }
 
 void
-boardtemp_poll(arg)
-	void *arg;
+boardtemp_poll(void *arg)
 {
 	struct tspld_softc *sc = arg;
-	u_int16_t val;
+	uint16_t val;
 
 	/* Disable chip select */
 	GPIO_SET(PFDDR, 0x0);
@@ -157,30 +145,20 @@ boardtemp_poll(arg)
 }
 
 void
-tspldattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tspldattach(device_t parent, device_t self, void *aux)
 {
 	int	i, rev, features, jp, model;
-	struct tspld_softc *sc = (struct tspld_softc *)self;
+	struct tspld_softc *sc = device_private(self);
 	bus_space_handle_t 	ioh;
         const struct sysctlnode *node;
 
-	if (sysctl_createv(NULL, 0, NULL, NULL,
-				CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw",
-				NULL, NULL, 0, NULL, 0,
-				CTL_HW, CTL_EOL) != 0) {
-		printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
-		return;
-	}
 	if (sysctl_createv(NULL, 0, NULL, &node,
-        			0, CTLTYPE_NODE, sc->sc_dev.dv_xname,
+        			0, CTLTYPE_NODE, device_xname(self),
         			NULL,
         			NULL, 0, NULL, 0,
 				CTL_HW, CTL_CREATE, CTL_EOL) != 0) {
                 printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 
@@ -196,7 +174,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	bus_space_unmap(sc->sc_iot, ioh, 2);
@@ -214,7 +192,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	bus_space_unmap(sc->sc_iot, ioh, 2);
@@ -237,7 +215,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -247,7 +225,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
         bus_space_map(sc->sc_iot, TS7XXX_IO16_HWBASE + TS7XXX_STATUS2, 2, 0, 
@@ -268,7 +246,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	sc->sc_com2mode = "rs232";
@@ -279,7 +257,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -289,7 +267,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	printf(": Technologic Systems %s rev %c, features 0x%x", 
@@ -313,7 +291,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -323,7 +301,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -333,7 +311,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -343,7 +321,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -353,7 +331,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 	if ((i = sysctl_createv(NULL, 0, NULL, NULL,
@@ -363,10 +341,10 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
-	printf("%s: jumpers 0x%x", sc->sc_dev.dv_xname, jp);
+	printf("%s: jumpers 0x%x", device_xname(self), jp);
 	if (jp) {
 		printf("<");
 		for(i = 0; i < 5; i++) {
@@ -402,7 +380,7 @@ tspldattach(parent, self, aux)
 	sc->boardtemp_5s = sc->boardtemp_30s = sc->boardtemp;
 #define DEGF(c)	((c) * 9 / 5 + 32000000)
 	printf("%s: board temperature %d.%02d degC (%d.%02d degF)\n",
-		sc->sc_dev.dv_xname, 
+		device_xname(self), 
 		sc->boardtemp / 1000000, sc->boardtemp / 10000 % 100, 
 		DEGF(sc->boardtemp) / 1000000, DEGF(sc->boardtemp) / 10000 % 100);
 #undef DEGF
@@ -413,7 +391,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 
@@ -424,7 +402,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 
@@ -435,7 +413,7 @@ tspldattach(parent, self, aux)
 				CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL))
 				!= 0) {
                 printf("%s: could not create sysctl\n", 
-			sc->sc_dev.dv_xname);
+			device_xname(self));
 		return;
 	}
 
@@ -444,7 +422,7 @@ tspldattach(parent, self, aux)
         bus_space_map(sc->sc_iot, TS7XXX_IO16_HWBASE + TS7XXX_WDOGFEED, 2, 0, 
 		&sc->sc_wdogfeed_ioh);
 
-	sc->sc_wdog.smw_name = sc->sc_dev.dv_xname;
+	sc->sc_wdog.smw_name = device_xname(self);
 	sc->sc_wdog.smw_cookie = sc;
 	sc->sc_wdog.smw_setmode = tspld_wdog_setmode;
 	sc->sc_wdog.smw_tickle = tspld_wdog_tickle;
@@ -457,13 +435,9 @@ tspldattach(parent, self, aux)
 }
 
 int
-tspld_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+tspld_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct tspld_softc *sc = (struct tspld_softc *)parent;
+	struct tspld_softc *sc = device_private(parent);
 	struct tspld_attach_args sa;
 
 	sa.ta_iot = sc->sc_iot;
@@ -475,17 +449,14 @@ tspld_search(parent, cf, ldesc, aux)
 }
 
 int
-tspld_print(aux, name)
-	void *aux;
-	const char *name;
+tspld_print(void *aux, const char *name)
 {
 
 	return (UNCONF);
 }
 
 void
-tspld_callback(self)
-	struct device *self;
+tspld_callback(device_t self)
 {
 #if NISA > 0
 	extern void isa_bs_mallocok(void);
@@ -508,8 +479,7 @@ tspld_callback(self)
 }
 
 static int
-tspld_wdog_tickle(smw)
-	struct sysmon_wdog *smw;
+tspld_wdog_tickle(struct sysmon_wdog *smw)
 {
 	struct tspld_softc *sc = (struct tspld_softc *)smw->smw_cookie;
 
@@ -518,8 +488,7 @@ tspld_wdog_tickle(smw)
 }
 
 static int
-tspld_wdog_setmode(smw)
-	struct sysmon_wdog *smw;
+tspld_wdog_setmode(struct sysmon_wdog *smw)
 {
 	int i, ret = 0;
 	struct tspld_softc *sc = (struct tspld_softc *)smw->smw_cookie;
@@ -529,6 +498,10 @@ tspld_wdog_setmode(smw)
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogfeed_ioh, 0, 0x5);
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogctrl_ioh, 0, 0);
 	} else {
+		if (smw->smw_period == WDOG_PERIOD_DEFAULT) {
+			smw->smw_period = 8;
+		}
+
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogfeed_ioh, 0, 0x5);
 		switch (smw->smw_period) {
 		case 1:

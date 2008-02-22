@@ -1,4 +1,4 @@
-/*	$NetBSD: fabs.S,v 1.7 2001/05/18 15:13:04 fredette Exp $	*/
+/*	$NetBSD: fabs.S,v 1.11 2013/07/17 06:43:32 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,15 +31,16 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: fabs.S,v 1.7 2001/05/18 15:13:04 fredette Exp $")
+RCSID("$NetBSD: fabs.S,v 1.11 2013/07/17 06:43:32 matt Exp $")
 
 ENTRY(fabs)
-#if defined(__SVR4_ABI__) && defined(__HAVE_68881__)
-	bclr	#31,%sp@(4)
-	fmoved	%sp@(4),%fp0
+#if defined(__SVR4_ABI__) && defined(__HAVE_FPU__)
+	bclr	#31,4(%sp)
+	fmoved	4(%sp),%fp0
 #else
-	movl	%sp@(4),%d0
-	movl	%sp@(8),%d1
+	movl	4(%sp),%d0
+	movl	8(%sp),%d1
 	bclr	#31,%d0
 #endif
 	rts
+END(fabs)

@@ -1,4 +1,4 @@
-/*	$NetBSD: headers.c,v 1.26 2007/12/29 01:44:03 christos Exp $	 */
+/*	$NetBSD: headers.c,v 1.63 2018/05/24 17:05:54 christos Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: headers.c,v 1.26 2007/12/29 01:44:03 christos Exp $");
+__RCSID("$NetBSD: headers.c,v 1.63 2018/05/24 17:05:54 christos Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: headers.c,v 1.26 2007/12/29 01:44:03 christos Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/bitops.h>
 #include <dirent.h>
 
 #include "debug.h"
@@ -67,13 +68,19 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 {
 	Elf_Dyn        *dynp;
 	Needed_Entry  **needed_tail = &obj->needed;
+	const Elf_Dyn  *dyn_soname = NULL;
 	const Elf_Dyn  *dyn_rpath = NULL;
-	Elf_Sword	plttype = DT_NULL;
+	bool		use_pltrel = false;
+	bool		use_pltrela = false;
 	Elf_Addr        relsz = 0, relasz = 0;
 	Elf_Addr	pltrel = 0, pltrelsz = 0;
+#ifdef RTLD_LOADER
 	Elf_Addr	init = 0, fini = 0;
+#endif
 
+	dbg(("headers: digesting PT_DYNAMIC at %p", obj->dynamic));
 	for (dynp = obj->dynamic; dynp->d_tag != DT_NULL; ++dynp) {
+		dbg(("  d_tag %ld at %p", (long)dynp->d_tag, dynp));
 		switch (dynp->d_tag) {
 
 		case DT_REL:
@@ -111,8 +118,9 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 			break;
 
 		case DT_PLTREL:
-			plttype = dynp->d_un.d_val;
-			assert(plttype == DT_REL || plttype == DT_RELA);
+			use_pltrel = dynp->d_un.d_val == DT_REL;
+			use_pltrela = dynp->d_un.d_val == DT_RELA;
+			assert(use_pltrel || use_pltrela);
 			break;
 
 		case DT_SYMTAB:
@@ -133,15 +141,51 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 			obj->strsize = dynp->d_un.d_val;
 			break;
 
+		case DT_VERNEED:
+			obj->verneed = (const Elf_Verneed *)
+			    (obj->relocbase + dynp->d_un.d_ptr);
+			break;
+
+		case DT_VERNEEDNUM:
+			obj->verneednum = dynp->d_un.d_val;
+			break;
+
+		case DT_VERDEF:
+			obj->verdef = (const Elf_Verdef *)
+			    (obj->relocbase + dynp->d_un.d_ptr);
+			break;
+
+		case DT_VERDEFNUM:
+			obj->verdefnum = dynp->d_un.d_val;
+			break;
+
+		case DT_VERSYM:
+			obj->versyms = (const Elf_Versym *)
+			    (obj->relocbase + dynp->d_un.d_ptr);
+			break;
+
 		case DT_HASH:
 			{
-				const Elf_Word *hashtab = (const Elf_Word *)
-				(obj->relocbase + dynp->d_un.d_ptr);
+				const Elf_Symindx *hashtab = (const Elf_Symindx *)
+				    (obj->relocbase + dynp->d_un.d_ptr);
 
-				obj->nbuckets = hashtab[0];
+				if (hashtab[0] > UINT32_MAX)
+					obj->nbuckets = UINT32_MAX;
+				else
+					obj->nbuckets = hashtab[0];
 				obj->nchains = hashtab[1];
 				obj->buckets = hashtab + 2;
 				obj->chains = obj->buckets + obj->nbuckets;
+				/*
+				 * Should really be in _rtld_relocate_objects,
+				 * but _rtld_symlook_obj might be used before.
+				 */
+				if (obj->nbuckets) {
+					fast_divide32_prepare(obj->nbuckets,
+					    &obj->nbuckets_m,
+					    &obj->nbuckets_s1,
+					    &obj->nbuckets_s2);
+				}
 			}
 			break;
 
@@ -181,16 +225,50 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 			break;
 
 		case DT_SONAME:
-			/* Not used by the dynamic linker. */
+			dyn_soname = dynp;
 			break;
 
 		case DT_INIT:
+#ifdef RTLD_LOADER
 			init = dynp->d_un.d_ptr;
+#endif
 			break;
 
-		case DT_FINI:
-			fini = dynp->d_un.d_ptr;
+#ifdef HAVE_INITFINI_ARRAY
+		case DT_INIT_ARRAY:
+			obj->init_array =
+			    (Elf_Addr *)(obj->relocbase + dynp->d_un.d_ptr);
+			dbg(("headers: DT_INIT_ARRAY at %p",
+			    obj->init_array));
 			break;
+
+		case DT_INIT_ARRAYSZ:
+			obj->init_arraysz = dynp->d_un.d_val / sizeof(fptr_t);
+			dbg(("headers: DT_INIT_ARRAYZ %zu",
+			    obj->init_arraysz));
+			break;
+#endif
+
+		case DT_FINI:
+#ifdef RTLD_LOADER
+			fini = dynp->d_un.d_ptr;
+#endif
+			break;
+
+#ifdef HAVE_INITFINI_ARRAY
+		case DT_FINI_ARRAY:
+			obj->fini_array =
+			    (Elf_Addr *)(obj->relocbase + dynp->d_un.d_ptr);
+			dbg(("headers: DT_FINI_ARRAY at %p",
+			    obj->fini_array));
+			break;
+
+		case DT_FINI_ARRAYSZ:
+			obj->fini_arraysz = dynp->d_un.d_val / sizeof(fptr_t);
+			dbg(("headers: DT_FINI_ARRAYZ %zu",
+			    obj->fini_arraysz));
+			break;
+#endif
 
 		/*
 		 * Don't process DT_DEBUG on MIPS as the dynamic section
@@ -225,16 +303,33 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 #endif
 			break;
 #endif
+#ifdef __powerpc__
+#ifdef _LP64
+		case DT_PPC64_GLINK:
+			obj->glink = (Elf_Addr)(uintptr_t)obj->relocbase + dynp->d_un.d_ptr;
+			break;
+#else
+		case DT_PPC_GOT:
+			obj->gotptr = (Elf_Addr *)(obj->relocbase + dynp->d_un.d_ptr);
+			break;
+#endif
+#endif
 		case DT_FLAGS_1:
-			obj->initfirst =
+			obj->z_now =
+			    ((dynp->d_un.d_val & DF_1_NOW) != 0);
+			obj->z_nodelete =
+			    ((dynp->d_un.d_val & DF_1_NODELETE) != 0);
+			obj->z_initfirst =
 			    ((dynp->d_un.d_val & DF_1_INITFIRST) != 0);
+			obj->z_noopen =
+			    ((dynp->d_un.d_val & DF_1_NOOPEN) != 0);
 			break;
 		}
 	}
 
-	obj->rellim = (const Elf_Rel *)((caddr_t)obj->rel + relsz);
-	obj->relalim = (const Elf_Rela *)((caddr_t)obj->rela + relasz);
-	if (plttype == DT_REL) {
+	obj->rellim = (const Elf_Rel *)((const uint8_t *)obj->rel + relsz);
+	obj->relalim = (const Elf_Rela *)((const uint8_t *)obj->rela + relasz);
+	if (use_pltrel) {
 		obj->pltrel = (const Elf_Rel *)(obj->relocbase + pltrel);
 		obj->pltrellim = (const Elf_Rel *)(obj->relocbase + pltrel + pltrelsz);
 		obj->pltrelalim = 0;
@@ -244,7 +339,7 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 		    obj->rellim > obj->pltrel &&
 		    obj->rellim <= obj->pltrellim)
 			obj->rellim = obj->pltrel;
-	} else if (plttype == DT_RELA) {
+	} else if (use_pltrela) {
 		obj->pltrela = (const Elf_Rela *)(obj->relocbase + pltrel);
 		obj->pltrellim = 0;
 		obj->pltrelalim = (const Elf_Rela *)(obj->relocbase + pltrel + pltrelsz);
@@ -256,25 +351,20 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 			obj->relalim = obj->pltrela;
 	}
 
-#if defined(RTLD_LOADER) && defined(__HAVE_FUNCTION_DESCRIPTORS)
+#ifdef RTLD_LOADER
 	if (init != 0)
-		obj->init = (void (*)(void))
-		    _rtld_function_descriptor_alloc(obj, NULL, init);
+		obj->init = (Elf_Addr) obj->relocbase + init;
 	if (fini != 0)
-		obj->fini = (void (*)(void))
-		    _rtld_function_descriptor_alloc(obj, NULL, fini);
-#else
-	if (init != 0)
-		obj->init = (void (*)(void))
-		    (obj->relocbase + init);
-	if (fini != 0)
-		obj->fini = (void (*)(void))
-		    (obj->relocbase + fini);
+		obj->fini = (Elf_Addr) obj->relocbase + fini;
 #endif
 
 	if (dyn_rpath != NULL) {
 		_rtld_add_paths(execname, &obj->rpaths, obj->strtab +
 		    dyn_rpath->d_un.d_val);
+	}
+	if (dyn_soname != NULL) {
+		_rtld_object_add_name(obj, obj->strtab +
+		    dyn_soname->d_un.d_val);
 	}
 }
 
@@ -290,45 +380,92 @@ _rtld_digest_phdr(const Elf_Phdr *phdr, int phnum, caddr_t entry)
 	Obj_Entry      *obj;
 	const Elf_Phdr *phlimit = phdr + phnum;
 	const Elf_Phdr *ph;
-	int             nsegs = 0;
-	ptrdiff_t	relocoffs = 0;
-	Elf_Addr	vaddr;
+	bool            first_seg = true;
+	Elf_Addr        vaddr;
+	size_t          size;
 
 	obj = _rtld_obj_new();
+
 	for (ph = phdr; ph < phlimit; ++ph) {
-		vaddr = ph->p_vaddr + relocoffs;
-		dbg(("headers: relocoffs = %lx\n", (long)relocoffs));
+		if (ph->p_type != PT_PHDR)
+			continue;
+
+		obj->relocbase = (caddr_t)((uintptr_t)phdr - (uintptr_t)ph->p_vaddr);
+		obj->phdr = phdr; /* Equivalent to relocbase + p_vaddr. */
+		obj->phsize = ph->p_memsz;
+		dbg(("headers: phdr %p (%p) phsize %zu relocbase %p",
+		    obj->phdr, phdr, obj->phsize, obj->relocbase));
+		break;
+	}
+
+	for (ph = phdr; ph < phlimit; ++ph) {
+		vaddr = (Elf_Addr)(uintptr_t)(obj->relocbase + ph->p_vaddr);
 		switch (ph->p_type) {
 
-		case PT_PHDR:
-			relocoffs = (char *)phdr - (char *)ph->p_vaddr;
-			break;
-
 		case PT_INTERP:
-			obj->interp = (const char *)vaddr;
+			obj->interp = (const char *)(uintptr_t)vaddr;
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_INTERP", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
 			break;
 
 		case PT_LOAD:
-			assert(nsegs < 2);
-			if (nsegs == 0) {	/* First load segment */
+			size = round_up(vaddr + ph->p_memsz) - obj->vaddrbase;
+			if (first_seg) {	/* First load segment */
 				obj->vaddrbase = round_down(vaddr);
-				obj->mapbase = (caddr_t)obj->vaddrbase;
-				obj->relocbase = (void *)relocoffs;
-				obj->textsize = round_up(vaddr + ph->p_memsz) -
-				    obj->vaddrbase;
+				obj->mapbase = (caddr_t)(uintptr_t)obj->vaddrbase;
+				obj->textsize = size;
+				obj->mapsize = size;
+				first_seg = false;
 			} else {		/* Last load segment */
-				obj->mapsize = round_up(vaddr + ph->p_memsz) -
-				    obj->vaddrbase;
+				obj->mapsize = MAX(obj->mapsize, size);
 			}
-			++nsegs;
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_LOAD", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
 			break;
 
 		case PT_DYNAMIC:
-			obj->dynamic = (Elf_Dyn *)vaddr;
+			obj->dynamic = (Elf_Dyn *)(uintptr_t)vaddr;
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_DYNAMIC", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
 			break;
+
+#ifdef GNU_RELRO
+		case PT_GNU_RELRO:
+			obj->relro_page = obj->relocbase
+			    + round_down(ph->p_vaddr);
+			obj->relro_size = round_up(ph->p_memsz);
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_GNU_RELRO", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
+			break;
+#endif
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		case PT_TLS:
+			obj->tlsindex = 1;
+			obj->tlssize = ph->p_memsz;
+			obj->tlsalign = ph->p_align;
+			obj->tlsinitsize = ph->p_filesz;
+			obj->tlsinit = (void *)(uintptr_t)ph->p_vaddr;
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_TLS", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
+			break;
+#endif
+#ifdef __ARM_EABI__
+		case PT_ARM_EXIDX:
+			obj->exidx_start = (void *)(uintptr_t)vaddr;
+			obj->exidx_sz = ph->p_memsz;
+			dbg(("headers: %s %p phsize %" PRImemsz,
+			    "PT_ARM_EXIDX", (void *)(uintptr_t)vaddr,
+			     ph->p_memsz));
+			break;
+#endif
 		}
 	}
-	assert(nsegs == 2);
 
 	obj->entry = entry;
 	return obj;

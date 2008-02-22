@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.sh3,v 1.24 2007/03/28 23:59:00 uwe Exp $
+#	$NetBSD: Makefile.sh3,v 1.28 2013/03/10 07:18:21 christos Exp $
 
 # Makefile for NetBSD
 #
@@ -33,13 +33,19 @@ GENASSYM_CONF=	${SH3}/sh3/genassym.cf
 ## (2) compile settings
 ##
 CPPFLAGS+=	-D${MACHINE}
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
-# pkgsrc/cross/sh* dies with -O2, use -O1 for now
-COPTS?=		-O1
+AFLAGS+=	-x assembler-with-cpp
+# -O2 is too -falign-* zealous for low-memory sh3 machines
+COPTS?=		-Os -freorder-blocks
 
 ##
 ## (3) libkern and compat
 ##
+OPT_MODULAR=	%MODULAR%
+.if !empty(OPT_MODULAR)
+KERN_AS=	obj
+.else
+KERN_AS=	library
+.endif
 
 ##
 ## (4) local objects, compile rules, and dependencies
@@ -50,6 +56,8 @@ MD_SFILES=	${THISSH3}/${MACHINE}/locore.S
 
 locore.o: ${THISSH3}/${MACHINE}/locore.S assym.h
 	${NORMAL_S}
+
+cpu_in_cksum.o exception_vector.o locore_subr.o: assym.h
 
 ##
 ## (5) link settings

@@ -1,4 +1,4 @@
-/* $NetBSD: __setjmp14.S,v 1.4 2004/03/21 18:04:27 matt Exp $ */
+/* $NetBSD: __setjmp14.S,v 1.7 2014/01/23 03:08:50 christos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -55,6 +55,7 @@ LEAF(__setjmp14, 1)
 	stq	s6, (SC_REGS+_REG_S6)(a0)
 	stq	ra, (SC_REGS+_REG_RA)(a0)
 	stq	sp, (SC_REGS+_REG_SP)(a0)
+	stq	gp, (SC_REGS+_REG_GP)(a0)
 
 	/*
 	 * get signal information
@@ -83,7 +84,7 @@ LEAF(__setjmp14, 1)
 	mov	s0, a0
 	ldq	s0, (SC_REGS+_REG_S0)(a0)
 
-	ldiq	t0, 0xacedbade			/* sigcontext magic number */
+	ldq	t0, magic		 	/* sigcontext magic number */
 	stq	t0, (SC_REGS+_REG_UNIQUE)(a0)	/* magic in sc_regs[31] */
 	/* Too bad we can't check if we actually used FP */
 	ldiq	t0, 1
@@ -96,7 +97,9 @@ LEAF(__setjmp14, 1)
 	stt	fs5, (7*8 + SC_FPREGS)(a0)
 	stt	fs6, (8*8 + SC_FPREGS)(a0)
 	stt	fs7, (9*8 + SC_FPREGS)(a0)
+	excb					/* required 4.7.8.1 Alpha ARM */
 	mf_fpcr	ft0				/* get FP control reg */
+	excb					/* required 4.7.8.1 Alpha ARM */
 	stt	ft0, SC_FPCR(a0)		/* and store it in sc_fpcr */
 	stq	zero, SC_FP_CONTROL(a0)		/* FP software control XXX */
 	stq	zero, (SC_RESERVED + 0*8)(a0)	/* sc_reserved[0] */
@@ -115,4 +118,6 @@ LEAF(__setjmp14, 1)
 botch:
 	CALL(abort)
 	RET					/* "can't" get here... */
+magic:
+	.quad	0xacedbade		 	/* sigcontext magic number */
 END(__setjmp14)

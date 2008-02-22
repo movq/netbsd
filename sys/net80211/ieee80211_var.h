@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_var.h,v 1.26 2007/03/04 06:03:19 christos Exp $	*/
+/*	$NetBSD: ieee80211_var.h,v 1.33 2018/05/08 07:02:07 maxv Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -143,7 +143,7 @@ struct ieee80211com {
 	u_int8_t		ic_dtim_period;	/* DTIM period */
 	u_int8_t		ic_dtim_count;	/* DTIM count for last bcn */
 	struct ifmedia		ic_media;	/* interface media config */
-	void *			ic_rawbpf;	/* packet filter structure */
+	struct bpf_if *		ic_rawbpf;	/* packet filter structure */
 	struct ieee80211_node	*ic_bss;	/* information for this node */
 	struct ieee80211_channel *ic_ibss_chan;
 	struct ieee80211_channel *ic_curchan;	/* current channel */
@@ -276,6 +276,9 @@ extern struct ieee80211com_head ieee80211com_head;
 #define	IEEE80211_C_SHPREAMBLE	0x00008000	/* CAPABILITY: short preamble */
 #define	IEEE80211_C_MONITOR	0x00010000	/* CAPABILITY: monitor mode */
 #define	IEEE80211_C_TKIPMIC	0x00020000	/* CAPABILITY: TKIP MIC avail */
+#define IEEE80211_C_WME_TKIPMIC 0x00040000      /* CAPABILITY: TKIP MIC for QoS
+						   frame */
+/* 0x780000 available */
 #define	IEEE80211_C_WPA1	0x00800000	/* CAPABILITY: WPA1 avail */
 #define	IEEE80211_C_WPA2	0x01000000	/* CAPABILITY: WPA2 avail */
 #define	IEEE80211_C_WPA		0x01800000	/* CAPABILITY: WPA1+WPA2 avail*/
@@ -356,6 +359,7 @@ ieee80211_anyhdrspace(struct ieee80211com *ic, const void *data)
 	return size;
 }
 
+/* Flags set in ic_debug, used to print debug messages */
 #define	IEEE80211_MSG_DEBUG	0x40000000	/* IFF_DEBUG equivalent */
 #define	IEEE80211_MSG_DUMPPKTS	0x20000000	/* IFF_LINK2 equivalant */
 #define	IEEE80211_MSG_CRYPTO	0x10000000	/* crypto work */
@@ -381,14 +385,13 @@ ieee80211_anyhdrspace(struct ieee80211com *ic, const void *data)
 #define	IEEE80211_MSG_DOTH	0x00000100	/* 802.11h support */
 #define	IEEE80211_MSG_INACT	0x00000080	/* inactivity handling */
 #define	IEEE80211_MSG_ROAM	0x00000040	/* sta-mode roaming */
-
 #define	IEEE80211_MSG_ANY	0xffffffff	/* anything */
 
 #ifdef IEEE80211_DEBUG
 #define	ieee80211_msg(_ic, _m)	((_ic)->ic_debug & (_m))
 #define	IEEE80211_DPRINTF(_ic, _m, _fmt, ...) do {			\
 	if (ieee80211_msg(_ic, _m))					\
-		ieee80211_note(_ic, _fmt, __VA_ARGS__);		\
+		ieee80211_note(_ic, _fmt, __VA_ARGS__);			\
 } while (0)
 #define	IEEE80211_NOTE(_ic, _m, _ni, _fmt, ...) do {			\
 	if (ieee80211_msg(_ic, _m))					\
@@ -398,15 +401,9 @@ ieee80211_anyhdrspace(struct ieee80211com *ic, const void *data)
 	if (ieee80211_msg(_ic, _m))					\
 		ieee80211_note_mac(_ic, _mac, _fmt, __VA_ARGS__);	\
 } while (0)
-#define	IEEE80211_NOTE_FRAME(_ic, _m, _wh, _fmt, ...) do {		\
-	if (ieee80211_msg(_ic, _m))					\
-		ieee80211_note_frame(_ic, _wh, _fmt, __VA_ARGS__);	\
-} while (0)
 void	ieee80211_note(struct ieee80211com *ic, const char *fmt, ...);
 void	ieee80211_note_mac(struct ieee80211com *ic,
 		const u_int8_t mac[IEEE80211_ADDR_LEN], const char *fmt, ...);
-void	ieee80211_note_frame(struct ieee80211com *ic,
-		const struct ieee80211_frame *wh, const char *fmt, ...);
 #define	ieee80211_msg_debug(_ic) \
 	((_ic)->ic_debug & IEEE80211_MSG_DEBUG)
 #define	ieee80211_msg_dumppkts(_ic) \
@@ -425,7 +422,7 @@ void	ieee80211_note_frame(struct ieee80211com *ic,
 	((_ic)->ic_debug & IEEE80211_MSG_ASSOC)
 #else
 #define	IEEE80211_DPRINTF(_ic, _m, _fmt, ...)
-#define	IEEE80211_NOTE_FRAME(_ic, _m, _wh, _fmt, ...)
+#define	IEEE80211_NOTE(_ic, _m, _ni, _fmt, ...)
 #define	IEEE80211_NOTE_MAC(_ic, _m, _mac, _fmt, ...)
 #define	ieee80211_msg_dumppkts(_ic)	0
 #define	ieee80211_msg(_ic, _m)		0

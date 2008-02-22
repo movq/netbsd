@@ -1,4 +1,4 @@
-/* $NetBSD: dec_1000a.c,v 1.25 2007/03/04 15:18:09 yamt Exp $ */
+/* $NetBSD: dec_1000a.c,v 1.33 2012/10/13 17:58:54 jdc Exp $ */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,17 +36,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -72,7 +65,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.25 2007/03/04 15:18:09 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.33 2012/10/13 17:58:54 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.25 2007/03/04 15:18:09 yamt Exp $");
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -105,6 +98,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.25 2007/03/04 15:18:09 yamt Exp $");
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
+#include <dev/ic/mlxio.h>
+#include <dev/ic/mlxvar.h>
+
 #include "pckbd.h"
 
 #ifndef CONSPEED
@@ -112,9 +108,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_1000a.c,v 1.25 2007/03/04 15:18:09 yamt Exp $");
 #endif
 static int comcnrate = CONSPEED;
 
-void _dec_1000a_init __P((void));
-static void dec_1000a_cons_init __P((void));
-static void dec_1000a_device_register __P((struct device *, void *));
+void _dec_1000a_init(void);
+static void dec_1000a_cons_init(void);
+static void dec_1000a_device_register(device_t, void *);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -136,9 +132,9 @@ static const struct alpha_variation_table dec_1000a_variations[] = {
 };
 
 void
-_dec_1000a_init()
+_dec_1000a_init(void)
 {
-	u_int64_t variation;
+	uint64_t variation;
 
 	platform.family = "AlphaServer 1000/1000A";
 
@@ -164,7 +160,7 @@ _dec_1000a_init()
 }
 
 static void
-dec_1000a_cons_init()
+dec_1000a_cons_init(void)
 {
 	struct ctb *ctb;
 	struct cia_config *ccp;
@@ -191,7 +187,7 @@ dec_1000a_cons_init()
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT: 
+	case CTB_PRINTERPORT:
 		/* serial console ... */
 		/* XXX */
 		{
@@ -214,7 +210,7 @@ dec_1000a_cons_init()
 #if NPCKBD > 0
 		/* display console ... */
 		/* XXX */
-		(void) pckbc_cnattach(iot, IO_KBD, KBCMDP, PCKBC_KBD_SLOT);
+		(void) pckbc_cnattach(iot, IO_KBD, KBCMDP, PCKBC_KBD_SLOT, 0);
 
 		/*
 		 * AlphaServer 1000s have a firmware bug whereby the
@@ -251,20 +247,19 @@ dec_1000a_cons_init()
 }
 
 static void
-dec_1000a_device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+dec_1000a_device_register(device_t dev, void *aux)
 {
 	static int found, initted, diskboot, netboot;
-	static struct device *pcidev, *ctrlrdev;
+	static device_t pcidev, ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (found)
 		return;
 
 	if (!initted) {
-		diskboot = (strcasecmp(b->protocol, "SCSI") == 0);
+		diskboot = (strcasecmp(b->protocol, "SCSI") == 0) ||
+		    (strcasecmp(b->protocol, "RAID") == 0);
 		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
 		    (strcasecmp(b->protocol, "MOP") == 0);
 #if 0
@@ -284,7 +279,7 @@ dec_1000a_device_register(dev, aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", dev->dv_xname);
+			printf("\npcidev = %s\n", device_xname(dev));
 #endif
 			return;
 		}
@@ -305,13 +300,13 @@ dec_1000a_device_register(dev, aux)
 			if (netboot) {
 				booted_device = dev;
 #if 0
-				printf("\nbooted_device = %s\n", dev->dv_xname);
+				printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if 0
-				printf("\nctrlrdev = %s\n", dev->dv_xname);
+				printf("\nctrlrdev = %s\n", device_xname(dev));
 #endif
 			}
 			return;
@@ -340,7 +335,28 @@ dec_1000a_device_register(dev, aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", dev->dv_xname);
+		printf("\nbooted_device = %s\n", device_xname(dev));
+#endif
+		found = 1;
+	}
+
+	if (device_is_a(dev, "ld") && device_is_a(parent, "mlx")) {
+		/*
+		 * Argh!  The attach arguments for ld devices is not
+		 * consistent, so each supported raid controller requires
+		 * different checks.
+		 */
+		struct mlx_attach_args *mlxa = aux;
+
+		if (parent != ctrlrdev)
+			return;
+
+		if (b->unit != mlxa->mlxa_unit)
+			return;
+		/* we've found it! */
+		booted_device = dev;
+#if 0
+		printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 		found = 1;
 	}

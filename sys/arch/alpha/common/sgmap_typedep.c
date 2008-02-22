@@ -1,4 +1,4 @@
-/* $NetBSD: sgmap_typedep.c,v 1.34 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: sgmap_typedep.c,v 1.37 2010/12/15 01:28:24 matt Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,9 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: sgmap_typedep.c,v 1.34 2007/03/04 05:59:11 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: sgmap_typedep.c,v 1.37 2010/12/15 01:28:24 matt Exp $");
 
 #include "opt_ddb.h"
+
+#include <uvm/uvm_extern.h>
 
 #ifdef SGMAP_DEBUG
 int			__C(SGMAP_TYPE,_debug) = 0;
@@ -128,9 +123,12 @@ __C(SGMAP_TYPE,_load_buffer)(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 		}
 	}
 
-#if 0
-	printf("len 0x%lx -> 0x%lx, boundary 0x%lx -> 0x%lx -> ",
-	    (endva - va), sgvalen, map->_dm_boundary, boundary);
+#ifdef SGMAP_DEBUG
+	if (__C(SGMAP_TYPE,_debug)) {
+		printf("sgmap_load: va:endva = 0x%lx:0x%lx\n", va, endva);
+		printf("sgmap_load: sgvalen = 0x%lx, boundary = 0x%lx\n",
+		       sgvalen, boundary);
+	}
 #endif
 
 	s = splvm();
@@ -139,10 +137,6 @@ __C(SGMAP_TYPE,_load_buffer)(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	splx(s);
 	if (error)
 		return (error);
-
-#if 0
-	printf("error %d sgva 0x%lx\n", error, sgva);
-#endif
 
 	pteidx = sgva >> SGMAP_ADDR_PTEIDX_SHIFT;
 	pte = &page_table[pteidx * SGMAP_PTE_SPACING];
@@ -160,8 +154,8 @@ __C(SGMAP_TYPE,_load_buffer)(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 
 #ifdef SGMAP_DEBUG
 	if (__C(SGMAP_TYPE,_debug))
-		printf("sgmap_load: wbase = 0x%lx, vpage = 0x%x, "
-		    "DMA addr = 0x%lx\n", sgmap->aps_wbase, sgva,
+		printf("sgmap_load: wbase = 0x%lx, vpage = 0x%lx, "
+		    "DMA addr = 0x%lx\n", sgmap->aps_wbase, (uint64_t)sgva,
 		    map->dm_segs[seg].ds_addr);
 #endif
 
@@ -188,9 +182,7 @@ __C(SGMAP_TYPE,_load_buffer)(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 #ifdef SGMAP_DEBUG
 		if (__C(SGMAP_TYPE,_debug)) {
 			printf("sgmap_load:     spill page, pte = %p, "
-			    "*pte = 0x%lx\n", pte, *pte);
-			printf("sgmap_load:     pte count = %d\n",
-			    map->_dm_ptecnt);
+			    "*pte = 0x%lx\n", pte, (uint64_t)*pte);
 		}
 #endif
 	}

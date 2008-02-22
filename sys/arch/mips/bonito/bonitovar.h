@@ -1,4 +1,4 @@
-/*	$NetBSD: bonitovar.h,v 1.3 2002/01/09 00:44:06 thorpej Exp $	*/
+/*	$NetBSD: bonitovar.h,v 1.6 2015/06/09 22:50:50 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,8 @@
 
 #include <dev/pci/pcivar.h>
 
+#include <mips/cpuregs.h>
+
 struct bonito_config {
 	int		bc_adbase;	/* AD line base for config access */
 
@@ -49,10 +44,15 @@ struct bonito_config {
 	uint32_t	bc_intEdge;
 	uint32_t	bc_intSteer;
 	uint32_t	bc_intPol;
+
+	/* PCI Attach hook , if needed */
+	void		(*bc_attach_hook)(device_t, device_t,
+			    struct pcibus_attach_args *);
+		 
 };
 
 #ifdef _KERNEL
-void	bonito_pci_init(pci_chipset_tag_t, struct bonito_config *);
+void	bonito_pci_init(pci_chipset_tag_t, const struct bonito_config *);
 
 void	bonito_iobc_wbinv_range(paddr_t, psize_t);
 void	bonito_iobc_inv_range(paddr_t, psize_t);

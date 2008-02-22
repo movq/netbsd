@@ -1,29 +1,29 @@
-/*	$NetBSD: db_machdep.h,v 1.14 2007/01/06 16:14:44 christos Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.27 2018/04/01 04:35:04 ryo Exp $	*/
 
 /*
  * Copyright (c) 1996 Scott K Stevens
- * 
+ *
  * Mach Operating System
  * Copyright (c) 1991,1990 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
@@ -31,10 +31,12 @@
 #ifndef	_ARM_DB_MACHDEP_H_
 #define	_ARM_DB_MACHDEP_H_
 
+#if defined(__arm__)
+
 /*
  * Machine-dependent defines for new kernel debugger.
  */
-
+#include <sys/types.h>
 #include <uvm/uvm_extern.h>
 #include <arm/armreg.h>
 #include <machine/frame.h>
@@ -43,20 +45,22 @@
 /* end of mangling */
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef trapframe_t db_regs_t;
 
-extern db_regs_t	ddb_regs;	/* register state */
+#ifndef MULTIPROCESSOR
+extern db_regs_t ddb_regs;	/* register state */
 #define	DDB_REGS	(&ddb_regs)
-
-#ifdef __PROG26
-#define	PC_REGS(regs)	((regs)->tf_r15 & R15_PC)
-#define PC_ADVANCE(regs) ((regs)->tf_r15 += BKPT_SIZE)
 #else
+extern db_regs_t *ddb_regp;
+#define DDB_REGS	(ddb_regp)
+#define ddb_regs	(*ddb_regp)
+#endif
+
 #define	PC_REGS(regs)	((regs)->tf_pc)
 #define PC_ADVANCE(r)   ((r)->tf_r15 += BKPT_SIZE)
-#endif
 
 #define	BKPT_ADDR(addr)	(addr)			/* breakpoint address */
 #if defined(DDB)
@@ -74,7 +78,7 @@ extern db_regs_t	ddb_regs;	/* register state */
 #define T_BREAKPOINT			(1)
 
 #define	IS_BREAKPOINT_TRAP(type, code)	((type) == T_BREAKPOINT)
-#define IS_WATCHPOINT_TRAP(type, code)	(0)
+#define	IS_WATCHPOINT_TRAP(type, code)	(0)
 
 #define	inst_trap_return(ins)	(0)
 /* ldmxx reg, {..., pc}
@@ -98,8 +102,8 @@ extern db_regs_t	ddb_regs;	/* register state */
 #define inst_load(ins)		(0)
 #define inst_store(ins)		(0)
 #define inst_unconditional_flow_transfer(ins)	\
-	((((ins) & INSN_COND_MASK) == INSN_COND_AL) && \
-	 (inst_branch(ins) || inst_call(ins) || inst_return(ins)))
+	(__SHIFTOUT((ins), INSN_COND_MASK) == INSN_COND_AL \
+	 && (inst_branch(ins) || inst_call(ins) || inst_return(ins)))
 
 #define getreg_val			(0)
 #define next_instr_address(pc, bd)	((bd) ? (pc) : ((pc) + INSN_SIZE))
@@ -108,17 +112,12 @@ extern db_regs_t	ddb_regs;	/* register state */
 
 #define SOFTWARE_SSTEP
 
-u_int branch_taken __P((u_int insn, u_int pc, db_regs_t *db_regs));
-int kdb_trap __P((int, db_regs_t *));
-void db_machine_init __P((void));
-int db_validate_address(vm_offset_t addr);
+u_int branch_taken(u_int insn, u_int pc, db_regs_t *db_regs);
+int kdb_trap(int, db_regs_t *);
+void db_machine_init(void);
+int db_validate_address(vaddr_t addr);
 
-#ifdef __ELF__
 #define DB_ELF_SYMBOLS
-#define DB_ELFSIZE 32
-#else
-#define	DB_AOUT_SYMBOLS
-#endif
 
 /*
  * kgdb
@@ -129,5 +128,17 @@ typedef register_t	kgdb_reg_t;
 #define KGDB_REGNUM_R0		0
 #define KGDB_REGNUM_SPSR	16 + 8*3 + 1
 #define KGDB_BUFLEN		1024
+
+/*
+ * MP stuff
+ */
+extern volatile struct cpu_info *db_onproc;
+extern volatile struct cpu_info *db_newcpu;
+
+#elif defined(__aarch64__)
+
+#include <aarch64/db_machdep.h>
+
+#endif
 
 #endif	/* _ARM_DB_MACHDEP_H_ */

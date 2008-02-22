@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.37 2006/03/08 09:32:22 sekiya Exp $
+#	$NetBSD: Makefile,v 1.46 2018/03/19 17:29:08 ragge Exp $
 
 S=	${.CURDIR}/../../../..
 
@@ -7,12 +7,19 @@ S=	${.CURDIR}/../../../..
 PROG=	boot
 DEVS=	hp.c ctu.c ra.c mfm.c if_qe.c if_le.c if_ze.c if_de.c if_ni.c
 SRCS=	srt0.S boot.c devopen.c conf.c autoconf.c netio.c rom.c romread.S \
-	consio.c consio2.S str.S ${DEVS} findcpu.c vers.c
-LIBC=
+	consio.c consio2.S str.S ${DEVS} findcpu.c
 
-CLEANFILES+=${PROG} ${PROG}.sym vers.c
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBC=
+LIBCRT0=
+LIBCRTI=
+LIBCRTBEGIN=
+LIBCRTEND=
+
+CLEANFILES+=${PROG} ${PROG}.sym
 CPPFLAGS+=-DSUPPORT_BOOTPARAMS -DSUPPORT_BOOTP -DSUPPORT_DHCP -D_STANDALONE \
 	-DNO_MID_CHECK
+CPPFLAGS+=-DLIBSA_CREAD_NOCRC
 #CPPFLAGS+=-DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG -DDEV_DEBUG \
 #	-DRPC_DEBUG -DRARP_DEBUG -DPARANOID
 BINDIR=	
@@ -31,11 +38,7 @@ KERN_AS=library
 .include "${S}/lib/libkern/Makefile.inc"
 LIBKERN=${KERNLIB}
 
-.PHONY: vers.c
-vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -NM ${.CURDIR}/version "${MACHINE}"
-
-${PROG}: machine-links ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
+${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${_MKTARGET_LINK}
 	${LD} -N -Ttext ${RELOC} -e nisse -o ${PROG}.sym ${OBJS} \
 	    ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN}
@@ -44,5 +47,8 @@ ${PROG}: machine-links ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 install:
 	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m 555 \
 		${PROG} ${DESTDIR}${MDEC_DIR}/${PROG}
+
+VERSIONFLAGS+=-n
+.include "${S}/conf/newvers_stand.mk"
 
 .include <bsd.prog.mk>

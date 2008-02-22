@@ -1,4 +1,4 @@
-/* $NetBSD: memmove.S,v 1.1 2008/02/21 17:35:47 garbled Exp $ */
+/* $NetBSD: memmove.S,v 1.3 2011/01/15 07:31:12 matt Exp $ */
 
 /* stropt/memmove.S, pl_string_common, pl_linux 10/11/04 11:45:37
  * ==========================================================================
@@ -49,11 +49,7 @@
  * ==========================================================================
  */
 
-#define _NOREGNAMES
 #include <machine/asm.h>
-#ifdef _KERNEL
-#include <assym.h>
-#endif
 
         .text
         .align 4
@@ -179,3 +175,8 @@ rlast2:
 					/* bytes left			*/
 	blr
 
+#ifdef _BCOPY
+END(bcopy)
+#else
+END(memmove)
+#endif

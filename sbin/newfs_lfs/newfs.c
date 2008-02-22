@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.23 2006/09/05 19:44:44 riz Exp $	*/
+/*	$NetBSD: newfs.c,v 1.30 2015/10/15 06:24:33 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.23 2006/09/05 19:44:44 riz Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.30 2015/10/15 06:24:33 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,8 +56,6 @@ __RCSID("$NetBSD: newfs.c,v 1.23 2006/09/05 19:44:44 riz Exp $");
 #include <sys/time.h>
 #include <sys/disk.h>
 
-#include <ufs/ufs/dir.h>
-#include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
 
 #include <err.h>
@@ -103,7 +101,10 @@ int	preen = 0;		/* Coexistence with fsck_lfs */
 char	device[MAXPATHLEN];
 char	*progname, *special;
 
+extern long	dev_bsize;		/* device block size */
+
 static int64_t strsuftoi64(const char *, const char *, int64_t, int64_t, int *);
+static int strtoint(const char *, const char *, int, int);
 static void usage(void);
 
 /* CHUNKSIZE should be larger than MAXPHYS */
@@ -166,7 +167,7 @@ main(int argc, char **argv)
 	struct disk_geom geo;
 	struct dkwedge_info dkw;
 	struct stat st;
-	int debug, force, fsi, fso, segsize, maxpartitions;
+	int debug, force, fsi, fso, lfs_segsize, maxpartitions, bitwidth;
 	uint secsize = 0;
 	daddr_t start;
 	const char *opstring;
@@ -184,16 +185,16 @@ main(int argc, char **argv)
 	if (maxpartitions > 26)
 		fatal("insane maxpartitions value %d", maxpartitions);
 
-	opstring = "AB:b:DFf:I:i:LM:m:NO:R:r:S:s:v:";
+	opstring = "AB:b:DFf:I:i:LM:m:NO:R:r:S:s:v:w:";
 
-	debug = force = segsize = start = 0;
+	start = debug = force = lfs_segsize = bitwidth = 0;
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch(ch) {
 		case 'A':	/* Adaptively configure segment size */
-			segsize = -1;
+			lfs_segsize = -1;
 			break;
 		case 'B':	/* LFS segment size */
-		        segsize = strsuftoi64("segment size", optarg, LFS_MINSEGSIZE, INT64_MAX, NULL);
+		        lfs_segsize = strsuftoi64("segment size", optarg, LFS_MINSEGSIZE, INT64_MAX, NULL);
 			break;
 		case 'D':
 			debug = 1;
@@ -249,6 +250,9 @@ main(int argc, char **argv)
 		case 'v':
 		        version = strsuftoi64("file system version", optarg, 1, LFS_VERSION, NULL);
 			break;
+		case 'w':
+			bitwidth = strtoint("bit width", optarg, 32, 64);
+			break;
 		case '?':
 		default:
 			usage();
@@ -258,6 +262,14 @@ main(int argc, char **argv)
 
 	if (argc != 2 && argc != 1)
 		usage();
+
+	if (bitwidth != 32 && bitwidth != 64 && bitwidth != 0) {
+		errx(1, "bit width %d is not sensible; please use 32 or 64",
+		     bitwidth);
+	}
+	if (bitwidth == 64 && version < 2) {
+		errx(1, "Cannot make a 64-bit version 1 volume");
+	}
 
 	/*
 	 * If the -N flag isn't specified, open the output file.  If no path
@@ -273,8 +285,18 @@ main(int argc, char **argv)
 		special = device;
 	}
 	if (!Nflag) {
-		fso = open(special,
-		    (debug ? O_CREAT : 0) | O_RDWR, DEFFILEMODE);
+		fso = open(special, O_RDWR, DEFFILEMODE);
+		if (debug && fso < 0) {
+			/* Create a file of the requested size. */
+			fso = open(special, O_CREAT | O_RDWR, DEFFILEMODE);
+			if (fso >= 0) {
+				char buf[512];
+				int i;
+				for (i = 0; i < fssize; i++)
+					write(fso, buf, sizeof(buf));
+				lseek(fso, 0, SEEK_SET);
+			}
+		}
 		if (fso < 0)
 			fatal("%s: %s", special, strerror(errno));
 	} else
@@ -315,6 +337,9 @@ main(int argc, char **argv)
 	if (secsize == 0)
 		secsize = geo.dg_secsize;
 
+	/* Make device block size available to low level routines */
+	dev_bsize = secsize;
+
 	/* From here on out fssize is in sectors */
 	if (byte_sized) {
 		fssize /= secsize;
@@ -330,19 +355,44 @@ main(int argc, char **argv)
 		if (fssize != 0 && fssize < dkw.dkw_size)
 			dkw.dkw_size = fssize;
 
+	/*
+	 * default to 64-bit for large volumes; note that we test for
+	 * 2^31 sectors and not 2^32, because block numbers (daddr_t)
+	 * are signed and negative values can/will cause interesting
+	 * complications.
+	 */
+	if (bitwidth == 0) {
+		if (dkw.dkw_size > 0x7fffffff) {
+			bitwidth = 64;
+		} else {
+			bitwidth = 32;
+		}
+	}
+
+	if (dkw.dkw_size > 0x7fffffff && bitwidth == 32) {
+		if (dkw.dkw_size >= 0xfffffffe) {
+			/* block numbers -1 and -2 are magic; must not exist */
+			errx(1, "This volume is too large for a 32-bit LFS.");
+		}
+		/* User does this at own risk */
+		warnx("Using negative block numbers; not recommended. "
+		      "You should probably use -w 64.");
+	}
+
 	/* Try autoconfiguring segment size, if asked to */
-	if (segsize == -1) {
+	if (lfs_segsize == -1) {
 		if (!S_ISCHR(st.st_mode)) {
 			warnx("%s is not a character special device, ignoring -A", special);
-			segsize = 0;
+			lfs_segsize = 0;
 		} else
-			segsize = auto_segsize(fsi, dbtob(dkw.dkw_size),
+			lfs_segsize = auto_segsize(fsi, dkw.dkw_size / secsize,
 			    version);
 	}
 
 	/* If we're making a LFS, we break out here */
-	r = make_lfs(fso, secsize, &dkw, minfree, bsize, fsize, segsize,
-	    minfreeseg, resvseg, version, start, ibsize, interleave, roll_id);
+	r = make_lfs(fso, secsize, &dkw, minfree, bsize, fsize, lfs_segsize,
+	    minfreeseg, resvseg, version, start, ibsize, interleave, roll_id,
+	    bitwidth);
 	if (debug)
 		bufstats();
 	exit(r);
@@ -391,6 +441,29 @@ strsuftoi64(const char *desc, const char *arg, int64_t min, int64_t max, int *nu
 		errx(1, "%s `%s' (%" PRId64 ") is greater than the maximum (%" PRId64 ").",
 		    desc, arg, result, max);
 	return result;
+}
+
+static int
+strtoint(const char *desc, const char *arg, int min, int max)
+{
+	long result;
+	char *s;
+
+	errno = 0;
+	result = strtol(arg, &s, 10);
+	if (errno || *s != '\0') {
+		errx(1, "%s `%s' is not a valid number.", desc, arg);
+	}
+#if LONG_MAX > INT_MAX
+	if (result > INT_MAX || result < INT_MIN) {
+		errx(1, "%s `%s' is out of range.", desc, arg);
+	}
+#endif
+	if (result < min || result > max) {
+		errx(1, "%s `%s' is out of range.", desc, arg);
+	}
+
+	return (int)result;
 }
 
 void

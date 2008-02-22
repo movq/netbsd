@@ -1,5 +1,7 @@
-#	$NetBSD: Makefile,v 1.11 2006/05/11 23:16:30 mrg Exp $
+#	$NetBSD: Makefile,v 1.18 2018/06/15 15:16:05 christos Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/18/93
+
+WARNS?=	3	# XXX -Wsign-compare
 
 .include <bsd.own.mk>
 
@@ -7,9 +9,7 @@ PROG=	dumplfs
 SRCS=	dumplfs.c lfs_cksum.c misc.c
 .PATH:	${NETBSDSRCDIR}/sys/ufs/lfs
 MAN=	dumplfs.8
-
-.if ${HAVE_GCC} == 4
-COPTS+=	-fno-strict-aliasing
-.endif
+LDADD+=	-lutil
+DPADD+= ${LIBUTIL}
 
 .include <bsd.prog.mk>

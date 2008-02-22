@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_dma.c,v 1.6 2007/03/06 14:12:10 tsutsui Exp $	*/
+/*	$NetBSD: isa_dma.c,v 1.12 2016/02/26 18:16:51 christos Exp $	*/
 
 #define ISA_DMA_STATS
 
@@ -18,13 +18,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_dma.c,v 1.6 2007/03/06 14:12:10 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_dma.c,v 1.12 2016/02/26 18:16:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_dma.c,v 1.6 2007/03/06 14:12:10 tsutsui Exp $");
 #include <sys/mbuf.h>
 
 #define _ATARI_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -97,27 +90,27 @@ struct atari_isa_dma_cookie {
 #define	ID_BUFTYPE_UIO		3
 #define	ID_BUFTYPE_RAW		4
 
-int	_isa_bus_dmamap_create __P((bus_dma_tag_t, bus_size_t, int,
-	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
-void	_isa_bus_dmamap_destroy __P((bus_dma_tag_t, bus_dmamap_t));
-int	_isa_bus_dmamap_load __P((bus_dma_tag_t, bus_dmamap_t, void *,
-	    bus_size_t, struct proc *, int));
-int	_isa_bus_dmamap_load_mbuf __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct mbuf *, int));
-int	_isa_bus_dmamap_load_uio __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct uio *, int));
-int	_isa_bus_dmamap_load_raw __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_dma_segment_t *, int, bus_size_t, int));
-void	_isa_bus_dmamap_unload __P((bus_dma_tag_t, bus_dmamap_t));
-void	_isa_bus_dmamap_sync __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_addr_t, bus_size_t, int));
+int	_isa_bus_dmamap_create(bus_dma_tag_t, bus_size_t, int,
+	    bus_size_t, bus_size_t, int, bus_dmamap_t *);
+void	_isa_bus_dmamap_destroy(bus_dma_tag_t, bus_dmamap_t);
+int	_isa_bus_dmamap_load(bus_dma_tag_t, bus_dmamap_t, void *,
+	    bus_size_t, struct proc *, int);
+int	_isa_bus_dmamap_load_mbuf(bus_dma_tag_t, bus_dmamap_t,
+	    struct mbuf *, int);
+int	_isa_bus_dmamap_load_uio(bus_dma_tag_t, bus_dmamap_t,
+	    struct uio *, int);
+int	_isa_bus_dmamap_load_raw(bus_dma_tag_t, bus_dmamap_t,
+	    bus_dma_segment_t *, int, bus_size_t, int);
+void	_isa_bus_dmamap_unload(bus_dma_tag_t, bus_dmamap_t);
+void	_isa_bus_dmamap_sync(bus_dma_tag_t, bus_dmamap_t,
+	    bus_addr_t, bus_size_t, int);
 
-int	_isa_bus_dmamem_alloc __P((bus_dma_tag_t, bus_size_t, bus_size_t,
-	    bus_size_t, bus_dma_segment_t *, int, int *, int));
+int	_isa_bus_dmamem_alloc(bus_dma_tag_t, bus_size_t, bus_size_t,
+	    bus_size_t, bus_dma_segment_t *, int, int *, int);
 
-int	_isa_dma_alloc_bouncebuf __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_size_t, int));
-void	_isa_dma_free_bouncebuf __P((bus_dma_tag_t, bus_dmamap_t));
+int	_isa_dma_alloc_bouncebuf(bus_dma_tag_t, bus_dmamap_t,
+	    bus_size_t, int);
+void	_isa_dma_free_bouncebuf(bus_dma_tag_t, bus_dmamap_t);
 
 /*
  * Entry points for ISA DMA.  These are mostly wrappers around
@@ -161,14 +154,7 @@ u_long	isa_dma_stats_nbouncebufs;
  * Create an ISA DMA map.
  */
 int
-_isa_bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	int nsegments;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags;
-	bus_dmamap_t *dmamp;
+_isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments, bus_size_t maxsegsz, bus_size_t boundary, int flags, bus_dmamap_t *dmamp)
 {
 	struct atari_isa_dma_cookie *cookie;
 	bus_dmamap_t map;
@@ -258,9 +244,7 @@ _isa_bus_dmamap_create(t, size, nsegments, maxsegsz, boundary, flags, dmamp)
  * Destroy an ISA DMA map.
  */
 void
-_isa_bus_dmamap_destroy(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+_isa_bus_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 
@@ -278,13 +262,8 @@ _isa_bus_dmamap_destroy(t, map)
  * Load an ISA DMA map with a linear buffer.
  */
 int
-_isa_bus_dmamap_load(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map; 
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+_isa_bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
+    bus_size_t buflen, struct proc *p, int flags)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 	int error;
@@ -302,8 +281,7 @@ _isa_bus_dmamap_load(t, map, buf, buflen, p, flags)
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load(t, map, buf, buflen, p, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*
@@ -349,11 +327,8 @@ _isa_bus_dmamap_load(t, map, buf, buflen, p, flags)
  * Like _isa_bus_dmamap_load(), but for mbufs.
  */
 int
-_isa_bus_dmamap_load_mbuf(t, map, m0, flags)  
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *m0;
-	int flags;
+_isa_bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
+    int flags)  
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 	int error;
@@ -377,8 +352,7 @@ _isa_bus_dmamap_load_mbuf(t, map, m0, flags)
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load_mbuf(t, map, m0, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*
@@ -425,11 +399,7 @@ _isa_bus_dmamap_load_mbuf(t, map, m0, flags)
  * Like _isa_bus_dmamap_load(), but for uios.
  */
 int
-_isa_bus_dmamap_load_uio(t, map, uio, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct uio *uio;
-	int flags;
+_isa_bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio, int flags)
 {
 
 	panic("_isa_bus_dmamap_load_uio: not implemented");
@@ -440,13 +410,7 @@ _isa_bus_dmamap_load_uio(t, map, uio, flags)
  * bus_dmamem_alloc().
  */
 int
-_isa_bus_dmamap_load_raw(t, map, segs, nsegs, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	bus_size_t size;
-	int flags;
+_isa_bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs, int nsegs, bus_size_t size, int flags)
 {
 
 	panic("_isa_bus_dmamap_load_raw: not implemented");
@@ -456,9 +420,7 @@ _isa_bus_dmamap_load_raw(t, map, segs, nsegs, size, flags)
  * Unload an ISA DMA map.
  */
 void
-_isa_bus_dmamap_unload(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+_isa_bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 
@@ -483,12 +445,7 @@ _isa_bus_dmamap_unload(t, map)
  * Synchronize an ISA DMA map.
  */
 void
-_isa_bus_dmamap_sync(t, map, offset, len, ops)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_addr_t offset;
-	bus_size_t len;
-	int ops;
+_isa_bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset, bus_size_t len, int ops)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 
@@ -616,13 +573,7 @@ _isa_bus_dmamap_sync(t, map, offset, len, ops)
  * Allocate memory safe for ISA DMA.
  */
 int
-_isa_bus_dmamem_alloc(t, size, alignment, boundary, segs, nsegs, rsegs, flags)
-	bus_dma_tag_t t;
-	bus_size_t size, alignment, boundary;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	int *rsegs;
-	int flags;
+_isa_bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment, bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags)
 {
 	paddr_t high;
 
@@ -640,11 +591,7 @@ _isa_bus_dmamem_alloc(t, size, alignment, boundary, segs, nsegs, rsegs, flags)
  **********************************************************************/
 
 int
-_isa_dma_alloc_bouncebuf(t, map, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_size_t size;
-	int flags;
+_isa_dma_alloc_bouncebuf(bus_dma_tag_t t, bus_dmamap_t map, bus_size_t size, int flags)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 	int error = 0;
@@ -674,9 +621,7 @@ _isa_dma_alloc_bouncebuf(t, map, size, flags)
 }
 
 void
-_isa_dma_free_bouncebuf(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+_isa_dma_free_bouncebuf(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct atari_isa_dma_cookie *cookie = map->_dm_cookie;
 

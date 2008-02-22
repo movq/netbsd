@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_subr.c,v 1.6 2007/10/08 18:04:03 ad Exp $	*/
+/*	$NetBSD: efs_subr.c,v 1.12 2015/09/26 12:16:28 maxv Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_subr.c,v 1.6 2007/10/08 18:04:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_subr.c,v 1.12 2015/09/26 12:16:28 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/kauth.h>
@@ -136,7 +136,7 @@ efs_locate_inode(ino_t ino, struct efs_sb *sbp, uint32_t *bboff, int *index)
 
 	cgisize = be16toh(sbp->sb_cgisize);
 	cgfsize = be32toh(sbp->sb_cgfsize);
-	firstcg = be32toh(sbp->sb_firstcg),
+	firstcg = be32toh(sbp->sb_firstcg);
 
 	*bboff = firstcg + ((ino / (cgisize * EFS_DINODES_PER_BB)) * cgfsize) +
 	    ((ino % (cgisize * EFS_DINODES_PER_BB)) / EFS_DINODES_PER_BB);
@@ -165,7 +165,6 @@ efs_read_inode(struct efs_mount *emp, ino_t ino, struct lwp *l,
 
 	err = efs_bread(emp, bboff, l, &bp);
 	if (err) {
-		brelse(bp, 0);
 		return (err);
 	}
 	memcpy(di, ((struct efs_dinode *)bp->b_data) + index, sizeof(*di));
@@ -189,7 +188,7 @@ efs_bread(struct efs_mount *emp, uint32_t bboff, struct lwp *l, struct buf **bp)
 	KASSERT(bboff < EFS_SIZE_MAX);
 
 	return (bread(emp->em_devvp, (daddr_t)bboff * (EFS_BB_SIZE / DEV_BSIZE),
-	    EFS_BB_SIZE, (l == NULL) ? NOCRED : l->l_cred, bp));
+	    EFS_BB_SIZE, 0, bp));
 }
 
 /*
@@ -270,7 +269,7 @@ efs_dirblk_lookup(struct efs_dirblk *dir, struct componentname *cn,
     ino_t *inode)
 {
 	struct efs_dirent *de;
-	int i, slot, offset;
+	int i, slot __diagused, offset;
 
 	KASSERT(cn->cn_namelen <= EFS_DIRENT_NAMELEN_MAX);
 
@@ -322,7 +321,6 @@ efs_extent_lookup(struct efs_mount *emp, struct efs_extent *ex,
 		err = efs_bread(emp, ex->ex_bn + i, NULL, &bp);
 		if (err) {
 			printf("efs: warning: invalid extent descriptor\n");
-			brelse(bp, 0);
 			return (err);
 		}
 
@@ -352,7 +350,9 @@ efs_inode_lookup(struct efs_mount *emp, struct efs_inode *ei,
 	int ret;
 	
 	KASSERT(VOP_ISLOCKED(ei->ei_vp));
+#ifdef DIAGNOSTIC
 	KASSERT(efs_is_inode_synced(ei) == 0);
+#endif
 	KASSERT((ei->ei_mode & S_IFMT) == S_IFDIR);
 
 	efs_extent_iterator_init(&exi, ei, 0);
@@ -482,7 +482,6 @@ efs_extent_iterator_init(struct efs_extent_iterator *exi, struct efs_inode *eip,
 
 		err = efs_bread(emp, ex.ex_bn, NULL, &bp);
 		if (err) {
-			brelse(bp, 0);
 			return;
 		}
 
@@ -528,7 +527,6 @@ efs_extent_iterator_init(struct efs_extent_iterator *exi, struct efs_inode *eip,
 
 		err = efs_bread(emp, ex.ex_bn + bboff, NULL, &bp);
 		if (err) {
-			brelse(bp, 0);
 			EFS_DPRINTF(("efs_extent_iterator_init: bsrch read\n"));
 			return;
 		}
@@ -603,7 +601,6 @@ efs_extent_iterator_next(struct efs_extent_iterator *exi,
 		if (err) {
 			EFS_DPRINTF(("efs_extent_iterator_next: "
 			    "efs_bread failed: %d\n", err));
-			brelse(bp, 0);
 			return (err);
 		}
 

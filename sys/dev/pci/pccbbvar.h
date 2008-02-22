@@ -1,4 +1,5 @@
-/*	$NetBSD: pccbbvar.h,v 1.33 2008/01/15 21:55:24 christos Exp $	*/
+/*	$NetBSD: pccbbvar.h,v 1.41 2010/04/20 23:39:11 dyoung Exp $	*/
+
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -10,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by HAYAKAWA Koichi.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,10 +28,12 @@
 /* require sys/queue.h */
 /* require sys/callout.h */
 /* require dev/ic/i82365reg.h */
-/* require dev/ic/i82365var.h */
 
 #ifndef _DEV_PCI_PCCBBVAR_H_
 #define	_DEV_PCI_PCCBBVAR_H_
+
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 
 #define	PCIC_FLAG_SOCKETP	0x0001
 #define	PCIC_FLAG_CARDP		0x0002
@@ -52,39 +50,9 @@
 #define	CB_CIRRUS	8	/* Cirrus Logic CL-PD683X */
 #define	CB_TI125X	9	/* TI PCI1250/1251(B)/1450 */
 #define	CB_TI1420	10	/* TI PCI1420 */
+#define	CB_O2MICRO	11	/* O2 Micro 67xx/68xx/69xx */
 
-struct pccbb_softc;
 struct pccbb_intrhand_list;
-
-
-struct cbb_pcic_handle {
-	device_t ph_parent;
-	bus_space_tag_t ph_base_t;
-	bus_space_handle_t ph_base_h;
-	u_int8_t (*ph_read)(struct cbb_pcic_handle *, int);
-	void (*ph_write)(struct cbb_pcic_handle *, int, u_int8_t);
-	int sock;
-
-	int vendor;
-	int flags;
-	int memalloc;
-	struct {
-		bus_addr_t addr;
-		bus_size_t size;
-		long offset;
-		int kind;
-	} mem[PCIC_MEM_WINS];
-	int ioalloc;
-	struct {
-		bus_addr_t addr;
-		bus_size_t size;
-		int width;
-	} io[PCIC_IO_WINS];
-	int ih_irq;
-	device_t pcmcia;
-
-	int shutdown;
-};
 
 struct pccbb_win_chain {
 	bus_addr_t wc_start;		/* Caution: region [start, end], */
@@ -97,16 +65,32 @@ struct pccbb_win_chain {
 
 TAILQ_HEAD(pccbb_win_chain_head, pccbb_win_chain);
 
+struct pccbb_softc; /* forward */
+struct pcic_handle {
+	/* extracted from i82365var.h */
+	int     memalloc;
+	struct {
+		bus_addr_t      addr;
+		bus_size_t      size;
+		long            offset;
+		int             kind;
+	} mem[PCIC_MEM_WINS];
+	int	ioalloc;
+	struct {
+		bus_addr_t      addr;
+		bus_size_t      size;
+		int             width;
+	} io[PCIC_IO_WINS];
+};
+
 struct pccbb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_tag_t sc_memt;
 	bus_dma_tag_t sc_dmat;
 
-#if rbus
 	rbus_tag_t sc_rbus_iot;		/* rbus for i/o donated from parent */
 	rbus_tag_t sc_rbus_memt;	/* rbus for mem donated from parent */
-#endif
 
 	bus_space_tag_t sc_base_memt;
 	bus_space_handle_t sc_base_memh;
@@ -116,7 +100,6 @@ struct pccbb_softc {
 
 	void *sc_ih;			/* interrupt handler */
 	struct pci_attach_args sc_pa;	/* copy of our attach args */
-	int sc_function;
 	u_int32_t sc_flags;
 #define	CBB_CARDEXIST	0x01
 #define	CBB_INSERTING	0x01000000
@@ -142,18 +125,18 @@ struct pccbb_softc {
 
 	/* pcmcia stuff */
 	struct pcic_handle sc_pcmcia_h;
-	pcmcia_chipset_tag_t sc_pct;
 	int sc_pcmcia_flags;
 #define	PCCBB_PCMCIA_IO_RELOC	0x01	/* IO addr relocatable stuff exists */
 #define	PCCBB_PCMCIA_MEM_32	0x02	/* 32-bit memory address ready */
 
-	struct proc *sc_event_thread;
-	SIMPLEQ_HEAD(, pcic_event) sc_events;
 	volatile int sc_pwrcycle;
+	kcondvar_t sc_pwr_cv;
+	kmutex_t sc_pwr_mtx;
 
 	/* interrupt handler list on the bridge */
 	LIST_HEAD(, pccbb_intrhand_list) sc_pil;
-	int sc_pil_intr_enable;	/* can i call intr handler for child device? */
+	/* can i call intr handler for child device? */
+	bool sc_pil_intr_enable;
 };
 
 /*

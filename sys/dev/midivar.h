@@ -1,7 +1,7 @@
-/*	$NetBSD: midivar.h,v 1.14 2008/01/04 21:17:49 ad Exp $	*/
+/*	$NetBSD: midivar.h,v 1.20 2014/12/22 07:02:22 mrg Exp $	*/
 
 /*
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,12 +35,11 @@
 
 #define MIDI_BUFSIZE 1024
 
-#include "sequencer.h"
-
 #include <sys/callout.h>
 #include <sys/cdefs.h>
 #include <sys/device.h>
-#include <sys/simplelock.h>
+#include <sys/condvar.h>
+#include <sys/mutex.h>
 
 /*
  * In both xmt and rcv direction, the midi_fst runs at the time data are
@@ -187,51 +179,29 @@ struct midi_state {
 };
 
 struct midi_softc {
-	struct	device dev;
+	device_t dev;		/* Hardware device struct */
 	void	*hw_hdl;	/* Hardware driver handle */
 	const struct	midi_hw_if *hw_if; /* Hardware interface */
 	const struct	midi_hw_if_ext *hw_if_ext; /* see midi_if.h */
-	struct	device *sc_dev;	/* Hardware device struct */
 	int	isopen;		/* Open indicator */
 	int	flags;		/* Open flags */
 	int	dying;
 	struct	midi_buffer outbuf;
 	struct	midi_buffer inbuf;
 	int	props;
-	int	rchan, wchan;
-	struct  simplelock out_lock; /* overkill or no? */
-	struct  simplelock in_lock;
-
-#define MIDI_OUT_LOCK(sc,s) \
-	do { \
-		(s) = splaudio(); \
-		simple_lock(&(sc)->out_lock); \
-	} while (/*CONSTCOND*/0)
-#define MIDI_OUT_UNLOCK(sc,s) \
-	do { \
-		simple_unlock(&(sc)->out_lock); \
-		splx((s)); \
-	} while (/*CONSTCOND*/0)
-#define MIDI_IN_LOCK(sc,s) \
-	do { \
-		(s) = splaudio(); \
-		simple_lock(&(sc)->in_lock); \
-	} while (/*CONSTCOND*/0)
-#define MIDI_IN_UNLOCK(sc,s) \
-	do { \
-		simple_unlock(&(sc)->in_lock); \
-		splx((s)); \
-	} while (/*CONSTCOND*/0)
-
+	int	refcnt;
+	kcondvar_t detach_cv;
+	kcondvar_t rchan;
+	kcondvar_t wchan;
+	kmutex_t *lock;
 	int	pbus;
 	int	rcv_expect_asense;
 	int	rcv_quiescent;
 	int	rcv_eof;
 	struct	selinfo wsel;	/* write selector */
 	struct	selinfo rsel;	/* read selector */
-	struct	proc *async;	/* process who wants audio SIGIO */
-	void	*sih_rd;
-	void	*sih_wr;
+	pid_t	async;	/* process who wants audio SIGIO */
+	void	*sih;
 
 	struct callout xmt_asense_co;
 	struct callout rcv_asense_co;
@@ -270,11 +240,9 @@ struct midi_softc {
 #define MIDI_CAT_STATUS2 2
 #define MIDI_CAT_COMMON 3
 
-#if NSEQUENCER > 0
 	/* Synthesizer emulation stuff */
 	int	seqopen;
 	struct	midi_dev *seq_md; /* structure that links us with the seq. */
-#endif
 };
 
 #define MIDIUNIT(d) ((d) & 0xff)

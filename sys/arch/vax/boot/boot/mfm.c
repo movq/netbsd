@@ -1,4 +1,4 @@
-/*	$NetBSD: mfm.c,v 1.7 2006/06/08 07:03:11 he Exp $	*/
+/*	$NetBSD: mfm.c,v 1.15 2017/05/22 16:59:32 ragge Exp $	*/
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -14,12 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of
- *	Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -100,7 +94,7 @@ static int mfm_rdstrategy(void *f, int func, daddr_t dblk, size_t size, void *bu
  * instruction. Thus the loop-overhead will be enough...
  */
 static void
-sreg_read()
+sreg_read(void)
 {
 	int	i;
 	char    *p;
@@ -112,7 +106,7 @@ sreg_read()
 }
 
 static void
-creg_write()
+creg_write(void)
 {
 	int	i;
 	char    *p;
@@ -132,7 +126,7 @@ creg_write()
  * ready...
  */
 int
-mfm_rxprepare()
+mfm_rxprepare(void)
 {
 	int	error;
 
@@ -240,7 +234,7 @@ static int	mfm_retry = 0;
 int
 mfm_command(int	cmd)
 {
-	int	termcode, ready, i;
+	int	termcode, i;
 
 	creg_write();		/* write command-registers */
 	*ka410_intclr = INTR_DC;
@@ -280,7 +274,6 @@ mfm_command(int	cmd)
 		goto retry;
 	}
 	termcode = (dkc->dkc_stat & DKC_ST_TERMCOD) >> 3;
-	ready = sreg.udc_dstat & UDC_DS_READY;
 
 	printf("cmd:0x%x: termcode=0x%x, status=0x%x, cstat=0x%x, dstat=0x%x\n",
 	       cmd, termcode, dkc->dkc_stat, sreg.udc_cstat, sreg.udc_dstat);
@@ -340,8 +333,7 @@ volatile struct mfm_xbn {
 } mfm_xbn;
 
 #ifdef verbose
-display_xbn(p)
-	struct mfm_xbn *p;
+display_xbn(struct mfm_xbn *p)
 {
 	printf("**DiskData**	XBNs: %d, DBNs: %d, LBNs: %d, RBNs: %d\n",
 	    p->xbn_count, p->dbn_count, p->lbn_count, p->rbn_count);
@@ -360,9 +352,7 @@ display_xbn(p)
 #endif
 
 int
-mfmopen(f, adapt, ctlr, unit, part)
-	struct open_file *f;
-	int    ctlr, unit, part;
+mfmopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 {
 	char *msg;
 	struct disklabel *lp = &mfmlabel;
@@ -370,7 +360,7 @@ mfmopen(f, adapt, ctlr, unit, part)
 	int err;
 	size_t i;
 
-	bzero(lp, sizeof(struct disklabel));
+	memset(lp, 0, sizeof(struct disklabel));
 	msc->unit = unit;
 	msc->part = part;
 
@@ -459,7 +449,7 @@ int
 mfm_rxstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *rsize) {
 	struct mfm_softc *msc = f;
 	struct disklabel *lp;
-	int	block, sect, head, cyl, scount, res;
+	int	block, sect, head, cyl, scount;
 	char *cbuf;
 
 	cbuf = (char*)buf;
@@ -479,7 +469,7 @@ mfm_rxstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 	if (lp->d_secpercyl == 0)
 		lp->d_secpercyl = 30;
 
-	bzero((void *) 0x200D0000, size);
+	memset((void *) 0x200D0000, 0, size);
 	scount = size / 512;
 
 	while (scount) {
@@ -519,8 +509,8 @@ mfm_rxstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 
 			mfm_rxprepare();
 			/* copy from buf */
-			bcopy(cbuf, (void *) 0x200D0000, *rsize);
-			res = mfm_command(DKC_CMD_WRITE_RX33);
+			memcpy((void *) 0x200D0000, cbuf, *rsize);
+			(void)mfm_command(DKC_CMD_WRITE_RX33);
 		} else {
 			creg.udc_rtcnt = UDC_RC_RX33READ;
 			creg.udc_mode = UDC_MD_RX33;
@@ -528,10 +518,10 @@ mfm_rxstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 
 			mfm_rxprepare();
 			/* clear disk buffer */
-			bzero((void *) 0x200D0000, *rsize);
-			res = mfm_command(DKC_CMD_READ_RX33);
+			memset((void *) 0x200D0000, 0, *rsize);
+			(void)mfm_command(DKC_CMD_READ_RX33);
 			/* copy to buf */
-			bcopy((void *) 0x200D0000, cbuf, *rsize);
+			memcpy(cbuf, (void *) 0x200D0000, *rsize);
 		}
 
 		scount -= *rsize / 512;
@@ -547,7 +537,7 @@ int
 mfm_rdstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *rsize) {
 	struct mfm_softc *msc = f;
 	struct disklabel *lp;
-	int	block, sect, head, cyl, scount, cmd, res;
+	int	block, sect, head, cyl, scount, cmd;
 	char *cbuf;
 
 	cbuf = (char *)buf;
@@ -567,7 +557,7 @@ mfm_rdstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 
 	mfm_rdselect(msc->unit);
 
-	bzero((void *) 0x200D0000, size);
+	memset((void *) 0x200D0000, 0, size);
 	scount = size / 512;
 
 	while (scount) {
@@ -610,17 +600,17 @@ mfm_rdstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 			creg.udc_term = UDC_TC_HDD;
 			cmd = DKC_CMD_WRITE_HDD;
 
-			bcopy(cbuf, (void *) 0x200D0000, *rsize);
-			res = mfm_command(cmd);
+			memcpy((void *) 0x200D0000, cbuf, *rsize);
+			(void)mfm_command(cmd);
 		} else {
 			creg.udc_rtcnt = UDC_RC_HDD_READ;
 			creg.udc_mode = UDC_MD_HDD;
 			creg.udc_term = UDC_TC_HDD;
 			cmd = DKC_CMD_READ_HDD;
 
-			bzero((void *) 0x200D0000, *rsize);
-			res = mfm_command(cmd);
-			bcopy((void *) 0x200D0000, cbuf, *rsize);
+			memset((void *) 0x200D0000, 0, *rsize);
+			(void)mfm_command(cmd);
+			memcpy(cbuf, (void *) 0x200D0000, *rsize);
 		}
 
 		scount -= *rsize / 512;
@@ -638,26 +628,20 @@ mfm_rdstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *
 }
 
 int
-mfmstrategy(f, func, dblk, size, buf, rsize)
-	void *f;
-	int	func;
-	daddr_t	dblk;
-	void    *buf;
-	size_t	size, *rsize;
+mfmstrategy(void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *rsize)
 {
 	struct mfm_softc *msc = f;
-	int	res = -1;
 
 	switch (msc->unit) {
 	case 0:
 	case 1:
-		res = mfm_rdstrategy(f, func, dblk, size, buf, rsize);
+		return mfm_rdstrategy(f, func, dblk, size, buf, rsize);
 		break;
 	case 2:
-		res = mfm_rxstrategy(f, func, dblk, size, buf, rsize);
+		return mfm_rxstrategy(f, func, dblk, size, buf, rsize);
 		break;
 	default:
 		printf("invalid unit %d in mfmstrategy()\n", msc->unit);
+		return -1;
 	}
-	return (res);
 }

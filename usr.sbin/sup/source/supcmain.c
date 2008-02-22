@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmain.c,v 1.23 2007/07/20 18:58:14 christos Exp $	*/
+/*	$NetBSD: supcmain.c,v 1.34 2017/05/04 16:26:10 sevan Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -155,6 +155,8 @@
  *			"notify" supfile option, that contains messages
  *			printed by Sup.
  *
+ *	-M	"mailto" flag
+ *			Like -m, but send mail to the specified user.
  *	-o	"old files" flag
  *			Sup will normally only upgrade files that have
  *			changed on the repository since the last time an
@@ -346,9 +348,8 @@ int rpauseflag;			/* don't disable resource pausing */
 int xpatchflag;			/* crosspatched with remote system */
 int portdebug;			/* network debugging ports */
 
-int main(int, char **);
 static int checkcoll(TREE *, void *);
-static void doswitch(char *, TREE **, int *, int *);
+static void doswitch(int *, char ***, TREE **, int *, int *, char *, size_t);
 static char *init(int, char **);
 
 /*************************************
@@ -359,14 +360,16 @@ int
 main(int argc, char **argv)
 {
 	char *progname, *supfname;
-	int restart, sfdev = 0, sfino = 0;
+	int restart;
+	dev_t sfdev = 0;
+	ino_t sfino = 0;
 	time_t sfmtime = 0;
 	struct stat sbuf;
 	struct sigaction ign;
 
 	/* initialize global variables */
 	pgmversion = PGMVERSION;/* export version number */
-	server = FALSE;		/* export that we're not a server */
+	isserver = FALSE;	/* export that we're not a server */
 	collname = NULL;	/* no current collection yet */
 	dontjump = TRUE;	/* clear setjmp buffer */
 	progname = estrdup(argv[0]);
@@ -458,27 +461,25 @@ main(int argc, char **argv)
 #define Tcount	Tgid
 
 static void 
-doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
+doswitch(int *argc, char ***argv, TREE ** collTp, int *oflagsp, int *aflagsp,
+    char *username, size_t ulen)
 {
 	TREE *t;
-	char *coll;
+	char *coll, *argp;
 	int oflags, aflags;
+	int c;
+
+#define SUPOPTIONS "abBCdDeEifkKlmM:NoOPRsStuvXzZ=:"
 
 	oflags = aflags = 0;
-	for (;;) {
-		switch (*argp) {
+	while ((c = getopt(*argc, *argv, SUPOPTIONS)) != -1)
+		switch (c) {
 		default:
-			logerr("Invalid flag '%c' ignored", *argp);
+			logerr("Invalid flag '%c' ignored", c);
 			break;
 		case '\0':
 		case '=':
-			if (*argp++ == '\0' || *argp == '\0') {
-				*oflagsp |= oflags;
-				*oflagsp &= ~aflags;
-				*aflagsp |= aflags;
-				*aflagsp &= ~oflags;
-				return;
-			}
+			argp = optarg;
 			do {
 				coll = nxtarg(&argp, ", \t");
 				t = Tinsert(collTp, coll, TRUE);
@@ -488,29 +489,6 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 				t->Taflags &= ~oflags;
 				argp = skipover(argp, ", \t");
 			} while (*argp);
-			return;
-		case 'N':
-			scmdebug++;
-			break;
-		case 'P':
-			portdebug = TRUE;
-			break;
-		case 'R':
-#if	MACH
-			rpauseflag = TRUE;
-#endif				/* MACH */
-			break;
-		case 'X':
-			xpatchflag = TRUE;
-			break;
-		case 'S':
-			silent = TRUE;
-			break;
-		case 's':
-			sysflag = TRUE;
-			break;
-		case 't':
-			timeflag = TRUE;
 			break;
 		case 'a':
 			oflags |= CFALL;
@@ -522,6 +500,9 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 		case 'B':
 			oflags &= ~CFBACKUP;
 			aflags |= CFBACKUP;
+			break;
+		case 'C':
+			oflags |= CFCANONICALIZE;
 			break;
 		case 'd':
 			oflags |= CFDELETE;
@@ -542,6 +523,10 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 		case 'f':
 			oflags |= CFLIST;
 			break;
+		case 'i':
+			oflags |= CFIGNCHERR;
+			aflags &= ~CFIGNCHERR;
+			break;
 		case 'k':
 			oflags |= CFKEEP;
 			aflags &= ~CFKEEP;
@@ -556,6 +541,14 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 		case 'm':
 			oflags |= CFMAIL;
 			break;
+		case 'M':
+			oflags |= CFMAIL;
+			strncpy(username, optarg, ulen);
+			username[ulen - 1] = '\0';
+			break;
+		case 'N':
+			scmdebug++;
+			break;
 		case 'o':
 			oflags |= CFOLD;
 			aflags &= ~CFOLD;
@@ -564,11 +557,31 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 			oflags &= ~CFOLD;
 			aflags |= CFOLD;
 			break;
+		case 'P':
+			portdebug = TRUE;
+			break;
+		case 'R':
+#if	MACH
+			rpauseflag = TRUE;
+#endif				/* MACH */
+			break;
+		case 's':
+			sysflag = TRUE;
+			break;
+		case 'S':
+			silent = TRUE;
+			break;
+		case 't':
+			timeflag = TRUE;
+			break;
 		case 'u':
 			noutime = TRUE;
 			break;
 		case 'v':
 			oflags |= CFVERBOSE;
+			break;
+		case 'X':
+			xpatchflag = TRUE;
 			break;
 		case 'z':
 			oflags |= CFCOMPRESS;
@@ -577,8 +590,13 @@ doswitch(char *argp, TREE ** collTp, int *oflagsp, int *aflagsp)
 			oflags &= ~CFCOMPRESS;
 			break;
 		}
-		argp++;
-	}
+
+	*oflagsp |= oflags;
+	*oflagsp &= ~aflags;
+	*aflagsp |= aflags;
+	*aflagsp &= ~oflags;
+	*argc -= optind;
+	*argv += optind;
 }
 
 static char *
@@ -601,6 +619,7 @@ init(int argc, char **argv)
 	void (*oldsigsys) ();
 #endif				/* MACH */
 
+	username[0] = '\0';
 	sysflag = FALSE;	/* not system upgrade */
 	timeflag = FALSE;	/* don't print times */
 #if	MACH
@@ -612,12 +631,11 @@ init(int argc, char **argv)
 
 	collT = NULL;
 	oflags = aflags = 0;
-	while (argc > 1 && argv[1][0] == '-' && argv[1][1] != '\0') {
-		doswitch(&argv[1][1], &collT, &oflags, &aflags);
-		--argc;
-		argv++;
-	}
-	if (argc == 1 && !sysflag)
+
+	doswitch(&argc, &argv, &collT, &oflags, &aflags, username,
+	    sizeof(username));
+
+	if (argc == 0 && !sysflag)
 		logquit(1, "Need either -s or supfile");
 #if	MACH
 	oldsigsys = signal(SIGSYS, SIG_IGN);
@@ -627,28 +645,28 @@ init(int argc, char **argv)
 	(void) signal(SIGSYS, oldsigsys);
 #endif				/* MACH */
 	if (sysflag)
-		(void) sprintf(supfname = buf,
+		(void) snprintf(supfname = buf, sizeof(buf),
 		    timeflag ? FILESUPTDEFAULT : FILESUPDEFAULT,
 		    DEFDIR);
 	else {
-		supfname = argv[1];
+		supfname = *argv;
 		if (strcmp(supfname, "-") == 0)
 			supfname = "";
 		--argc;
 		argv++;
 	}
-	cwant = argc > 1;
-	while (argc > 1) {
-		t = Tinsert(&collT, argv[1], TRUE);
+	cwant = argc > 0;
+	while (argc > 0) {
+		t = Tinsert(&collT, *argv, TRUE);
 		t->Twant = TRUE;
 		--argc;
 		argv++;
 	}
-	if ((u = getlogin()) ||
-	    ((pw = getpwuid((int) getuid())) && (u = pw->pw_name)))
-		(void) strcpy(username, u);
-	else
-		*username = '\0';
+	if (*username == '\0' && ((u = getlogin()) ||
+	    ((pw = getpwuid((int) getuid())) && (u = pw->pw_name)))) {
+		(void)strncpy(username, u, sizeof(username));
+		username[sizeof(username) - 1] = '\0';
+	} 
 	if (*supfname) {
 		f = fopen(supfname, "r");
 		if (f == NULL)
@@ -659,7 +677,7 @@ init(int argc, char **argv)
 	lastC = NULL;
 	bogus = FALSE;
 	while ((p = read_line(f, NULL, NULL, NULL, 0)) != NULL) {
-		if (index("#;:", *p))
+		if (strchr("#;:", *p))
 			continue;
 		arg = nxtarg(&p, " \t");
 		if (*arg == '\0') {
@@ -713,7 +731,7 @@ init(int argc, char **argv)
 	Tfree(&collT);
 	if (firstC == NULL)
 		logquit(1, "No collections to upgrade");
-	timenow = time((time_t *) NULL);
+	timenow = time(NULL);
 	if (*supfname == '\0')
 		p = "standard input";
 	else if (sysflag)

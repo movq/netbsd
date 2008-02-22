@@ -1,4 +1,4 @@
-/*	$NetBSD: vnode.c,v 1.3 2006/09/29 14:18:25 christos Exp $	*/
+/*	$NetBSD: vnode.c,v 1.5 2008/12/29 05:56:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,9 +98,9 @@ main(int argc, char **argv)
 		if (gettimeofday(&now, NULL) == -1)
 			err(1, "gettimeofday now");
 		timersub(&now, &then, &diff);
-		printf("vnode '%s': kevent returned %d in %ld.%06ld\n",
+		printf("vnode '%s': kevent returned %d in %lld.%06ld\n",
 			argv[1],
-			n, diff.tv_sec, diff.tv_usec);
+			n, (long long)diff.tv_sec, (long)diff.tv_usec);
 
 		if (n == -1)
 			err(1, "kevent");

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot32.c,v 1.33 2008/02/03 14:59:16 chris Exp $	*/
+/*	$NetBSD: boot32.c,v 1.43 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 Reinoud Zandijk
@@ -29,7 +29,6 @@
  * Thanks a bunch for Ben's framework for the bootloader and its suporting
  * libs. This file tries to actually boot NetBSD/acorn32 !
  *
- * XXX eventually to be partly merged back with boot26 ? XXX
  */
 
 #include <lib/libsa/stand.h>
@@ -121,6 +120,7 @@ char	*memory_image, *bottom_memory, *top_memory;
 /* kernel info */
 u_long	 marks[MARK_MAX];		/* loader mark pointers 	*/
 u_long	 kernel_physical_start;		/* where does it get relocated	*/
+u_long	 kernel_physical_maxsize;	/* Max allowed size of kernel	*/
 u_long	 kernel_free_vm_start;		/* where does the free VM start	*/
 /* some free space to mess with	*/
 u_long	 scratch_virtualbase, scratch_physicalbase;
@@ -129,9 +129,6 @@ u_long	 scratch_virtualbase, scratch_physicalbase;
 /* bootprogram identifiers */
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
-extern const char bootprog_date[];
-extern const char bootprog_maker[];
-
 
 /* predefines / prototypes */
 void	 init_datastructures(void);
@@ -284,7 +281,7 @@ void
 get_memory_configuration(void)
 {
 	int loop, current_page_type, page_count, phys_page;
-	int page, count, bank, top_bank, video_bank;
+	int page, count, top_bank, video_bank;
 	int mapped_screen_memory;
 	int one_mb_pages;
 	u_long top;
@@ -294,8 +291,7 @@ get_memory_configuration(void)
 	osmemory_read_arrangement_table(memory_page_types);
 
 	/* init counters */
-	bank = vram_blocks = dram_blocks = rom_blocks = io_blocks =
-	    podram_blocks = 0;
+	vram_blocks = dram_blocks = rom_blocks = io_blocks = podram_blocks = 0;
 
 	current_page_type = -1;
 	phys_page = 0;			/* physical address in pages	*/
@@ -659,7 +655,7 @@ vsync_rate(void)
 	time0 = os_read_monotonic_time();
 	while (os_read_monotonic_time() - time0 < 100)
 		continue;
-	return (u_int8_t)(count0 - osbyte_read(osbyte_VAR_VSYNC_TIMER));
+	return (uint8_t)(count0 - osbyte_read(osbyte_VAR_VSYNC_TIMER));
 }
 
 void
@@ -711,9 +707,13 @@ create_configuration(int argc, char **argv, int start_args)
 	strcpy(bconfig->args, "");
 	for (i = start_args; i < argc; i++) {
 		if (strncmp(argv[i], "root=",5) ==0) root_specified = 1;
+		if (i > start_args)
+			strcat(bconfig->args, " ");
 		strcat(bconfig->args, argv[i]);
 	}
 	if (!root_specified) {
+		if (start_args < argc)
+			strcat(bconfig->args, " ");
 		strcat(bconfig->args, "root=");
 		strcat(bconfig->args, DEFAULT_ROOT);
 	}
@@ -765,10 +765,10 @@ int
 main(int argc, char **argv)
 {
 	int howto, start_args, ret;
+	int class;
 
 	printf("\n\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 	printf(">> Booting NetBSD/acorn32 on a RiscPC/A7000/NC\n");
 	printf("\n");
 
@@ -788,10 +788,12 @@ main(int argc, char **argv)
 		free_relocation_page =
 		    mem_pages_info + first_mapped_PODRAM_page_index;
 		kernel_physical_start = PODRAM_addr[0];
+		kernel_physical_maxsize = PODRAM_pages[0] * nbpp;
 	} else {
 		free_relocation_page =
 		    mem_pages_info + first_mapped_DRAM_page_index;
 		kernel_physical_start = DRAM_addr[0];
+		kernel_physical_maxsize = DRAM_pages[0] * nbpp;
 	}
 
 	printf("\nLoading %s ", booted_file);
@@ -800,6 +802,11 @@ main(int argc, char **argv)
 	ret = loadfile(booted_file, marks, COUNT_KERNEL);
 	if (ret == -1) panic("Kernel load failed"); /* lie to the user ... */
 	close(ret);
+
+	if (marks[MARK_END] - marks[MARK_START] > kernel_physical_maxsize) 
+	{
+		panic("\nKernel is bigger than the first DRAM module, unable to boot\n");
+	}
 
 	/*
 	 * calculate how much the difference is between physical and
@@ -810,7 +817,7 @@ main(int argc, char **argv)
 	kernel_free_vm_start = (marks[MARK_END] + nbpp-1) & ~(nbpp-1);
 
 	/* we seem to be forced to clear the marks[] ? */
-	bzero(marks, sizeof(marks));
+	memset(marks, 0, sizeof(marks));
 
 	/* really load it ! */
 	ret = loadfile(booted_file, marks, LOAD_KERNEL);
@@ -847,8 +854,11 @@ main(int argc, char **argv)
 	/* dismount all filesystems */
 	xosfscontrol_shutdown();
 
-	/* reset devices, well they try to anyway */
-	service_pre_reset();
+	os_readsysinfo_platform_class(&class, NULL, NULL);
+	if (class != osreadsysinfo_Platform_Pace) {
+		/* reset devices, well they try to anyway */
+		service_pre_reset();
+	}
 
 	start_kernel(
 		/* r0 relocation code page (V)	*/ relocate_code_page->logical,
@@ -971,9 +981,6 @@ get_relocated_page(u_long destination, int size)
 	if (destination & 0x3)
 		panic("\n\ndestination address is not aligned!");
 
-	if (size & 0x3)
-		panic("\n\nsize is not aligned!");
-
 	*reloc_pos++ = free_relocation_page->physical;
 	*reloc_pos++ = destination;
 	*reloc_pos++ = size;
@@ -1030,7 +1037,7 @@ process_args(int argc, char **argv, int *howto, char *file, int *start_args)
 	if (*file == NULL) {
 		if (*howto & RB_ASKNAME) {
 			printf("boot: ");
-			gets(filename);
+			kgets(filename, sizeof(filename));
 			strcpy(file, filename);
 		} else
 			strcpy(file, "netbsd");
@@ -1050,7 +1057,7 @@ sprint0(int width, char prefix, char base, int value)
 	*pos++ = base;
 	*pos++ = (char) 0;
 	
-	sprintf(scrap, format, value);
+	snprintf(scrap, sizeof(scrap), format, value);
 	length = strlen(scrap);
 
 	return scrap+length-width;

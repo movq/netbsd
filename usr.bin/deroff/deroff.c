@@ -1,4 +1,4 @@
-/*	$NetBSD: deroff.c,v 1.5 2007/12/15 19:44:50 perry Exp $	*/
+/*	$NetBSD: deroff.c,v 1.11 2013/10/18 20:47:06 christos Exp $	*/
 
 /* taken from: OpenBSD: deroff.c,v 1.6 2004/06/02 14:58:46 tom Exp */
 
@@ -64,23 +64,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef lint
-static const char copyright[] =
-"@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n";
-#endif /* not lint */
-
-#ifndef lint
-#if 0
-static const char sccsid[] = "@(#)deroff.c	8.1 (Berkeley) 6/6/93";
-#else
-static const char rcsid[] = "$NetBSD: deroff.c,v 1.5 2007/12/15 19:44:50 perry Exp $";
-#endif
-#endif /* not lint */
-
 #include <sys/cdefs.h>
+__RCSID("$NetBSD: deroff.c,v 1.11 2013/10/18 20:47:06 christos Exp $");
+
 #include <err.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -125,7 +114,7 @@ static const char rcsid[] = "$NetBSD: deroff.c,v 1.5 2007/12/15 19:44:50 perry E
 #define	MA 3	/* -man */
 
 #ifdef DEBUG
-char *mactab[] = { "-ms", "-mm", "-me", "-ma" };
+static char *mactab[] = { "-ms", "-mm", "-me", "-ma" };
 #endif /* DEBUG */
 
 #define	ONE 1
@@ -177,7 +166,7 @@ typedef	int pacmac;		/* compressed macro name */
 static int	argconcat = 0;	/* concat arguments together (-me only) */
 
 #define	tomac(c1, c2)		((((c1) & 0xFF) << 8) | ((c2) & 0xFF))
-#define	frommac(src, c1, c2)	(((c1)=((src)>>8)&0xFF),((c2) =(src)&0xFF))
+#define	frommac(src, c1, c2)	(((c1)=((src)>>8)&0xFF),((c2) =(src)&0xFF), __USE(c1), __USE(c2))
 
 struct mactab {
 	int	condition;
@@ -250,7 +239,7 @@ static int	 macsort(const void *, const void *);
 static int	 sizetab(const struct mactab *);
 static void	 getfname(void);
 static void	 textline(char *, int);
-static void	 work(void);
+static void	 work(void) __dead;
 static void	 regline(void (*)(char *, int), int);
 static void	 macro(void);
 static void	 tbl(void);
@@ -436,7 +425,8 @@ getfname(void)
 	while (C == ' ')
 		;	/* nothing */
 
-	for (p = fname ; p - fname < sizeof(fname) && (*p = c) != '\n' &&
+	for (p = fname ; p - fname < (ptrdiff_t)sizeof(fname) &&
+	    (*p = c) != '\n' &&
 	    c != ' ' && c != '\t' && c != '\\'; ++p)
 		C;
 	*p = '\0';
@@ -472,7 +462,7 @@ textline(char *str, int constant)
 	puts(str);
 }
 
-void
+static void
 work(void)
 {
 
@@ -494,7 +484,7 @@ regline(void (*pfunc)(char *, int), int constant)
 
 	line[0] = c;
 	lp = line;
-	while (lp - line < sizeof(line)) {
+	while (lp - line < (ptrdiff_t)sizeof(line)) {
 		if (c == '\\') {
 			*lp = ' ';
 			backsl();
@@ -823,14 +813,14 @@ static int
 _C1(void)
 {
 
-	return C1get);
+	return C1get;
 }
 
 static int
 _C(void)
 {
 
-	return Cget);
+	return Cget;
 }
 #endif /* DEBUG */
 
@@ -996,7 +986,7 @@ meputmac(char *cp, int constant)
 		 */
 		if (((np - cp) > constant) &&
 		    (inquote || (chars[(unsigned char)cp[0]] == LETTER))) {
-			for (cp = cp; cp < np; cp++)
+			for (; cp < np; cp++)
 				putchar(*cp);
 			last = np[-1];
 			found++;
@@ -1169,7 +1159,7 @@ outtbl(pacmac unused)
 	return 0;
 }
 
-int
+static int
 /*ARGSUSED*/
 so(pacmac unused)
 {

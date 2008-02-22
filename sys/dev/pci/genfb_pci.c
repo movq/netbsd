@@ -1,4 +1,4 @@
-/*	$NetBSD: genfb_pci.c,v 1.5 2007/12/21 05:32:09 macallan Exp $ */
+/*	$NetBSD: genfb_pci.c,v 1.38 2016/07/07 06:55:41 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb_pci.c,v 1.5 2007/12/21 05:32:09 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb_pci.c,v 1.38 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: genfb_pci.c,v 1.5 2007/12/21 05:32:09 macallan Exp $
 #include <dev/pci/pciio.h>
 
 #include <dev/wsfb/genfbvar.h>
+#include <dev/pci/wsdisplay_pci.h>
+
+#include <dev/pci/genfb_pcivar.h>
 
 #include "opt_wsfb.h"
 #include "opt_genfb.h"
@@ -59,64 +59,53 @@ __KERNEL_RCSID(0, "$NetBSD: genfb_pci.c,v 1.5 2007/12/21 05:32:09 macallan Exp $
 # define DPRINTF while (0) printf
 #endif
 
-struct range {
-	bus_addr_t offset;
-	bus_size_t size;
-	int flags;
-};
-
-struct pci_genfb_softc {
-	struct genfb_softc sc_gen;
-
-	pci_chipset_tag_t sc_pc;
-	pcitag_t sc_pcitag;
-	bus_space_tag_t sc_memt;
-	bus_space_tag_t sc_iot;
-	bus_space_handle_t sc_memh;
-	pcireg_t sc_bars[9];
-	struct range sc_ranges[8];
-	int sc_ranges_used;
-	int sc_want_wsfb;
-};
-
-static int	pci_genfb_match(struct device *, struct cfdata *, void *);
-static void	pci_genfb_attach(struct device *, struct device *, void *);
+static int	pci_genfb_match(device_t, cfdata_t, void *);
+static void	pci_genfb_attach(device_t, device_t, void *);
 static int	pci_genfb_ioctl(void *, void *, u_long, void *, int,
 		    struct lwp *);
 static paddr_t	pci_genfb_mmap(void *, void *, off_t, int);
+static int	pci_genfb_borrow(void *, bus_addr_t, bus_space_handle_t *);
 static int	pci_genfb_drm_print(void *, const char *);
+static bool	pci_genfb_shutdown(device_t, int);
 
-
-CFATTACH_DECL(genfb_pci, sizeof(struct pci_genfb_softc),
+CFATTACH_DECL_NEW(genfb_pci, sizeof(struct pci_genfb_softc),
     pci_genfb_match, pci_genfb_attach, NULL, NULL);
 
 static int
-pci_genfb_match(struct device *parent, struct cfdata *match, void *aux)
+pci_genfb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
+	int matchlvl = 1;
+
+	if (!genfb_is_enabled())
+		return 0;	/* explicitly disabled by MD code */
+
+	if (genfb_is_console())
+		matchlvl = 5;	/* beat VGA */
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_APPLE &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_CONTROL)
-		return 1;
+		return matchlvl;
 
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY)
-		return 1;
+		return matchlvl;
 
 	return 0;
 }
 
 static void
-pci_genfb_attach(struct device *parent, struct device *self, void *aux)
+pci_genfb_attach(device_t parent, device_t self, void *aux)
 {
-	struct pci_genfb_softc *sc = (struct pci_genfb_softc *)self;
+	struct pci_genfb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
-	struct genfb_ops ops;
+	static const struct genfb_ops zero_ops;
+	struct genfb_ops ops = zero_ops;
+	pcireg_t rom;
 	int idx, bar, type;
-	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, NULL);
 
+	sc->sc_gen.sc_dev = self;
 	sc->sc_memt = pa->pa_memt;
 	sc->sc_iot = pa->pa_iot;	
 	sc->sc_pc = pa->pa_pc;
@@ -125,55 +114,94 @@ pci_genfb_attach(struct device *parent, struct device *self, void *aux)
 
 	genfb_init(&sc->sc_gen);
 
+	/* firmware / MD code responsible for restoring the display */
+	if (sc->sc_gen.sc_pmfcb == NULL)
+		pmf_device_register1(self, NULL, NULL,
+		    pci_genfb_shutdown);
+	else
+		pmf_device_register1(self,
+		    sc->sc_gen.sc_pmfcb->gpc_suspend,
+		    sc->sc_gen.sc_pmfcb->gpc_resume,
+		    pci_genfb_shutdown);
+
 	if ((sc->sc_gen.sc_width == 0) || (sc->sc_gen.sc_fbsize == 0)) {
-		aprint_error("%s: bogus parameters, unable to continue\n", 
-		    device_xname(self));
+		aprint_debug_dev(self, "not configured by firmware\n");
 		return;
 	}
 
-	if (bus_space_map(sc->sc_memt, sc->sc_gen.sc_fboffset,
-	    sc->sc_gen.sc_fbsize, BUS_SPACE_MAP_LINEAR, &sc->sc_memh) != 0) {
-
-		panic("%s: unable to map the framebuffer\n", self->dv_xname);
-	}
-	sc->sc_gen.sc_fbaddr = bus_space_vaddr(sc->sc_memt, sc->sc_memh);
+	/*
+	 * if some MD code handed us a framebuffer VA we use that instead of
+	 * mapping our own
+	 */
+	if (sc->sc_gen.sc_fbaddr == NULL) {
+		if (bus_space_map(sc->sc_memt, sc->sc_gen.sc_fboffset,
+		    sc->sc_gen.sc_fbsize,
+		    BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_PREFETCHABLE,
+		    &sc->sc_memh) != 0) {
+			aprint_error_dev(self,
+			    "unable to map the framebuffer\n");
+			return;
+		}
+		sc->sc_gen.sc_fbaddr = bus_space_vaddr(sc->sc_memt,
+		    sc->sc_memh);
+	} else
+		aprint_debug("%s: recycling existing fb mapping at %lx\n",
+		    device_xname(sc->sc_gen.sc_dev),
+		    (unsigned long)sc->sc_gen.sc_fbaddr);
 
 	/* mmap()able bus ranges */
 	idx = 0;
-	bar = 0x10;
-	while (bar < 0x30) {
+	bar = PCI_MAPREG_START;
+	while (bar <= PCI_MAPREG_ROM) {
 
-		type = pci_mapreg_type(sc->sc_pc, sc->sc_pcitag, bar);
-		if ((type == PCI_MAPREG_TYPE_MEM) || 
-		    (type == PCI_MAPREG_TYPE_ROM)) {
+		sc->sc_bars[(bar - PCI_MAPREG_START) >> 2] = rom =
+		    pci_conf_read(sc->sc_pc, sc->sc_pcitag, bar);
 
+		if ((bar >= PCI_MAPREG_END && bar < PCI_MAPREG_ROM) ||
+		    pci_mapreg_probe(sc->sc_pc, sc->sc_pcitag, bar, &type)
+		    == 0) {
+			/* skip unimplemented and non-BAR registers */
+			bar += 4;
+			continue;
+		}
+		if (PCI_MAPREG_TYPE(type) == PCI_MAPREG_TYPE_MEM || 
+		    PCI_MAPREG_TYPE(type) == PCI_MAPREG_TYPE_ROM) {
 			pci_mapreg_info(sc->sc_pc, sc->sc_pcitag, bar, type,
 			    &sc->sc_ranges[idx].offset,
 			    &sc->sc_ranges[idx].size,
 			    &sc->sc_ranges[idx].flags);
 			idx++;
 		}
-		sc->sc_bars[(bar - 0x10) >> 2] =
-		    pci_conf_read(sc->sc_pc, sc->sc_pcitag, bar);
-		bar += 4;
+		if ((bar == PCI_MAPREG_ROM) && (rom != 0)) {
+			pci_conf_write(sc->sc_pc, sc->sc_pcitag, bar, rom |
+			    PCI_MAPREG_ROM_ENABLE);
+		}
+		if (PCI_MAPREG_TYPE(type) == PCI_MAPREG_TYPE_MEM &&
+		    PCI_MAPREG_MEM_TYPE(type) == PCI_MAPREG_MEM_TYPE_64BIT)
+			bar += 8;
+		else
+			bar += 4;
 	}
+
 	sc->sc_ranges_used = idx;			    
 
 	ops.genfb_ioctl = pci_genfb_ioctl;
 	ops.genfb_mmap = pci_genfb_mmap;
+	ops.genfb_borrow = pci_genfb_borrow;
 
-	genfb_attach(&sc->sc_gen, &ops);
+	if (genfb_attach(&sc->sc_gen, &ops) == 0) {
 
-	/* now try to attach a DRM */
-	config_found_ia(self, "drm", aux, pci_genfb_drm_print);	
+		/* now try to attach a DRM */
+		config_found_ia(self, "drm", aux, pci_genfb_drm_print);	
+	}
 }
 
 static int
 pci_genfb_drm_print(void *aux, const char *pnp)
 {
 	if (pnp)
-		aprint_normal("direct rendering for %s", pnp);
-	return (UNSUPP);
+		aprint_normal("drm at %s", pnp);
+	return (UNCONF);
 }
 
 
@@ -184,27 +212,31 @@ pci_genfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct pci_genfb_softc *sc = v;
 
 	switch (cmd) {
-		case WSDISPLAYIO_GTYPE:
-			*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
-			return 0;
+	case WSDISPLAYIO_GTYPE:
+		*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
+		return 0;
 
-		/* PCI config read/write passthrough. */
-		case PCI_IOC_CFGREAD:
-		case PCI_IOC_CFGWRITE:
-			return (pci_devioctl(sc->sc_pc, sc->sc_pcitag,
-			    cmd, data, flag, l));
-		case WSDISPLAYIO_SMODE:
-			{
-				int new_mode = *(int*)data, i;
-				if (new_mode == WSDISPLAYIO_MODE_EMUL) {
-					for (i = 0; i < 9; i++)
-						pci_conf_write(sc->sc_pc,
-						     sc->sc_pcitag,
-						     0x10 + (i << 2),
-						     sc->sc_bars[i]);
-				}
-			}
-			return 0;
+	/* PCI config read/write passthrough. */
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE:
+		return pci_devioctl(sc->sc_pc, sc->sc_pcitag,
+		    cmd, data, flag, l);
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(sc->sc_gen.sc_dev, sc->sc_pc,
+		    sc->sc_pcitag, data);
+
+	case WSDISPLAYIO_SMODE: {
+		int new_mode = *(int*)data, i;
+		if (new_mode == WSDISPLAYIO_MODE_EMUL) {
+			for (i = 0; i < 9; i++)
+				pci_conf_write(sc->sc_pc,
+				     sc->sc_pcitag,
+				     0x10 + (i << 2),
+				     sc->sc_bars[i]);
+		}
+		}
+		return 0;
 	}
 
 	return EPASSTHROUGH;
@@ -215,7 +247,6 @@ pci_genfb_mmap(void *v, void *vs, off_t offset, int prot)
 {
 	struct pci_genfb_softc *sc = v;
 	struct range *r;
-	struct lwp *me;
 	int i;
 
 	if (offset == 0)
@@ -233,21 +264,18 @@ pci_genfb_mmap(void *v, void *vs, off_t offset, int prot)
 	    (sc->sc_want_wsfb == 1)) {
 
 		return bus_space_mmap(sc->sc_memt, sc->sc_gen.sc_fboffset,
-		   offset, prot, BUS_SPACE_MAP_LINEAR);
+		   offset, prot,
+		   BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_PREFETCHABLE);
 	}
 
 	/*
 	 * restrict all other mappings to processes with superuser privileges
 	 * or the kernel itself
 	 */
-	me = curlwp;
-	if (me != NULL) {
-		if (kauth_authorize_generic(me->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) != 0) {
-			aprint_normal("%s: mmap() rejected.\n",
-			    sc->sc_gen.sc_dev.dv_xname);
-			return -1;
-		}
+	if (kauth_authorize_machdep(kauth_cred_get(), KAUTH_MACHDEP_UNMANAGEDMEM,
+	    NULL, NULL, NULL, NULL) != 0) {
+		aprint_normal_dev(sc->sc_gen.sc_dev, "mmap() rejected.\n");
+		return -1;
 	}
 
 #ifdef WSFB_FAKE_VGA_FB
@@ -266,11 +294,31 @@ pci_genfb_mmap(void *v, void *vs, off_t offset, int prot)
 	 * somewhere in a MD header and compile this code only if all are
 	 * present
 	 */
-#ifdef macppc
+	/*
+	 * no.
+	 * PCI_IOAREA_PADDR would be completely, utterly wrong and completely
+	 * useless for the following reasons:
+	 * - it's a bus address, not a physical address
+	 * - there's no guarantee it's the same for each host bridge
+	 * - it's already taken care of by the IO tag
+	 * PCI_IOAREA_OFFSET is the same as PCI_MAGIC_IO_RANGE
+	 * PCI_IOAREA_SIZE is also useless:
+	 * - many cards don't decode more than 16 bit IO anyway
+	 * - even machines with more than 64kB IO space try to keep everything
+	 *   within 64kB for the reason above
+	 * - IO ranges tend to be small so in most cases you can't cram enough
+	 *   cards into a single machine to exhaust 64kB IO space
+	 * - machines which need this tend to prefer memory space anyway
+	 * - the only use for this right now is to allow the Xserver to map
+	 *   VGA registers on macppc and a few other powerpc ports, shark uses
+	 *   a similar mechanism, and what they need is always within 64kB
+	 */
+#ifdef PCI_MAGIC_IO_RANGE
 	/* allow to map our IO space */
-	if ((offset >= 0xf2000000) && (offset < 0xf2800000)) {
-		return bus_space_mmap(sc->sc_iot, offset-0xf2000000, 0, prot, 
-		    BUS_SPACE_MAP_LINEAR);	
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset < PCI_MAGIC_IO_RANGE + 0x10000)) {
+		return bus_space_mmap(sc->sc_iot, offset - PCI_MAGIC_IO_RANGE,
+		    0, prot, BUS_SPACE_MAP_LINEAR);	
 	}
 #endif
 
@@ -286,4 +334,26 @@ pci_genfb_mmap(void *v, void *vs, off_t offset, int prot)
 	}
 
 	return -1;
+}
+
+int
+pci_genfb_borrow(void *opaque, bus_addr_t addr, bus_space_handle_t *hdlp)
+{
+	struct pci_genfb_softc *sc = opaque;
+
+	if (sc == NULL)
+		return 0;
+	if (!sc->sc_gen.sc_fboffset)
+		return 0;
+	if (sc->sc_gen.sc_fboffset != addr)
+		return 0;
+	*hdlp = sc->sc_memh;
+	return 1;
+}
+
+static bool
+pci_genfb_shutdown(device_t self, int flags)
+{
+	genfb_enable_polling(self);
+	return true;
 }

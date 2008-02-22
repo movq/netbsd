@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_syscall.c,v 1.24 2008/02/06 22:12:41 dsl Exp $	*/
+/*	$NetBSD: netbsd32_syscall.c,v 1.33 2015/03/07 18:41:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,20 +29,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(_KERNEL) && defined(_KERNEL_OPT)
+#include "opt_dtrace.h"
+#endif
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_syscall.c,v 1.24 2008/02/06 22:12:41 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_syscall.c,v 1.33 2015/03/07 18:41:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 /* XXX this file ought to include the netbsd32 version of these 2 headers */
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 #include <sys/syscallargs.h>
 #include <sys/syscall_stats.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/psl.h>
@@ -62,7 +57,6 @@ void
 netbsd32_syscall_intern(struct proc *p)
 {
 
-	p->p_trace_enabled = trace_is_enabled(p);
 	p->p_md.md_syscall = netbsd32_syscall;
 }
 
@@ -85,7 +79,6 @@ netbsd32_syscall(struct trapframe *frame)
 	code = frame->tf_rax & (SYS_NSYSENT - 1);
 	callp = p->p_emul->e_sysent + code;
 
-	uvmexp.syscalls++;
 	LWP_CACHE_CREDS(l, p);
 
 	SYSCALL_COUNT(syscall_counts, code);
@@ -97,36 +90,29 @@ netbsd32_syscall(struct trapframe *frame)
 		error = copyin(params, args, callp->sy_argsize);
 		if (__predict_false(error != 0))
 			goto bad;
-		/* Recover 'code' - not in a register */
-		code = frame->tf_rax & (SYS_NSYSENT - 1);
 	}
 
-	if (__predict_false(p->p_trace_enabled)
+	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_entry))
 	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
 		int narg = callp->sy_argsize >> 2;
 		for (i = 0; i < narg; i++)
 			args64[i] = args[i];
-		error = trace_enter(code, args64, narg);
+		error = trace_enter(code, callp, args64);
 		if (__predict_false(error != 0))
 			goto out;
 	}
 
 	rval[0] = 0;
 	rval[1] = 0;
-	if (callp->sy_flags & SYCALL_MPSAFE)
-		error = (*callp->sy_call)(l, args, rval);
-	else {
-		KERNEL_LOCK(1, l);
-		error = (*callp->sy_call)(l, args, rval);
-		KERNEL_UNLOCK_LAST(l);
-	}
+	error = sy_call(callp, l, args, rval);
 
 out:
-	if (__predict_false(p->p_trace_enabled)
+	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_return))
 	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
-		/* Recover 'code' - the compiler doesn't assign it a register */
-		code = frame->tf_rax & (SYS_NSYSENT - 1);
-		trace_exit(code, rval, error);
+		int narg = callp->sy_argsize >> 2;
+		for (i = 0; i < narg; i++)
+			args64[i] = args[i];
+		trace_exit(code, callp, args64, rval, error);
 	}
 
 	if (__predict_true(error == 0)) {

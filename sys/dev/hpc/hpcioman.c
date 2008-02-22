@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcioman.c,v 1.15 2007/10/19 11:59:43 ad Exp $ */
+/*	$NetBSD: hpcioman.c,v 1.19 2012/10/27 17:18:17 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcioman.c,v 1.15 2007/10/19 11:59:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcioman.c,v 1.19 2012/10/27 17:18:17 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,21 +46,16 @@ __KERNEL_RCSID(0, "$NetBSD: hpcioman.c,v 1.15 2007/10/19 11:59:43 ad Exp $");
 
 #include "locators.h"
 
-int	hpcioman_match(struct device *, struct cfdata *, void *);
-void	hpcioman_attach(struct device *, struct device *, void *);
+int	hpcioman_match(device_t, cfdata_t, void *);
+void	hpcioman_attach(device_t, device_t, void *);
 int	hpcioman_print(void *, const char *);
-int	hpcioman_search(struct device *, struct cfdata *,
-			const int *, void *);
+int	hpcioman_search(device_t, cfdata_t, const int *, void *);
 
-struct hpcioman_softc {
-	struct device sc_dev;
-};
-
-CFATTACH_DECL(hpcioman, sizeof(struct hpcioman_softc),
+CFATTACH_DECL_NEW(hpcioman, 0,
     hpcioman_match, hpcioman_attach, NULL, NULL);
 
 int
-hpcioman_match(struct device *parent, struct cfdata *cf, void *aux)
+hpcioman_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
 	platid_mask_t mask;
@@ -81,7 +69,7 @@ hpcioman_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-hpcioman_attach(struct device *parent, struct device *self, void *aux)
+hpcioman_attach(device_t parent, device_t self, void *aux)
 {
 	printf("\n");
 
@@ -89,10 +77,8 @@ hpcioman_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-hpcioman_search(struct device *parent, struct cfdata *cf,
-		const int *ldesc, void *aux)
+hpcioman_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	//struct hpcioman_softc *sc = (struct hpcioman_softc *)parent;
 	struct hpcio_attach_args *haa = aux;
 	struct hpcioman_attach_args hma;
 

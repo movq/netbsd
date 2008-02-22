@@ -1,6 +1,6 @@
-#	$NetBSD: list,v 1.14 2007/05/10 23:22:31 dogcow Exp $
+#	$NetBSD: list,v 1.20 2011/06/19 06:44:05 tsutsui Exp $
 
-SRCDIRS	bin sbin usr.bin usr.sbin gnu/usr.bin
+SRCDIRS	bin sbin usr.bin usr.sbin
 
 PROG	bin/cat
 PROG	bin/chmod
@@ -19,7 +19,6 @@ PROG	bin/sh
 PROG	bin/tftp
 
 PROG	sbin/disklabel
-PROG	sbin/edlabel
 PROG	sbin/ifconfig
 PROG	sbin/init
 PROG	sbin/installboot
@@ -44,14 +43,14 @@ SPECIAL	route		srcdir distrib/utils/x_route
 SPECIAL	umount		srcdir distrib/utils/x_umount
 SPECIAL	installboot	srcdir sys/arch/mvme68k/stand/installboot
 
-LIBS	libhack.o -lutil -lz -ll -lrmt
+LIBS	libhack.o -lutil -lz -ll -lrmt -lprop
 
 # various files that we need in /etc for the install
 COPY	${CURDIR}/rd.fstab			etc/fstab
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${NETBSDSRCDIR}/etc/protocols		etc/protocols
-COPY	${NETBSDSRCDIR}/distrib/common/services		etc/services
+COPY	${DISTRIBDIR}/common/protocols	etc/protocols
+COPY	${DISTRIBDIR}/common/services		etc/services
 COPY	${DESTDIR}/usr/mdec/bootsd		bootsd
 COPY	${DESTDIR}/usr/mdec/bootst		bootst
 COPY	${DESTDIR}/usr/mdec/bootxx		bootxx

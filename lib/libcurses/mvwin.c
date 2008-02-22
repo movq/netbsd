@@ -1,4 +1,4 @@
-/*	$NetBSD: mvwin.c,v 1.15 2003/08/07 16:44:22 agc Exp $	*/
+/*	$NetBSD: mvwin.c,v 1.21 2017/01/11 20:43:03 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)mvwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: mvwin.c,v 1.15 2003/08/07 16:44:22 agc Exp $");
+__RCSID("$NetBSD: mvwin.c,v 1.21 2017/01/11 20:43:03 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -43,14 +43,17 @@ __RCSID("$NetBSD: mvwin.c,v 1.15 2003/08/07 16:44:22 agc Exp $");
 
 /*
  * mvderwin --
- *      Move a derived window.
+ *      Move a derived window.  This does not change the physical screen
+ * coordinates of the subwin, rather maps the characters in the subwin
+ * sized part of the parent window starting at dy, dx into the subwin.
  *
  */
 int
 mvderwin(WINDOW *win, int dy, int dx)
 {
 	WINDOW *parent;
-	int x, y;
+	int x, i;
+	__LINE *plp;
 
 	if (win == NULL)
 		return ERR;
@@ -60,9 +63,33 @@ mvderwin(WINDOW *win, int dy, int dx)
 	if (parent == NULL)
 		return ERR;
 
+	if (((win->maxx + dx) > parent->maxx) ||
+	    ((win->maxy + dy) > parent->maxy))
+		return ERR;
+
+	win->flags |= __ISDERWIN;
+	win->derx = dx;
+	win->dery = dy;
+
 	x = parent->begx + dx;
-	y = parent->begy + dy;
-	return mvwin(win, y, x);
+
+	/*
+	 * Mark the source area for the derwin as changed so it will be
+	 * copied to the destination window on refresh.
+	 */
+	for (i = 0; i < win->maxy; i++) {
+		plp = parent->alines[i + dy];
+		plp->flags = __ISDIRTY;
+		if (*plp->firstchp > x)
+			*plp->firstchp = x;
+		if (*plp->lastchp < x + win->maxx)
+			*plp->lastchp = x + win->maxx;
+#ifdef DEBUG
+		__CTRACE(__CTRACE_REFRESH, "mvderwin: firstchp = %d, lastchp = %d\n", *plp->firstchp, *plp->lastchp);
+#endif
+	}
+
+	return OK;
 }
 
 /*
@@ -75,8 +102,9 @@ mvwin(WINDOW *win, int by, int bx)
 	WINDOW *orig;
 	int     dy, dx;
 
-	if (by < 0 || by + win->maxy > LINES || bx < 0 || bx + win->maxx > COLS)
-		return (ERR);
+	if (by < 0 || by + win->maxy > win->screen->LINES ||
+	    bx < 0 || bx + win->maxx > win->screen->COLS)
+		return ERR;
 	dy = by - win->begy;
 	dx = bx - win->begx;
 	orig = win->orig;
@@ -90,14 +118,14 @@ mvwin(WINDOW *win, int by, int bx)
 		} while (win != orig);
 	} else {
 		if (by < orig->begy || win->maxy + dy > orig->maxy)
-			return (ERR);
+			return ERR;
 		if (bx < orig->begx || win->maxx + dx > orig->maxx)
-			return (ERR);
+			return ERR;
 		win->begy = by;
 		win->begx = bx;
 		__swflags(win);
 		__set_subwin(orig, win);
 	}
 	__touchwin(win);
-	return (OK);
+	return OK;
 }

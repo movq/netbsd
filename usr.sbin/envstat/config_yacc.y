@@ -1,4 +1,4 @@
-/* 	$NetBSD: config_yacc.y,v 1.3 2007/11/16 08:01:38 xtraeme Exp $	*/
+/* 	$NetBSD: config_yacc.y,v 1.5 2012/03/15 02:02:23 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: config_yacc.y,v 1.3 2007/11/16 08:01:38 xtraeme Exp $");
+__RCSID("$NetBSD: config_yacc.y,v 1.5 2012/03/15 02:02:23 joerg Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -38,6 +38,7 @@ __RCSID("$NetBSD: config_yacc.y,v 1.3 2007/11/16 08:01:38 xtraeme Exp $");
 #include <err.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #include <prop/proplib.h>
 
@@ -45,7 +46,7 @@ __RCSID("$NetBSD: config_yacc.y,v 1.3 2007/11/16 08:01:38 xtraeme Exp $");
 
 int yylex(void);
 int yyparse(void);
-int yyerror(const char *, ...);
+int yyerror(const char *, ...) __printflike(1, 2);
 void yyrestart(FILE *);
 
 int yyline;

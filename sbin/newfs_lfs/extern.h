@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.12 2008/02/16 17:58:43 matt Exp $	*/
+/*	$NetBSD: extern.h,v 1.14 2015/10/15 06:24:33 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -31,14 +31,14 @@
  *	@(#)extern.h	8.2 (Berkeley) 5/24/95
  */
 
-struct dlfs;
+struct lfs;
 
-uint32_t lfs_sb_cksum(struct dlfs *);
+uint32_t lfs_sb_cksum(struct lfs *);
 void	fatal(const char *fmt, ...)
      __attribute__((__format__(__printf__,1,2)));
 u_int	lfs_log2(u_int);
 int	make_lfs(int, uint, struct dkwedge_info *, int,
-    int, int, int, int, int, int, daddr_t, int, int, u_int32_t);
+    int, int, int, int, int, int, daddr_t, int, int, u_int32_t, int);
 
 extern char	*progname;
 extern char	*special;

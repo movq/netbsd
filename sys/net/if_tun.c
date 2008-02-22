@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tun.c,v 1.103 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: if_tun.c,v 1.144 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1988, Julian Onions <jpo@cs.nott.ac.uk>
@@ -14,35 +14,40 @@
  * operation though.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.103 2008/02/20 17:05:53 matt Exp $");
+/*
+ * tun - tunnel software network interface.
+ */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.144 2018/06/26 06:48:02 msaitoh Exp $");
+
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
-#include <sys/proc.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/buf.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/errno.h>
-#include <sys/syslog.h>
-#include <sys/select.h>
-#include <sys/poll.h>
-#include <sys/file.h>
-#include <sys/signalvar.h>
-#include <sys/conf.h>
-#include <sys/kauth.h>
-#include <sys/simplelock.h>
-#include <sys/cpu.h>
 
+#include <sys/buf.h>
+#include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/kauth.h>
+#include <sys/kmem.h>
+#include <sys/lwp.h>
+#include <sys/mbuf.h>
+#include <sys/module.h>
+#include <sys/mutex.h>
+#include <sys/poll.h>
+#include <sys/select.h>
+#include <sys/signalvar.h>
+#include <sys/socket.h>
+
+#include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_types.h>
-#include <net/netisr.h>
 #include <net/route.h>
-
 
 #ifdef INET
 #include <netinet/in.h>
@@ -52,28 +57,22 @@ __KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.103 2008/02/20 17:05:53 matt Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
-#include <sys/time.h>
-#include <net/bpf.h>
-#endif
-
 #include <net/if_tun.h>
+
+#include "ioconf.h"
 
 #define TUNDEBUG	if (tundebug) printf
 int	tundebug = 0;
 
 extern int ifqmaxlen;
-void	tunattach(int);
 
 static LIST_HEAD(, tun_softc) tun_softc_list;
 static LIST_HEAD(, tun_softc) tunz_softc_list;
-static struct simplelock tun_softc_lock;
+static kmutex_t tun_softc_lock;
 
 static int	tun_ioctl(struct ifnet *, u_long, void *);
 static int	tun_output(struct ifnet *, struct mbuf *,
-			const struct sockaddr *, struct rtentry *rt);
+			const struct sockaddr *, const struct rtentry *rt);
 static int	tun_clone_create(struct if_clone *, int);
 static int	tun_clone_destroy(struct ifnet *);
 
@@ -81,7 +80,9 @@ static struct if_clone tun_cloner =
     IF_CLONE_INITIALIZER("tun", tun_clone_create, tun_clone_destroy);
 
 static void tunattach0(struct tun_softc *);
-static void tuninit(struct tun_softc *);
+static void tun_enable(struct tun_softc *, const struct ifaddr *);
+static void tun_i_softintr(void *);
+static void tun_o_softintr(void *);
 #ifdef ALTQ
 static void tunstart(struct ifnet *);
 #endif
@@ -97,23 +98,69 @@ static dev_type_poll(tunpoll);
 static dev_type_kqfilter(tunkqfilter);
 
 const struct cdevsw tun_cdevsw = {
-	tunopen, tunclose, tunread, tunwrite, tunioctl,
-	nostop, notty, tunpoll, nommap, tunkqfilter, D_OTHER,
+	.d_open = tunopen,
+	.d_close = tunclose,
+	.d_read = tunread,
+	.d_write = tunwrite,
+	.d_ioctl = tunioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = tunpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = tunkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER | D_MPSAFE
 };
+
+#ifdef _MODULE
+devmajor_t tun_bmajor = -1, tun_cmajor = -1;
+#endif
 
 void
 tunattach(int unused)
 {
 
-	simple_lock_init(&tun_softc_lock);
+	/*
+	 * Nothing to do here, initialization is handled by the
+	 * module initialization code in tuninit() below).
+	 */
+}
+
+static void
+tuninit(void)
+{
+
+	mutex_init(&tun_softc_lock, MUTEX_DEFAULT, IPL_NET);
 	LIST_INIT(&tun_softc_list);
 	LIST_INIT(&tunz_softc_list);
 	if_clone_attach(&tun_cloner);
+#ifdef _MODULE
+	devsw_attach("tun", NULL, &tun_bmajor, &tun_cdevsw, &tun_cmajor);
+#endif
+}
+
+static int
+tundetach(void)
+{
+	int error = 0;
+
+	if (!LIST_EMPTY(&tun_softc_list) || !LIST_EMPTY(&tunz_softc_list))
+		error = EBUSY;
+
+#ifdef _MODULE
+	if (error == 0)
+		error = devsw_detach(NULL, &tun_cdevsw);
+#endif
+	if (error == 0) {
+		if_clone_detach(&tun_cloner);
+		mutex_destroy(&tun_softc_lock);
+	}
+
+	return error;
 }
 
 /*
  * Find driver instance from dev_t.
- * Call at splnet().
  * Returns with tp locked (if found).
  */
 static struct tun_softc *
@@ -122,20 +169,19 @@ tun_find_unit(dev_t dev)
 	struct tun_softc *tp;
 	int unit = minor(dev);
 
-	simple_lock(&tun_softc_lock);
+	mutex_enter(&tun_softc_lock);
 	LIST_FOREACH(tp, &tun_softc_list, tun_list)
 		if (unit == tp->tun_unit)
 			break;
 	if (tp)
-		simple_lock(&tp->tun_lock);
-	simple_unlock(&tun_softc_lock);
+		mutex_enter(&tp->tun_lock);
+	mutex_exit(&tun_softc_lock);
 
-	return (tp);
+	return tp;
 }
 
 /*
  * Find zombie driver instance by unit number.
- * Call at splnet().
  * Remove tp from list and return it unlocked (if found).
  */
 static struct tun_softc *
@@ -143,19 +189,17 @@ tun_find_zunit(int unit)
 {
 	struct tun_softc *tp;
 
-	simple_lock(&tun_softc_lock);
+	mutex_enter(&tun_softc_lock);
 	LIST_FOREACH(tp, &tunz_softc_list, tun_list)
 		if (unit == tp->tun_unit)
 			break;
 	if (tp)
 		LIST_REMOVE(tp, tun_list);
-	simple_unlock(&tun_softc_lock);
-#ifdef DIAGNOSTIC
-	if (tp != NULL && (tp->tun_flags & (TUN_INITED|TUN_OPEN)) != TUN_OPEN)
-		printf("tun%d: inconsistent flags: %x\n", unit, tp->tun_flags);
-#endif
+	mutex_exit(&tun_softc_lock);
+	KASSERTMSG(!tp || (tp->tun_flags & (TUN_INITED|TUN_OPEN)) == TUN_OPEN,
+	    "tun%d: inconsistent flags: %x", unit, tp->tun_flags);
 
-	return (tp);
+	return tp;
 }
 
 static int
@@ -164,27 +208,29 @@ tun_clone_create(struct if_clone *ifc, int unit)
 	struct tun_softc *tp;
 
 	if ((tp = tun_find_zunit(unit)) == NULL) {
-		/* Allocate a new instance */
-		tp = malloc(sizeof(struct tun_softc), M_DEVBUF, M_WAITOK);
-		(void)memset(tp, 0, sizeof(struct tun_softc));
+		tp = kmem_zalloc(sizeof(*tp), KM_SLEEP);
 
 		tp->tun_unit = unit;
-		simple_lock_init(&tp->tun_lock);
+		mutex_init(&tp->tun_lock, MUTEX_DEFAULT, IPL_NET);
+		cv_init(&tp->tun_cv, "tunread");
+		selinit(&tp->tun_rsel);
+		selinit(&tp->tun_wsel);
 	} else {
 		/* Revive tunnel instance; clear ifp part */
 		(void)memset(&tp->tun_if, 0, sizeof(struct ifnet));
 	}
 
-	(void)snprintf(tp->tun_if.if_xname, sizeof(tp->tun_if.if_xname),
-			"%s%d", ifc->ifc_name, unit);
+	if_initname(&tp->tun_if, ifc->ifc_name, unit);
 	tunattach0(tp);
 	tp->tun_flags |= TUN_INITED;
+	tp->tun_osih = softint_establish(SOFTINT_CLOCK, tun_o_softintr, tp);
+	tp->tun_isih = softint_establish(SOFTINT_CLOCK, tun_i_softintr, tp);
 
-	simple_lock(&tun_softc_lock);
+	mutex_enter(&tun_softc_lock);
 	LIST_INSERT_HEAD(&tun_softc_list, tp, tun_list);
-	simple_unlock(&tun_softc_lock);
+	mutex_exit(&tun_softc_lock);
 
-	return (0);
+	return 0;
 }
 
 static void
@@ -201,6 +247,7 @@ tunattach0(struct tun_softc *tp)
 	ifp->if_start = tunstart;
 #endif
 	ifp->if_flags = IFF_POINTOPOINT;
+	ifp->if_extflags = IFEF_NO_LINK_STATE_CHANGE;
 	ifp->if_type = IFT_TUNNEL;
 	ifp->if_snd.ifq_maxlen = ifqmaxlen;
 	ifp->if_collisions = 0;
@@ -214,53 +261,54 @@ tunattach0(struct tun_softc *tp)
 	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_NULL, sizeof(uint32_t));
-#endif
+	bpf_attach(ifp, DLT_NULL, sizeof(uint32_t));
 }
 
 static int
 tun_clone_destroy(struct ifnet *ifp)
 {
 	struct tun_softc *tp = (void *)ifp;
-	int s, zombie = 0;
-
-	s = splnet();
-	simple_lock(&tun_softc_lock);
-	simple_lock(&tp->tun_lock);
-	LIST_REMOVE(tp, tun_list);
-	if (tp->tun_flags & TUN_OPEN) {
-		/* Hang on to storage until last close */
-		zombie = 1;
-		tp->tun_flags &= ~TUN_INITED;
-		LIST_INSERT_HEAD(&tunz_softc_list, tp, tun_list);
-	}
-	simple_unlock(&tun_softc_lock);
+	bool zombie = false;
 
 	IF_PURGE(&ifp->if_snd);
 	ifp->if_flags &= ~IFF_RUNNING;
 
+	mutex_enter(&tun_softc_lock);
+	mutex_enter(&tp->tun_lock);
+	LIST_REMOVE(tp, tun_list);
+	if (tp->tun_flags & TUN_OPEN) {
+		/* Hang on to storage until last close. */
+		tp->tun_flags &= ~TUN_INITED;
+		LIST_INSERT_HEAD(&tunz_softc_list, tp, tun_list);
+		zombie = true;
+	}
+	mutex_exit(&tun_softc_lock);
+
 	if (tp->tun_flags & TUN_RWAIT) {
 		tp->tun_flags &= ~TUN_RWAIT;
-		wakeup((void *)tp);
+		cv_broadcast(&tp->tun_cv);
 	}
+	selnotify(&tp->tun_rsel, 0, 0);
+
+	mutex_exit(&tp->tun_lock);
+
 	if (tp->tun_flags & TUN_ASYNC && tp->tun_pgid)
 		fownsignal(tp->tun_pgid, SIGIO, POLL_HUP, 0, NULL);
 
-	selwakeup(&tp->tun_rsel);
-
-	simple_unlock(&tp->tun_lock);
-	splx(s);
-
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
-	if (!zombie)
-		free(tp, M_DEVBUF);
+	if (!zombie) {
+		seldestroy(&tp->tun_rsel);
+		seldestroy(&tp->tun_wsel);
+		softint_disestablish(tp->tun_osih);
+		softint_disestablish(tp->tun_isih);
+		mutex_destroy(&tp->tun_lock);
+		cv_destroy(&tp->tun_cv);
+		kmem_free(tp, sizeof(*tp));
+	}
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -272,37 +320,35 @@ tunopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct ifnet	*ifp;
 	struct tun_softc *tp;
-	int	s, error;
+	int	error;
 
-	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0)
-		return (error);
+	error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE_TUN,
+	    KAUTH_REQ_NETWORK_INTERFACE_TUN_ADD, NULL, NULL, NULL);
+	if (error)
+		return error;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
 
 	if (tp == NULL) {
 		(void)tun_clone_create(&tun_cloner, minor(dev));
 		tp = tun_find_unit(dev);
 		if (tp == NULL) {
-			error = ENXIO;
-			goto out_nolock;
+			return ENXIO;
 		}
 	}
 
 	if (tp->tun_flags & TUN_OPEN) {
-		error = EBUSY;
-		goto out;
+		mutex_exit(&tp->tun_lock);
+		return EBUSY;
 	}
 
 	ifp = &tp->tun_if;
 	tp->tun_flags |= TUN_OPEN;
 	TUNDEBUG("%s: open\n", ifp->if_xname);
-out:
-	simple_unlock(&tp->tun_lock);
-out_nolock:
-	splx(s);
-	return (error);
+
+	mutex_exit(&tp->tun_lock);
+
+	return error;
 }
 
 /*
@@ -313,15 +359,18 @@ int
 tunclose(dev_t dev, int flag, int mode,
     struct lwp *l)
 {
-	int	s;
 	struct tun_softc *tp;
 	struct ifnet	*ifp;
 
-	s = splnet();
 	if ((tp = tun_find_zunit(minor(dev))) != NULL) {
 		/* interface was "destroyed" before the close */
-		free(tp, M_DEVBUF);
-		goto out_nolock;
+		seldestroy(&tp->tun_rsel);
+		seldestroy(&tp->tun_wsel);
+		softint_disestablish(tp->tun_osih);
+		softint_disestablish(tp->tun_isih);
+		mutex_destroy(&tp->tun_lock);
+		kmem_free(tp, sizeof(*tp));
+		return 0;
 	}
 
 	if ((tp = tun_find_unit(dev)) == NULL)
@@ -330,6 +379,12 @@ tunclose(dev_t dev, int flag, int mode,
 	ifp = &tp->tun_if;
 
 	tp->tun_flags &= ~TUN_OPEN;
+
+	tp->tun_pgid = 0;
+	selnotify(&tp->tun_rsel, 0, 0);
+
+	TUNDEBUG ("%s: closed\n", ifp->if_xname);
+	mutex_exit(&tp->tun_lock);
 
 	/*
 	 * junk all pending output
@@ -341,7 +396,7 @@ tunclose(dev_t dev, int flag, int mode,
 		if (ifp->if_flags & IFF_RUNNING) {
 			/* find internet addresses and delete routes */
 			struct ifaddr *ifa;
-			IFADDR_FOREACH(ifa, ifp) {
+			IFADDR_READER_FOREACH(ifa, ifp) {
 #if defined(INET) || defined(INET6)
 				if (ifa->ifa_addr->sa_family == AF_INET ||
 				    ifa->ifa_addr->sa_family == AF_INET6) {
@@ -354,66 +409,59 @@ tunclose(dev_t dev, int flag, int mode,
 			}
 		}
 	}
-	tp->tun_pgid = 0;
-	selnotify(&tp->tun_rsel, 0);
-
-	TUNDEBUG ("%s: closed\n", ifp->if_xname);
-	simple_unlock(&tp->tun_lock);
 out_nolock:
-	splx(s);
-	return (0);
+	return 0;
 }
 
-/*
- * Call at splnet() with tp locked.
- */
 static void
-tuninit(struct tun_softc *tp)
+tun_enable(struct tun_softc *tp, const struct ifaddr *ifa)
 {
 	struct ifnet	*ifp = &tp->tun_if;
-	struct ifaddr	*ifa;
 
-	TUNDEBUG("%s: tuninit\n", ifp->if_xname);
+	TUNDEBUG("%s: %s\n", __func__, ifp->if_xname);
 
-	ifp->if_flags |= IFF_UP | IFF_RUNNING;
-
+	mutex_enter(&tp->tun_lock);
 	tp->tun_flags &= ~(TUN_IASET|TUN_DSTADDR);
-	IFADDR_FOREACH(ifa, ifp) {
+
+	switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			struct sockaddr_in *sin;
+	case AF_INET: {
+		struct sockaddr_in *sin;
 
-			sin = satosin(ifa->ifa_addr);
+		sin = satosin(ifa->ifa_addr);
+		if (sin && sin->sin_addr.s_addr)
+			tp->tun_flags |= TUN_IASET;
+
+		if (ifp->if_flags & IFF_POINTOPOINT) {
+			sin = satosin(ifa->ifa_dstaddr);
 			if (sin && sin->sin_addr.s_addr)
-				tp->tun_flags |= TUN_IASET;
-
-			if (ifp->if_flags & IFF_POINTOPOINT) {
-				sin = satosin(ifa->ifa_dstaddr);
-				if (sin && sin->sin_addr.s_addr)
-					tp->tun_flags |= TUN_DSTADDR;
-			}
+				tp->tun_flags |= TUN_DSTADDR;
 		}
+		break;
+	    }
 #endif
 #ifdef INET6
-		if (ifa->ifa_addr->sa_family == AF_INET6) {
-			struct sockaddr_in6 *sin;
+	case AF_INET6: {
+		struct sockaddr_in6 *sin;
 
-			sin = (struct sockaddr_in6 *)ifa->ifa_addr;
-			if (!IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
-				tp->tun_flags |= TUN_IASET;
+		sin = satosin6(ifa->ifa_addr);
+		if (!IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
+			tp->tun_flags |= TUN_IASET;
 
-			if (ifp->if_flags & IFF_POINTOPOINT) {
-				sin = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
-				if (sin &&
-				    !IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
-					tp->tun_flags |= TUN_DSTADDR;
-			} else
-				tp->tun_flags &= ~TUN_DSTADDR;
-		}
+		if (ifp->if_flags & IFF_POINTOPOINT) {
+			sin = satosin6(ifa->ifa_dstaddr);
+			if (sin && !IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
+				tp->tun_flags |= TUN_DSTADDR;
+		} else
+			tp->tun_flags &= ~TUN_DSTADDR;
+		break;
+	    }
 #endif /* INET6 */
+	default:
+		break;
 	}
-
-	return;
+	ifp->if_flags |= IFF_UP | IFF_RUNNING;
+	mutex_exit(&tp->tun_lock);
 }
 
 /*
@@ -422,21 +470,16 @@ tuninit(struct tun_softc *tp)
 static int
 tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
-	int		error = 0, s;
 	struct tun_softc *tp = (struct tun_softc *)(ifp->if_softc);
-	struct ifreq *ifr = data;
-
-	s = splnet();
-	simple_lock(&tp->tun_lock);
+	struct ifreq *ifr = (struct ifreq *)data;
+	struct ifaddr *ifa = (struct ifaddr *)data;
+	int error = 0;
 
 	switch (cmd) {
-	case SIOCSIFADDR:
-		tuninit(tp);
+	case SIOCINITIFADDR:
+		tun_enable(tp, ifa);
+		ifa->ifa_rtrequest = p2p_rtrequest;
 		TUNDEBUG("%s: address set\n", ifp->if_xname);
-		break;
-	case SIOCSIFDSTADDR:
-		tuninit(tp);
-		TUNDEBUG("%s: destination address set\n", ifp->if_xname);
 		break;
 	case SIOCSIFBRDADDR:
 		TUNDEBUG("%s: broadcast address set\n", ifp->if_xname);
@@ -470,15 +513,11 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 		}
 		break;
-	case SIOCSIFFLAGS:
-		break;
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 
-	simple_unlock(&tp->tun_lock);
-	splx(s);
-	return (error);
+	return error;
 }
 
 /*
@@ -486,39 +525,40 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
  */
 static int
 tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
-    struct rtentry *rt)
+    const struct rtentry *rt)
 {
 	struct tun_softc *tp = ifp->if_softc;
-	int		s;
 	int		error;
 #if defined(INET) || defined(INET6)
 	int		mlen;
 	uint32_t	*af;
 #endif
-	ALTQ_DECL(struct altq_pktattr pktattr;)
 
-	s = splnet();
-	simple_lock(&tp->tun_lock);
+	mutex_enter(&tp->tun_lock);
 	TUNDEBUG ("%s: tun_output\n", ifp->if_xname);
 
 	if ((tp->tun_flags & TUN_READY) != TUN_READY) {
 		TUNDEBUG ("%s: not ready 0%o\n", ifp->if_xname,
 			  tp->tun_flags);
-		m_freem (m0);
 		error = EHOSTDOWN;
+		mutex_exit(&tp->tun_lock);
 		goto out;
 	}
+	// XXXrmind
+	mutex_exit(&tp->tun_lock);
 
 	/*
 	 * if the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
 	 */
-	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family, &pktattr);
+	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m0);
-#endif
+	bpf_mtap_af(ifp, dst->sa_family, m0, BPF_D_OUT);
+
+	if ((error = pfil_run_hooks(ifp->if_pfil, &m0, ifp, PFIL_OUT)) != 0)
+		goto out;
+	if (m0 == NULL)
+		goto out;
 
 	switch(dst->sa_family) {
 #ifdef INET6
@@ -536,7 +576,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 				error = ENOBUFS;
 				goto out;
 			}
-			bcopy(dst, mtod(m0, char *), dst->sa_len);
+			memcpy(mtod(m0, char *), dst, dst->sa_len);
 		}
 
 		if (tp->tun_flags & TUN_IFHEAD) {
@@ -550,21 +590,21 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			af = mtod(m0,uint32_t *);
 			*af = htonl(dst->sa_family);
 		} else {
-#ifdef INET     
+#ifdef INET
 			if (dst->sa_family != AF_INET)
 #endif
 			{
-				m_freem(m0);
 				error = EAFNOSUPPORT;
 				goto out;
 			}
 		}
 		/* FALLTHROUGH */
 	case AF_UNSPEC:
-		IFQ_ENQUEUE(&ifp->if_snd, m0, &pktattr, error);
+		IFQ_ENQUEUE(&ifp->if_snd, m0, error);
 		if (error) {
 			ifp->if_collisions++;
 			error = EAFNOSUPPORT;
+			m0 = NULL;
 			goto out;
 		}
 		mlen = m0->m_pkthdr.len;
@@ -573,24 +613,46 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		break;
 #endif
 	default:
-		m_freem(m0);
 		error = EAFNOSUPPORT;
 		goto out;
 	}
 
+	mutex_enter(&tp->tun_lock);
 	if (tp->tun_flags & TUN_RWAIT) {
 		tp->tun_flags &= ~TUN_RWAIT;
-		wakeup((void *)tp);
+		cv_broadcast(&tp->tun_cv);
 	}
+	if (tp->tun_flags & TUN_ASYNC && tp->tun_pgid)
+		softint_schedule(tp->tun_isih);
+
+	selnotify(&tp->tun_rsel, 0, 0);
+
+	mutex_exit(&tp->tun_lock);
+out:
+	if (error && m0)
+		m_freem(m0);
+
+	return error;
+}
+
+static void
+tun_i_softintr(void *cookie)
+{
+	struct tun_softc *tp = cookie;
+
 	if (tp->tun_flags & TUN_ASYNC && tp->tun_pgid)
 		fownsignal(tp->tun_pgid, SIGIO, POLL_IN, POLLIN|POLLRDNORM,
 		    NULL);
+}
 
-	selnotify(&tp->tun_rsel, 0);
-out:
-	simple_unlock(&tp->tun_lock);
-	splx(s);
-	return (0);
+static void
+tun_o_softintr(void *cookie)
+{
+	struct tun_softc *tp = cookie;
+
+	if (tp->tun_flags & TUN_ASYNC && tp->tun_pgid)
+		fownsignal(tp->tun_pgid, SIGIO, POLL_OUT, POLLOUT|POLLWRNORM,
+		    NULL);
 }
 
 /*
@@ -600,15 +662,13 @@ int
 tunioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct tun_softc *tp;
-	int s, error = 0;
+	int error = 0;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
 
 	/* interface was "destroyed" already */
 	if (tp == NULL) {
-		error = ENXIO;
-		goto out_nolock;
+		return ENXIO;
 	}
 
 	switch (cmd) {
@@ -681,12 +741,12 @@ tunioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 	case TIOCSPGRP:
 	case FIOSETOWN:
-		error = fsetown(l->l_proc, &tp->tun_pgid, cmd, data);
+		error = fsetown(&tp->tun_pgid, cmd, data);
 		break;
 
 	case TIOCGPGRP:
 	case FIOGETOWN:
-		error = fgetown(l->l_proc, tp->tun_pgid, cmd, data);
+		error = fgetown(tp->tun_pgid, cmd, data);
 		break;
 
 	default:
@@ -694,10 +754,9 @@ tunioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	}
 
 out:
-	simple_unlock(&tp->tun_lock);
-out_nolock:
-	splx(s);
-	return (error);
+	mutex_exit(&tp->tun_lock);
+
+	return error;
 }
 
 /*
@@ -710,18 +769,15 @@ tunread(dev_t dev, struct uio *uio, int ioflag)
 	struct tun_softc *tp;
 	struct ifnet	*ifp;
 	struct mbuf	*m, *m0;
-	int		error = 0, len, s, index;
+	int		error = 0, len;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
 
 	/* interface was "destroyed" already */
 	if (tp == NULL) {
-		error = ENXIO;
-		goto out_nolock;
+		return ENXIO;
 	}
 
-	index = tp->tun_if.if_index;
 	ifp = &tp->tun_if;
 
 	TUNDEBUG ("%s: read\n", ifp->if_xname);
@@ -741,40 +797,21 @@ tunread(dev_t dev, struct uio *uio, int ioflag)
 				goto out;
 			}
 			tp->tun_flags |= TUN_RWAIT;
-			if (ltsleep((void *)tp, PZERO|PCATCH|PNORELOCK,
-					"tunread", 0, &tp->tun_lock) != 0) {
+			if (cv_wait_sig(&tp->tun_cv, &tp->tun_lock)) {
 				error = EINTR;
-				goto out_nolock;
-			} else {
-				/*
-				 * Maybe the interface was destroyed while
-				 * we were sleeping, so let's ensure that
-				 * we're looking at the same (valid) tun
-				 * interface before looping.
-				 */
-				tp = tun_find_unit(dev);
-				if (tp == NULL) {
-					error = ENXIO;
-					goto out_nolock;
-				}
-				if (tp->tun_if.if_index != index) {
-					error = ENXIO;
-					goto out;
-				}
+				goto out;
 			}
 		}
 	} while (m0 == 0);
 
-	simple_unlock(&tp->tun_lock);
-	splx(s);
+	mutex_exit(&tp->tun_lock);
 
 	/* Copy the mbuf chain */
 	while (m0 && uio->uio_resid > 0 && error == 0) {
 		len = min(uio->uio_resid, m0->m_len);
 		if (len != 0)
 			error = uiomove(mtod(m0, void *), len, uio);
-		MFREE(m0, m);
-		m0 = m;
+		m0 = m = m_free(m0);
 	}
 
 	if (m0) {
@@ -784,13 +821,12 @@ tunread(dev_t dev, struct uio *uio, int ioflag)
 	if (error)
 		ifp->if_ierrors++;
 
-	return (error);
+	return error;
 
 out:
-	simple_unlock(&tp->tun_lock);
-out_nolock:
-	splx(s);
-	return (error);
+	mutex_exit(&tp->tun_lock);
+
+	return error;
 }
 
 /*
@@ -802,23 +838,19 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 	struct tun_softc *tp;
 	struct ifnet	*ifp;
 	struct mbuf	*top, **mp, *m;
-	struct ifqueue	*ifq;
+	pktqueue_t	*pktq;
 	struct sockaddr	dst;
-	int		isr, error = 0, s, tlen, mlen;
+	int		error = 0, tlen, mlen;
 	uint32_t	family;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
-
-	/* interface was "destroyed" already */
 	if (tp == NULL) {
-		error = ENXIO;
-		goto out_nolock;
+		/* Interface was "destroyed" already. */
+		return ENXIO;
 	}
 
 	/* Unlock until we've got the data */
-	simple_unlock(&tp->tun_lock);
-	splx(s);
+	mutex_exit(&tp->tun_lock);
 
 	ifp = &tp->tun_if;
 
@@ -832,12 +864,14 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 		error = uiomove((void *)&dst, sizeof(dst), uio);
 		if (dst.sa_len > sizeof(dst)) {
 			/* Duh.. */
-			char discard;
 			int n = dst.sa_len - sizeof(dst);
-			while (n--)
-				if ((error = uiomove(&discard, 1, uio)) != 0) {
+			while (n--) {
+				char discard;
+				error = uiomove(&discard, 1, uio);
+				if (error) {
 					goto out0;
 				}
+			}
 		}
 	} else if (tp->tun_flags & TUN_IFHEAD) {
 		if (uio->uio_resid < sizeof(family)){
@@ -862,14 +896,12 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 	switch (dst.sa_family) {
 #ifdef INET
 	case AF_INET:
-		ifq = &ipintrq;
-		isr = NETISR_IP;
+		pktq = ip_pktq;
 		break;
 #endif
 #ifdef INET6
 	case AF_INET6:
-		ifq = &ip6intrq;
-		isr = NETISR_IPV6;
+		pktq = ip6_pktq;
 		break;
 #endif
 	default:
@@ -882,8 +914,7 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 	/* get a header mbuf */
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL) {
-		error = ENOBUFS;
-		goto out0;
+		return ENOBUFS;
 	}
 	mlen = MHLEN;
 
@@ -905,44 +936,40 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 	}
 	if (error) {
 		if (top != NULL)
-			m_freem (top);
+			m_freem(top);
 		ifp->if_ierrors++;
 		goto out0;
 	}
 
 	top->m_pkthdr.len = tlen;
-	top->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(top, ifp);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, dst.sa_family, top);
-#endif
+	bpf_mtap_af(ifp, dst.sa_family, top, BPF_D_IN);
 
-	s = splnet();
-	simple_lock(&tp->tun_lock);
+	if ((error = pfil_run_hooks(ifp->if_pfil, &top, ifp, PFIL_IN)) != 0)
+		goto out0;
+	if (top == NULL)
+		goto out0;
+
+	mutex_enter(&tp->tun_lock);
 	if ((tp->tun_flags & TUN_INITED) == 0) {
 		/* Interface was destroyed */
 		error = ENXIO;
 		goto out;
 	}
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
+	if (__predict_false(!pktq_enqueue(pktq, top, 0))) {
 		ifp->if_collisions++;
-		m_freem(top);
+		mutex_exit(&tp->tun_lock);
 		error = ENOBUFS;
-		goto out;
+		m_freem(top);
+		goto out0;
 	}
-
-	IF_ENQUEUE(ifq, top);
 	ifp->if_ipackets++;
 	ifp->if_ibytes += tlen;
-	schednetisr(isr);
 out:
-	simple_unlock(&tp->tun_lock);
-out_nolock:
-	splx(s);
+	mutex_exit(&tp->tun_lock);
 out0:
-	return (error);
+	return error;
 }
 
 #ifdef ALTQ
@@ -951,8 +978,6 @@ out0:
  * when the interface queue is rate-limited by ALTQ or TBR,
  * if_start is needed to drain packets from the queue in order
  * to notify readers when outgoing packets become ready.
- *
- * Should be called at splnet.
  */
 static void
 tunstart(struct ifnet *ifp)
@@ -962,19 +987,18 @@ tunstart(struct ifnet *ifp)
 	if (!ALTQ_IS_ENABLED(&ifp->if_snd) && !TBR_IS_ENABLED(&ifp->if_snd))
 		return;
 
-	simple_lock(&tp->tun_lock);
+	mutex_enter(&tp->tun_lock);
 	if (!IF_IS_EMPTY(&ifp->if_snd)) {
 		if (tp->tun_flags & TUN_RWAIT) {
 			tp->tun_flags &= ~TUN_RWAIT;
-			wakeup((void *)tp);
+			cv_broadcast(&tp->tun_cv);
 		}
 		if (tp->tun_flags & TUN_ASYNC && tp->tun_pgid)
-			fownsignal(tp->tun_pgid, SIGIO, POLL_OUT,
-				POLLOUT|POLLWRNORM, NULL);
+			softint_schedule(tp->tun_osih);
 
-		selwakeup(&tp->tun_rsel);
+		selnotify(&tp->tun_rsel, 0, 0);
 	}
-	simple_unlock(&tp->tun_lock);
+	mutex_exit(&tp->tun_lock);
 }
 #endif /* ALTQ */
 /*
@@ -987,15 +1011,13 @@ tunpoll(dev_t dev, int events, struct lwp *l)
 {
 	struct tun_softc *tp;
 	struct ifnet	*ifp;
-	int		s, revents = 0;
+	int revents = 0;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
-
-	/* interface was "destroyed" already */
-	if (tp == NULL)
-		goto out_nolock;
-
+	if (tp == NULL) {
+		/* Interface was "destroyed" already. */
+		return 0;
+	}
 	ifp = &tp->tun_if;
 
 	TUNDEBUG("%s: tunpoll\n", ifp->if_xname);
@@ -1014,21 +1036,19 @@ tunpoll(dev_t dev, int events, struct lwp *l)
 	if (events & (POLLOUT | POLLWRNORM))
 		revents |= events & (POLLOUT | POLLWRNORM);
 
-	simple_unlock(&tp->tun_lock);
-out_nolock:
-	splx(s);
-	return (revents);
+	mutex_exit(&tp->tun_lock);
+
+	return revents;
 }
 
 static void
 filt_tunrdetach(struct knote *kn)
 {
 	struct tun_softc *tp = kn->kn_hook;
-	int s;
 
-	s = splnet();
+	mutex_enter(&tp->tun_lock);
 	SLIST_REMOVE(&tp->tun_rsel.sel_klist, kn, knote, kn_selnext);
-	splx(s);
+	mutex_exit(&tp->tun_lock);
 }
 
 static int
@@ -1037,36 +1057,43 @@ filt_tunread(struct knote *kn, long hint)
 	struct tun_softc *tp = kn->kn_hook;
 	struct ifnet *ifp = &tp->tun_if;
 	struct mbuf *m;
-	int s;
 
-	s = splnet();
+	mutex_enter(&tp->tun_lock);
 	IF_POLL(&ifp->if_snd, m);
 	if (m == NULL) {
-		splx(s);
-		return (0);
+		mutex_exit(&tp->tun_lock);
+		return 0;
 	}
 
 	for (kn->kn_data = 0; m != NULL; m = m->m_next)
 		kn->kn_data += m->m_len;
 
-	splx(s);
-	return (1);
+	mutex_exit(&tp->tun_lock);
+
+	return 1;
 }
 
-static const struct filterops tunread_filtops =
-	{ 1, NULL, filt_tunrdetach, filt_tunread };
+static const struct filterops tunread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_tunrdetach,
+	.f_event = filt_tunread,
+};
 
-static const struct filterops tun_seltrue_filtops =
-	{ 1, NULL, filt_tunrdetach, filt_seltrue };
+static const struct filterops tun_seltrue_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_tunrdetach,
+	.f_event = filt_seltrue,
+};
 
 int
 tunkqfilter(dev_t dev, struct knote *kn)
 {
 	struct tun_softc *tp;
 	struct klist *klist;
-	int rv = 0, s;
+	int rv = 0;
 
-	s = splnet();
 	tp = tun_find_unit(dev);
 	if (tp == NULL)
 		goto out_nolock;
@@ -1092,8 +1119,14 @@ tunkqfilter(dev_t dev, struct knote *kn)
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
 
 out:
-	simple_unlock(&tp->tun_lock);
+	mutex_exit(&tp->tun_lock);
 out_nolock:
-	splx(s);
-	return (rv);
+	return rv;
 }
+
+/*
+ * Module infrastructure
+ */
+#include "if_module.h"
+
+IF_MODULE(MODULE_CLASS_DRIVER, tun, "")

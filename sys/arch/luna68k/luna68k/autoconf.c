@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.10 2008/02/12 17:30:57 joerg Exp $ */
+/* $NetBSD: autoconf.c,v 1.15 2014/01/11 08:07:16 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,19 +15,12 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2008/02/12 17:30:57 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2014/01/11 08:07:16 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,18 +40,32 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2008/02/12 17:30:57 joerg Exp $");
 #include <sys/reboot.h>
 #include <sys/device.h>
 
+#include <machine/autoconf.h>
+#include <machine/bootinfo.h>
 #include <machine/disklabel.h>
 #include <machine/cpu.h>
 
+#include <dev/scsipi/scsi_all.h>
+#include <dev/scsipi/scsipi_all.h>
+#include <dev/scsipi/scsiconf.h>
+
 #include <luna68k/luna68k/isr.h>
+
+static uint booted_adpt, booted_ctlr, booted_unit, booted_part;
 
 /*
  * Determine mass storage and memory configuration for a machine.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
+
 	booted_device = NULL;	/* set by device drivers (if found) */
+
+	booted_adpt = B_ADAPTOR(bootdev);
+	booted_ctlr = B_CONTROLLER(bootdev);
+	booted_unit = B_UNIT(bootdev);
+	booted_part = B_PARTITION(bootdev);
 
 	(void)splhigh();
 	isrinit();
@@ -69,30 +76,64 @@ cpu_configure()
 }
 
 void
-cpu_rootconf()
+device_register(device_t dev, void *aux)
 {
-#if 1 /* XXX to be reworked with helps of 2nd stage loaders XXX */
-	int i;
-	const char *devname;
-	char *cp;
-	extern char bootarg[64];
+	static device_t booted_controller;
+	static bool bootdev_found;
 
-	cp = bootarg;
-	devname = "sd0";
-	for (i = 0; i < sizeof(bootarg); i++) {
-		if (*cp == '\0')
-			break;
-		if (*cp == 'E' && memcmp("ENADDR=", cp, 7) == 0) {
-			devname = "le0";
-			break;
+	/*
+	 * Check booted device.
+	 */
+	if (bootdev_found)
+		return;
+
+	if (booted_adpt == LUNA68K_BOOTADPT_LANCE &&
+	    device_is_a(dev, "le")) {
+		struct mainbus_attach_args *ma = aux;
+
+		if (booted_ctlr == 0 &&
+		    ma->ma_addr == LUNA68K_BOOTADPT_LANCE0_PA) {
+			booted_device = dev;
+			bootdev_found = true;
 		}
-		cp++;
+		return;
 	}
-	booted_device = device_find_by_xname(devname);
 
-#endif
+	if (booted_adpt == LUNA68K_BOOTADPT_SPC &&
+	    device_is_a(dev, "spc")) {
+		struct mainbus_attach_args *ma = aux;
+
+		if ((booted_ctlr == 0 &&
+		     (u_int)ma->ma_addr == LUNA68K_BOOTADPT_SPC0_PA) ||
+		    (booted_ctlr == 1 &&
+		     (u_int)ma->ma_addr == LUNA68K_BOOTADPT_SPC1_PA)) {
+			booted_controller = dev;
+		}
+		return;
+	}
+
+	if (booted_controller != NULL &&
+	    (device_is_a(dev, "sd") || device_is_a(dev, "cd"))) {
+		struct scsipibus_attach_args *sa = aux;
+		device_t parent = device_parent(dev);
+
+		if (device_parent(parent) != booted_controller)
+			return;
+		if (booted_unit != sa->sa_periph->periph_target)
+			return;
+		booted_device = dev;
+		booted_partition = booted_part;
+		bootdev_found = true;
+		return;
+	}
+}
+
+void
+cpu_rootconf(void)
+{
+
 	printf("boot device: %s\n",
-		(booted_device) ? booted_device->dv_xname : "<unknown>");
+		(booted_device) ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, 0); /* XXX partition 'a' XXX */
+	rootconf();
 }

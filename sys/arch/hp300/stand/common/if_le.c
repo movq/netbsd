@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.10 2007/03/04 05:59:50 christos Exp $	*/
+/*	$NetBSD: if_le.c,v 1.13 2014/06/21 02:02:40 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass
@@ -75,7 +75,7 @@ struct le_sel {
 int le_probe(struct netif *, void *);
 int le_match(struct netif *, void *);
 void le_init(struct iodesc *, void *);
-int le_get(struct iodesc *, void *, size_t, time_t);
+int le_get(struct iodesc *, void *, size_t, saseconds_t);
 int le_put(struct iodesc *, void *, size_t);
 void le_end(struct netif *);
 
@@ -531,7 +531,10 @@ le_put(struct iodesc *desc, void *pkt, size_t len)
 	int unit = /*nif->nif_unit*/0;
 	struct le_softc *sc = &le_softc[unit];
 	volatile struct mds *cdm;
-	int timo, i, stat;
+	int timo, stat;
+#if 0
+	int i;
+#endif
 
  le_put_loop:
 	timo = 100000;
@@ -545,8 +548,8 @@ le_put(struct iodesc *desc, void *pkt, size_t len)
 	if (stat & (LE_BABL | LE_CERR | LE_MISS | LE_MERR))
 		le_error(unit, "le_put(way before xmit)", stat);
 	cdm = &sc->sc_td[sc->sc_next_td];
-	i = 0;
 #if 0
+	i = 0;
 	while (cdm->flags & LE_OWN) {
 		if ((i % 100) == 0)
 			printf("le%d: output buffer busy - flags=%x\n",
@@ -625,16 +628,15 @@ le_put(struct iodesc *desc, void *pkt, size_t len)
 
 
 int
-le_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
+le_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
 {
-	time_t t;
+	satime_t t;
 	int cc;
 
 	t = getsecs();
-	cc = 0;
-	while (((getsecs() - t) < timeout) && !cc) {
+	do {
 		cc = le_poll(desc, pkt, len);
-	}
+	} while (cc == 0 && (getsecs() - t) < timeout);
 	return cc;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mulaw.h,v 1.19 2005/12/11 12:20:53 christos Exp $	*/
+/*	$NetBSD: mulaw.h,v 1.25 2017/12/27 00:12:06 nat Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,17 +33,37 @@
 #define _SYS_DEV_MULAW_H_
 #include <dev/audio_if.h>
 
+/* Convert 8-bit mu-law to/from 32 bit unsigned/signed linear. */
+extern stream_filter_factory_t mulaw_to_linear32;
+#define linear32_32_to_mulaw linearN_to_mulaw
+extern stream_filter_factory_t linear32_32_to_mulaw;
+/* Convert 8-bit mu-law to/from 24 bit unsigned/signed linear. */
+extern stream_filter_factory_t mulaw_to_linear24;
+#define linear24_24_to_mulaw linearN_to_mulaw
 /* Convert 8-bit mu-law to/from 16 bit unsigned/signed linear. */
 extern stream_filter_factory_t mulaw_to_linear16;
-extern stream_filter_factory_t linear16_to_mulaw;
+#define linear16_16_to_mulaw linearN_to_mulaw
+#define linear16_to_mulaw linearN_to_mulaw
 /* Convert 8-bit mu-law to/from 8 bit unsigned/signed linear. */
 extern stream_filter_factory_t mulaw_to_linear8;
-extern stream_filter_factory_t linear8_to_mulaw;
-/* Convert 8-bit A-law to/from 16 bit unsigned/signed linear. */
+#define linear8_8_to_mulaw linearN_to_mulaw
+#define linear8_to_mulaw linearN_to_mulaw
+extern stream_filter_factory_t linearN_to_mulaw;
+
+/* Convert 8-bit alaw to/from 32 bit unsigned/signed linear. */
+extern stream_filter_factory_t alaw_to_linear32;
+#define linear32_32_to_alaw linearN_to_alaw
+/* Convert 8-bit alaw to/from 24 bit unsigned/signed linear. */
+extern stream_filter_factory_t alaw_to_linear24;
+#define linear24_24_to_alaw linearN_to_alaw
+/* Convert 8-bit alaw to/from 16 bit unsigned/signed linear. */
 extern stream_filter_factory_t alaw_to_linear16;
-extern stream_filter_factory_t linear16_to_alaw;
+#define linear16_to_alaw linearN_to_alaw
+#define linear16_16_to_alaw linearN_to_alaw
 /* Convert 8-bit A-law to/from 8 bit unsigned/signed linear. */
 extern stream_filter_factory_t alaw_to_linear8;
-extern stream_filter_factory_t linear8_to_alaw;
+#define linear8_8_to_alaw linearN_to_alaw
+#define linear8_to_alaw linearN_to_alaw
+extern stream_filter_factory_t linearN_to_alaw;
 
 #endif /* _SYS_DEV_MULAW_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: movem.c,v 1.6 2008/01/28 05:38:54 dholland Exp $	*/
+/*	$NetBSD: movem.c,v 1.9 2012/06/19 05:30:43 dholland Exp $	*/
 
 /*
  * movem.c (move monster)		Larn is copyrighted 1986 by Noah Morgan.
@@ -12,11 +12,15 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: movem.c,v 1.6 2008/01/28 05:38:54 dholland Exp $");
+__RCSID("$NetBSD: movem.c,v 1.9 2012/06/19 05:30:43 dholland Exp $");
 #endif				/* not lint */
 
 #include "header.h"
 #include "extern.h"
+
+static void movemt(int, int);
+static void mmove(int, int, int, int);
+static void movsphere(void);
 
 /*
  * movemonst()		Routine to move the monsters toward the player
@@ -28,7 +32,7 @@ __RCSID("$NetBSD: movem.c,v 1.6 2008/01/28 05:38:54 dholland Exp $");
 static short    w1[9], w1x[9], w1y[9];
 static int      tmp1, tmp2, tmp3, tmp4, distance;
 void
-movemonst()
+movemonst(void)
 {
 	int    i, j;
 	if (c[TIMESTOP])
@@ -127,9 +131,8 @@ movemonst()
  * Returns no value.
  */
 static int      tmpitem, xl, xh, yl, yh;
-void
-movemt(i, j)
-	int             i, j;
+static void
+movemt(int i, int j)
 {
 	int    k, m, z, tmp, xtmp, ytmp, monst;
 	switch (monst = mitem[i][j]) {	/* for half speed monsters */
@@ -269,12 +272,11 @@ out:		if (tmp < distance)	/* did find connectivity */
  * Enter with the from coordinates in (x,y) and the destination coordinates
  * in (xd,yd).
  */
-void
-mmove(aa, bb, cc, dd)
-	int             aa, bb, cc, dd;
+static void
+mmove(int aa, int bb, int cc, int dd)
 {
 	int    tmp, i, flag;
-	const char *who = NULL, *p;
+	const char *who = NULL;
 
 	flag = 0;		/* set to 1 if monster hit by arrow trap */
 	if ((cc == playerx) && (dd == playery)) {
@@ -360,24 +362,22 @@ mmove(aa, bb, cc, dd)
 	if (c[BLINDCOUNT])
 		return;		/* if blind don't show where monsters are	 */
 	if (know[cc][dd] & 1) {
-		p = 0;
 		if (flag)
 			cursors();
 		switch (flag) {
 		case 1:
-			p = "\n%s hits the %s";
+			lprintf("\n%s hits the %s", who, monster[tmp].name);
+			beep();
 			break;
 		case 2:
-			p = "\n%s hits and kills the %s";
+			lprintf("\n%s hits and kills the %s",
+			    who, monster[tmp].name);
+			beep();
 			break;
 		case 3:
-			p = "\nThe %s%s gets teleported";
-			who = "";
-			break;
-		};
-		if (p) {
-			lprintf(p, who, monster[tmp].name);
+			lprintf("\nThe %s gets teleported", monster[tmp].name);
 			beep();
+			break;
 		}
 	}
 	/*
@@ -402,8 +402,8 @@ mmove(aa, bb, cc, dd)
  */
 #define SPHMAX 20		/* maximum number of spheres movsphere can
 				 * handle */
-void
-movsphere()
+static void
+movsphere(void)
 {
 	int    x, y, dir, len;
 	struct sphere *sp, *sp2;

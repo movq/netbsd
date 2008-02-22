@@ -1,4 +1,4 @@
-/*	$NetBSD: ibm4xx_machdep.c,v 1.7 2007/03/04 06:00:34 christos Exp $	*/
+/*	$NetBSD: ibm4xx_machdep.c,v 1.25 2016/12/26 21:25:08 rin Exp $	*/
 /*	Original: ibm40x_machdep.c,v 1.3 2005/01/17 17:19:36 shige Exp $ */
 
 /*
@@ -68,17 +68,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibm4xx_machdep.c,v 1.7 2007/03/04 06:00:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibm4xx_machdep.c,v 1.25 2016/12/26 21:25:08 rin Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_ipkdb.h"
+#include "opt_modular.h"
+#include "ksyms.h" /* for NKSYMS */
 
 #include <sys/param.h>
 #include <sys/msgbuf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -96,150 +99,147 @@ __KERNEL_RCSID(0, "$NetBSD: ibm4xx_machdep.c,v 1.7 2007/03/04 06:00:34 christos 
 #endif
 
 #include <machine/powerpc.h>
-#include <powerpc/spr.h>
+#include <powerpc/pcb.h>
 #include <machine/trap.h>
+
+#include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
+
+#include <powerpc/ibm4xx/cpu.h>
 
 /*
  * Global variables used here and there
  */
-extern struct user *proc0paddr;
 paddr_t msgbuf_paddr;
 vaddr_t msgbuf_vaddr;
 char msgbuf[MSGBUFSIZE];
+
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+void *startsym, *endsym;
+#endif
+
+/*
+ * Trap vectors
+ */
+extern const uint32_t defaulttrap[], defaultsize;
+extern const uint32_t sctrap[], scsize;
+extern const uint32_t accesstrap[], accesssize;
+extern const uint32_t criticaltrap[], criticalsize;
+extern const uint32_t tlbimiss4xx[], tlbim4size;
+extern const uint32_t tlbdmiss4xx[], tlbdm4size;
+extern const uint32_t pitfitwdog[], pitfitwdogsize;
+extern const uint32_t errata51handler[], errata51size;
+#if defined(DDB)
+extern const uint32_t ddblow[], ddbsize;
+#elif defined(IPKDB)
+extern const uint32_t ipkdblow[], ipkdbsize;
+#endif
+static const struct exc_info trap_table[] = {
+	{ EXC_SC,	sctrap,		(uintptr_t)&scsize },
+	{ EXC_ALI,	accesstrap,	(uintptr_t)&accesssize },
+	{ EXC_DSI,	accesstrap,	(uintptr_t)&accesssize },
+	{ EXC_MCHK,	criticaltrap,	(uintptr_t)&criticalsize },
+	{ EXC_ITMISS,	tlbimiss4xx,	(uintptr_t)&tlbim4size },
+	{ EXC_DTMISS,	tlbdmiss4xx,	(uintptr_t)&tlbdm4size },
+	{ EXC_PIT,	pitfitwdog,	(uintptr_t)&pitfitwdogsize },
+	{ EXC_DEBUG,	criticaltrap,	(uintptr_t)&criticalsize },
+	{ (EXC_DTMISS|EXC_ALI),
+			errata51handler, (uintptr_t)&errata51size },
+#if defined(DDB)
+	{ EXC_PGM,	ddblow,		(uintptr_t)&ddbsize },
+#elif defined(IPKDB)
+	{ EXC_PGM,	ipkdblow,	(uintptr_t)&ipkdbsize },
+#endif
+};
+
+/*
+ * Install a trap vector. We cannot use memcpy because the
+ * destination may be zero.
+ */
+static void
+trap_copy(const uint32_t *src, vaddr_t dest, size_t len)
+{
+	uint32_t *dest_p = (void *)dest;
+
+	while (len > 0) {
+		*dest_p++ = *src++;
+		len -= sizeof(uint32_t);
+	}
+}
 
 /*
  * ibm4xx_init:
  */
 void
-ibm4xx_init(void (*handler)(void))
+ibm4xx_init(vaddr_t startkernel, vaddr_t endkernel, void (*handler)(void))
 {
-	extern int defaulttrap, defaultsize;
-	extern int sctrap, scsize;
-	extern int alitrap, alisize;
-	extern int dsitrap, dsisize;
-	extern int isitrap, isisize;
-	extern int mchktrap, mchksize;
-	extern int tlbimiss4xx, tlbim4size;
-	extern int tlbdmiss4xx, tlbdm4size;
-	extern int pitfitwdog, pitfitwdogsize;
-	extern int debugtrap, debugsize;
-	extern int errata51handler, errata51size;
-#ifdef DDB
-	extern int ddblow, ddbsize;
-#endif
-#ifdef IPKDB
-	extern int ipkdblow, ipkdbsize;
-#endif
-	uintptr_t exc;
-	struct cpu_info * const ci = curcpu();
-
 	/* Initialize cache info for memcpy, etc. */
 	cpu_probe_cache();
 
 	/*
-	 * Initialize lwp0 and current pcb and pmap pointers.
+	 * Initialize current pcb and pmap pointers.
 	 */
-	KASSERT(ci != NULL);
-	KASSERT(curcpu() == ci);
-	lwp0.l_cpu = ci;
-	lwp0.l_addr = proc0paddr;
-	memset(lwp0.l_addr, 0, sizeof *lwp0.l_addr);
-	KASSERT(lwp0.l_cpu != NULL);
+	KASSERT(curcpu() == &cpu_info[0]);
+	KASSERT(lwp0.l_cpu == curcpu());
+	KASSERT(curlwp == &lwp0);
 
-	curpcb = &proc0paddr->u_pcb;
-        memset(curpcb, 0, sizeof(*curpcb));
+	curpcb = lwp_getpcb(curlwp);
+	memset(curpcb, 0, sizeof(struct pcb));
+
 	curpcb->pcb_pm = pmap_kernel();
 
-	/*
-	 * Set up trap vectors
-	 */
-	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
-		switch (exc) {
-		default:
-			memcpy((void *)exc, &defaulttrap, (size_t)&defaultsize);
-			break;
-		case EXC_EXI:
-			/*
-			 * This one is (potentially) installed during autoconf
-			 */
-			break;
-		case EXC_SC:
-			memcpy((void *)EXC_SC, &sctrap, (size_t)&scsize);
-			break;
-		case EXC_ALI:
-			memcpy((void *)EXC_ALI, &alitrap, (size_t)&alisize);
-			break;
-		case EXC_DSI:
-			memcpy((void *)EXC_DSI, &dsitrap, (size_t)&dsisize);
-			break;
-		case EXC_ISI:
-			memcpy((void *)EXC_ISI, &isitrap, (size_t)&isisize);
-			break;
-		case EXC_MCHK:
-			memcpy((void *)EXC_MCHK, &mchktrap, (size_t)&mchksize);
-			break;
-		case EXC_ITMISS:
-			memcpy((void *)EXC_ITMISS, &tlbimiss4xx,
-				(size_t)&tlbim4size);
-			break;
-		case EXC_DTMISS:
-			memcpy((void *)EXC_DTMISS, &tlbdmiss4xx,
-				(size_t)&tlbdm4size);
-			break;
-		/* 
-		 * EXC_PIT, EXC_FIT, EXC_WDOG handlers 
-		 * are spaced by 0x10 bytes only.. 
-		 */
-		case EXC_PIT:	
-			memcpy((void *)EXC_PIT, &pitfitwdog,
-				(size_t)&pitfitwdogsize);
-			break;
-		case EXC_DEBUG:
-			memcpy((void *)EXC_DEBUG, &debugtrap,
-				(size_t)&debugsize);
-			break;
-		case EXC_DTMISS|EXC_ALI:
-                        /* PPC405GP Rev D errata item 51 */	
-			memcpy((void *)(EXC_DTMISS|EXC_ALI), &errata51handler,
-				(size_t)&errata51size);
-			break;
-#if defined(DDB) || defined(IPKDB)
-		case EXC_PGM:
-#if defined(DDB)
-			memcpy((void *)exc, &ddblow, (size_t)&ddbsize);
-#elif defined(IPKDB)
-			memcpy((void *)exc, &ipkdblow, (size_t)&ipkdbsize);
-#endif
-#endif /* DDB | IPKDB */
-			break;
-		}
+	for (uintptr_t exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100) {
+		trap_copy(defaulttrap, exc, (uintptr_t)&defaultsize);
+	}
+
+	for (size_t i = 0; i < __arraycount(trap_table); i++) {
+		KASSERT(trap_table[i].exc_size <= 0x100);
+		trap_copy(trap_table[i].exc_addr, trap_table[i].exc_vector,
+		    trap_table[i].exc_size);
+	}
 
 	__syncicache((void *)EXC_RST, EXC_LAST - EXC_RST + 0x100);
+
 	mtspr(SPR_EVPR, 0);		/* Set Exception vector base */
 
-	consinit();
-
 	/* Handle trap instruction as PGM exception */
-	{
-	  int dbcr0;
-	  __asm volatile("mfspr %0,%1":"=r"(dbcr0):"K"(SPR_DBCR0));
-	  __asm volatile("mtspr %0,%1"::"K"(SPR_DBCR0),"r"(dbcr0 & ~DBCR0_TDE));
-	}
+	mtspr(SPR_DBCR0, mfspr(SPR_DBCR0) & ~DBCR0_TDE);
 
 	/*
 	 * external interrupt handler install
 	 */
-        if (handler)
+	if (handler)
 	    ibm4xx_install_extint(handler);
 
 	/*
 	 * Now enable translation (and machine checks/recoverable interrupts).
 	 */
 	__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0; isync"
-		      : : "r"(0), "K"(PSL_IR|PSL_DR)); 
+		      : : "r"(0), "K"(PSL_IR|PSL_DR));
 	/* XXXX PSL_ME - With ME set kernel gets stuck... */
 
-	KASSERT(curcpu() == ci);
+	/*
+	 * turn on console after enable translation
+	 */
+	consinit();
+
+	uvm_md_init();
+
+	/*
+	 * Initialize pmap module.
+	 */
+	pmap_bootstrap(startkernel, endkernel);
+
+	/*
+	 * Let's take all the indirect calls via our stubs and patch
+	 * them to be direct calls.
+	 */
+	cpu_fixup_stubs();
+
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((uintptr_t)endsym - (uintptr_t)startsym,
+	    startsym, endsym);
+#endif
 }
 
 void
@@ -275,7 +275,7 @@ ibm4xx_cpu_startup(const char *model)
 	KASSERT(curcpu() != NULL);
 	KASSERT(lwp0.l_cpu != NULL);
 	KASSERT(curcpu()->ci_intstk != 0);
-	KASSERT(curcpu()->ci_intrdepth == -1);
+	KASSERT(curcpu()->ci_idepth == -1);
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -289,7 +289,8 @@ ibm4xx_cpu_startup(const char *model)
 		panic("startup: no room for message buffer");
 	for (i = 0; i < btoc(MSGBUFSIZE); i++)
 		pmap_kenter_pa(msgbuf_vaddr + i * PAGE_SIZE,
-		    msgbuf_paddr + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE);
+		    msgbuf_paddr + i * PAGE_SIZE,
+		    VM_PROT_READ|VM_PROT_WRITE, 0);
 	initmsgbuf((void *)msgbuf_vaddr, round_page(MSGBUFSIZE));
 #else
 	initmsgbuf((void *)msgbuf, round_page(MSGBUFSIZE));
@@ -303,13 +304,6 @@ ibm4xx_cpu_startup(const char *model)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
 	/*
 	 * Allocate a submap for physio
 	 */

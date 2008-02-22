@@ -1,4 +1,4 @@
-/* $NetBSD: if_awi_pcmcia.c,v 1.38 2007/10/19 12:01:04 ad Exp $ */
+/* $NetBSD: if_awi_pcmcia.c,v 1.46 2016/07/14 04:19:27 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 1999, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_awi_pcmcia.c,v 1.38 2007/10/19 12:01:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_awi_pcmcia.c,v 1.46 2016/07/14 04:19:27 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,10 +71,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_awi_pcmcia.c,v 1.38 2007/10/19 12:01:04 ad Exp $"
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciadevs.h>
 
-static int awi_pcmcia_match(struct device *, struct cfdata *, void *);
+static int awi_pcmcia_match(device_t, cfdata_t, void *);
 static int awi_pcmcia_validate_config(struct pcmcia_config_entry *);
-static void awi_pcmcia_attach(struct device *, struct device *, void *);
-static int awi_pcmcia_detach(struct device *, int);
+static void awi_pcmcia_attach(device_t, device_t, void *);
+static int awi_pcmcia_detach(device_t, int);
 static int awi_pcmcia_enable(struct awi_softc *);
 static void awi_pcmcia_disable(struct awi_softc *);
 
@@ -96,7 +89,7 @@ struct awi_pcmcia_softc {
 #define	AWI_PCMCIA_ATTACHED	3
 };
 
-CFATTACH_DECL(awi_pcmcia, sizeof(struct awi_pcmcia_softc),
+CFATTACH_DECL_NEW(awi_pcmcia, sizeof(struct awi_pcmcia_softc),
     awi_pcmcia_match, awi_pcmcia_attach, awi_pcmcia_detach, awi_activate);
 
 static const struct pcmcia_product awi_pcmcia_products[] = {
@@ -125,8 +118,7 @@ static const size_t awi_pcmcia_nproducts =
     sizeof(awi_pcmcia_products) / sizeof(awi_pcmcia_products[0]);
 
 static int
-awi_pcmcia_enable(sc)
-	struct awi_softc *sc;
+awi_pcmcia_enable(struct awi_softc *sc)
 {
 	struct awi_pcmcia_softc *psc = (struct awi_pcmcia_softc *)sc;
 	struct pcmcia_function *pf = psc->sc_pf;
@@ -147,8 +139,7 @@ awi_pcmcia_enable(sc)
 }
 
 static void
-awi_pcmcia_disable(sc)
-	struct awi_softc *sc;
+awi_pcmcia_disable(struct awi_softc *sc)
 {
 	struct awi_pcmcia_softc *psc = (struct awi_pcmcia_softc *)sc;
 	struct pcmcia_function *pf = psc->sc_pf;
@@ -159,8 +150,7 @@ awi_pcmcia_disable(sc)
 }
 
 static int
-awi_pcmcia_match(struct device *parent, struct cfdata *match,
-    void *aux)
+awi_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -171,8 +161,7 @@ awi_pcmcia_match(struct device *parent, struct cfdata *match,
 }
 
 static int
-awi_pcmcia_validate_config(cfe)
-	struct pcmcia_config_entry *cfe;
+awi_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_iospace < 1 ||
@@ -188,21 +177,20 @@ awi_pcmcia_validate_config(cfe)
 }
 
 static void
-awi_pcmcia_attach(struct device *parent, struct device *self,
-    void *aux)
+awi_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct awi_pcmcia_softc *psc = (void *)self;
+	struct awi_pcmcia_softc *psc = device_private(self);
 	struct awi_softc *sc = &psc->sc_awi;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	int error;
 
+	sc->sc_dev = self;
 	psc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf, awi_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -232,7 +220,7 @@ awi_pcmcia_attach(struct device *parent, struct device *self,
 	sc->sc_cansleep = 1;
 
 	if (awi_attach(sc) != 0) {
-		printf("%s: failed to attach controller\n", self->dv_xname);
+		aprint_error_dev(self, "failed to attach controller\n");
 		goto fail2;
 	}
 
@@ -249,9 +237,9 @@ fail:
 }
 
 static int
-awi_pcmcia_detach(struct device *self, int flags)
+awi_pcmcia_detach(device_t self, int flags)
 {
-	struct awi_pcmcia_softc *psc = (struct awi_pcmcia_softc *)self;
+	struct awi_pcmcia_softc *psc = device_private(self);
 	int error;
 
 	if (psc->sc_state != AWI_PCMCIA_ATTACHED)

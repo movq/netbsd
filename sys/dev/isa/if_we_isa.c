@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_isa.c,v 1.18 2007/10/19 12:00:18 ad Exp $	*/
+/*	$NetBSD: if_we_isa.c,v 1.23 2014/10/18 08:33:28 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_isa.c,v 1.18 2007/10/19 12:00:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_isa.c,v 1.23 2014/10/18 08:33:28 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,66 +77,33 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_isa.c,v 1.18 2007/10/19 12:00:18 ad Exp $");
 #include <dev/ic/wereg.h>
 #include <dev/ic/wevar.h>
 
+#include "ioconf.h"
+
 #ifndef __BUS_SPACE_HAS_STREAM_METHODS
 #define	bus_space_read_region_stream_2	bus_space_read_region_2
 #define	bus_space_write_stream_2	bus_space_write_2
 #define	bus_space_write_region_stream_2	bus_space_write_region_2
 #endif
 
-int	we_isa_probe(struct device *, struct cfdata *, void *);
-void	we_isa_attach(struct device *, struct device *, void *);
+int	we_isa_probe(device_t, cfdata_t , void *);
+void	we_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(we_isa, sizeof(struct we_softc),
+CFATTACH_DECL_NEW(we_isa, sizeof(struct we_softc),
     we_isa_probe, we_isa_attach, NULL, NULL);
 
-extern struct cfdriver we_cd;
-
 static const char *we_params(bus_space_tag_t, bus_space_handle_t,
-		u_int8_t *, bus_size_t *, u_int8_t *, int *);
+    uint8_t *, bus_size_t *, uint8_t *, int *);
 
 static const int we_584_irq[] = {
 	9, 3, 5, 7, 10, 11, 15, 4,
 };
-#define	NWE_584_IRQ	(sizeof(we_584_irq) / sizeof(we_584_irq[0]))
 
 static const int we_790_irq[] = {
 	ISA_UNKNOWN_IRQ, 9, 3, 5, 7, 10, 11, 15,
 };
-#define	NWE_790_IRQ	(sizeof(we_790_irq) / sizeof(we_790_irq[0]))
-
-/*
- * Delay needed when switching 16-bit access to shared memory.
- */
-#define	WE_DELAY(wsc) delay(3)
-
-/*
- * Enable card RAM, and 16-bit access.
- */
-#define	WE_MEM_ENABLE(wsc) \
-do { \
-	if ((wsc)->sc_16bitp) \
-		bus_space_write_1((wsc)->sc_asict, (wsc)->sc_asich, \
-		    WE_LAAR, (wsc)->sc_laar_proto | WE_LAAR_M16EN); \
-	bus_space_write_1((wsc)->sc_asict, (wsc)->sc_asich, \
-	    WE_MSR, wsc->sc_msr_proto | WE_MSR_MENB); \
-	WE_DELAY((wsc)); \
-} while (0)
-
-/*
- * Disable card RAM, and 16-bit access.
- */
-#define	WE_MEM_DISABLE(wsc) \
-do { \
-	bus_space_write_1((wsc)->sc_asict, (wsc)->sc_asich, \
-	    WE_MSR, (wsc)->sc_msr_proto); \
-	if ((wsc)->sc_16bitp) \
-		bus_space_write_1((wsc)->sc_asict, (wsc)->sc_asich, \
-		    WE_LAAR, (wsc)->sc_laar_proto); \
-	WE_DELAY((wsc)); \
-} while (0)
 
 int
-we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
+we_isa_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t asict, memt;
@@ -151,7 +111,7 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 	bus_size_t memsize;
 	int asich_valid, memh_valid;
 	int i, is790, rv = 0;
-	u_int8_t x, type;
+	uint8_t x, type;
 
 	asict = ia->ia_iot;
 	memt = ia->ia_memt;
@@ -159,22 +119,22 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 	asich_valid = memh_valid = 0;
 
 	if (ia->ia_nio < 1)
-		return (0);
+		return 0;
 	if (ia->ia_niomem < 1)
-		return (0);
+		return 0;
 	if (ia->ia_nirq < 1)
-		return (0);
+		return 0;
 
 	if (ISA_DIRECT_CONFIG(ia))
-		return (0);
+		return 0;
 
 	/* Disallow wildcarded i/o addresses. */
 	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
-		return (0);
+		return 0;
 
 	/* Disallow wildcarded mem address. */
 	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
-		return (0);
+		return 0;
 
 	/* Attempt to map the device. */
 	if (bus_space_map(asict, ia->ia_io[0].ir_addr, WE_NPORTS, 0, &asich))
@@ -219,7 +179,7 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 	bus_space_write_1(asict, asich, WE_MSR,
 	    bus_space_read_1(asict, asich, WE_MSR) & ~WE_MSR_RST);
 
-	/* Wait in case the card is reading it's EEPROM. */
+	/* Wait in case the card is reading its EEPROM. */
 	delay(5000);
 
 	/*
@@ -242,7 +202,7 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 	 * and use it.
 	 */
 	if (is790) {
-		u_int8_t hwr;
+		uint8_t hwr;
 
 		/* Assemble together the encoded interrupt number. */
 		hwr = bus_space_read_1(asict, asich, WE790_HWR);
@@ -257,9 +217,9 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 
 		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
 		    ia->ia_irq[0].ir_irq != we_790_irq[i])
-			printf("%s%d: overriding configured IRQ %d to %d\n",
-			    we_cd.cd_name, cf->cf_unit, ia->ia_irq[0].ir_irq,
-			    we_790_irq[i]);
+			aprint_error("%s%d: overriding configured "
+			    "IRQ %d to %d\n", we_cd.cd_name, cf->cf_unit,
+			    ia->ia_irq[0].ir_irq, we_790_irq[i]);
 		ia->ia_irq[0].ir_irq = we_790_irq[i];
 	} else if (type & WE_SOFTCONFIG) {
 		/* Assemble together the encoded interrupt number. */
@@ -269,9 +229,9 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 
 		if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
 		    ia->ia_irq[0].ir_irq != we_584_irq[i])
-			printf("%s%d: overriding configured IRQ %d to %d\n",
-			    we_cd.cd_name, cf->cf_unit, ia->ia_irq[0].ir_irq,
-			    we_584_irq[i]);
+			aprint_error("%s%d: overriding configured "
+			    "IRQ %d to %d\n", we_cd.cd_name, cf->cf_unit,
+			    ia->ia_irq[0].ir_irq, we_584_irq[i]);
 		ia->ia_irq[0].ir_irq = we_584_irq[i];
 	}
 
@@ -293,42 +253,41 @@ we_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
 		bus_space_unmap(asict, asich, WE_NPORTS);
 	if (memh_valid)
 		bus_space_unmap(memt, memh, memsize);
-	return (rv);
+	return rv;
 }
 
 void
-we_isa_attach(struct device *parent, struct device *self, void *aux)
+we_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct we_softc *wsc = (struct we_softc *)self;
+	struct we_softc *wsc = device_private(self);
 	struct dp8390_softc *sc = &wsc->sc_dp8390;
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t nict, asict, memt;
 	bus_space_handle_t nich, asich, memh;
 	const char *typestr;
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	nict = asict = ia->ia_iot;
 	memt = ia->ia_memt;
 
 	/* Map the device. */
 	if (bus_space_map(asict, ia->ia_io[0].ir_addr, WE_NPORTS, 0, &asich)) {
-		printf("%s: can't map nic i/o space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map nic i/o space\n");
 		return;
 	}
 
 	if (bus_space_subregion(asict, asich, WE_NIC_OFFSET, WE_NIC_NPORTS,
 	    &nich)) {
-		printf("%s: can't subregion i/o space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't subregion i/o space\n");
 		return;
 	}
 
 	typestr = we_params(asict, asich, &wsc->sc_type, NULL,
 	    &wsc->sc_flags, &sc->is790);
 	if (typestr == NULL) {
-		printf("%s: where did the card go?\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "where did the card go?\n");
 		return;
 	}
 
@@ -338,8 +297,7 @@ we_isa_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr,
 	    ia->ia_iomem[0].ir_size, 0, &memh)) {
-		printf("%s: can't map shared memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map shared memory\n");
 		return;
 	}
 
@@ -372,8 +330,8 @@ we_isa_attach(struct device *parent, struct device *self, void *aux)
 		bus_space_write_1(asict, asich, WE_IRR,
 		    bus_space_read_1(asict, asich, WE_IRR) | WE_IRR_IEN);
 	else if (ia->ia_irq[0].ir_irq == ISA_UNKNOWN_IRQ) {
-		printf("%s: can't wildcard IRQ on a %s\n",
-		    sc->sc_dev.dv_xname, typestr);
+		aprint_error_dev(self, "can't wildcard IRQ on a %s\n",
+		    typestr);
 		return;
 	}
 
@@ -381,21 +339,17 @@ we_isa_attach(struct device *parent, struct device *self, void *aux)
 	wsc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, dp8390_intr, sc);
 	if (wsc->sc_ih == NULL)
-		printf("%s: can't establish interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't establish interrupt\n");
 }
 
 static const char *
-we_params(asict, asich, typep, memsizep, flagp, is790p)
-	bus_space_tag_t asict;
-	bus_space_handle_t asich;
-	u_int8_t *typep, *flagp;
-	bus_size_t *memsizep;
-	int *is790p;
+we_params(bus_space_tag_t asict, bus_space_handle_t asich, uint8_t *typep,
+    bus_size_t *memsizep, uint8_t *flagp, int *is790p)
 {
 	const char *typestr;
 	bus_size_t memsize;
 	int is16bit, is790;
-	u_int8_t type;
+	uint8_t type;
 
 	memsize = 8192;
 	is16bit = is790 = 0;
@@ -450,7 +404,7 @@ we_params(asict, asich, typep, memsizep, flagp, is790p)
 	case WE_TYPE_SMC8216C:
 	case WE_TYPE_SMC8216T:
 	    {
-		u_int8_t hwr;
+		uint8_t hwr;
 
 		typestr = (type == WE_TYPE_SMC8216C) ?
 		    "SMC8216/SMC8216C" : "SMC8216T";
@@ -496,7 +450,7 @@ we_params(asict, asich, typep, memsizep, flagp, is790p)
 #endif
 	default:
 		/* Not one we recognize. */
-		return (NULL);
+		return NULL;
 	}
 
 	/*
@@ -532,5 +486,5 @@ we_params(asict, asich, typep, memsizep, flagp, is790p)
 		*flagp |= WE_16BIT_ENABLE;
 	if (is790p != NULL)
 		*is790p = is790;
-	return (typestr);
+	return typestr;
 }

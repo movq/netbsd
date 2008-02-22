@@ -1,7 +1,7 @@
-/*	$NetBSD: joy_pnpbios.c,v 1.10 2006/11/16 01:32:39 christos Exp $	*/
+/*	$NetBSD: joy_pnpbios.c,v 1.15 2011/11/26 14:06:44 tron Exp $	*/
 
 /*-
- * Copyright (c) 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_pnpbios.c,v 1.10 2006/11/16 01:32:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_pnpbios.c,v 1.15 2011/11/26 14:06:44 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/isa/isadmavar.h>
@@ -53,38 +46,46 @@ __KERNEL_RCSID(0, "$NetBSD: joy_pnpbios.c,v 1.10 2006/11/16 01:32:39 christos Ex
 
 #include <dev/ic/joyvar.h>
 
-int	joy_pnpbios_match(struct device *, struct cfdata *, void *);
-void	joy_pnpbios_attach(struct device *, struct device *, void *);
+struct joy_pnpbios_softc {
+	struct joy_softc sc_joy;
+	kmutex_t sc_lock;
+};
 
-CFATTACH_DECL(joy_pnpbios, sizeof(struct joy_softc),
+static int	joy_pnpbios_match(device_t, cfdata_t, void *);
+static void	joy_pnpbios_attach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(joy_pnpbios, sizeof(struct joy_pnpbios_softc),
     joy_pnpbios_match, joy_pnpbios_attach, NULL, NULL);
 
-int
-joy_pnpbios_match(struct device *parent, struct cfdata *match,
-    void *aux)
+static int
+joy_pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
 	if (strcmp(aa->idstr, "PNPB02F"))
-		return (0);
+		return 0;
 
-	return (1);
+	return 1;
 }
 
-void
-joy_pnpbios_attach(struct device *parent, struct device *self,
-    void *aux)
+static void
+joy_pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct joy_softc *sc = (struct joy_softc *)self;
+	struct joy_softc *sc = device_private(self);
+	struct joy_pnpbios_softc *psc = device_private(self);
 	struct pnpbiosdev_attach_args *aa = aux;
 
 	if (pnpbios_io_map(aa->pbt, aa->resc, 0, &sc->sc_iot, &sc->sc_ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
-	printf("\n");
+	aprint_normal("\n");
+	sc->sc_dev = self;
 	pnpbios_print_devres(self, aa);
+
+	mutex_init(&psc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	sc->sc_lock = &psc->sc_lock;
 
 	joyattach(sc);
 }

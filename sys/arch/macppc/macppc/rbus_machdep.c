@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.14 2007/10/17 19:55:34 garbled Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.18 2011/07/01 18:43:05 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -28,23 +28,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.14 2007/10/17 19:55:34 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.18 2011/07/01 18:43:05 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <powerpc/oea/bat.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/cardbus/rbus.h>
 #include <dev/ofw/openfirm.h>
 
-static void macppc_cardbus_init __P((pci_chipset_tag_t, pcitag_t));
+static void macppc_cardbus_init(pci_chipset_tag_t, pcitag_t);
 
 #ifdef DEBUG_ALLOC
 # define DPRINTF printf
@@ -74,8 +72,7 @@ md_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size,
 }
 
 rbus_tag_t
-rbus_pccbb_parent_mem(pa)
-	struct pci_attach_args *pa;
+rbus_pccbb_parent_mem(struct pci_attach_args *pa)
 {
 	bus_addr_t start;
 	bus_size_t size;
@@ -102,8 +99,7 @@ rbus_pccbb_parent_mem(pa)
 }
 
 rbus_tag_t
-rbus_pccbb_parent_io(pa)
-	struct pci_attach_args *pa;
+rbus_pccbb_parent_io(struct pci_attach_args *pa)
 {
 	bus_addr_t start = 0x2000;
 	bus_size_t size  = 0x0800;
@@ -115,9 +111,7 @@ rbus_pccbb_parent_io(pa)
 }
 
 void
-macppc_cardbus_init(pc, tag)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
+macppc_cardbus_init(pci_chipset_tag_t pc, pcitag_t tag)
 {
 	u_int x;
 	static int initted = 0;

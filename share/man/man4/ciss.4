@@ -1,11 +1,11 @@
-.\"	$NetBSD: ciss.4,v 1.4 2007/11/02 08:59:56 xtraeme Exp $
+.\"	$NetBSD: ciss.4,v 1.10 2016/10/18 18:56:39 maya Exp $
 .\"	Jonathan Stone, 2006.
 .\"
 .\"	derived from:
 .\"	$OpenBSD: ciss.4,v 1.4 2006/01/07 21:55:02 brad Exp $
 .\"	Michael Shalayeff, 2005. Public Domain.
 .\"
-.Dd November 2, 2007
+.Dd October 18, 2016
 .Dt CISS 4
 .Os
 .Sh NAME
@@ -62,6 +62,8 @@ HP Smart Array P400
 .It
 HP Smart Array P400i
 .It
+HP Smart Array P410i
+.It
 HP Smart Array P600
 .It
 HP Smart Array P800
@@ -85,6 +87,7 @@ supported by the
 .Xr cac 4
 driver.
 .Sh SEE ALSO
+.Xr bio 4 ,
 .Xr cac 4 ,
 .Xr intro 4 ,
 .Xr pci 4 ,
@@ -100,8 +103,8 @@ driver first appeared in
 The
 .Nm
 driver was written by
-.An Michael Shalayeff Aq mickey@openbsd.org ,
+.An Michael Shalayeff Aq Mt mickey@openbsd.org ,
 and ported to
 .Nx
 by
-.An Tonnerre Lombard Aq tonnerre@thebsh.sygroup.ch .
+.An Tonnerre Lombard Aq Mt tonnerre@netbsd.org .

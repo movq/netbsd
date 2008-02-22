@@ -1,4 +1,4 @@
-/*	$NetBSD: scsiconf.h,v 1.54 2005/12/11 12:23:50 christos Exp $	*/
+/*	$NetBSD: scsiconf.h,v 1.58 2012/04/20 20:23:21 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,7 +55,7 @@
 int	scsiprint(void *, const char *);
 
 struct scsibus_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct scsipi_channel *sc_channel;	/* our scsipi_channel */
 	int	sc_flags;
 };
@@ -70,12 +63,23 @@ struct scsibus_softc {
 /* sc_flags */
 #define	SCSIBUSF_OPEN	0x00000001	/* bus is open */
 
+/* SCSI subtypes for struct scsipi_bustype */
+#define SCSIPI_BUSTYPE_SCSI_PSCSI       0 /* parallel SCSI */
+#define SCSIPI_BUSTYPE_SCSI_FC          1 /* Fiber channel */
+#define SCSIPI_BUSTYPE_SCSI_SAS         2 /* SAS */
+#define SCSIPI_BUSTYPE_SCSI_USB         3 /* USB */
+
 extern const struct scsipi_bustype scsi_bustype;
+extern const struct scsipi_bustype scsi_fc_bustype;
+extern const struct scsipi_bustype scsi_sas_bustype;
+extern const struct scsipi_bustype scsi_usb_bustype;
 
 int	scsi_change_def(struct scsipi_periph *, int);
 void	scsi_kill_pending(struct scsipi_periph *);
 void	scsi_print_addr(struct scsipi_periph *);
 int	scsi_probe_bus(struct scsibus_softc *, int, int);
 void	scsi_scsipi_cmd(struct scsipi_xfer *);
+void	scsi_async_event_xfer_mode(struct scsipi_channel *, void *);
+void	scsi_fc_sas_async_event_xfer_mode(struct scsipi_channel *, void *);
 
 #endif /* _DEV_SCSIPI_SCSICONF_H_ */

@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_rssadapt.c,v 1.14 2006/08/30 15:40:41 christos Exp $ */
+/* $NetBSD: ieee80211_rssadapt.c,v 1.21 2016/09/27 20:20:06 christos Exp $ */
 /*-
  * Copyright (c) 2003, 2004 David Young.  All rights reserved.
  *
@@ -11,9 +11,6 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -31,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_rssadapt.c,v 1.14 2006/08/30 15:40:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_rssadapt.c,v 1.21 2016/09/27 20:20:06 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -75,12 +72,12 @@ int ieee80211_rssadapt_debug = 0;
 #endif
 
 static struct ieee80211_rssadapt_expavgctl master_expavgctl = {
-	rc_decay_denom : 16,
-	rc_decay_old : 15,
-	rc_thresh_denom : 8,
-	rc_thresh_old : 4,
-	rc_avgrssi_denom : 8,
-	rc_avgrssi_old : 4
+	.rc_decay_denom = 16,
+	.rc_decay_old = 15,
+	.rc_thresh_denom = 8,
+	.rc_thresh_old = 4,
+	.rc_avgrssi_denom = 8,
+	.rc_avgrssi_old = 4
 };
 
 #ifdef __NetBSD__
@@ -142,22 +139,17 @@ sysctl_ieee80211_rssadapt_expavgctl(SYSCTLFN_ARGS)
 /*
  * Setup sysctl(3) MIB, net.ieee80211.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
-SYSCTL_SETUP(sysctl_ieee80211_rssadapt,
-    "sysctl ieee80211 rssadapt subtree setup")
+void
+ieee80211_rssadapt_sysctl_setup(struct sysctllog **clog)
 {
 	int rc;
 	const struct sysctlnode *node;
 
 	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "net", NULL,
-	    NULL, 0, NULL, 0, CTL_NET, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &node, &node,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "link", NULL,
-	    NULL, 0, NULL, 0, PF_LINK, CTL_EOL)) != 0)
+	    NULL, 0, NULL, 0, CTL_NET, PF_LINK, CTL_EOL)) != 0)
 		goto err;
 
 	if ((rc = sysctl_createv(clog, 0, &node, &node,
@@ -253,7 +245,7 @@ out:
 void
 ieee80211_rssadapt_updatestats(struct ieee80211_rssadapt *ra)
 {
-	long interval; 
+	long interval;
 
 	ra->ra_pktrate =
 	    (ra->ra_pktrate + 10 * (ra->ra_nfail + ra->ra_nok)) / 2;
@@ -358,6 +350,7 @@ ieee80211_rssadapt_raise_rate(struct ieee80211com *ic,
 	    (*thrs)[id->id_rateidx + 1] > (*thrs)[id->id_rateidx]) {
 		rate = (rs->rs_rates[id->id_rateidx + 1] & IEEE80211_RATE_VAL);
 
+		__USE(rate);
 		RSSADAPT_PRINTF(("%s: threshold[%d, %d.%d] decay %d ",
 		    ic->ic_ifp->if_xname,
 		    IEEE80211_RSSADAPT_BKT0 << (IEEE80211_RSSADAPT_BKTPOWER* i),

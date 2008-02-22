@@ -1,4 +1,4 @@
-/*	$NetBSD: pef.h,v 1.1 2007/12/20 23:00:00 garbled Exp $	*/
+/*	$NetBSD: pef.h,v 1.3 2014/04/22 21:37:52 phx Exp $	*/
 
 /*-
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -31,38 +31,38 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
- 
+
 struct FileHeader
 {
-   	unsigned long magic;
-   	unsigned long fileTypeID;
-   	unsigned long archID;
-   	unsigned long versionNumber;
-   	unsigned long dateTimeStamp;
-   	unsigned long definVersion;
-   	unsigned long implVersion;
-   	unsigned long currentVersion;
-   	unsigned short numSections;
-   	unsigned short loadableSections;
-   	unsigned long memoryAddress;
+	uint32_t magic;
+	uint32_t fileTypeID;
+	uint32_t archID;
+	uint32_t versionNumber;
+	uint32_t dateTimeStamp;
+	uint32_t definVersion;
+	uint32_t implVersion;
+	uint32_t currentVersion;
+	uint16_t numSections;
+	uint16_t loadableSections;
+	uint32_t memoryAddress;
 };
 
 #define PEF_MAGIC 0x4A6F7921  /* Joy! */
 #define PEF_FILE  0x70656666  /* peff */
-#define PEF_PPC   0x70777063  /* pwpc */  
+#define PEF_PPC   0x70777063  /* pwpc */
 
 struct SectionHeader
 {
-   	unsigned long sectionName;
-   	unsigned long sectionAddress;
-   	unsigned long execSize;
-   	unsigned long initSize;
-   	unsigned long rawSize;
-   	unsigned long fileOffset;
-   	unsigned char regionKind;
-   	unsigned char shareKind;
-   	unsigned char alignment;
-   	unsigned char _reserved;
+	uint32_t sectionName;
+	uint32_t sectionAddress;
+	uint32_t execSize;
+	uint32_t initSize;
+	uint32_t rawSize;
+	uint32_t fileOffset;
+	uint8_t regionKind;
+	uint8_t shareKind;
+	uint8_t alignment;
+	uint8_t _reserved;
 };
 
 #define CodeSection	0
@@ -75,22 +75,22 @@ struct SectionHeader
 #define ContextShare	1
 #define TeamShare	2
 #define TaskShare	3
-#define GlobalShare	4   
+#define GlobalShare	4
 
 struct LoaderHeader
 {
-   	unsigned long entryPointSection;
-   	unsigned long entryPointOffset;
-   	unsigned long initPointSection;
-   	unsigned long initPointOffset;
-   	unsigned long termPointSection;
-   	unsigned long termPointOffset;
-   	unsigned long numImportFiles;
-   	unsigned long numImportSyms;
-   	unsigned long numSections;
-   	unsigned long relocationsOffset;
-   	unsigned long stringsOffset;
-   	unsigned long hashSlotTable;
-   	unsigned long hashSlotTableSize;
-   	unsigned long numExportSyms;
+	uint32_t entryPointSection;
+	uint32_t entryPointOffset;
+	uint32_t initPointSection;
+	uint32_t initPointOffset;
+	uint32_t termPointSection;
+	uint32_t termPointOffset;
+	uint32_t numImportFiles;
+	uint32_t numImportSyms;
+	uint32_t numSections;
+	uint32_t relocationsOffset;
+	uint32_t stringsOffset;
+	uint32_t hashSlotTable;
+	uint32_t hashSlotTableSize;
+	uint32_t numExportSyms;
 };

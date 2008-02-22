@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.101 2007/06/29 23:30:32 rumble Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.119 2015/12/08 20:36:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -46,10 +46,11 @@
  * disk geometry, filesystem partitions, and drive specific information.
  * The location of the label, as well as the number of partitions the
  * label can describe and the number of the "whole disk" (raw)
- * paritition are machine dependent.
+ * partition are machine dependent.
  */
 #if HAVE_NBTOOL_CONFIG_H
-#include <nbinclude/machine/disklabel.h>
+#undef MAXPARTITIONS
+#define MAXPARTITIONS		MAXMAXPARTITIONS
 #else
 #include <machine/disklabel.h>
 #endif /* HAVE_NBTOOL_CONFIG_H */
@@ -97,6 +98,24 @@
 #define	DISKMAGIC	((uint32_t)0x82564557)	/* The disk magic number */
 
 #ifndef _LOCORE
+struct	partition {		/* the partition table */
+	uint32_t p_size;	/* number of sectors in partition */
+	uint32_t p_offset;	/* starting sector */
+	union {
+		uint32_t fsize; /* FFS, ADOS: filesystem basic fragment size */
+		uint32_t cdsession; /* ISO9660: session offset */
+	} __partition_u2;
+#define	p_fsize		__partition_u2.fsize
+#define	p_cdsession	__partition_u2.cdsession
+	uint8_t p_fstype;	/* filesystem type, see below */
+	uint8_t p_frag;	/* filesystem fragments per block */
+	union {
+		uint16_t cpg;	/* UFS: FS cylinders per group */
+		uint16_t sgs;	/* LFS: FS segment shift */
+	} __partition_u1;
+#define	p_cpg	__partition_u1.cpg
+#define	p_sgs	__partition_u1.sgs
+};
 struct disklabel {
 	uint32_t d_magic;		/* the magic number */
 	uint16_t d_type;		/* drive type */
@@ -117,6 +136,7 @@ struct disklabel {
 			char *un_d_boot0;	/* primary bootstrap name */
 			char *un_d_boot1;	/* secondary bootstrap name */
 		} un_b;
+		uint64_t un_d_pad;		/* force 8 byte alignment */
 	} d_un;
 #define	d_packname	d_un.un_d_packname
 #define	d_boot0		d_un.un_b.un_d_boot0
@@ -179,25 +199,8 @@ struct disklabel {
 	uint16_t d_npartitions;	/* number of partitions in following */
 	uint32_t d_bbsize;		/* size of boot area at sn0, bytes */
 	uint32_t d_sbsize;		/* max size of fs superblock, bytes */
-	struct	partition {		/* the partition table */
-		uint32_t p_size;	/* number of sectors in partition */
-		uint32_t p_offset;	/* starting sector */
-		union {
-			uint32_t fsize; /* FFS, ADOS:
-					    filesystem basic fragment size */
-			uint32_t cdsession; /* ISO9660: session offset */
-		} __partition_u2;
-#define	p_fsize		__partition_u2.fsize
-#define	p_cdsession	__partition_u2.cdsession
-		uint8_t p_fstype;	/* filesystem type, see below */
-		uint8_t p_frag;	/* filesystem fragments per block */
-		union {
-			uint16_t cpg;	/* UFS: FS cylinders per group */
-			uint16_t sgs;	/* LFS: FS segment shift */
-		} __partition_u1;
-#define	p_cpg	__partition_u1.cpg
-#define	p_sgs	__partition_u1.sgs
-	} d_partitions[MAXPARTITIONS];	/* actually may be more */
+	struct	partition  d_partitions[MAXPARTITIONS];
+			/* the partition table, actually may be more */
 };
 
 #if defined(__HAVE_OLD_DISKLABEL) && !HAVE_NBTOOL_CONFIG_H
@@ -266,7 +269,7 @@ struct olddisklabel {
 	.set	d_ncylinders,52
 	.set	d_secpercyl,56
 	.set	d_secperunit,60
-	.set	d_end_,276		/* size of disk label */
+	.set	d_end_,148+(MAXPARTITIONS*16)
 #endif /* _LOCORE */
 
 /*
@@ -305,10 +308,16 @@ x(JFS2,		16,	"jfs")		/* IBM JFS2 */ \
 x(CGD,		17,	"cgd")		/* cryptographic pseudo-disk */ \
 x(VINUM,	18,	"vinum")	/* vinum volume */ \
 x(FLASH,	19,	"flash")	/* flash memory devices */ \
-
+x(DM,		20,	"dm")		/* device-mapper pseudo-disk devices */\
+x(RUMPD,	21,	"rumpd")	/* rump virtual disk */ \
+x(MD,		22,	"md")		/* memory disk */ \
+    
 #ifndef _LOCORE
-#define DKTYPE_NUMS(tag, number, name) __CONCAT(DTYPE_,tag=number),
-enum { DKTYPE_DEFN(DKTYPE_NUMS) DKMAXTYPES };
+#define DKTYPE_NUMS(tag, number, name) __CONCAT(DKTYPE_,tag=number),
+#ifndef DKTYPE_ENUMNAME
+#define DKTYPE_ENUMNAME
+#endif
+enum DKTYPE_ENUMNAME { DKTYPE_DEFN(DKTYPE_NUMS) DKMAXTYPES };
 #undef	DKTYPE_NUMS
 #endif
 
@@ -325,7 +334,7 @@ static const char *const dktypenames[] = { DKTYPE_DEFN(DKTYPE_NAMES) NULL };
 x(UNUSED,   0, "unused",     NULL,    NULL)   /* unused */ \
 x(SWAP,     1, "swap",       NULL,    NULL)   /* swap */ \
 x(V6,       2, "Version 6",  NULL,    NULL)   /* Sixth Edition */ \
-x(V7,       3, "Version 7",  NULL,    NULL)   /* Seventh Edition */ \
+x(V7,       3, "Version 7", "v7fs",  "v7fs")  /* Seventh Edition */ \
 x(SYSV,     4, "System V",   NULL,    NULL)   /* System V */ \
 x(V71K,     5, "4.1BSD",     NULL,    NULL)   /* V7, 1K blocks (4.1, 2.9) */ \
 x(V8,    6, "Eighth Edition",NULL,    NULL)   /* Eighth Edition, 4K blocks */ \
@@ -347,13 +356,20 @@ x(JFS2,    21, "jfs",        NULL,    NULL)   /* IBM JFS2 */ \
 x(APPLEUFS,22, "Apple UFS", "ffs",   "ffs")   /* Apple UFS */ \
 /* XXX this is not the same as FreeBSD.  How to solve? */ \
 x(VINUM,   23, "vinum",      NULL,    NULL)   /* Vinum */ \
-x(UDF,     24, "UDF",        NULL,   "udf")  /* UDF */ \
+x(UDF,     24, "UDF",        NULL,   "udf")   /* UDF */ \
 x(SYSVBFS, 25, "SysVBFS",    NULL,  "sysvbfs")/* System V boot file system */ \
-x(EFS,     26, "EFS",        NULL,   "efs")   /* SGI's Extent Filesystem */
+x(EFS,     26, "EFS",        NULL,   "efs")   /* SGI's Extent Filesystem */ \
+x(NILFS,   27, "NiLFS",      NULL,   "nilfs") /* NTT's NiLFS(2) */ \
+x(CGD,     28, "cgd",	     NULL,   NULL)    /* Cryptographic disk */ \
+x(MINIXFS3,29, "MINIX FSv3", NULL,   NULL)    /* MINIX file system v3 */
+
 
 #ifndef _LOCORE
 #define	FS_TYPENUMS(tag, number, name, fsck, mount) __CONCAT(FS_,tag=number),
-enum { FSTYPE_DEFN(FS_TYPENUMS) FSMAXTYPES };
+#ifndef FSTYPE_ENUMNAME
+#define FSTYPE_ENUMNAME
+#endif
+enum FSTYPE_ENUMNAME { FSTYPE_DEFN(FS_TYPENUMS) FSMAXTYPES };
 #undef	FS_TYPENUMS
 #endif
 
@@ -387,6 +403,7 @@ static const char *const mountnames[] = { FSTYPE_DEFN(FS_MOUNTNAMES) NULL };
 #define		D_BADSECT	0x04		/* supports bad sector forw. */
 #define		D_RAMDISK	0x08		/* disk emulator */
 #define		D_CHAIN		0x10		/* can do back-back transfers */
+#define		D_SCSI_MMC	0x20		/* SCSI MMC sessioned media */
 
 /*
  * Drive data for SMD.
@@ -421,16 +438,21 @@ struct format_op {
 	int	 df_reg[8];		/* result */
 };
 
+#ifdef _KERNEL
 /*
  * Structure used internally to retrieve information about a partition
  * on a disk.
  */
 struct partinfo {
-	struct disklabel *disklab;
-	struct partition *part;
+	uint64_t pi_offset;
+	uint64_t pi_size;
+	uint32_t pi_secsize;
+	uint32_t pi_bsize;
+	uint8_t	 pi_fstype;
+	uint8_t  pi_frag;
+	uint16_t pi_cpg;
+	uint32_t pi_fsize;
 };
-
-#ifdef _KERNEL
 
 struct disk;
 
@@ -450,6 +472,7 @@ const char *convertdisklabel(struct disklabel *, void (*)(struct buf *),
     struct buf *, uint32_t);
 int	 bounds_check_with_label(struct disk *, struct buf *, int);
 int	 bounds_check_with_mediasize(struct buf *, int, uint64_t);
+const char *getfstypename(int);
 #endif
 #endif /* _LOCORE */
 

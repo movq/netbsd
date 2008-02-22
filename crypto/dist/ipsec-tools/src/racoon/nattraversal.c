@@ -1,4 +1,4 @@
-/*	$NetBSD: nattraversal.c,v 1.6 2006/09/09 16:22:09 manu Exp $	*/
+/*	$NetBSD: nattraversal.c,v 1.15 2018/05/19 18:51:59 maxv Exp $	*/
 
 /*
  * Copyright (C) 2004 SuSE Linux AG, Nuernberg, Germany.
@@ -77,6 +77,7 @@ struct natt_ka_addrs {
 };
 
 static TAILQ_HEAD(_natt_ka_addrs, natt_ka_addrs) ka_tree;
+static struct sched sc_natt = SCHED_INITIALIZER();
 
 /*
  * check if the given vid is NAT-T.
@@ -126,10 +127,14 @@ natt_hash_addr (struct ph1handle *iph1, struct sockaddr *addr)
   char *ptr;
   void *addr_ptr, *addr_port;
   size_t buf_size, addr_size;
+  int natt_force = 0;
+
+  if (iph1->rmconf != NULL && iph1->rmconf->nat_traversal == NATT_FORCE)
+	  natt_force = 1;
 
   plog (LLV_INFO, LOCATION, addr, "Hashing %s with algo #%d %s\n",
 	saddr2str(addr), iph1->approval->hashtype, 
-	(iph1->rmconf->nat_traversal == NATT_FORCE)?"(NAT-T forced)":"");
+	natt_force?"(NAT-T forced)":"");
   
   if (addr->sa_family == AF_INET) {
     addr_size = sizeof (struct in_addr);	/* IPv4 address */
@@ -163,7 +168,7 @@ natt_hash_addr (struct ph1handle *iph1, struct sockaddr *addr)
   ptr += sizeof (cookie_t);
   
   /* Copy-in Address (or zeroes if NATT_FORCE) */
-  if (iph1->rmconf->nat_traversal == NATT_FORCE)
+  if (natt_force)
     memset (ptr, 0, addr_size);
   else
     memcpy (ptr, addr_ptr, addr_size);
@@ -186,7 +191,8 @@ natt_compare_addr_hash (struct ph1handle *iph1, vchar_t *natd_received,
   u_int32_t flag;
   int verified = 0;
 
-  if (iph1->rmconf->nat_traversal == NATT_FORCE)
+  if (iph1->rmconf != NULL &&
+      iph1->rmconf->nat_traversal == NATT_FORCE)
     return verified;
 
   if (natd_seq == 0) {
@@ -224,104 +230,131 @@ natt_udp_encap (int encmode)
 }
 
 int
-natt_fill_options (struct ph1natt_options *opts, int version)
+natt_fill_options(struct ph1natt_options *opts, int version)
 {
-  if (! opts)
-    return -1;
+	if (!opts)
+		return -1;
 
-  opts->version = version;
+	opts->version = version;
 
-  switch (version) {
-    case VENDORID_NATT_00:
-    case VENDORID_NATT_01:
-      opts->float_port = 0; /* No port floating for those drafts */
-      opts->payload_nat_d = ISAKMP_NPTYPE_NATD_DRAFT;
-      opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_DRAFT;
-      opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_DRAFT;
-      opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_DRAFT;
-      opts->encaps_type = UDP_ENCAP_ESPINUDP_NON_IKE;
+	switch (version) {
+	case VENDORID_NATT_00:
+	case VENDORID_NATT_01:
+		opts->float_port = 0; /* No port floating for those drafts */
+		opts->payload_nat_d = ISAKMP_NPTYPE_NATD_DRAFT;
+		opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_DRAFT;
+		opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_DRAFT;
+		opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_DRAFT;
+		opts->encaps_type = UDP_ENCAP_ESPINUDP_NON_IKE;
 		break;
+	case VENDORID_NATT_02:
+	case VENDORID_NATT_02_N:
+	case VENDORID_NATT_03:
+		opts->float_port = lcconf->port_isakmp_natt;
+		opts->payload_nat_d = ISAKMP_NPTYPE_NATD_DRAFT;
+		opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_DRAFT;
+		opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_DRAFT;
+		opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_DRAFT;
+		opts->encaps_type = UDP_ENCAP_ESPINUDP;
+		break;
+	case VENDORID_NATT_04:
+	case VENDORID_NATT_05:
+	case VENDORID_NATT_06:
+	case VENDORID_NATT_07:
+	case VENDORID_NATT_08:
+		opts->float_port = lcconf->port_isakmp_natt;
+		opts->payload_nat_d = ISAKMP_NPTYPE_NATD_BADDRAFT;
+		opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_BADDRAFT;
+		opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_RFC;
+		opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_RFC;
+		opts->encaps_type = UDP_ENCAP_ESPINUDP;
+		break;
+	case VENDORID_NATT_RFC:
+		opts->float_port = lcconf->port_isakmp_natt;
+		opts->payload_nat_d = ISAKMP_NPTYPE_NATD_RFC;
+		opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_RFC;
+		opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_RFC;
+		opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_RFC;
+		opts->encaps_type = UDP_ENCAP_ESPINUDP;
+		break;
+	default:
+		plog(LLV_ERROR, LOCATION, NULL,
+		    "unsupported NAT-T version: %s\n",
+		    vid_string_by_id(version));
+		return -1;
+	}
 
-    case VENDORID_NATT_02:
-    case VENDORID_NATT_02_N:
-    case VENDORID_NATT_03:
-      opts->float_port = lcconf->port_isakmp_natt;
-      opts->payload_nat_d = ISAKMP_NPTYPE_NATD_DRAFT;
-      opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_DRAFT;
-      opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_DRAFT;
-      opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_DRAFT;
-      opts->encaps_type = UDP_ENCAP_ESPINUDP;
-      break;
-    case VENDORID_NATT_04:
-    case VENDORID_NATT_05:
-    case VENDORID_NATT_06:
-    case VENDORID_NATT_07:
-    case VENDORID_NATT_08:
-      opts->float_port = lcconf->port_isakmp_natt;
-      opts->payload_nat_d = ISAKMP_NPTYPE_NATD_BADDRAFT;
-      opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_BADDRAFT;
-      opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_RFC;
-      opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_RFC;
-      opts->encaps_type = UDP_ENCAP_ESPINUDP;
-      break;
-    case VENDORID_NATT_RFC:
-      opts->float_port = lcconf->port_isakmp_natt;
-      opts->payload_nat_d = ISAKMP_NPTYPE_NATD_RFC;
-      opts->payload_nat_oa = ISAKMP_NPTYPE_NATOA_RFC;
-      opts->mode_udp_tunnel = IPSECDOI_ATTR_ENC_MODE_UDPTUNNEL_RFC;
-      opts->mode_udp_transport = IPSECDOI_ATTR_ENC_MODE_UDPTRNS_RFC;
-      opts->encaps_type = UDP_ENCAP_ESPINUDP;
-	  break;
-    default:
-      plog(LLV_ERROR, LOCATION, NULL, 
-	   "unsupported NAT-T version: %s\n",
-	   vid_string_by_id(version));
-      return -1;
-  }
- 
-  opts->mode_udp_diff = opts->mode_udp_tunnel - IPSECDOI_ATTR_ENC_MODE_TUNNEL;
+	opts->mode_udp_diff = opts->mode_udp_tunnel - IPSECDOI_ATTR_ENC_MODE_TUNNEL;
 
-  return 0;
+	return 0;
 }
 
 void
-natt_float_ports (struct ph1handle *iph1)
+natt_float_ports(struct ph1handle *iph1)
 {
-	if (! (iph1->natt_flags && NAT_DETECTED) )
+	if (!(iph1->natt_flags & NAT_DETECTED))
 		return;
-	if (! iph1->natt_options->float_port){
+	if (!iph1->natt_options->float_port) {
 		/* Drafts 00 / 01, just schedule keepalive */
 		natt_keepalive_add_ph1 (iph1);
 		return;
 	}
-	
-	set_port (iph1->local, iph1->natt_options->float_port);
-	set_port (iph1->remote, iph1->natt_options->float_port);
+
+	set_port(iph1->local, iph1->natt_options->float_port);
+	set_port(iph1->remote, iph1->natt_options->float_port);
 	iph1->natt_flags |= NAT_PORTS_CHANGED | NAT_ADD_NON_ESP_MARKER;
-	
-	natt_keepalive_add_ph1 (iph1);
+
+	natt_keepalive_add_ph1(iph1);
+}
+
+static int
+natt_is_enabled(struct remoteconf *rmconf, void *args)
+{
+	if (rmconf->nat_traversal)
+		return 1;
+	return 0;
 }
 
 void
-natt_handle_vendorid (struct ph1handle *iph1, int vid_numeric)
+natt_handle_vendorid(struct ph1handle *iph1, int vid_numeric)
 {
-  if (! iph1->natt_options)
-    iph1->natt_options = racoon_calloc (1, sizeof (*iph1->natt_options));
+	if (iph1->rmconf == NULL) {
+		/* Check if any candidate remote conf allows nat-t */
+		struct rmconfselector rmconf;
+		rmconf_selector_from_ph1(&rmconf, iph1);
+		if (enumrmconf(&rmconf, natt_is_enabled, NULL) == 0)
+			return;
+	} else {
+		if (!iph1->rmconf->nat_traversal)
+			return;
+	}
 
-  if (! iph1->natt_options) {
-    plog (LLV_ERROR, LOCATION, NULL,
-	  "Allocating memory for natt_options failed!\n");
-    return;
-  }
-  
-  if (iph1->natt_options->version < vid_numeric)
-    if (natt_fill_options (iph1->natt_options, vid_numeric) == 0)
-      iph1->natt_flags |= NAT_ANNOUNCED;
+	if (!iph1->natt_options)
+		iph1->natt_options = racoon_calloc(1, sizeof(*iph1->natt_options));
+
+	if (!iph1->natt_options) {
+		plog(LLV_ERROR, LOCATION, NULL,
+		    "Allocating memory for natt_options failed!\n");
+		return;
+	}
+
+	if (iph1->natt_options->version < vid_numeric)
+		if (natt_fill_options(iph1->natt_options, vid_numeric) == 0)
+			iph1->natt_flags |= NAT_ANNOUNCED;
+}
+
+static void
+natt_keepalive_delete (struct natt_ka_addrs *ka)
+{
+  TAILQ_REMOVE (&ka_tree, ka, chain);
+  racoon_free (ka->src);
+  racoon_free (ka->dst);
+  racoon_free (ka);
 }
 
 /* NAT keepalive functions */
 static void
-natt_keepalive_send (void *param)
+natt_keepalive_send (struct sched *param)
 {
   struct natt_ka_addrs	*ka, *next = NULL;
   char keepalive_packet[] = { 0xff };
@@ -331,10 +364,9 @@ natt_keepalive_send (void *param)
   for (ka = TAILQ_FIRST(&ka_tree); ka; ka = next) {
     next = TAILQ_NEXT(ka, chain);
     
-    s = getsockmyaddr(ka->src);
+    s = myaddr_getfd(ka->src);
     if (s == -1) {
-      TAILQ_REMOVE (&ka_tree, ka, chain);
-      racoon_free (ka);
+      natt_keepalive_delete(ka);
       continue;
     }
     plog (LLV_DEBUG, LOCATION, NULL, "KA: %s\n", 
@@ -346,7 +378,7 @@ natt_keepalive_send (void *param)
 	   strerror (errno));
   }
   
-  sched_new (lcconf->natt_ka_interval, natt_keepalive_send, NULL);
+  sched_schedule (&sc_natt, lcconf->natt_ka_interval, natt_keepalive_send);
 }
 
 void
@@ -356,7 +388,7 @@ natt_keepalive_init (void)
 
   /* To disable sending KAs set natt_ka_interval=0 */
   if (lcconf->natt_ka_interval > 0)
-    sched_new (lcconf->natt_ka_interval, natt_keepalive_send, NULL);
+    sched_schedule (&sc_natt, lcconf->natt_ka_interval, natt_keepalive_send);
 }
 
 int
@@ -365,8 +397,8 @@ natt_keepalive_add (struct sockaddr *src, struct sockaddr *dst)
   struct natt_ka_addrs *ka = NULL, *new_addr;
   
   TAILQ_FOREACH (ka, &ka_tree, chain) {
-    if (cmpsaddrstrict(ka->src, src) == 0 && 
-	cmpsaddrstrict(ka->dst, dst) == 0) {
+    if (cmpsaddr(ka->src, src) == CMPSADDR_MATCH &&
+	cmpsaddr(ka->dst, dst) == CMPSADDR_MATCH) {
       ka->in_use++;
       plog (LLV_INFO, LOCATION, NULL, "KA found: %s (in_use=%u)\n",
 	    saddr2str_fromto("%s->%s", src, dst), ka->in_use);
@@ -429,14 +461,13 @@ natt_keepalive_remove (struct sockaddr *src, struct sockaddr *dst)
     plog (LLV_DEBUG, LOCATION, NULL, "KA tree dump: %s (in_use=%u)\n",
 	  saddr2str_fromto("%s->%s", src, dst), ka->in_use);
 
-    if (cmpsaddrstrict(ka->src, src) == 0 && 
-	cmpsaddrstrict(ka->dst, dst) == 0 &&
+    if (cmpsaddr(ka->src, src) == CMPSADDR_MATCH &&
+	cmpsaddr(ka->dst, dst) == CMPSADDR_MATCH &&
 	-- ka->in_use <= 0) {
 
       plog (LLV_DEBUG, LOCATION, NULL, "KA removing this one...\n");
 
-      TAILQ_REMOVE (&ka_tree, ka, chain);
-      racoon_free (ka);
+      natt_keepalive_delete (ka);
       /* Should we break here? Every pair of addresses should 
          be inserted only once, but who knows :-) Lets traverse 
 	 the whole list... */
@@ -444,16 +475,16 @@ natt_keepalive_remove (struct sockaddr *src, struct sockaddr *dst)
   }
 }
 
-static struct remoteconf *
+static int
 natt_enabled_in_rmconf_stub (struct remoteconf *rmconf, void *data)
 {
-  return (rmconf->nat_traversal ? rmconf : NULL);
+  return rmconf->nat_traversal ? 1 : 0;
 }
 
 int
 natt_enabled_in_rmconf ()
 {
-  return foreachrmconf (natt_enabled_in_rmconf_stub, NULL) != NULL;
+  return enumrmconf(NULL, natt_enabled_in_rmconf_stub, NULL) != 0;
 }
 
 

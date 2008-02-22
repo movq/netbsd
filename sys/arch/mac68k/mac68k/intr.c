@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.26 2007/12/05 12:51:49 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.29 2010/12/20 00:25:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.26 2007/12/05 12:51:49 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.29 2010/12/20 00:25:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.26 2007/12/05 12:51:49 tsutsui Exp $");
 #include <sys/vmmeter.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/psc.h>
 #include <machine/viareg.h>
@@ -90,7 +81,7 @@ int	intr_debug = 0;
  * IIfx/Q700/900/950/etc. where the interrupt controller may be reprogrammed
  * to interrupt on different levels as listed in locore.s
  */
-u_short mac68k_ipls[NIPL];
+uint16_t ipl2psl_table[NIPL];
 int idepth;
 volatile int ssir;
 
@@ -113,31 +104,31 @@ intr_init(void)
 	const char	*inames;
 	char		*g_inames;
 
-	mac68k_ipls[IPL_NONE]       = 0;
-	mac68k_ipls[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1;
-	mac68k_ipls[IPL_SOFTNET]    = PSL_S|PSL_IPL1;
-	mac68k_ipls[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1;
-	mac68k_ipls[IPL_SOFTBIO]    = PSL_S|PSL_IPL1;
-	mac68k_ipls[IPL_HIGH]       = PSL_S|PSL_IPL7;
+	ipl2psl_table[IPL_NONE]       = 0;
+	ipl2psl_table[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTNET]    = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_SOFTBIO]    = PSL_S|PSL_IPL1;
+	ipl2psl_table[IPL_HIGH]       = PSL_S|PSL_IPL7;
 
 	g_inames = (char *) &intrnames;
 	if (mac68k_machine.aux_interrupts) {
 		inames = AUX_INAMES;
 
 		/* Standard spl(9) interrupt priorities */
-		mac68k_ipls[IPL_VM]        = (PSL_S | PSL_IPL6);
-		mac68k_ipls[IPL_SCHED]     = (PSL_S | PSL_IPL6);
+		ipl2psl_table[IPL_VM]        = (PSL_S | PSL_IPL6);
+		ipl2psl_table[IPL_SCHED]     = (PSL_S | PSL_IPL6);
 	} else {
 		inames = STD_INAMES;
 
 		/* Standard spl(9) interrupt priorities */
-		mac68k_ipls[IPL_VM]        = (PSL_S | PSL_IPL2);
-		mac68k_ipls[IPL_SCHED]     = (PSL_S | PSL_IPL3);
+		ipl2psl_table[IPL_VM]        = (PSL_S | PSL_IPL2);
+		ipl2psl_table[IPL_SCHED]     = (PSL_S | PSL_IPL3);
 
 		if (current_mac_model->class == MACH_CLASSAV) {
 			inames = AV_INAMES;
-			mac68k_ipls[IPL_VM]    = (PSL_S | PSL_IPL4);
-			mac68k_ipls[IPL_SCHED] = (PSL_S | PSL_IPL4);
+			ipl2psl_table[IPL_VM]    = (PSL_S | PSL_IPL4);
+			ipl2psl_table[IPL_SCHED] = (PSL_S | PSL_IPL4);
 		}
 	}
 
@@ -164,11 +155,11 @@ intr_computeipl(void)
 	 * Enforce the following relationship, as defined in spl(9):
 	 * `bio <= net <= tty <= vm <= statclock <= clock <= sched <= serial'
 	 */
-	if (mac68k_ipls[IPL_VM] > mac68k_ipls[IPL_SCHED])
-		mac68k_ipls[IPL_SCHED] = mac68k_ipls[IPL_VM];
+	if (ipl2psl_table[IPL_VM] > ipl2psl_table[IPL_SCHED])
+		ipl2psl_table[IPL_SCHED] = ipl2psl_table[IPL_VM];
 
-	if (mac68k_ipls[IPL_SCHED] > mac68k_ipls[IPL_HIGH])
-		mac68k_ipls[IPL_HIGH] = mac68k_ipls[IPL_SCHED];
+	if (ipl2psl_table[IPL_SCHED] > ipl2psl_table[IPL_HIGH])
+		ipl2psl_table[IPL_HIGH] = ipl2psl_table[IPL_SCHED];
 }
 
 /*
@@ -228,7 +219,7 @@ intr_dispatch(int evec)		/* format | vector offset */
 	ipl = vec - ISRLOC;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	(void)(*intr_func[ipl])(intr_arg[ipl]);
 	idepth--;

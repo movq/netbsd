@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_exec.h,v 1.11 2007/12/04 18:40:25 dsl Exp $	 */
+/*	$NetBSD: svr4_32_exec.h,v 1.16 2017/02/12 21:02:20 chs Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,9 @@
 
 #undef SVR4_COMPAT_SOLARIS2
 #ifdef SVR4_COMPAT_SOLARIS2
-# define SVR4_32_AUX_ARGSIZ howmany((sizeof(Aux32Info) * 15) + 256, \
-				sizeof(netbsd32_charp))
+# define SVR4_32_AUX_ARGSIZ (sizeof(Aux32Info) * 15 + 256)
 #else
-# define SVR4_32_AUX_ARGSIZ howmany(sizeof(Aux32Info) * 8, sizeof(netbsd32_charp))
+# define SVR4_32_AUX_ARGSIZ (sizeof(Aux32Info) * 8)
 #endif
 
 int svr4_32_copyargs(struct lwp *, struct exec_package *, struct ps_strings *,
@@ -67,10 +59,10 @@ int svr4_32_copyargs(struct lwp *, struct exec_package *, struct ps_strings *,
 #endif
 #endif
 
-extern const struct emul emul_svr4_32;
+extern struct emul emul_svr4_32;
 
-void svr4_32_setregs(struct lwp *, struct exec_package *, u_long);
-vaddr_t svr4_32_vm_default_addr(struct proc *, vaddr_t, vsize_t);
+void svr4_32_setregs(struct lwp *, struct exec_package *, vaddr_t);
+vaddr_t svr4_32_vm_default_addr(struct proc *, vaddr_t, vsize_t, int);
 int svr4_32_elf32_probe(struct lwp *, struct exec_package *, void *,
     char *, vaddr_t *);
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ip.4,v 1.22 2006/12/23 06:58:20 wiz Exp $
+.\"	$NetBSD: ip.4,v 1.43 2018/01/01 12:45:07 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ip.4	8.2 (Berkeley) 11/30/93
 .\"
-.Dd December 5, 2006
+.Dd December 31, 2017
 .Dt IP 4
 .Os
 .Sh NAME
@@ -41,38 +41,24 @@
 .Ft int
 .Fn socket AF_INET SOCK_RAW proto
 .Sh DESCRIPTION
-.Tn IP
-is the network layer protocol used by the Internet protocol family.
+IP is the network layer protocol used by the Internet protocol family.
 Options may be set at the
-.Tn IP
-level when using higher-level protocols that are based on
-.Tn IP
-(such as
-.Tn TCP
-and
-.Tn UDP ) .
+IP level when using higher-level protocols that are based on
+IP (such as TCP and UDP).
 It may also be accessed through a
 .Dq raw socket
 when developing new protocols, or special-purpose applications.
 .Pp
-There are several
-.Tn IP-level
+There are several IP-level
 .Xr setsockopt 2 Ns / Ns Xr getsockopt 2
 options.
 .Dv IP_OPTIONS
-may be used to provide
-.Tn IP
-options to be transmitted in the
-.Tn IP
-header of each outgoing packet
+may be used to provide IP options to be transmitted in the
+IP header of each outgoing packet
 or to examine the header options on incoming packets.
-.Tn IP
-options may be used with any socket type in the Internet family.
-The format of
-.Tn IP
-options to be sent is that specified by the
-.Tn IP
-protocol specification (RFC 791), with one exception:
+IP options may be used with any socket type in the Internet family.
+The format of IP options to be sent is that specified by the
+IP protocol specification (RFC 791), with one exception:
 the list of addresses for Source Route options must include the first-hop
 gateway at the beginning of the list of gateways.
 The first-hop gateway address will be extracted from the option list
@@ -86,19 +72,18 @@ setsockopt(s, IPPROTO_IP, IP_OPTIONS, NULL, 0);
 and
 .Dv IP_TTL
 may be used to set the type-of-service and time-to-live fields in the
-.Tn IP
-header for
+IP header for
 .Dv SOCK_STREAM
 and
 .Dv SOCK_DGRAM
 sockets.
 For example,
 .Bd -literal
-int tos = IPTOS_LOWDELAY;       /* see \*[Lt]netinet/in.h\*[Gt] */
-setsockopt(s, IPPROTO_IP, IP_TOS, \*[Am]tos, sizeof(tos));
+int tos = IPTOS_LOWDELAY;       /* see <netinet/ip.h> */
+setsockopt(s, IPPROTO_IP, IP_TOS, &tos, sizeof(tos));
 
 int ttl = 60;                   /* max = 255 */
-setsockopt(s, IPPROTO_IP, IP_TTL, \*[Am]ttl, sizeof(ttl));
+setsockopt(s, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl));
 .Ed
 .Pp
 .Dv IP_IPSEC_POLICY
@@ -110,15 +95,81 @@ char *buf = ipsec_set_policy(policy, strlen(policy));
 setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY, buf, ipsec_get_policylen(buf));
 .Ed
 .Pp
+The
+.Dv IP_RECVPKTINFO
+option can be used to turn on receiving of information about the destination
+address of the packet, and the interface index.
+The information is passed in a
+.Vt struct in_pktinfo
+structure, which contains
+.Bd -literal
+	struct in_addr ipi_addr;	/* the source or destination address */
+	unsigned int ipi_ifindex;	/* the interface index */
+.Ed
+.Pp
+and added to the control portion of the message:
+The cmsghdr fields have the following values:
+.Bd -literal
+cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo))
+cmsg_level = IPPROTO_IP
+cmsg_type = IP_PKTINFO
+.Ed
+.Pp
+For
+.Xr sendmsg 2 ,
+the source address or output interface can be specified by adding an
+.Dv IP_PKTINFO
+message to the control part of the message on a
+.Dv SOCK_DGRAM
+or
+.Dv SOCK_RAW
+socket.
+Setting ipi_ifindex will cause the primary address of that interface
+to be used; setting ipi_addr will directly choose that address.
+The
+.Dv IP_PKTINFO
+cmsghdr structure from a received message may be
+used unchanged, in which case the outgoing message will be sent
+from the address the incoming message was received on.
+.Pp
+Setting the
+.Dv IP_PKTINFO
+option on a socket, with the same
+.Vt struct in_pktinfo
+structure, will set the default source address to be used until set
+again, unless explicitly overridden on a per-packet basis, as above.
+.Pp
+The
+.Dv IP_PORTALGO
+can be used to randomize the port selection.
+Valid algorithms are described in
+.Xr rfc6056 7
+and their respective constants are in
+.In netinet/portalgo.h .
+For example,
+.Bd -literal
+int algo = PORTALGO_ALGO_RANDOM_PICK;       /* see <netinet/portalgo.h> */
+setsockopt(s, IPPROTO_IP, IP_PORTALGO, &algo, sizeof(algo));
+.Ed
+.Pp
+The port selection can be also viewed and controlled at a global level for all
+IP sockets using the following
+.Xr sysctl 7
+variables:
+.Dv net.inet.ip.anonportalgo.available
+and
+.Dv net.inet.ip.anonportalgo.selected .
+.Pp
 .Dv IP_PORTRANGE
 controls how ephemeral ports are allocated for
 .Dv SOCK_STREAM
 and
 .Dv SOCK_DGRAM
-sockets. For example,
+sockets.
+For example,
 .Bd -literal
-int range = IP_PORTRANGE_LOW;       /* see \*[Lt]netinet/in.h\*[Gt] */
-setsockopt(s, IPPROTO_IP, IP_PORTRANGE, \*[Am]range, sizeof(range));
+int range = IP_PORTRANGE_LOW;       /* see <netinet/in.h> */
+setsockopt(s, IPPROTO_IP, IP_PORTRANGE, &range, sizeof(range));
 .Ed
 .Pp
 If the
@@ -130,21 +181,30 @@ or
 socket,
 the
 .Xr recvmsg 2
-call will return the destination
-.Tn IP
-address for a
-.Tn UDP
-datagram.
+call will return the destination IP address for a UDP datagram.
 The msg_control field in the msghdr structure points to a buffer
-that contains a cmsghdr structure followed by the
-.Tn IP
-address.
+that contains a cmsghdr structure followed by the IP address.
 The cmsghdr fields have the following values:
 .Bd -literal
-cmsg_len = sizeof(struct in_addr)
+cmsg_len = CMSG_LEN(sizeof(struct in_addr))
 cmsg_level = IPPROTO_IP
 cmsg_type = IP_RECVDSTADDR
 .Ed
+.Pp
+For
+.Xr sendmsg 2 ,
+the source address can be specified by adding
+.Dv IP_SENDSRCADDR
+to the control part of the message on a
+.Dv SOCK_DGRAM
+or
+.Dv SOCK_RAW
+socket.
+The
+.Dv IP_RECVDSTADDR
+cmsghdr structure from a received message may
+be used unchanged, in which case the outgoing message will be sent
+from the address the incoming message was received on.
 .Pp
 If the
 .Dv IP_RECVIF
@@ -161,13 +221,44 @@ the msg_control field in the msghdr structure points to a buffer
 that contains a cmsghdr structure followed by the struct sockaddr_dl.
 The cmsghdr fields have the following values:
 .Bd -literal
-cmsg_len = sizeof(struct sockaddr_dl)
+cmsg_len = CMSG_LEN(sizeof(struct sockaddr_dl))
 cmsg_level = IPPROTO_IP
 cmsg_type = IP_RECVIF
 .Ed
+.Pp
+If the
+.Dv IP_RECVTTL
+option is enabled on a
+.Dv SOCK_DGRAM
+socket, the
+.Xr recvmsg 2
+call will return the TTL of the received datagram.
+The msg_control field in the msghdr structure points to a buffer
+that contains a cmsghdr structure followed by the TTL value.
+The cmsghdr fields have the following values:
+.Bd -literal
+cmsg_len = CMSG_LEN(sizeof(uint8_t))
+cmsg_level = IPPROTO_IP
+cmsg_type = IP_RECVTTL
+.Ed
+.Pp
+The
+.Dv IP_MINTTL
+option may be used on
+.Dv SOCK_DGRAM
+or
+.Dv SOCK_STREAM
+sockets to discard packets with a TTL lower than the option value.
+This can be used to implement the
+.Em Generalized TTL Security Mechanism (GTSM)
+according to RFC 3682.
+To discard all packets with a TTL lower than 255:
+.Bd -literal -offset indent
+int minttl = 255;
+setsockopt(s, IPPROTO_IP, IP_MINTTL, &minttl, sizeof(minttl));
+.Ed
 .Ss MULTICAST OPTIONS
-.Tn IP
-multicasting is supported only on
+IP multicasting is supported only on
 .Dv AF_INET
 sockets of type
 .Dv SOCK_DGRAM
@@ -181,7 +272,7 @@ option changes the time-to-live (TTL) for outgoing multicast datagrams
 in order to control the scope of the multicasts:
 .Bd -literal
 u_char ttl;	/* range: 0 to 255, default = 1 */
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, \*[Am]ttl, sizeof(ttl));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
 .Ed
 .Pp
 Datagrams with a TTL of 1 are not forwarded beyond the local network.
@@ -200,12 +291,10 @@ option overrides the default for
 subsequent transmissions from a given socket:
 .Bd -literal
 struct in_addr addr;
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, \*[Am]addr, sizeof(addr));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr));
 .Ed
 .Pp
-where "addr" is the local
-.Tn IP
-address of the desired interface or
+where "addr" is the local IP address of the desired interface or
 .Dv INADDR_ANY
 to specify the default interface.
 An interface's local IP address and multicast capability can
@@ -218,7 +307,7 @@ An application may also specify an alternative to the default network interface
 by index:
 .Bd -literal
 struct uint32_t idx = htonl(ifindex);
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, \*[Am]idx, sizeof(idx));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, &idx, sizeof(idx));
 .Ed
 .Pp
 where "ifindex" is an interface index as returned by
@@ -236,7 +325,7 @@ option gives the sender explicit control
 over whether or not subsequent datagrams are looped back:
 .Bd -literal
 u_char loop;	/* 0 = disable, 1 = enable (default) */
-setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP, \*[Am]loop, sizeof(loop));
+setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
 .Ed
 .Pp
 This option
@@ -260,7 +349,7 @@ To join a multicast group, use the
 option:
 .Bd -literal
 struct ip_mreq mreq;
-setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, \*[Am]mreq, sizeof(mreq));
+setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 .Ed
 .Pp
 where
@@ -276,8 +365,7 @@ struct ip_mreq {
 .Dv imr_interface
 should be
 .Dv INADDR_ANY
-to choose the default multicast interface, or the
-.Tn IP
+to choose the default multicast interface, or the IP
 address of a particular multicast-capable interface if
 the host is multihomed.
 Membership is associated with a single interface;
@@ -290,7 +378,7 @@ Up to
 To drop a membership, use:
 .Bd -literal
 struct ip_mreq mreq;
-setsockopt(s, IPPROTO_IP, IP_DROP_MEMBERSHIP, \*[Am]mreq, sizeof(mreq));
+setsockopt(s, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 .Ed
 .Pp
 where
@@ -299,9 +387,7 @@ contains the same values as used to add the membership.
 Memberships are dropped when the socket is closed or the process exits.
 .\"-----------------------
 .Ss RAW IP SOCKETS
-Raw
-.Tn IP
-sockets are connectionless, and are normally used with the
+Raw IP sockets are connectionless, and are normally used with the
 .Xr sendto 2
 and
 .Xr recvfrom 2
@@ -329,15 +415,12 @@ If
 is non-zero, that protocol number will be used on outgoing packets
 and to filter incoming packets.
 .Pp
-Outgoing packets automatically have an
-.Tn IP
+Outgoing packets automatically have an IP
 header prepended to them (based on the destination address and the
 protocol number the socket is created with), unless the
 .Dv IP_HDRINCL
 option has been set.
-Incoming packets are received with
-.Tn IP
-header and options intact.
+Incoming packets are received with IP header and options intact.
 .Pp
 .Dv IP_HDRINCL
 indicates the complete IP header is included with the data and may
@@ -345,10 +428,10 @@ be used only with the
 .Dv SOCK_RAW
 type.
 .Bd -literal
-#include \*[Lt]netinet/ip.h\*[Gt]
+#include <netinet/ip.h>
 
 int hincl = 1;                  /* 1 = on, 0 = off */
-setsockopt(s, IPPROTO_IP, IP_HDRINCL, \*[Am]hincl, sizeof(hincl));
+setsockopt(s, IPPROTO_IP, IP_HDRINCL, &hincl, sizeof(hincl));
 .Ed
 .Pp
 Unlike previous
@@ -356,10 +439,10 @@ Unlike previous
 releases, the program must set all
 the fields of the IP header, including the following:
 .Bd -literal
-ip-\*[Gt]ip_v = IPVERSION;
-ip-\*[Gt]ip_hl = hlen \*[Gt]\*[Gt] 2;
-ip-\*[Gt]ip_id = 0;  /* 0 means kernel set appropriate value */
-ip-\*[Gt]ip_off = offset;
+ip->ip_v = IPVERSION;
+ip->ip_hl = hlen >> 2;
+ip->ip_id = 0;  /* 0 means kernel set appropriate value */
+ip->ip_off = offset;
 .Ed
 .Pp
 If the header source address is set to
@@ -368,38 +451,54 @@ the kernel will choose an appropriate address.
 .Sh DIAGNOSTICS
 A socket operation may fail with one of the following errors returned:
 .Bl -tag -width [EADDRNOTAVAIL]
+.It Bq Er EACCES
+when an attempt is made to create a raw IP socket by a non-privileged process.
+.It Bq Er EADDRNOTAVAIL
+when an attempt is made to create a socket with a network address
+for which no network interface exists.
 .It Bq Er EISCONN
 when trying to establish a connection on a socket which already
 has one, or when trying to send a datagram with the destination
 address specified and the socket is already connected;
+.It Bq Er ENOBUFS
+when the system runs out of memory for an internal data structure;
 .It Bq Er ENOTCONN
 when trying to send a datagram, but no destination address is
 specified, and the socket hasn't been connected;
-.It Bq Er ENOBUFS
-when the system runs out of memory for an internal data structure;
-.It Bq Er EADDRNOTAVAIL
-when an attempt is made to create a socket with a network address
-for which no network interface exists.
-.It Bq Er EACCES
-when an attempt is made to create a raw IP socket by a non-privileged process.
 .El
 .Pp
-The following errors specific to
-.Tn IP
-may occur when setting or getting
-.Tn IP
-options:
+The following errors specific to IP may occur when setting or getting
+IP options:
 .Bl -tag -width EADDRNOTAVAILxx
 .It Bq Er EINVAL
-An unknown socket option name was given.
-.It Bq Er EINVAL
-The IP option field was improperly formed; an option field was
+An unknown socket option name was given; or
+the IP option field was improperly formed; an option field was
 shorter than the minimum value or longer than the option buffer provided.
 .El
+.Sh COMPATIBILITY
+The
+.Dv IP_RECVPKTINFO
+option is used because it is directly compatible with Solaris, AIX, etc.,
+and the
+.Dv IP_PKTINFO
+option is intended to be used in their manner, to set the default source
+address for outgoing packets on a
+.Dv SOCK_DGRAM
+or
+.Dv SOCK_RAW
+socket.
+For compatibility with Linux, however, if you attempt to set the
+.Dv IP_PKTINFO
+option, using an integer parameter as a boolean value, this will
+transparently manipulate the
+.Dv IP_RECVPKTINFO
+option instead.
+Source code compatbility with both environments is thus maintained.
 .Sh SEE ALSO
 .Xr getsockopt 2 ,
 .Xr recv 2 ,
 .Xr send 2 ,
+.Xr CMSG_DATA 3 ,
 .Xr ipsec_set_policy 3 ,
 .Xr icmp 4 ,
 .Xr inet 4 ,

@@ -1,4 +1,4 @@
-/*	$NetBSD: parms.c,v 1.23 2006/03/18 20:25:28 christos Exp $	*/
+/*	$NetBSD: parms.c,v 1.26 2012/01/16 17:38:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: parms.c,v 1.23 2006/03/18 20:25:28 christos Exp $");
+__RCSID("$NetBSD: parms.c,v 1.26 2012/01/16 17:38:16 christos Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -192,7 +192,7 @@ gwkludge(void)
 	}
 
 	for (lnum = 1; ; lnum++) {
-		if (0 == fgets(lbuf, sizeof(lbuf), fp))
+		if (fgets(lbuf, sizeof(lbuf), fp) == NULL)
 			break;
 		lptr = lbuf;
 		while (*lptr == ' ')
@@ -253,7 +253,7 @@ gwkludge(void)
 				       dname, lptr);
 				continue;
 			}
-			HTONL(dst);	/* make network # into IP address */
+			dst = htonl(dst); /* make network # into IP address */
 		} else {
 			msglog("bad \"%s\" in "_PATH_GATEWAYS
 			       " entry \"%s\"", net_host, lptr);
@@ -620,7 +620,7 @@ parse_parms(char *line,
 			free(intnetp);
 			return bad_str(line);
 		}
-		HTONL(intnetp->intnet_addr);
+		intnetp->intnet_addr = htonl(intnetp->intnet_addr);
 		intnetp->intnet_next = intnets;
 		intnets = intnetp;
 		return 0;
@@ -884,9 +884,9 @@ check_parms(struct parm *new)
 	     parmpp = &parmp->parm_next) {
 		if (strcmp(new->parm_name, parmp->parm_name))
 			continue;
-		if (!on_net(htonl(parmp->parm_net),
+		if (!on_net_h(parmp->parm_net,
 			    new->parm_net, new->parm_mask)
-		    && !on_net(htonl(new->parm_net),
+		    && !on_net_h(new->parm_net,
 			       parmp->parm_net, parmp->parm_mask))
 			continue;
 
@@ -900,11 +900,11 @@ check_parms(struct parm *new)
 		if ((0 != (new->parm_int_state & GROUP_IS_SOL_OUT)
 		     && 0 != (parmp->parm_int_state & GROUP_IS_SOL_OUT)
 		     && 0 != ((new->parm_int_state ^ parmp->parm_int_state)
-			      && GROUP_IS_SOL_OUT))
+			      & GROUP_IS_SOL_OUT))
 		    || (0 != (new->parm_int_state & GROUP_IS_ADV_OUT)
 			&& 0 != (parmp->parm_int_state & GROUP_IS_ADV_OUT)
 			&& 0 != ((new->parm_int_state ^ parmp->parm_int_state)
-				 && GROUP_IS_ADV_OUT))
+				 & GROUP_IS_ADV_OUT))
 		    || (new->parm_rdisc_pref != 0
 			&& parmp->parm_rdisc_pref != 0
 			&& new->parm_rdisc_pref != parmp->parm_rdisc_pref)
@@ -987,7 +987,7 @@ getnet(char *name,
 		if (0 == (in.s_addr & 0xff000000))
 			in.s_addr <<= 8;
 	} else if (inet_aton(name, &in) == 1) {
-		NTOHL(in.s_addr);
+		in.s_addr = ntohl(in.s_addr);
 	} else if (!mname && !strcasecmp(name,"default")) {
 		in.s_addr = RIP_DEFAULT;
 	} else {

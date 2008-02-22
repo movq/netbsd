@@ -1,7 +1,6 @@
-/*	$NetBSD: natm.h,v 1.9 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: natm.h,v 1.15 2015/09/06 06:01:01 dholland Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,6 +31,8 @@
 /*
  * natm.h: native mode atm
  */
+
+#include <sys/ioccom.h>
 
 
 /*
@@ -126,6 +121,8 @@ extern	u_int natm_sookcnt,
 		natm_sookbytes;		/* account of ok */
 #endif
 
+extern const struct pr_usrreqs natm_usrreqs;
+
 /* atm_rawioctl: kernel's version of SIOCRAWATM [for internal use only!] */
 struct atm_rawioctl {
   struct natmpcb *npcb;
@@ -136,21 +133,14 @@ struct atm_rawioctl {
 /* external functions */
 
 /* natm_pcb.c */
-struct	natmpcb *npcb_alloc __P((int));
-void	npcb_free __P((struct natmpcb *, int));
-struct	natmpcb *npcb_add __P((struct natmpcb *, struct ifnet *, int, int));
+struct	natmpcb *npcb_alloc(bool);
+void	npcb_free(struct natmpcb *, int);
+struct	natmpcb *npcb_add(struct natmpcb *, struct ifnet *, u_int16_t, u_int8_t);
 
 /* natm.c */
-#if defined(__NetBSD__) || defined(__OpenBSD__)
-int	natm_usrreq __P((struct socket *, int, struct mbuf *,
-                             struct mbuf *, struct mbuf *, struct lwp *));
-#elif defined(__FreeBSD__)
-int	natm_usrreq __P((struct socket *, int, struct mbuf *,
-                             struct mbuf *, struct mbuf *));
-#endif
-int	natm0_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
-int	natm5_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
-void	natmintr __P((void));
+int	natm0_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+int	natm5_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+void	natmintr(void);
 
 #endif
 

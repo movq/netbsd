@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_arm7tdmi.S,v 1.3 2007/10/17 19:53:29 garbled Exp $	*/
+/*	$NetBSD: cpufunc_asm_arm7tdmi.S,v 1.7 2014/03/30 01:15:03 matt Exp $	*/
 
 /*
  * Copyright (c) 2001 John Fremlin
@@ -34,8 +34,9 @@
  * ARM7TDMI assembly functions for CPU / MMU / TLB specific operations
  */
  
-#include <machine/cpu.h>
+#include "assym.h"
 #include <machine/asm.h>
+#include <arm/locore.h>
 
 /*
  * Functions to set the MMU Translation Table Base register
@@ -43,14 +44,26 @@
  * We need to clean and flush the cache as it uses virtual
  * addresses that are about to change.
  */
-ENTRY(arm7tdmi_setttb)
-	mov	r1, r0		/* store the TTB in a safe place */
-	mov	r2, lr		/* ditto with lr */
 
-	bl	_C_LABEL(arm7tdmi_cache_flushID)
+/*
+ * Context switch.
+ *
+ * These are the CPU-specific parts of the context switcher cpu_switch()
+ * These functions actually perform the TTB reload.
+ */
+ENTRY(arm7tdmi_setttb)
+	mov	r3, lr		/* ditto with lr */
+	mov	r2, r1		/* store the flush flag in a safe place */
+	mov	r1, r0		/* store the TTB in a safe place */
+
+	cmp	r2, #0
+	blne	_C_LABEL(arm7tdmi_cache_flushID)
 
 	/* Write the TTB */
 	mcr	p15, 0, r1, c2, c0, 0
+
+	cmp	r2, #0		@ do we need to flush
+	moveq	pc, r3		@   if not, return
 
 	/* If we have updated the TTB we must flush the TLB */
 	bl	_C_LABEL(arm7tdmi_tlb_flushID)
@@ -58,7 +71,9 @@ ENTRY(arm7tdmi_setttb)
 	/* For good measure we will flush the IDC as well */
 	bl	_C_LABEL(arm7tdmi_cache_flushID)
 
-	mov	pc, r2
+	mov	pc, r3
+END(arm7tdmi_setttb)
+STRONG_ALIAS(arm7tdmi_context_switch, arm7tdmi_setttb)
 
 /*
  * TLB functions
@@ -67,10 +82,16 @@ ENTRY(arm7tdmi_tlb_flushID)
 	mov	r0, #0
 	mcr	p15, 0, r0, c8, c7, 0
 	mov	pc, lr
+END(arm7tdmi_tlb_flushID)
 
 ENTRY(arm7tdmi_tlb_flushID_SE)
 	mcr	p15, 0, r0, c8, c7, 1
+#if PAGE_SIZE == 2 * L2_S_SIZE
+	add	r0, r0, #L2_S_SIZE
+	mcr	p15, 0, r0, c8, c7, 1
+#endif
 	mov	pc, lr
+END(arm7tdmi_tlb_flushID_SE)
 
 /*
  * Cache functions
@@ -85,12 +106,4 @@ ENTRY(arm7tdmi_cache_flushID)
 	mov	r0, r0
 
 	mov	pc, lr
-
-/*
- * Context switch.
- *
- * These is the CPU-specific parts of the context switcher cpu_switch()
- * These functions actually perform the TTB reload.
- */
-ENTRY(arm7tdmi_context_switch)
-	b	_C_LABEL(arm7tdmi_setttb)
+END(arm7tdmi_cache_flushID)

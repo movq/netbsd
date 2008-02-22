@@ -1,4 +1,4 @@
-/*	$NetBSD: ioat66.c,v 1.16 2007/10/19 12:00:19 ad Exp $	*/
+/*	$NetBSD: ioat66.c,v 1.22 2016/07/14 04:19:27 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.16 2007/10/19 12:00:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.22 2016/07/14 04:19:27 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: ioat66.c,v 1.16 2007/10/19 12:00:19 ad Exp $");
 #define	NSLAVES	6
 
 struct ioat66_softc {
-	struct device sc_dev;
 	void *sc_ih;
 
 	bus_space_tag_t sc_iot;
@@ -68,16 +67,15 @@ struct ioat66_softc {
 int ioatbases[NSLAVES]={0x220,0x228,0x240,0x248,0x260,0x268};
 #define IOAT66SHARED 0x208
 
-int ioat66probe(struct device *, struct cfdata *, void *);
-void ioat66attach(struct device *, struct device *, void *);
+int ioat66probe(device_t, cfdata_t, void *);
+void ioat66attach(device_t, device_t, void *);
 int ioat66intr(void *);
 
-CFATTACH_DECL(ioat, sizeof(struct ioat66_softc),
+CFATTACH_DECL_NEW(ioat, sizeof(struct ioat66_softc),
     ioat66probe, ioat66attach, NULL, NULL);
 
 int
-ioat66probe(struct device *parent, struct cfdata *self,
-    void *aux)
+ioat66probe(device_t parent, cfdata_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -143,9 +141,9 @@ out:
 }
 
 void
-ioat66attach(struct device *parent, struct device *self, void *aux)
+ioat66attach(device_t parent, device_t self, void *aux)
 {
-	struct ioat66_softc *sc = (void *)self;
+	struct ioat66_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	struct commulti_attach_args ca;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -162,16 +160,15 @@ ioat66attach(struct device *parent, struct device *self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			     sc->sc_dev.dv_xname, i);
+			aprint_error_dev(self,
+			    "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
 
 	if(bus_space_map(iot, IOAT66SHARED, 1, 0, &sc->sc_intmasq)) {
-	  printf("%s: can't map shared interrupt mask\n",
-	 	 sc->sc_dev.dv_xname);
-	  return;
+		aprint_error_dev(self, "can't map shared interrupt mask\n");
+		return;
 	}
 
 	for (i = 0; i < NSLAVES; i++) {
@@ -192,8 +189,7 @@ ioat66attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-ioat66intr(arg)
-	void *arg;
+ioat66intr(void *arg)
 {
 	struct ioat66_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;

@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.37 2007/12/20 23:46:12 ad Exp $	*/
+/*	$NetBSD: asm.h,v 1.42 2016/05/15 15:26:04 chs Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,7 +41,7 @@
 #include "opt_multiprocessor.h"
 #endif
 
-#ifdef PIC
+#ifdef __PIC__
 #define PIC_PROLOGUE	\
 	pushl	%ebx;	\
 	call	1f;	\
@@ -85,7 +85,7 @@
 /* let kernels and others override entrypoint alignment */
 #if !defined(_ALIGN_TEXT) && !defined(_KERNEL)
 # ifdef _STANDALONE
-#  define _ALIGN_TEXT .align 4
+#  define _ALIGN_TEXT .align 1
 # elif defined __ELF__
 #  define _ALIGN_TEXT .align 16
 # else
@@ -107,17 +107,25 @@
 #ifdef __STDC__
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X ## name; .type X ## name,@function; X ## name:
+#define	IDTVEC_END(name) \
+	.size X ## name, . - X ## name
 #else 
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X/**/name; .type X/**/name,@function; X/**/name:
+#define	IDTVEC_END(name) \
+	.size X/**/name, . - X/**/name
 #endif /* __STDC__ */ 
 #else 
 #ifdef __STDC__
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl _X ## name; .type _X ## name,@function; _X ## name: 
+#define	IDTVEC_END(name) \
+	.size _X ## name, . - _X ## name
 #else
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl _X/**/name; .type _X/**/name,@function; _X/**/name:
+#define	IDTVEC_END(name) \
+	.size _X/**/name, . - _X/**/name
 #endif /* __STDC__ */
 #endif /* __ELF__ */
 
@@ -165,8 +173,10 @@
 
 #define	ENTRY(y)	_ENTRY(_C_LABEL(y)); _PROF_PROLOGUE
 #define	NENTRY(y)	_ENTRY(_C_LABEL(y))
+#define	ALTENTRY(x)	NENTRY(x)
 #define	ASENTRY(y)	_ENTRY(_ASM_LABEL(y)); _PROF_PROLOGUE
 #define	LABEL(y)	_LABEL(_C_LABEL(y))
+#define	END(y)		.size y, . - y
 
 #define	ASMSTR		.asciz
 
@@ -196,16 +206,14 @@
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_C_LABEL(sym)) ## ,1,0,0,0
-#elif defined(__ELF__)
-#define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(sym),1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_/**/sym),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
 
 #endif /* !_I386_ASM_H_ */

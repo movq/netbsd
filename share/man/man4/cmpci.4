@@ -1,4 +1,4 @@
-.\" $NetBSD: cmpci.4,v 1.7 2005/06/22 04:30:08 kent Exp $
+.\" $NetBSD: cmpci.4,v 1.9 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -17,13 +17,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,36 +60,36 @@ command.
 The complex structure is analyzed as follows.
 .Bd -literal
 SPDIF in  ----------------------
-#1(coax)-\*[Gt]|spdin1              |  R    -----------------------
-#2(opt)--\*[Gt]|spdin2  spdif.input |--*-\*[Gt]--|spdin   spdif.output |--\*[Gt] SPDIF
-       --\*[Gt]|spdout              |  | --\*[Gt]|playback             |    output
+#1(coax)->|spdin1              |  R    -----------------------
+#2(opt)-->|spdin2  spdif.input |--*->--|spdin   spdif.output |--> SPDIF
+       -->|spdout              |  | -->|playback             |    output
        |  ----------------------  | |  -----------------------
-       --------------------\*[Lt]------+-*
-     ---------\*[Lt]-------------------+-+----------------------------------
+       --------------------<------+-*
+     ---------<-------------------+-+----------------------------------
      |  ------------------------  | |   -----------------------       |
-     --\*[Gt]|legacy  spdif.output. |--+-*--\*[Gt]|spdout               |       |
-     --\*[Gt]|wave    playback      |  -----\*[Gt]|spdin  spdif.monitor |----   |
+     -->|legacy  spdif.output. |--+-*-->|spdout               |       |
+     -->|wave    playback      |  ----->|spdin  spdif.monitor |----   |
      |  ------------------------     NC-|off                  |   |   |
-     ---------\*[Lt]-- spdif                 -----------------------   |   |
+     ---------<-- spdif                 -----------------------   |   |
          -------+------- dac ------------    -----------------    v   |
-wave  --\*[Gt]|playback.mode|----\*[Gt]|inputs.dac|-*-\*[Gt]|inputs.dac.mute|-\*[Gt]----- |
+wave  -->|playback.mode|---->|inputs.dac|-*->|inputs.dac.mute|->----- |
 playback ---------------     ------------ R  -----------------  | + | |
                   -----------------     ---------------------   |mix| |
-FM synthesizer --\*[Gt]|inputs.fmsynth |--*-\*[Gt]|inputs.fmsynth.mute|--\*[Gt]----- |
-                  -----------------  R  ---------------------     *-\*[Gt]--
+FM synthesizer -->|inputs.fmsynth |--*->|inputs.fmsynth.mute|-->----- |
+                  -----------------  R  ---------------------     *->--
 CD        ----------------------   ---------------------------    v
-LINE-IN -\*[Gt]|inputs.{cd,line,aux}|-*\*[Gt]|inputs.{cd,line,aux}.mute|-\*[Gt]-----
+LINE-IN ->|inputs.{cd,line,aux}|-*>|inputs.{cd,line,aux}.mute|->-----
 AUX       ---------------------- R ---------------------------  |   |
           ------------------                                    |   |
-PC-SPK --\*[Gt]| inputs.speaker |-----------------------------------\*[Gt]| + |
+PC-SPK -->| inputs.speaker |----------------------------------->| + |
           ------------------                                    |   |
           -------------------  ------------  -----------------  |mix|
-MIC --*--\*[Gt]|inputs.mic.preamp|-\*[Gt]|inputs.mic|-\*[Gt]|inputs.mic.mute|-\*[Gt]|   |
+MIC --*-->|inputs.mic.preamp|->|inputs.mic|->|inputs.mic.mute|->|   |
       |   -------------------  ------------  -----------------  -----
       |   ------------   -----------------                       |
-      ---\*[Gt]|record.mic|--\*[Gt]|               |                       v
-          ------------   | record.source |--\*[Gt]to         -----------
-                    *R--\*[Gt]| (select, mix) |   recording  |outputs.*|--\*[Gt]
+      --->|record.mic|-->|               |                       v
+          ------------   | record.source |-->to         -----------
+                    *R-->| (select, mix) |   recording  |outputs.*|-->
                          -----------------              ----------- SPK
                                                                  (front)
 .Ed

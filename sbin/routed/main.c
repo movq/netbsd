@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.39 2004/07/06 16:43:18 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.42 2017/10/02 11:02:19 maya Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -35,27 +35,22 @@
 
 #include "defs.h"
 #include "pathnames.h"
-#ifdef sgi
-#include "math.h"
+#if defined(__NetBSD__)
+#include <util.h>
 #endif
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/file.h>
 
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n"
-	    "The Regents of the University of California."
-	    "  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #ifdef __NetBSD__
-__RCSID("$NetBSD: main.c,v 1.39 2004/07/06 16:43:18 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.42 2017/10/02 11:02:19 maya Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
 __RCSID("Revision: 2.27 ");
 #ident "Revision: 2.27 "
-#endif
-
-#if defined(__NetBSD__)
-#include <util.h>
 #endif
 
 pid_t	mypid;
@@ -226,7 +221,7 @@ main(int argc,
 		case 'v':
 			/* display version */
 			verbose++;
-			msglog("version 2.28");
+			msglog("version 2.32");
 			break;
 
 		default:
@@ -290,14 +285,8 @@ usage:
 	signal(SIGUSR2, sigtrace_off);
 
 	/* get into the background */
-#ifdef sgi
-	if (0 > _daemonize(background ? 0 : (_DF_NOCHDIR|_DF_NOFORK),
-			   STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO))
-		BADERR(0, "_daemonize()");
-#else
 	if (background && daemon(0, 1) < 0)
 		BADERR(0,"daemon()");
-#endif
 
 #if defined(__NetBSD__)
 	pidfile(NULL);

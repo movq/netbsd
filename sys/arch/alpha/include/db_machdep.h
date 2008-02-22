@@ -1,4 +1,4 @@
-/* $NetBSD: db_machdep.h,v 1.17 2007/02/21 22:59:37 thorpej Exp $ */
+/* $NetBSD: db_machdep.h,v 1.19 2017/11/06 03:47:45 christos Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -39,6 +39,7 @@
 #include <machine/frame.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
@@ -106,7 +107,6 @@ void	alpha_kgdb_init(const char **, struct alpha_bus_space *);
  * We use Elf64 symbols in DDB.
  */
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE	64
 
 /*
  * Stuff for KGDB.

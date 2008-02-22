@@ -1,4 +1,4 @@
-/*	$NetBSD: putchar.c,v 1.20 2007/09/19 21:59:37 jdc Exp $	*/
+/*	$NetBSD: putchar.c,v 1.22 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)putchar.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: putchar.c,v 1.20 2007/09/19 21:59:37 jdc Exp $");
+__RCSID("$NetBSD: putchar.c,v 1.22 2017/01/06 13:53:18 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -48,7 +48,7 @@ __cputchar(int ch)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "__cputchar: %s\n", unctrl(ch));
 #endif
-	return (putc(ch, _cursesi_screen->outfd));
+	return putc(ch, _cursesi_screen->outfd);
 }
 
 /*
@@ -56,16 +56,16 @@ __cputchar(int ch)
  * descriptor to write the output to.  This function can only be used with
  * the "new" libterm interface.
  */
-void
-__cputchar_args(char ch, void *args)
+int
+__cputchar_args(int ch, void *args)
 {
-	FILE *outfd = (FILE *) args;
+	FILE *outfd = (FILE *)args;
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "__cputchar_args: %s on fd %d\n",
 	    unctrl(ch), outfd->_file);
 #endif
-	putc(ch, outfd);
+	return putc(ch, outfd);
 }
 
 #ifdef HAVE_WCHAR
@@ -75,7 +75,7 @@ __cputwchar(wchar_t wch)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "__cputwchar: 0x%x\n", wch);
 #endif
-	return (putwc(wch, _cursesi_screen->outfd));
+	return putwc(wch, _cursesi_screen->outfd);
 }
 
 /*
@@ -83,15 +83,15 @@ __cputwchar(wchar_t wch)
  * descriptor to write the output to.  This function can only be used with
  * the "new" libterm interface.
  */
-void
+int
 __cputwchar_args(wchar_t wch, void *args)
 {
-	FILE *outfd = (FILE *) args;
+	FILE *outfd = (FILE *)args;
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "__cputwchar_args: 0x%x on fd %d\n",
 	    wch, outfd->_file);
 #endif
-	putwc(wch, outfd);
+	return putwc(wch, outfd);
 }
 #endif /* HAVE_WCHAR */

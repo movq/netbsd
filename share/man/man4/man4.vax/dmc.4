@@ -1,4 +1,4 @@
-.\"	$NetBSD: dmc.4,v 1.13 2003/08/07 10:31:10 agc Exp $
+.\"	$NetBSD: dmc.4,v 1.17 2017/08/01 11:11:17 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)dmc.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd February 17, 2017
 .Dt DMC 4 vax
 .Os
 .Sh NAME
@@ -77,13 +77,12 @@ to 7 for the
 .Tn DMC .
 .Pp
 The configuration flags specify how to set up the device,
-.Bl -column xxx -offset indent
-0	full duplex DDCMP (normal mode)
-1	DDCMP Maintenance mode (generally useless)
-2	DDCMP Half Duplex, primary station
-3	DDCMP Half Duplex, secondary station
+.Bl -column 1 description -offset indent
+.It 0	full duplex DDCMP (normal mode)
+.It 1	DDCMP Maintenance mode (generally useless)
+.It 2	DDCMP Half Duplex, primary station
+.It 3	DDCMP Half Duplex, secondary station
 .El
-.Pp
 The host's address must be specified with an
 .Dv SIOCSIFADDR
 .Xr ioctl 2 ,
@@ -113,28 +112,24 @@ on each end of the link.
 A bad parameter was passed to the
 .Em dmcload
 routine.
-.Pp
 .It dmc%d: unknown address type %d.
 An input packet was received which contained a type of
 address unknown to the driver.
-.Pp
 .It DMC fatal error 0%o.
 A fatal error in
 .Tn DDMCP
 occurred, causing the device to be restarted.
-.Pp
 .It DMC soft error 0%o.
 A non-fatal error in
 .Tn DDMCP
 has occurred.
-.Pp
 .It dmc%d: af%d not supported.
 The interface was handed a message which has
 addresses formatted in an unsuitable address family.
 .El
 .Sh SEE ALSO
 .Xr inet 4 ,
-.Xr intro 4
+.Xr vax/intro 4
 .Sh HISTORY
 The
 .Nm

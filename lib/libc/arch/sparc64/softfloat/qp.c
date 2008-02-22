@@ -1,4 +1,4 @@
-/* $NetBSD: qp.c,v 1.6 2007/11/08 15:50:19 martin Exp $ */
+/* $NetBSD: qp.c,v 1.11 2014/02/02 08:14:39 martin Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,7 @@
 #include "milieu.h"
 #include "softfloat.h"
 
+int printf(const char *, ...);
 
 void _Qp_add(float128 *c, float128 *a, float128 *b);
 int  _Qp_cmp(float128 *a, float128 *b);
@@ -173,14 +167,15 @@ _Qp_mul(float128 *c, float128 *a, float128 *b)
 
 
 /*
- * XXX need corresponding softfloat function
+ * XXX need corresponding softfloat functions
  */
-static float128 __zero = {0x4034000000000000, 0x00000000};
+static float128 __sf128_zero = {0x4034000000000000, 0x00000000};
+static float128 __sf128_one = {0x3fff000000000000, 0};
 
 void
 _Qp_neg(float128 *c, float128 *a)
 {
-	*c = float128_sub(__zero, *a);
+	*c = float128_sub(__sf128_zero, *a);
 }
 
 
@@ -201,7 +196,7 @@ _Qp_qtod(float128 *a)
 int
 _Qp_qtoi(float128 *a)
 {
-	return float128_to_int32(*a);
+	return float128_to_int32_round_to_zero(*a);
 }
 
 
@@ -222,7 +217,7 @@ float
 unsigned int
 _Qp_qtoui(float128 *a)
 {
-	return (unsigned int)float128_to_int64(*a);
+	return (unsigned int)float128_to_int64_round_to_zero(*a);
 }
 
 
@@ -275,18 +270,20 @@ _Qp_uitoq(float128 *c, unsigned int a)
 void
 _Qp_uxtoq(float128 *c, unsigned long a)
 {
-
 	if (a & 0x8000000000000000ULL) {
-		a = (a >> 1) | (a & 1);
-		*c = int64_to_float128(a);
+		/* a would not fit in a signed conversion */
+		*c = int64_to_float128((long long)(a>>1));
 		*c = float128_add(*c, *c);
-	} else
-		*c = int64_to_float128(a);
+		if (a & 1)
+			*c = float128_add(*c, __sf128_one);
+	} else {
+		*c = int64_to_float128((long long)a);
+	}
 }
 
 
 void
 _Qp_xtoq(float128 *c, long a)
 {
-	*c = int64_to_float128(a);
+	*c = int64_to_float128((long long)a);
 }

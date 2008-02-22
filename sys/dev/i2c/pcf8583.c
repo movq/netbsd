@@ -1,4 +1,4 @@
-/*	$NetBSD: pcf8583.c,v 1.8 2007/12/11 12:09:23 lukem Exp $	*/
+/*	$NetBSD: pcf8583.c,v 1.18 2018/06/16 21:22:13 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcf8583.c,v 1.8 2007/12/11 12:09:23 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcf8583.c,v 1.18 2018/06/16 21:22:13 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,20 +60,21 @@ __KERNEL_RCSID(0, "$NetBSD: pcf8583.c,v 1.8 2007/12/11 12:09:23 lukem Exp $");
 #include <dev/i2c/pcf8583reg.h>
 #include <dev/i2c/pcf8583var.h>
 
+#include "ioconf.h"
+
 struct pcfrtc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_address;
 	int sc_open;
 	struct todr_chip_handle sc_todr;
 };
 
-static int  pcfrtc_match(struct device *, struct cfdata *, void *);
-static void pcfrtc_attach(struct device *, struct device *, void *);
+static int  pcfrtc_match(device_t, cfdata_t, void *);
+static void pcfrtc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pcfrtc, sizeof(struct pcfrtc_softc),
+CFATTACH_DECL_NEW(pcfrtc, sizeof(struct pcfrtc_softc),
 	pcfrtc_match, pcfrtc_attach, NULL, NULL);
-extern struct cfdriver pcfrtc_cd;
 
 dev_type_open(pcfrtc_open);
 dev_type_close(pcfrtc_close);
@@ -81,30 +82,40 @@ dev_type_read(pcfrtc_read);
 dev_type_write(pcfrtc_write);
 
 const struct cdevsw pcfrtc_cdevsw = {
-	pcfrtc_open, pcfrtc_close, pcfrtc_read, pcfrtc_write, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	.d_open = pcfrtc_open,
+	.d_close = pcfrtc_close,
+	.d_read = pcfrtc_read,
+	.d_write = pcfrtc_write,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 static int pcfrtc_clock_read(struct pcfrtc_softc *, struct clock_ymdhms *,
 			     uint8_t *);
 static int pcfrtc_clock_write(struct pcfrtc_softc *, struct clock_ymdhms *,
 			      uint8_t);
-static int pcfrtc_gettime(struct todr_chip_handle *, volatile struct timeval *);
-static int pcfrtc_settime(struct todr_chip_handle *, volatile struct timeval *);
+static int pcfrtc_gettime(struct todr_chip_handle *, struct timeval *);
+static int pcfrtc_settime(struct todr_chip_handle *, struct timeval *);
 
 int
-pcfrtc_match(struct device *parent, struct cfdata *cf, void *aux)
+pcfrtc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct i2c_attach_args *ia = aux;
 
 	if ((ia->ia_addr & PCF8583_ADDRMASK) == PCF8583_ADDR)
-		return (1);
+		return (I2C_MATCH_ADDRESS_ONLY);
 
 	return (0);
 }
 
 void
-pcfrtc_attach(struct device *parent, struct device *self, void *aux)
+pcfrtc_attach(device_t parent, device_t self, void *aux)
 {
 	struct pcfrtc_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = aux;
@@ -112,6 +123,7 @@ pcfrtc_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
+	sc->sc_dev = self;
 
 	aprint_naive(": Real-time Clock/NVRAM\n");
 	aprint_normal(": PCF8583 Real-time Clock/NVRAM\n");
@@ -119,10 +131,10 @@ pcfrtc_attach(struct device *parent, struct device *self, void *aux)
 	cmdbuf[0] = PCF8583_REG_CSR;
 	if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_address,
 	    cmdbuf, 1, &csr, 1, 0) != 0) {
-		aprint_error("%s: unable to read CSR\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to read CSR\n");
 		return;
 	}
-	aprint_normal("%s: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "");
 	switch (csr & PCF8583_CSR_FN_MASK) {
 	case PCF8583_CSR_FN_32768HZ:
 		aprint_normal(" 32.768 kHz clock");
@@ -162,7 +174,7 @@ pcfrtc_open(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct pcfrtc_softc *sc;
 
-	if ((sc = device_lookup(&pcfrtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&pcfrtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	/* XXX: Locking */
@@ -180,7 +192,7 @@ pcfrtc_close(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct pcfrtc_softc *sc;
 
-	if ((sc = device_lookup(&pcfrtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&pcfrtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	sc->sc_open = 0;
@@ -195,7 +207,7 @@ pcfrtc_read(dev_t dev, struct uio *uio, int flags)
 	u_int8_t ch, cmdbuf[1];
 	int a, error;
 
-	if ((sc = device_lookup(&pcfrtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&pcfrtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= PCF8583_NVRAM_SIZE)
@@ -211,8 +223,8 @@ pcfrtc_read(dev_t dev, struct uio *uio, int flags)
 				      sc->sc_address, cmdbuf, 1,
 				      &ch, 1, 0)) != 0) {
 			iic_release_bus(sc->sc_tag, 0);
-			printf("%s: pcfrtc_read: read failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "pcfrtc_read: read failed at 0x%x\n", a);
 			return (error);
 		}
 		if ((error = uiomove(&ch, 1, uio)) != 0) {
@@ -234,7 +246,7 @@ pcfrtc_write(dev_t dev, struct uio *uio, int flags)
 	u_int8_t cmdbuf[2];
 	int a, error;
 
-	if ((sc = device_lookup(&pcfrtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&pcfrtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= PCF8583_NVRAM_SIZE)
@@ -252,8 +264,8 @@ pcfrtc_write(dev_t dev, struct uio *uio, int flags)
 		if ((error = iic_exec(sc->sc_tag,
 		    uio->uio_resid ? I2C_OP_WRITE : I2C_OP_WRITE_WITH_STOP,
 		    sc->sc_address, cmdbuf, 1, &cmdbuf[1], 1, 0)) != 0) {
-			printf("%s: pcfrtc_write: write failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "pcfrtc_write: write failed at 0x%x\n", a);
 			return (error);
 		}
 	}
@@ -264,7 +276,7 @@ pcfrtc_write(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-pcfrtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+pcfrtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct pcfrtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -281,7 +293,7 @@ pcfrtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 }
 
 static int
-pcfrtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+pcfrtc_settime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct pcfrtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -289,7 +301,7 @@ pcfrtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 
 	clock_secs_to_ymdhms(tv->tv_sec, &dt);
 
-	if ((err = pcfrtc_clock_write(sc, &dt, tv->tv_usec / 10000) == 0))
+	if ((err = pcfrtc_clock_write(sc, &dt, tv->tv_usec / 10000)) != 0)
 		return err;
 
 	return (0);
@@ -316,8 +328,8 @@ pcfrtc_clock_read(struct pcfrtc_softc *sc, struct clock_ymdhms *dt,
 	int i, err;
 
 	if ((err = iic_acquire_bus(sc->sc_tag, I2C_F_POLL))) {
-		printf("%s: pcfrtc_clock_read: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "pcfrtc_clock_read: failed to acquire I2C bus\n");
 		return err;
 	}
 
@@ -329,8 +341,9 @@ pcfrtc_clock_read(struct pcfrtc_softc *sc, struct clock_ymdhms *dt,
 			     sc->sc_address, cmdbuf, 1,
 			     &bcd[i], 1, I2C_F_POLL))) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: pcfrtc_clock_read: failed to read rtc "
-			    "at 0x%x\n", sc->sc_dev.dv_xname,
+			aprint_error_dev(sc->sc_dev,
+			    "pcfrtc_clock_read: failed to read rtc "
+			    "at 0x%x\n",
 			    pcf8583_rtc_offset[i]);
 			return err;
 		}
@@ -342,24 +355,24 @@ pcfrtc_clock_read(struct pcfrtc_softc *sc, struct clock_ymdhms *dt,
 	/*
 	 * Convert the PCF8583's register values into something useable
 	 */
-	*centi      = FROMBCD(bcd[PCF8583_REG_CENTI]);
-	dt->dt_sec  = FROMBCD(bcd[PCF8583_REG_SEC]);
-	dt->dt_min  = FROMBCD(bcd[PCF8583_REG_MIN]);
-	dt->dt_hour = FROMBCD(bcd[PCF8583_REG_HOUR] & PCF8583_HOUR_MASK);
+	*centi      = bcdtobin(bcd[PCF8583_REG_CENTI]);
+	dt->dt_sec  = bcdtobin(bcd[PCF8583_REG_SEC]);
+	dt->dt_min  = bcdtobin(bcd[PCF8583_REG_MIN]);
+	dt->dt_hour = bcdtobin(bcd[PCF8583_REG_HOUR] & PCF8583_HOUR_MASK);
 	if (bcd[PCF8583_REG_HOUR] & PCF8583_HOUR_12H) {
 		dt->dt_hour %= 12;	/* 12AM -> 0, 12PM -> 12 */
 		if (bcd[PCF8583_REG_HOUR] & PCF8583_HOUR_PM)
 			dt->dt_hour += 12;
 	}
 
-	dt->dt_day = FROMBCD(bcd[PCF8583_REG_YEARDATE] & PCF8583_DATE_MASK);
-	dt->dt_mon = FROMBCD(bcd[PCF8583_REG_WKDYMON] & PCF8583_MON_MASK);
+	dt->dt_day = bcdtobin(bcd[PCF8583_REG_YEARDATE] & PCF8583_DATE_MASK);
+	dt->dt_mon = bcdtobin(bcd[PCF8583_REG_WKDYMON] & PCF8583_MON_MASK);
 
 	dt->dt_year = bcd[8] + (bcd[9] * 100);
 	/* Try to notice if the year's rolled over. */
 	if (bcd[PCF8583_REG_CSR] & PCF8583_CSR_MASK)
-		printf("%s: cannot check year in mask mode\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "cannot check year in mask mode\n");
 	else {
 		while (dt->dt_year % 4 !=
 		       (bcd[PCF8583_REG_YEARDATE] &
@@ -382,19 +395,19 @@ pcfrtc_clock_write(struct pcfrtc_softc *sc, struct clock_ymdhms *dt,
 	 * can understand.
 	 */
 	bcd[PCF8583_REG_CENTI]    = centi;
-	bcd[PCF8583_REG_SEC]      = TOBCD(dt->dt_sec);
-	bcd[PCF8583_REG_MIN]      = TOBCD(dt->dt_min);
-	bcd[PCF8583_REG_HOUR]     = TOBCD(dt->dt_hour) & PCF8583_HOUR_MASK;
-	bcd[PCF8583_REG_YEARDATE] = TOBCD(dt->dt_day) |
+	bcd[PCF8583_REG_SEC]      = bintobcd(dt->dt_sec);
+	bcd[PCF8583_REG_MIN]      = bintobcd(dt->dt_min);
+	bcd[PCF8583_REG_HOUR]     = bintobcd(dt->dt_hour) & PCF8583_HOUR_MASK;
+	bcd[PCF8583_REG_YEARDATE] = bintobcd(dt->dt_day) |
 	    ((dt->dt_year % 4) << PCF8583_YEAR_SHIFT);
-	bcd[PCF8583_REG_WKDYMON]  = TOBCD(dt->dt_mon) |
+	bcd[PCF8583_REG_WKDYMON]  = bintobcd(dt->dt_mon) |
 	    ((dt->dt_wday % 4) << PCF8583_WKDY_SHIFT);
 	bcd[8]                    = dt->dt_year % 100;
 	bcd[9]                    = dt->dt_year / 100;
 
 	if ((err = iic_acquire_bus(sc->sc_tag, I2C_F_POLL))) {
-		printf("%s: pcfrtc_clock_write: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "pcfrtc_clock_write: failed to acquire I2C bus\n");
 		return err;
 	}
 
@@ -405,8 +418,9 @@ pcfrtc_clock_write(struct pcfrtc_softc *sc, struct clock_ymdhms *dt,
 			     sc->sc_address, cmdbuf, 1,
 			     &bcd[i], 1, I2C_F_POLL))) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: pcfrtc_clock_write: failed to write rtc "
-			    " at 0x%x\n", sc->sc_dev.dv_xname,
+			aprint_error_dev(sc->sc_dev,
+			    "pcfrtc_clock_write: failed to write rtc "
+			    " at 0x%x\n",
 			    pcf8583_rtc_offset[i]);
 			return err;
 		}

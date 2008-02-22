@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.7 2014/06/12 18:50:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -35,8 +35,18 @@
 #define _COMPAT_STDLIB_H_
 
 __BEGIN_DECLS
+
 void	 unsetenv(const char *);
 int	 __unsetenv13(const char *);
+int	 putenv(char *);
+int	 __putenv50(char *);
+__aconst char *devname(int32_t, mode_t);
+__aconst char *__devname50(dev_t, mode_t);
+char	*initstate(unsigned long, char *, size_t);
+char	*__initstate60(unsigned int, char *, size_t);
+void	 srandom(unsigned long);
+void	 __srandom60(unsigned int);
+
 __END_DECLS
 
 #endif /* !_COMPAT_STDLIB_H_ */

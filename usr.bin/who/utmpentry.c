@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpentry.c,v 1.11 2006/11/27 16:54:10 christos Exp $	*/
+/*	$NetBSD: utmpentry.c,v 1.18 2015/11/21 15:01:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: utmpentry.c,v 1.11 2006/11/27 16:54:10 christos Exp $");
+__RCSID("$NetBSD: utmpentry.c,v 1.18 2015/11/21 15:01:43 christos Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -58,6 +51,11 @@ __RCSID("$NetBSD: utmpentry.c,v 1.11 2006/11/27 16:54:10 christos Exp $");
 #include "utmpentry.h"
 
 
+/* Fail the compile if x is not true, by constructing an illegal type. */
+#define COMPILE_ASSERT(x) /*LINTED null effect */ \
+	((void)sizeof(struct { unsigned : ((x) ? 1 : -1); }))
+
+
 #ifdef SUPPORT_UTMP
 static void getentry(struct utmpentry *, struct utmp *);
 static struct timespec utmptime = {0, 0};
@@ -71,16 +69,16 @@ static int setup(const char *);
 static void adjust_size(struct utmpentry *e);
 #endif
 
-int maxname = 8, maxline = 8, maxhost = 16;
+size_t maxname = 8, maxline = 8, maxhost = 16;
 int etype = 1 << USER_PROCESS;
-static int numutmp = 0;
+static size_t numutmp = 0;
 static struct utmpentry *ehead;
 
 #if defined(SUPPORT_UTMPX) || defined(SUPPORT_UTMP)
 static void
 adjust_size(struct utmpentry *e)
 {
-	int max;
+	size_t max;
 
 	if ((max = strlen(e->name)) > maxname)
 		maxname = max;
@@ -160,26 +158,27 @@ setup(const char *fname)
 #endif
 
 void
-freeutentries(struct utmpentry *ep)
+endutentries(void)
 {
+	struct utmpentry *ep;
+
 #ifdef SUPPORT_UTMP
 	timespecclear(&utmptime);
 #endif
 #ifdef SUPPORT_UTMPX
 	timespecclear(&utmpxtime);
 #endif
-	if (ep == ehead) {
-		ehead = NULL;
-		numutmp = 0;
-	}
+	ep = ehead;
 	while (ep) {
 		struct utmpentry *sep = ep;
 		ep = ep->next;
 		free(sep);
 	}
+	ehead = NULL;
+	numutmp = 0;
 }
 
-int
+size_t
 getutentries(const char *fname, struct utmpentry **epp)
 {
 #ifdef SUPPORT_UTMPX
@@ -243,7 +242,7 @@ getutentries(const char *fname, struct utmpentry **epp)
 	}
 #endif
 	numutmp = 0;
-#if defined(SUPPORT_UTMP) && defined(SUPPORT_UTMPX)
+#if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 	if (ehead != NULL) {
 		struct utmpentry *from = ehead, *save;
 		
@@ -272,12 +271,22 @@ getutentries(const char *fname, struct utmpentry **epp)
 static void
 getentry(struct utmpentry *e, struct utmp *up)
 {
+	COMPILE_ASSERT(sizeof(e->name) > sizeof(up->ut_name));
+	COMPILE_ASSERT(sizeof(e->line) > sizeof(up->ut_line));
+	COMPILE_ASSERT(sizeof(e->host) > sizeof(up->ut_host));
+
+	/*
+	 * e has just been calloc'd. We don't need to clear it or
+	 * append null-terminators, because its length is strictly
+	 * greater than the source string. Use strncpy to _read_
+	 * up->ut_* because they may not be terminated. For this
+	 * reason we use the size of the _source_ as the length
+	 * argument.
+	 */
 	(void)strncpy(e->name, up->ut_name, sizeof(up->ut_name));
-	e->name[sizeof(e->name) - 1] = '\0';
 	(void)strncpy(e->line, up->ut_line, sizeof(up->ut_line));
-	e->line[sizeof(e->line) - 1] = '\0';
 	(void)strncpy(e->host, up->ut_host, sizeof(up->ut_host));
-	e->name[sizeof(e->name) - 1] = '\0';
+
 	e->tv.tv_sec = up->ut_time;
 	e->tv.tv_usec = 0;
 	e->pid = 0;
@@ -293,12 +302,22 @@ getentry(struct utmpentry *e, struct utmp *up)
 static void
 getentryx(struct utmpentry *e, struct utmpx *up)
 {
+	COMPILE_ASSERT(sizeof(e->name) > sizeof(up->ut_name));
+	COMPILE_ASSERT(sizeof(e->line) > sizeof(up->ut_line));
+	COMPILE_ASSERT(sizeof(e->host) > sizeof(up->ut_host));
+
+	/*
+	 * e has just been calloc'd. We don't need to clear it or
+	 * append null-terminators, because its length is strictly
+	 * greater than the source string. Use strncpy to _read_
+	 * up->ut_* because they may not be terminated. For this
+	 * reason we use the size of the _source_ as the length
+	 * argument.
+	 */
 	(void)strncpy(e->name, up->ut_name, sizeof(up->ut_name));
-	e->name[sizeof(e->name) - 1] = '\0';
 	(void)strncpy(e->line, up->ut_line, sizeof(up->ut_line));
-	e->line[sizeof(e->line) - 1] = '\0';
 	(void)strncpy(e->host, up->ut_host, sizeof(up->ut_host));
-	e->name[sizeof(e->name) - 1] = '\0';
+
 	e->tv = up->ut_tv;
 	e->pid = up->ut_pid;
 	e->term = up->ut_exit.e_termination;

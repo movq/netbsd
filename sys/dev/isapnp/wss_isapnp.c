@@ -1,4 +1,4 @@
-/*	$NetBSD: wss_isapnp.c,v 1.21 2007/10/19 12:00:33 ad Exp $	*/
+/*	$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.21 2007/10/19 12:00:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,10 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.21 2007/10/19 12:00:33 ad Exp $");
 #include <dev/isa/wssvar.h>
 #include <dev/isa/sbreg.h>
 
-int	wss_isapnp_match(struct device *, struct cfdata *, void *);
-void	wss_isapnp_attach(struct device *, struct device *, void *);
+int	wss_isapnp_match(device_t, cfdata_t, void *);
+void	wss_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(wss_isapnp, sizeof(struct wss_softc),
+CFATTACH_DECL_NEW(wss_isapnp, sizeof(struct wss_softc),
     wss_isapnp_match, wss_isapnp_attach, NULL, NULL);
 
 /*
@@ -76,8 +69,7 @@ CFATTACH_DECL(wss_isapnp, sizeof(struct wss_softc),
  * Probe for the WSS hardware.
  */
 int
-wss_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+wss_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -92,8 +84,7 @@ wss_isapnp_match(struct device *parent, struct cfdata *match,
  * pseudo-device driver.
  */
 void
-wss_isapnp_attach(struct device *parent, struct device *self,
-    void *aux)
+wss_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct wss_softc *sc;
 	struct ad1848_softc *ac;
@@ -102,16 +93,17 @@ wss_isapnp_attach(struct device *parent, struct device *self,
 
 	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
+	ac->sc_dev = self;
 	ipa = aux;
 	printf("\n");
 
 	if (!isapnp_devmatch(aux, &isapnp_wss_devinfo, &variant)) {
-		printf("%s: match failed?\n", self->dv_xname);
+		aprint_error_dev(self, "match failed?\n");
 		return;
 	}
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n", self->dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
@@ -152,7 +144,6 @@ wss_isapnp_attach(struct device *parent, struct device *self,
 	/* Set up AD1848 I/O handle. */
 	ac->sc_iot = sc->sc_iot;
 	ac->sc_ioh = sc->sc_ioh;
-	ac->mode = 2;
 
 	sc->sc_ad1848.sc_ic = ipa->ipa_ic;
 
@@ -163,12 +154,14 @@ wss_isapnp_attach(struct device *parent, struct device *self,
 	    ipa->ipa_ndrq > 1 ? ipa->ipa_drq[1].num : ipa->ipa_drq[0].num;
 
 	if (!ad1848_isa_probe(&sc->sc_ad1848)) {
-		printf("%s: ad1848_probe failed\n", self->dv_xname);
+		aprint_error_dev(self, "ad1848_probe failed\n");
 		return;
 	}
 
-	printf("%s: %s %s", self->dv_xname, ipa->ipa_devident,
+	aprint_error_dev(self, "%s %s", ipa->ipa_devident,
 	    ipa->ipa_devclass);
+
+	ac->mode = 2;
 
 	wssattach(sc);
 
@@ -181,6 +174,6 @@ wss_isapnp_attach(struct device *parent, struct device *self,
 		arg.type = AUDIODEV_TYPE_OPL;
 		arg.hwif = 0;
 		arg.hdl = 0;
-		(void)config_found(&ac->sc_dev, &arg, audioprint);
+		(void)config_found(self, &arg, audioprint);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: srt0.S,v 1.10 2005/12/11 12:19:08 christos Exp $	*/
+/*	$NetBSD: srt0.S,v 1.12 2016/03/10 20:22:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -113,12 +106,20 @@ start:
 	 * Clear BSS
 	 */
 	set     _edata, %o0             ! bzero(edata, end - edata)
+1:	! check if %o0 is well aligned
+	andcc	%o0, 3, %o2
+	bz	2f
+	 nop
+	stb	%g0, [%o0]
+	b	1b
+	 add	%o0, 1, %o0
+
+2:	! now we have %o0 4 byte aligned
 	set     _end, %o1
-	/* note: bzero() expanded inline for compactness */
 	subcc	%o1, %o0, %o1
 	bz	2f			! in case there is no BSS
 
-	srl	%o1, 2, %o1		! assume _edata & _end are aligned
+	srl	%o1, 2, %o1		! we do 4 byte writes now
 1:
 	st	%g0, [%o0]		! while (n--)
 	subcc	%o1, 1, %o1		!	*p = 0; etc..

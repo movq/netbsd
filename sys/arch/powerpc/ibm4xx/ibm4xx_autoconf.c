@@ -1,4 +1,4 @@
-/*	$NetBSD: ibm4xx_autoconf.c,v 1.11 2007/02/22 16:57:56 thorpej Exp $	*/
+/*	$NetBSD: ibm4xx_autoconf.c,v 1.15 2011/06/18 06:41:41 matt Exp $	*/
 /*	Original Tag: ibm4xxgpx_autoconf.c,v 1.2 2004/10/23 17:12:22 thorpej Exp $	*/
 
 /*
@@ -33,47 +33,54 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibm4xx_autoconf.c,v 1.11 2007/02/22 16:57:56 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibm4xx_autoconf.c,v 1.15 2011/06/18 06:41:41 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 
-#include <machine/cpu.h>
-
+#include <powerpc/ibm4xx/cpu.h>
 #include <powerpc/ibm4xx/dev/opbvar.h>
 
 void
-ibm4xx_device_register(struct device *dev, void *aux)
+ibm4xx_device_register(device_t dev, void *aux)
 {
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (device_is_a(dev, "emac") && device_is_a(parent, "opb")) {
-		/* Set the mac-addr of the on-chip Ethernet. */
+		/* Set the mac-address of the on-chip Ethernet. */
 		struct opb_attach_args *oaa = aux;
 
 		if (oaa->opb_instance < 10) {
+			prop_dictionary_t dict = device_properties(dev);
 			prop_data_t pd;
+			prop_number_t pn;
 			unsigned char prop_name[15];
 
 			snprintf(prop_name, sizeof(prop_name),
-				"emac%d-mac-addr", oaa->opb_instance);
-
+			    "emac%d-mac-addr", oaa->opb_instance);
 			pd = prop_dictionary_get(board_properties, prop_name);
 			if (pd == NULL) {
 				printf("WARNING: unable to get mac-addr "
 				    "property from board properties\n");
 				return;
 			}
-			if (prop_dictionary_set(device_properties(dev),
-						"mac-addr", pd) == false) {
-				printf("WARNING: unable to set mac-addr "
-				    "property for %s\n", dev->dv_xname);
-			}
+			if (prop_dictionary_set(dict, "mac-address", pd) ==
+			    false)
+				printf("WARNING: unable to set mac-address "
+				    "property for %s\n", device_xname(dev));
+
+			snprintf(prop_name, sizeof(prop_name),
+			    "emac%d-mii-phy", oaa->opb_instance);
+			pn = prop_dictionary_get(board_properties, prop_name);
+			if (pn != NULL)
+				prop_dictionary_set_uint32(dict, "mii-phy",
+				    prop_number_integer_value(pn));
 		}
 		return;
 	}

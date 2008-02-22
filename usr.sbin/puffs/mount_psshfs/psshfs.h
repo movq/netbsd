@@ -1,7 +1,7 @@
-/*	$NetBSD: psshfs.h,v 1.33 2007/12/07 14:59:22 pooka Exp $	*/
+/*	$NetBSD: psshfs.h,v 1.40 2010/04/01 02:34:09 pooka Exp $	*/
 
 /*
- * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2006-2009  Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,6 +42,11 @@ extern unsigned int max_reads;
  */
 #define SFTP_PROTOVERSION 3
 
+/* extensions, held in psshfs_ctx extensions */
+#define SFTP_EXT_POSIX_RENAME	0x01
+#define SFTP_EXT_STATVFS	0x02
+#define SFTP_EXT_FSTATVFS	0x04
+
 #define DEFAULTREFRESH 30
 #define REFRESHTIMEOUT(pctx, t) \
   (!(pctx)->refreshival || ((pctx->refreshival!=-1) && ((t)>pctx->refreshival)))
@@ -60,25 +65,25 @@ PUFFSOP_PROTOS(psshfs);
 	puffs_framebuf_destroy(pb);					\
 	return (rv)
 
-#define GETRESPONSE(pb)							\
+#define GETRESPONSE(pb, fd)						\
 do {									\
-	if (puffs_framev_enqueue_cc(pcc, pctx->sshfd, pb, 0) == -1) {	\
+	if (puffs_framev_enqueue_cc(pcc, fd, pb, 0) == -1) 	{	\
 		rv = errno;						\
 		goto out;						\
 	}								\
 } while (/*CONSTCOND*/0)
 
-#define JUSTSEND(pb)							\
+#define JUSTSEND(pb,fd)							\
 do {									\
-	if (puffs_framev_enqueue_justsend(pu,pctx->sshfd,pb,1,0) == -1){\
+	if (puffs_framev_enqueue_justsend(pu, fd, pb, 1, 0) == -1) {	\
 		rv = errno;						\
 		goto out;						\
 	}								\
 } while (/*CONSTCOND*/0)
 
-#define SENDCB(pb, f, a)						\
+#define SENDCB(pb, fd, f, a)						\
 do {									\
-	if (puffs_framev_enqueue_cb(pu, pctx->sshfd, pb,f,a,0) == -1) {	\
+	if (puffs_framev_enqueue_cb(pu, fd, pb, f, a, 0) == -1) {	\
 		rv = errno;						\
 		goto out;						\
 	}								\
@@ -119,7 +124,7 @@ struct psshfs_node {
 	int childcount;
 
 	int stat;
-	int readcount;
+	unsigned readcount;
 
 	time_t attrread;
 	char *symlink;
@@ -148,11 +153,18 @@ struct psshfs_node {
 #define HANDLE_WRITE	0x2
 
 struct psshfs_ctx {
+	int numconnections;
 	int sshfd;
+	int sshfd_data;
 	pid_t sshpid;
+	pid_t sshpid_data;
+
 	const char *mountpath;
+	char **sshargs;
 
 	int protover;
+	int extensions;
+
 	uint32_t nextreq;
 
 	struct puffs_framebuf *curpb;
@@ -164,9 +176,15 @@ struct psshfs_ctx {
 	time_t mounttime;
 
 	int refreshival;
-};
 
-int	psshfs_domount(struct puffs_usermount *);
+	int domangleuid, domanglegid;
+	uid_t mangleuid, myuid;
+	gid_t manglegid, mygid;
+};
+#define PSSHFD_META 0
+#define PSSHFD_DATA 1
+
+int	psshfs_handshake(struct puffs_usermount *, int);
 
 int	psbuf_read(struct puffs_usermount *, struct puffs_framebuf *,int,int*);
 int	psbuf_write(struct puffs_usermount *, struct puffs_framebuf *,int,int*);
@@ -182,7 +200,8 @@ void	psbuf_put_4(struct puffs_framebuf *, uint32_t);
 void	psbuf_put_8(struct puffs_framebuf *, uint64_t);
 void	psbuf_put_str(struct puffs_framebuf *, const char *);
 void	psbuf_put_data(struct puffs_framebuf *, const void *, uint32_t);
-void	psbuf_put_vattr(struct puffs_framebuf *, const struct vattr *);
+void	psbuf_put_vattr(struct puffs_framebuf *, const struct vattr *,
+			const struct psshfs_ctx *);
 
 uint8_t		psbuf_get_type(struct puffs_framebuf *);
 uint32_t	psbuf_get_len(struct puffs_framebuf *);
@@ -211,14 +230,14 @@ int	sftp_readdir(struct puffs_usermount *, struct psshfs_ctx *,
 
 struct psshfs_dir *lookup(struct psshfs_dir *, size_t, const char *);
 struct puffs_node *makenode(struct puffs_usermount *, struct puffs_node *,
-			    struct psshfs_dir *, const struct vattr *);
+			    const struct psshfs_dir *, const struct vattr *);
 struct puffs_node *allocnode(struct puffs_usermount *, struct puffs_node *,
 			    const char *, const struct vattr *);
 struct psshfs_dir *direnter(struct puffs_node *, const char *);
 void nukenode(struct puffs_node *, const char *, int);
 void doreclaim(struct puffs_node *);
 int getpathattr(struct puffs_usermount *, const char *, struct vattr *);
-int getnodeattr(struct puffs_usermount *, struct puffs_node *);
+int getnodeattr(struct puffs_usermount *, struct puffs_node *, const char *);
 
 void closehandles(struct puffs_usermount *, struct psshfs_node *, int);
 void lazyopen_rresp(struct puffs_usermount *, struct puffs_framebuf *,

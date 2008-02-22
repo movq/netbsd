@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p6032_bus_mem.c,v 1.3 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: algor_p6032_bus_mem.c,v 1.6 2011/07/09 16:03:00 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p6032_bus_mem.c,v 1.3 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p6032_bus_mem.c,v 1.6 2011/07/09 16:03:00 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,15 +44,16 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p6032_bus_mem.c,v 1.3 2005/12/11 12:16:08 chri
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/locore.h>
+#include <mips/locore.h>
 
 #include <algor/algor/algor_p6032reg.h>
 #include <algor/algor/algor_p6032var.h>
 
 #define	CHIP		algor_p6032
+#define	CHIP_MEM
 
 #define	CHIP_EX_MALLOC_SAFE(v)	(((struct p6032_config *)(v))->ac_mallocsafe)
-#define	CHIP_MEM_EXTENT(v)	(((struct p6032_config *)(v))->ac_mem_ex)
+#define	CHIP_EXTENT(v)		(((struct p6032_config *)(v))->ac_mem_ex)
 
 /*
  * There are actually 3 PCILO memory windows, but PMON configures them
@@ -67,19 +61,17 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p6032_bus_mem.c,v 1.3 2005/12/11 12:16:08 chri
  */
 
 /* MEM region 1 */
-#define	CHIP_MEM_W1_BUS_START(v)	0x00000000UL
-#define	CHIP_MEM_W1_BUS_END(v)		0x0bffffffUL
-#define	CHIP_MEM_W1_SYS_START(v)	((u_long)BONITO_PCILO_BASE)
-#define	CHIP_MEM_W1_SYS_END(v)		((u_long)BONITO_PCILO_BASE + \
-					 0x0bffffffUL)
+#define	CHIP_W1_BUS_START(v)	0x00000000UL
+#define	CHIP_W1_BUS_END(v)	0x0bffffffUL
+#define	CHIP_W1_SYS_START(v)	((u_long)BONITO_PCILO_BASE)
+#define	CHIP_W1_SYS_END(v)	((u_long)BONITO_PCILO_BASE + 0x0bffffffUL)
 
 #if 0 /* XXX Should implement access to this via TLB or 64-bit KSEG */
 /* MEM region 2 */
-#define	CHIP_MEM_W2_BUS_START(v)	0x20000000UL
-#define	CHIP_MEM_W2_BUS_END(v)		0xffffffffUL
-#define	CHIP_MEM_W2_SYS_START(v)	((u_long)BONITO_PCIHI_BASE)
-#define	CHIP_MEM_W2_SYS_END(v)		((u_long)BONITO_PCIHI_BASE + \
-					 0xe0000000UL)
+#define	CHIP_W2_BUS_START(v)	0x20000000UL
+#define	CHIP_W2_BUS_END(v)	0xffffffffUL
+#define	CHIP_W2_SYS_START(v)	((u_long)BONITO_PCIHI_BASE)
+#define	CHIP_W2_SYS_END(v)	((u_long)BONITO_PCIHI_BASE + 0xe0000000UL)
 #endif
 
-#include <algor/pci/pci_alignstride_bus_mem_chipdep.c>
+#include <mips/mips/bus_space_alignstride_chipdep.c>

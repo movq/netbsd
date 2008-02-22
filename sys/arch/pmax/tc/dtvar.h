@@ -1,4 +1,4 @@
-/*	$NetBSD: dtvar.h,v 1.4 2005/12/11 12:18:41 christos Exp $	*/
+/*	$NetBSD: dtvar.h,v 1.6 2011/06/04 01:37:36 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,7 +56,7 @@ struct dt_msg {
 #define	DT_CTL_LEN(c)		(c & 0x1f)
 
 struct dt_device {
-	struct	device *dtdv_dv;
+	void	*dtdv_arg;
 	void	(*dtdv_handler)(void *, struct dt_msg *);
 };
 
@@ -78,7 +71,7 @@ struct dt_state {
 };
 
 struct dt_softc {
-	struct device	sc_dv;
+	device_t	sc_dev;
 	struct dt_msg	sc_msg;
 	void		*sc_sih;
 	SLIST_HEAD(, dt_msg) sc_free;
@@ -98,7 +91,7 @@ int	dt_identify(int, struct dt_ident *);
 int	dt_msg_get(struct dt_msg *, int);
 void	dt_msg_dump(struct dt_msg *);
 int	dt_establish_handler(struct dt_softc *, struct dt_device *,
-    struct device *, void (*)(void *, struct dt_msg *));
+    void *, void (*)(void *, struct dt_msg *));
 
 extern int	dt_kbd_addr;
 extern struct	dt_device dt_kbd_dv;

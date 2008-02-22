@@ -1,4 +1,4 @@
-/*	$NetBSD: et4000.c,v 1.13 2007/03/04 05:59:41 christos Exp $	*/
+/*	$NetBSD: et4000.c,v 1.26 2014/07/25 08:10:32 dholland Exp $	*/
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,7 +45,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: et4000.c,v 1.13 2007/03/04 05:59:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: et4000.c,v 1.26 2014/07/25 08:10:32 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -72,6 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: et4000.c,v 1.13 2007/03/04 05:59:41 christos Exp $")
 #include <atari/dev/grfioctl.h>
 #include <atari/dev/grf_etreg.h>
 
+#include "ioconf.h"
+
 /*
  * Allow a 8Kb io-region and a 1MB frame buffer to be mapped. This
  * is more or less required by the XFree server.  The X server also
@@ -83,42 +78,42 @@ __KERNEL_RCSID(0, "$NetBSD: et4000.c,v 1.13 2007/03/04 05:59:41 christos Exp $")
 #define VGA_MAPPABLE	(128 * 1024)		/* 0x20000 */
 #define VGA_BASE	0xa0000
 
-static int	et_vme_match __P((struct device *, struct cfdata *, void *));
-static void	et_vme_attach __P((struct device *, struct device *, void *));
-static int	et_probe_addresses __P((struct vme_attach_args *));
-static void	et_start __P((bus_space_tag_t *, bus_space_handle_t *, int *,
-		    u_char *));
-static void	et_stop __P((bus_space_tag_t *, bus_space_handle_t *, int *,
-		    u_char *));
-static int	et_detect __P((bus_space_tag_t *, bus_space_tag_t *,
-		    bus_space_handle_t *, bus_space_handle_t *, u_int));
+static int	et4k_vme_match(device_t, cfdata_t, void *);
+static void	et4k_vme_attach(device_t, device_t, void *);
+static int	et4k_probe_addresses(struct vme_attach_args *);
+static void	et4k_start(bus_space_tag_t *, bus_space_handle_t *, int *,
+		    u_char *);
+static void	et4k_stop(bus_space_tag_t *, bus_space_handle_t *, int *,
+		    u_char *);
+static int	et4k_detect(bus_space_tag_t *, bus_space_tag_t *,
+		    bus_space_handle_t *, bus_space_handle_t *, u_int);
 
-int		eton __P((dev_t));
-int		etoff __P((dev_t));
+int		et4kon(dev_t);
+int		et4koff(dev_t);
 
 /* Register and screen memory addresses for ET4000 based VME cards */
-static struct et_addresses {
+static struct et4k_addresses {
 	u_long io_addr;
 	u_long io_size;
 	u_long mem_addr;
 	u_long mem_size;
-} etstd[] = {
+} et4kstd[] = {
 	{ 0xfebf0000, REG_MAPPABLE, 0xfec00000, FRAME_MAPPABLE }, /* Crazy Dots VME & II */
 	{ 0xfed00000, REG_MAPPABLE, 0xfec00000, FRAME_MAPPABLE }, /* Spektrum I & HC */
 	{ 0xfed80000, REG_MAPPABLE, 0xfec00000, FRAME_MAPPABLE }  /* Spektrum TC */
 };
 
-#define NETSTD (sizeof(etstd) / sizeof(etstd[0]))
+#define NET4KSTD (sizeof(et4kstd) / sizeof(et4kstd[0]))
 
-struct grfabs_et_priv {
+struct grfabs_et4k_priv {
 	volatile void *	regkva;
 	volatile void *	memkva;
 	int			regsz;
 	int			memsz;
-} et_priv;
+} et4k_priv;
 
-struct et_softc {
-	struct device sc_dev;
+struct et4k_softc {
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_ioh;
@@ -132,21 +127,29 @@ struct et_softc {
 
 #define ET_SC_FLAGS_INUSE 1
 
-CFATTACH_DECL(et, sizeof(struct et_softc),
-    et_vme_match, et_vme_attach, NULL, NULL);
+CFATTACH_DECL_NEW(et4k, sizeof(struct et4k_softc),
+    et4k_vme_match, et4k_vme_attach, NULL, NULL);
 
-extern struct cfdriver et_cd;
+dev_type_open(et4kopen);
+dev_type_close(et4kclose);
+dev_type_read(et4kread);
+dev_type_write(et4kwrite);
+dev_type_ioctl(et4kioctl);
+dev_type_mmap(et4kmmap);
 
-dev_type_open(etopen);
-dev_type_close(etclose);
-dev_type_read(etread);
-dev_type_write(etwrite);
-dev_type_ioctl(etioctl);
-dev_type_mmap(etmmap);
-
-const struct cdevsw et_cdevsw = {
-	etopen, etclose, etread, etwrite, etioctl,
-	nostop, notty, nopoll, etmmap, nokqfilter,
+const struct cdevsw et4k_cdevsw = {
+	.d_open = et4kopen,
+	.d_close = et4kclose,
+	.d_read = et4kread,
+	.d_write = et4kwrite,
+	.d_ioctl = et4kioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = et4kmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /*
@@ -154,19 +157,15 @@ const struct cdevsw et_cdevsw = {
  * match Spektrum cards too (untested).
  */
 int 
-et_vme_match(pdp, cfp, auxp)
-	struct device	*pdp;
-	struct cfdata	*cfp;
-	void		*auxp;
+et4k_vme_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct vme_attach_args *va = auxp;
+	struct vme_attach_args *va = aux;
 
-	return(et_probe_addresses(va));
+	return et4k_probe_addresses(va);
 }
 
 static int
-et_probe_addresses(va)
-	struct vme_attach_args *va;
+et4k_probe_addresses(struct vme_attach_args *va)
 {
 	int i, found = 0;
 	bus_space_tag_t iot;
@@ -178,51 +177,47 @@ et_probe_addresses(va)
 	memt = va->va_memt;
 
 /* Loop around our possible addresses looking for a match */
-	for (i = 0; i < NETSTD; i++) {
-		struct et_addresses *et_ap = &etstd[i];
+	for (i = 0; i < NET4KSTD; i++) {
+		struct et4k_addresses *et4k_ap = &et4kstd[i];
 		struct vme_attach_args vat = *va;
 
 		if (vat.va_irq != VMECF_IRQ_DEFAULT) {
-			printf("et probe: config error: no irq support\n");
-			return(0);
+			printf("%s: config error: no irq support\n", __func__);
+			return 0;
 		}
 		if (vat.va_iobase == VMECF_IOPORT_DEFAULT)
-			vat.va_iobase = et_ap->io_addr;
+			vat.va_iobase = et4k_ap->io_addr;
 		if (vat.va_maddr == VMECF_MEM_DEFAULT)
-			vat.va_maddr = et_ap->mem_addr;
+			vat.va_maddr = et4k_ap->mem_addr;
 		if (vat.va_iosize == VMECF_IOSIZE_DEFAULT)
-			vat.va_iosize = et_ap->io_size;
+			vat.va_iosize = et4k_ap->io_size;
 		if (vat.va_msize == VMECF_MEMSIZ_DEFAULT)
-			vat.va_msize = et_ap->mem_size;
+			vat.va_msize = et4k_ap->mem_size;
 		if (bus_space_map(iot, vat.va_iobase, vat.va_iosize, 0,
 				  &ioh)) {
-			printf("et probe: cannot map io area\n");
-			return(0);
+			printf("%s: cannot map io area\n", __func__);
+			return 0;
 		}
 		if (bus_space_map(memt, vat.va_maddr, vat.va_msize,
 			  	  BUS_SPACE_MAP_LINEAR|BUS_SPACE_MAP_CACHEABLE,
 			  	  &memh)) {
 			bus_space_unmap(iot, ioh, vat.va_iosize);
-			printf("et probe: cannot map memory area\n");
-			return(0);
+			printf("%s: cannot map memory area\n", __func__);
+			return 0;
 		}
-		found = et_detect(&iot, &memt, &ioh, &memh, vat.va_msize);
+		found = et4k_detect(&iot, &memt, &ioh, &memh, vat.va_msize);
 		bus_space_unmap(iot, ioh, vat.va_iosize);
 		bus_space_unmap(memt, memh, vat.va_msize);
 		if (found) {
 			*va = vat;
-			return(1);
+			return 1;
 		}
 	}
-	return(0);
+	return 0;
 }
 
 static void
-et_start(iot, ioh, vgabase, saved)
-	bus_space_tag_t *iot;
-	bus_space_handle_t *ioh;
-	int *vgabase;
-	u_char *saved;
+et4k_start(bus_space_tag_t *iot, bus_space_handle_t *ioh, int *vgabase, u_char *saved)
 {
 	/* Enable VGA */
 	bus_space_write_1(*iot, *ioh, GREG_VIDEOSYSENABLE, 0x01);
@@ -245,11 +240,7 @@ et_start(iot, ioh, vgabase, saved)
 }
 
 static void
-et_stop(iot, ioh, vgabase, saved)
-	bus_space_tag_t *iot;
-	bus_space_handle_t *ioh;
-	int *vgabase;
-	u_char *saved;
+et4k_stop(bus_space_tag_t *iot, bus_space_handle_t *ioh, int *vgabase, u_char *saved)
 {
 	/* Restore writes to CRTC[0..7] */
 	bus_space_write_1(*iot, *ioh, *vgabase + 0x04, 0x11);
@@ -262,21 +253,18 @@ et_stop(iot, ioh, vgabase, saved)
 }
 
 static int
-et_detect(iot, memt, ioh, memh, memsize)
-	bus_space_tag_t *iot, *memt;
-	bus_space_handle_t *ioh, *memh;
-	u_int memsize;
+et4k_detect(bus_space_tag_t *iot, bus_space_tag_t *memt, bus_space_handle_t *ioh, bus_space_handle_t *memh, u_int memsize)
 {
 	u_char orig, new, saved;
 	int vgabase;
 
 	/* Test accessibility of registers and memory */
-	if(!bus_space_peek_1(*iot, *ioh, GREG_STATUS1_R))
-		return(0);
-	if(!bus_space_peek_1(*memt, *memh, 0))
-		return(0);
+	if (!bus_space_peek_1(*iot, *ioh, GREG_STATUS1_R))
+		return 0;
+	if (!bus_space_peek_1(*memt, *memh, 0))
+		return 0;
 
-	et_start(iot, ioh, &vgabase, &saved);
+	et4k_start(iot, ioh, &vgabase, &saved);
 
 	/* Is the card a Tseng card?  Check read/write of ATC[16] */
 	(void)bus_space_read_1(*iot, *ioh, vgabase + 0x0a);
@@ -291,8 +279,8 @@ et_detect(iot, memt, ioh, memh, memsize)
 		printf("et4000: ATC[16] failed (%x != %x)\n",
 		    new, (orig ^ 0x10));
 #else
-		et_stop(iot, ioh, &vgabase, &saved);
-		return(0);
+		et4k_stop(iot, ioh, &vgabase, &saved);
+		return 0;
 #endif
 	}
 	/* Is the card and ET4000?  Check read/write of CRTC[33] */
@@ -306,8 +294,8 @@ et_detect(iot, memt, ioh, memh, memsize)
 		printf("et4000: CRTC[33] failed (%x != %x)\n",
 		    new, (orig ^ 0x0f));
 #else
-		et_stop(iot, ioh, &vgabase, &saved);
-		return(0);
+		et4k_stop(iot, ioh, &vgabase, &saved);
+		return 0;
 #endif
 	}
 
@@ -331,8 +319,8 @@ et_detect(iot, memt, ioh, memh, memsize)
 #ifdef DEBUG_ET4000
 		printf("et4000: Video base write/read failed\n");
 #else
-		et_stop(iot, ioh, &vgabase, &saved);
-		return(0);
+		et4k_stop(iot, ioh, &vgabase, &saved);
+		return 0;
 #endif
 	}
 	bus_space_write_4(*memt, *memh, memsize - 4, TEST_PATTERN);
@@ -341,31 +329,31 @@ et_detect(iot, memt, ioh, memh, memsize)
 #ifdef DEBUG_ET4000
 		printf("et4000: Video top write/read failed\n");
 #else
-		et_stop(iot, ioh, &vgabase, &saved);
-		return(0);
+		et4k_stop(iot, ioh, &vgabase, &saved);
+		return 0;
 #endif
 	}
 
-	et_stop(iot, ioh, &vgabase, &saved);
-	return(1);
+	et4k_stop(iot, ioh, &vgabase, &saved);
+	return 1;
 }
 
 static void
-et_vme_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+et4k_vme_attach(device_t parent, device_t self, void *aux)
 {
-	struct et_softc *sc = (struct et_softc *)self;
+	struct et4k_softc *sc = device_private(self);
 	struct vme_attach_args *va = aux;
 	bus_space_handle_t ioh;
 	bus_space_handle_t memh;
 
+	sc->sc_dev = self;
+
 	printf("\n");
 
 	if (bus_space_map(va->va_iot, va->va_iobase, va->va_iosize, 0, &ioh))
-		panic("et attach: cannot map io area");
+		panic("%s: cannot map io area", __func__);
 	if (bus_space_map(va->va_memt, va->va_maddr, va->va_msize, 0, &memh))
-		panic("et attach: cannot map mem area");
+		panic("%s: cannot map mem area", __func__);
 
 	sc->sc_iot = va->va_iot;
 	sc->sc_ioh = ioh;
@@ -377,81 +365,66 @@ et_vme_attach(parent, self, aux)
 	sc->sc_iosize = va->va_iosize;
 	sc->sc_msize = va->va_msize;
 
-	et_priv.regkva = (volatile void *)ioh;
-	et_priv.memkva = (volatile void *)memh;
-	et_priv.regsz = va->va_iosize;
-	et_priv.memsz = va->va_msize;
+	et4k_priv.regkva = (volatile void *)ioh;
+	et4k_priv.memkva = (volatile void *)memh;
+	et4k_priv.regsz = va->va_iosize;
+	et4k_priv.memsz = va->va_msize;
 }
 
 int
-etopen(dev, flags, devtype, l)
-	dev_t dev;
-	int flags, devtype;
-	struct lwp *l;
+et4kopen(dev_t dev, int flags, int devtype, struct lwp *l)
 {
-	struct et_softc *sc;
+	struct et4k_softc *sc;
 
-	if (minor(dev) >= et_cd.cd_ndevs)
-		return(ENXIO);
-	sc = et_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&et4k_cd, minor(dev));
+	if (sc == NULL)
+		return ENXIO;
 	if (sc->sc_flags & ET_SC_FLAGS_INUSE)
-		return(EBUSY);
+		return EBUSY;
 	sc->sc_flags |= ET_SC_FLAGS_INUSE;
-	return(0);
+	return 0;
 }
 
 int
-etclose(dev, flags, devtype, l)
-	dev_t dev;
-	int flags, devtype;
-	struct lwp *l;
+et4kclose(dev_t dev, int flags, int devtype, struct lwp *l)
 {
-	struct et_softc *sc;
+	struct et4k_softc *sc;
 
 	/*
 	 * XXX: Should we reset to a default mode?
 	 */
-	sc = et_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&et4k_cd, minor(dev));
 	sc->sc_flags &= ~ET_SC_FLAGS_INUSE;
-	return(0);
+	return 0;
 }
 
 int
-etread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+et4kread(dev_t dev, struct uio *uio, int flags)
 {
-	return(EINVAL);
+
+	return EINVAL;
 }
 
 int
-etwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+et4kwrite(dev_t dev, struct uio *uio, int flags)
 {
-	return(EINVAL);
+
+	return EINVAL;
 }
 
 int
-etioctl(dev, cmd, data, flags, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flags;
-	struct lwp *l;
+et4kioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	struct grfinfo g_display;
-	struct et_softc *sc;
+	struct et4k_softc *sc;
 
-	sc = et_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&et4k_cd, minor(dev));
 	switch (cmd) {
 	case GRFIOCON:
-		return(0);
+		return 0;
 		break;
 	case GRFIOCOFF:
-		return(0);
+		return 0;
 		break;
 	case GRFIOCGINFO:
 		g_display.gd_fbaddr = (void *) (sc->sc_maddr);
@@ -473,73 +446,69 @@ etioctl(dev, cmd, data, flags, l)
 		g_display.gd_dx = 0;
 		g_display.gd_dy = 0;
 		g_display.gd_bank_size = 0;
-		bcopy((void *)&g_display, data, sizeof(struct grfinfo));
+		memcpy(data, (void *)&g_display, sizeof(struct grfinfo));
 		break;
 	case GRFIOCMAP:
-		return(EINVAL);
+		return EINVAL;
 		break;
 	case GRFIOCUNMAP:
-		return(EINVAL);
+		return EINVAL;
 		break;
 	default:
-		return(EINVAL);
+		return EINVAL;
 		break;
 	}
-	return(0);
+	return 0;
 }
 
 paddr_t
-etmmap(dev, offset, prot)
-	dev_t dev;
-	off_t offset;
-	int prot;
+et4kmmap(dev_t dev, off_t offset, int prot)
 {
-	struct et_softc *sc;
+	struct et4k_softc *sc;
 
-	sc = et_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&et4k_cd, minor(dev));
 
 	/* 
 	 * control registers
 	 * mapped from offset 0x0 to REG_MAPPABLE
 	 */
 	if (offset >= 0 && offset <= sc->sc_iosize)
-		return(m68k_btop(sc->sc_iobase + offset));
+		return m68k_btop(sc->sc_iobase + offset);
 
 	/*
 	 * VGA memory
 	 * mapped from offset 0xa0000 to 0xc0000
 	 */
 	if (offset >= VGA_BASE && offset < (VGA_MAPPABLE + VGA_BASE))
-		return(m68k_btop(sc->sc_maddr + offset - VGA_BASE));
+		return m68k_btop(sc->sc_maddr + offset - VGA_BASE);
 
 	/*
 	 * frame buffer
 	 * mapped from offset 0x400000 to 0x4fffff
 	 */
 	if (offset >= FRAME_BASE && offset < sc->sc_msize + FRAME_BASE)
-		return(m68k_btop(sc->sc_maddr + offset - FRAME_BASE));
+		return m68k_btop(sc->sc_maddr + offset - FRAME_BASE);
 
-	return(-1);
+	return -1;
 }
 
 int 
-eton(dev)
-	dev_t dev;
+et4kon(dev_t dev)
 {
-	struct et_softc *sc;
+	struct et4k_softc *sc;
 
-	if (minor(dev) >= et_cd.cd_ndevs)
-		return(ENXIO);
-	sc = et_cd.cd_devs[minor(dev)];
-	if (!sc)
-		return(ENXIO);
-	return(0);
+	if (minor(dev) >= et4k_cd.cd_ndevs)
+		return ENXIO;
+	sc = device_lookup_private(&et4k_cd, minor(dev));
+	if (sc == NULL)
+		return ENXIO;
+	return 0;
 }
 
 int 
-etoff(dev)
-	dev_t dev;
+et4koff(dev_t dev)
 {
-	return(0);
+
+	return 0;
 }
 

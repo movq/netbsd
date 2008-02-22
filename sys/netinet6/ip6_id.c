@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_id.c,v 1.16 2006/08/30 17:11:53 christos Exp $	*/
+/*	$NetBSD: ip6_id.c,v 1.18 2015/08/07 08:11:33 ozaki-r Exp $	*/
 /*	$KAME: ip6_id.c,v 1.8 2003/09/06 13:41:06 itojun Exp $	*/
 /*	$OpenBSD: ip_id.c,v 1.6 2002/03/15 18:19:52 millert Exp $	*/
 
@@ -82,9 +82,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_id.c,v 1.16 2006/08/30 17:11:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_id.c,v 1.18 2015/08/07 08:11:33 ozaki-r Exp $");
 
 #include <sys/param.h>
+#include <sys/cprng.h>
+
 #include <lib/libkern/libkern.h>
 
 #include <net/if.h>
@@ -175,20 +177,20 @@ initid(struct randomtab *p)
 	u_int32_t j, i;
 	int noprime = 1;
 
-	p->ru_x = arc4random() % p->ru_m;
+	p->ru_x = cprng_fast32() % p->ru_m;
 
 	/* (bits - 1) bits of random seed */
-	p->ru_seed = arc4random() & (~0U >> (32 - p->ru_bits + 1));
-	p->ru_seed2 = arc4random() & (~0U >> (32 - p->ru_bits + 1));
+	p->ru_seed = cprng_fast32() & (~0U >> (32 - p->ru_bits + 1));
+	p->ru_seed2 = cprng_fast32() & (~0U >> (32 - p->ru_bits + 1));
 
 	/* Determine the LCG we use */
-	p->ru_b = (arc4random() & (~0U >> (32 - p->ru_bits))) | 1;
+	p->ru_b = (cprng_fast32() & (~0U >> (32 - p->ru_bits))) | 1;
 	p->ru_a = pmod(p->ru_agen,
-	    (arc4random() & (~0U >> (32 - p->ru_bits))) & (~1U), p->ru_m);
+	    (cprng_fast32() & (~0U >> (32 - p->ru_bits))) & (~1U), p->ru_m);
 	while (p->ru_b % 3 == 0)
 		p->ru_b += 2;
 
-	j = arc4random() % p->ru_n;
+	j = cprng_fast32() % p->ru_n;
 
 	/*
 	 * Do a fast gcd(j, RU_N - 1), so we can find a j with
@@ -209,7 +211,7 @@ initid(struct randomtab *p)
 	p->ru_g = pmod(p->ru_gen, j, p->ru_n);
 	p->ru_counter = 0;
 
-	p->ru_reseed = time_second + p->ru_out;
+	p->ru_reseed = time_uptime + p->ru_out;
 	p->ru_msb = p->ru_msb ? 0 : (1U << (p->ru_bits - 1));
 }
 
@@ -218,11 +220,11 @@ randomid(struct randomtab *p)
 {
 	int i, n;
 
-	if (p->ru_counter >= p->ru_max || time_second > p->ru_reseed)
+	if (p->ru_counter >= p->ru_max || time_uptime > p->ru_reseed)
 		initid(p);
 
 	/* Skip a random number of ids */
-	n = arc4random() & 0x3;
+	n = cprng_fast32() & 0x3;
 	if (p->ru_counter + n >= p->ru_max)
 		initid(p);
 

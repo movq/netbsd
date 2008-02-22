@@ -1,4 +1,4 @@
-/* $NetBSD: macekbc.c,v 1.2 2007/04/14 15:11:39 jmcneill Exp $ */
+/* $NetBSD: macekbc.c,v 1.8 2015/04/04 14:19:00 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +31,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.2 2007/04/14 15:11:39 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.8 2015/04/04 14:19:00 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <sgimips/mace/macevar.h>
@@ -67,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.2 2007/04/14 15:11:39 jmcneill Exp $")
 #define		MACEKBC_STAT_RXFULL	(1 << 4)
 
 struct macekbc_softc {
-	struct device 		sc_dev;
 	struct macekbc_internal	*sc_id;
 
 	bus_space_tag_t		sc_iot;
@@ -95,10 +88,10 @@ static void 	macekbc_slot_enable(void *, pckbport_slot_t, int);
 static void 	macekbc_intr_establish(void *, pckbport_slot_t);
 static void 	macekbc_set_poll(void *, pckbport_slot_t, int);
 
-static int	macekbc_match(struct device *, struct cfdata *, void *);
-static void 	macekbc_attach(struct device *, struct device *, void *);
+static int	macekbc_match(device_t, cfdata_t, void *);
+static void 	macekbc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(macekbc, sizeof(struct macekbc_softc),
+CFATTACH_DECL_NEW(macekbc, sizeof(struct macekbc_softc),
     macekbc_match, macekbc_attach, NULL, NULL);
 
 static struct pckbport_accessops macekbc_ops = {
@@ -111,25 +104,20 @@ static struct pckbport_accessops macekbc_ops = {
 };
 
 static int
-macekbc_match(struct device *parent, struct cfdata *match, void *aux)
+macekbc_match(device_t parent, cfdata_t match, void *aux)
 {
-	const char *consdev;
-
-	/* XXX don't bother attaching if we're using a serial console */
-	consdev = ARCBIOS->GetEnvironmentVariable("ConsoleIn");
-	if (consdev == NULL || strcmp(consdev, "keyboard()") != 0)
-		return 0;
 
 	return 1;
 }
 
 static void
-macekbc_attach(struct device *parent, struct device *self, void *aux)
+macekbc_attach(device_t parent, device_t self, void *aux)
 {
 	struct mace_attach_args *maa;
 	struct macekbc_softc *sc;
 	struct macekbc_internal *t;
 	int slot;
+	const char *consdev;
 
 	maa = aux;
 	sc = device_private(self);
@@ -137,7 +125,7 @@ macekbc_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal(": PS2 controller\n");
 	aprint_naive("\n");
 
-	t = malloc(sizeof(struct macekbc_internal), M_DEVBUF, M_NOWAIT|M_ZERO);
+	t = kmem_alloc(sizeof(struct macekbc_internal), KM_NOSLEEP);
 	if (t == NULL) {
 		aprint_error("%s: not enough memory\n", device_xname(self));
 		return;
@@ -149,20 +137,20 @@ macekbc_attach(struct device *parent, struct device *self, void *aux)
 	    0, &t->t_ioh[PCKBPORT_KBD_SLOT]) != 0) {
 		aprint_error("%s: couldn't map kbd registers\n",
 		    device_xname(self));
-		return;
+		goto bork;
 	}
 	if (bus_space_subregion(t->t_iot, maa->maa_sh, maa->maa_offset + 32,
 	    0, &t->t_ioh[PCKBPORT_AUX_SLOT]) != 0) {
 		aprint_error("%s: couldn't map aux registers\n",
 		    device_xname(self));
-		return;
+		goto bork;
 	}
 
 	if ((t->t_rxih = cpu_intr_establish(maa->maa_intr, maa->maa_intrmask,
 	    macekbc_intr, t)) == NULL) {
 		printf("%s: couldn't establish interrupt\n",
 		    device_xname(self));
-		return;
+		goto bork;
 	}
 	sc->sc_id = t;
 	t->t_sc = sc;
@@ -170,12 +158,19 @@ macekbc_attach(struct device *parent, struct device *self, void *aux)
 	macekbc_reset(t, PCKBPORT_KBD_SLOT);
 	macekbc_reset(t, PCKBPORT_AUX_SLOT);
 
+	consdev = arcbios_GetEnvironmentVariable("ConsoleIn");
+	if (consdev != NULL && strcmp(consdev, "keyboard()") == 0)
+		pckbport_cnattach(t, &macekbc_ops, PCKBPORT_KBD_SLOT);
+
 	t->t_pt = pckbport_attach(t, &macekbc_ops);
-	if (pckbport_attach_slot(&sc->sc_dev, t->t_pt, PCKBPORT_KBD_SLOT))
+	if (pckbport_attach_slot(self, t->t_pt, PCKBPORT_KBD_SLOT))
 		t->t_present[PCKBPORT_KBD_SLOT] = 1;
-	if (pckbport_attach_slot(&sc->sc_dev, t->t_pt, PCKBPORT_AUX_SLOT))
+	if (pckbport_attach_slot(self, t->t_pt, PCKBPORT_AUX_SLOT))
 		t->t_present[PCKBPORT_AUX_SLOT] = 1;
 
+	return;
+bork:
+	kmem_free(t, sizeof(struct macekbc_internal));
 	return;
 }
 
@@ -206,7 +201,7 @@ macekbc_intr(void *opaque)
 		}
 	}
 
-	return rv; 
+	return rv;
 }
 
 static void

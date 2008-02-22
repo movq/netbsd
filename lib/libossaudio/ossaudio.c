@@ -1,4 +1,4 @@
-/*	$NetBSD: ossaudio.c,v 1.23 2007/11/08 20:27:25 drochner Exp $	*/
+/*	$NetBSD: ossaudio.c,v 1.33 2017/03/23 15:50:48 nat Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ossaudio.c,v 1.23 2007/11/08 20:27:25 drochner Exp $");
+__RCSID("$NetBSD: ossaudio.c,v 1.33 2017/03/23 15:50:48 nat Exp $");
 
 /*
  * This is an OSS (Linux) sound API emulator.
@@ -51,6 +44,10 @@ __RCSID("$NetBSD: ossaudio.c,v 1.23 2007/11/08 20:27:25 drochner Exp $");
 #include <sys/audioio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdarg.h>
 
 #include "soundcard.h"
 #undef ioctl
@@ -66,15 +63,22 @@ static void setblocksize(int, struct audio_info *);
 
 static int audio_ioctl(int, unsigned long, void *);
 static int mixer_ioctl(int, unsigned long, void *);
-static int opaque_to_enum(struct audiodevinfo *di, audio_mixer_name_t *label, int opq);
-static int enum_to_ord(struct audiodevinfo *di, int enm);
-static int enum_to_mask(struct audiodevinfo *di, int enm);
+static int opaque_to_enum(struct audiodevinfo *, audio_mixer_name_t *, int);
+static int enum_to_ord(struct audiodevinfo *, int);
+static int enum_to_mask(struct audiodevinfo *, int);
 
 #define INTARG (*(int*)argp)
 
 int
-_oss_ioctl(int fd, unsigned long com, void *argp)
+_oss_ioctl(int fd, unsigned long com, ...)
 {
+	va_list ap;
+	void *argp;
+
+	va_start(ap, com);
+	argp = va_arg(ap, void *);
+	va_end(ap);
+
 	if (IOCGROUP(com) == 'P')
 		return audio_ioctl(fd, com, argp);
 	else if (IOCGROUP(com) == 'M')
@@ -92,9 +96,17 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 	struct audio_buf_info bufinfo;
 	struct count_info cntinfo;
 	struct audio_encoding tmpenc;
+	struct oss_sysinfo tmpsysinfo;
+	struct oss_audioinfo *tmpaudioinfo;
+	audio_device_t tmpaudiodev;
+	struct stat tmpstat;
+	dev_t devno;
+	char version[32] = "4.01";
+	char license[16] = "NetBSD";
 	u_int u;
 	int idat, idata;
 	int retval;
+	int i;
 
 	idat = 0;
 
@@ -192,6 +204,36 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			tmpinfo.play.encoding =
 			tmpinfo.record.encoding = AUDIO_ENCODING_ULINEAR_BE;
 			break;
+		case AFMT_S24_LE:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 24;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_SLINEAR_LE;
+			break;
+		case AFMT_S24_BE:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 24;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_SLINEAR_BE;
+			break;
+		case AFMT_S32_LE:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 32;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_SLINEAR_LE;
+			break;
+		case AFMT_S32_BE:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 32;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_SLINEAR_BE;
+			break;
+		case AFMT_AC3:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 16;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_AC3;
+			break;
 		default:
 			return EINVAL;
 		}
@@ -209,13 +251,21 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			idat = AFMT_A_LAW;
 			break;
 		case AUDIO_ENCODING_SLINEAR_LE:
-			if (tmpinfo.play.precision == 16)
+			if (tmpinfo.play.precision == 32)
+				idat = AFMT_S32_LE;
+			else if (tmpinfo.play.precision == 24)
+				idat = AFMT_S24_LE;
+			else if (tmpinfo.play.precision == 16)
 				idat = AFMT_S16_LE;
 			else
 				idat = AFMT_S8;
 			break;
 		case AUDIO_ENCODING_SLINEAR_BE:
-			if (tmpinfo.play.precision == 16)
+			if (tmpinfo.play.precision == 32)
+				idat = AFMT_S32_BE;
+			else if (tmpinfo.play.precision == 24)
+				idat = AFMT_S24_BE;
+			else if (tmpinfo.play.precision == 16)
 				idat = AFMT_S16_BE;
 			else
 				idat = AFMT_S8;
@@ -234,6 +284,9 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			break;
 		case AUDIO_ENCODING_ADPCM:
 			idat = AFMT_IMA_ADPCM;
+			break;
+		case AUDIO_ENCODING_AC3:
+			idat = AFMT_AC3;
 			break;
 		}
 		INTARG = idat;
@@ -306,13 +359,21 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 				idat |= AFMT_S8;
 				break;
 			case AUDIO_ENCODING_SLINEAR_LE:
-				if (tmpenc.precision == 16)
+				if (tmpenc.precision == 32)
+					idat |= AFMT_S32_LE;
+				else if (tmpenc.precision == 24)
+					idat |= AFMT_S24_LE;
+				else if (tmpenc.precision == 16)
 					idat |= AFMT_S16_LE;
 				else
 					idat |= AFMT_S8;
 				break;
 			case AUDIO_ENCODING_SLINEAR_BE:
-				if (tmpenc.precision == 16)
+				if (tmpenc.precision == 32)
+					idat |= AFMT_S32_BE;
+				else if (tmpenc.precision == 24)
+					idat |= AFMT_S24_BE;
+				else if (tmpenc.precision == 16)
 					idat |= AFMT_S16_BE;
 				else
 					idat |= AFMT_S8;
@@ -335,6 +396,9 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			case AUDIO_ENCODING_ADPCM:
 				idat |= AFMT_IMA_ADPCM;
 				break;
+			case AUDIO_ENCODING_AC3:
+				idat |= AFMT_AC3;
+				break;
 			default:
 				break;
 			}
@@ -347,10 +411,11 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			return retval;
 		setblocksize(fd, &tmpinfo);
 		bufinfo.fragsize = tmpinfo.blocksize;
-		bufinfo.fragments = tmpinfo.hiwat -
-			(tmpinfo.play.seek + tmpinfo.blocksize - 1)/tmpinfo.blocksize;
+		bufinfo.fragments = (tmpinfo.hiwat * tmpinfo.blocksize -
+		    (tmpinfo.play.seek + tmpinfo.blocksize -1)) /
+		    tmpinfo.blocksize;
 		bufinfo.fragstotal = tmpinfo.hiwat;
-		bufinfo.bytes = tmpinfo.hiwat * tmpinfo.blocksize - tmpinfo.play.seek;
+		bufinfo.bytes = bufinfo.fragments * tmpinfo.blocksize;
 		*(struct audio_buf_info *)argp = bufinfo;
 		break;
 	case SNDCTL_DSP_GETISPACE:
@@ -359,10 +424,9 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 			return retval;
 		setblocksize(fd, &tmpinfo);
 		bufinfo.fragsize = tmpinfo.blocksize;
-		bufinfo.fragments = tmpinfo.hiwat -
-			(tmpinfo.record.seek + tmpinfo.blocksize - 1)/tmpinfo.blocksize;
+		bufinfo.fragments = tmpinfo.record.seek / tmpinfo.blocksize;
 		bufinfo.fragstotal = tmpinfo.hiwat;
-		bufinfo.bytes = tmpinfo.hiwat * tmpinfo.blocksize - tmpinfo.record.seek;
+		bufinfo.bytes = bufinfo.fragments * tmpinfo.blocksize;
 		*(struct audio_buf_info *)argp = bufinfo;
 		break;
 	case SNDCTL_DSP_NONBLOCK:
@@ -430,6 +494,128 @@ audio_ioctl(int fd, unsigned long com, void *argp)
 		cntinfo.ptr = tmpoffs.offset;
 		*(struct count_info *)argp = cntinfo;
 		break;
+	case SNDCTL_SYSINFO:
+		strlcpy(tmpsysinfo.product, "OSS/NetBSD",
+		    sizeof tmpsysinfo.product);
+		strlcpy(tmpsysinfo.version, version, sizeof tmpsysinfo.version);
+		strlcpy(tmpsysinfo.license, license, sizeof tmpsysinfo.license);
+		tmpsysinfo.versionnum = SOUND_VERSION;
+		memset(tmpsysinfo.options, 0, 8);
+		tmpsysinfo.numaudios = OSS_MAX_AUDIO_DEVS;
+		tmpsysinfo.numaudioengines = 1;
+		memset(tmpsysinfo.openedaudio, 0, 8);
+		tmpsysinfo.numsynths = 1;
+		tmpsysinfo.nummidis = -1;
+		tmpsysinfo.numtimers = -1;
+		tmpsysinfo.nummixers = 1;
+		tmpsysinfo.numcards = 1;
+		memset(tmpsysinfo.openedmidi, 0, 8);
+		*(struct oss_sysinfo *)argp = tmpsysinfo;
+		break;
+	case SNDCTL_ENGINEINFO:
+	case SNDCTL_AUDIOINFO:
+		devno = 0;
+		tmpaudioinfo = (struct oss_audioinfo*)argp;
+		if (tmpaudioinfo == NULL)
+			return EINVAL;
+		if (tmpaudioinfo->dev < 0) {
+			fstat(fd, &tmpstat);
+			if ((tmpstat.st_rdev & 0xff00) == 0x2a00)
+				devno = tmpstat.st_rdev & 0xff;
+			if (devno >= 0x80)
+				tmpaudioinfo->dev = devno & 0x7f;
+		}
+		if (tmpaudioinfo->dev < 0)
+			tmpaudioinfo->dev = 0;
+
+		snprintf(tmpaudioinfo->devnode, OSS_DEVNODE_SIZE,
+		    "/dev/audio%d", tmpaudioinfo->dev); 
+
+		retval = ioctl(fd, AUDIO_GETDEV, &tmpaudiodev);
+		if (retval < 0)
+			return retval;
+		retval = ioctl(fd, AUDIO_GETINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		retval = ioctl(fd, AUDIO_GETPROPS, &idata);
+		if (retval < 0)
+			return retval;
+		idat = DSP_CAP_TRIGGER; /* pretend we have trigger */
+		if (idata & AUDIO_PROP_FULLDUPLEX)
+			idat |= DSP_CAP_DUPLEX;
+		if (idata & AUDIO_PROP_MMAP)
+			idat |= DSP_CAP_MMAP;
+		idat = PCM_CAP_INPUT | PCM_CAP_OUTPUT;
+		strlcpy(tmpaudioinfo->name, tmpaudiodev.name,
+		    sizeof tmpaudioinfo->name);
+		tmpaudioinfo->busy = tmpinfo.play.open;
+		tmpaudioinfo->pid = -1;
+		tmpaudioinfo->caps = idat;
+		ioctl(fd, SNDCTL_DSP_GETFMTS, &tmpaudioinfo->iformats);
+		tmpaudioinfo->oformats = tmpaudioinfo->iformats;
+		tmpaudioinfo->magic = -1;
+		memset(tmpaudioinfo->cmd, 0, 64);
+		tmpaudioinfo->card_number = -1;
+		memset(tmpaudioinfo->song_name, 0, 64);
+		memset(tmpaudioinfo->label, 0, 16);
+		tmpaudioinfo->port_number = tmpinfo.play.port;
+		tmpaudioinfo->mixer_dev = tmpaudioinfo->dev;
+		tmpaudioinfo->legacy_device = -1;
+		tmpaudioinfo->enabled = 1;
+		tmpaudioinfo->flags = -1;
+		tmpaudioinfo->min_rate = tmpinfo.play.sample_rate;
+		tmpaudioinfo->max_rate = tmpinfo.play.sample_rate;
+		tmpaudioinfo->nrates = 2;
+		for (i = 0; i < tmpaudioinfo->nrates; i++)
+			tmpaudioinfo->rates[i] = tmpinfo.play.sample_rate;
+		tmpaudioinfo->min_channels = tmpinfo.play.channels;
+		tmpaudioinfo->max_channels = tmpinfo.play.channels;
+		tmpaudioinfo->binding = -1;
+		tmpaudioinfo->rate_source = -1;
+		memset(tmpaudioinfo->handle, 0, 16);
+		tmpaudioinfo->next_play_engine = 0;
+		tmpaudioinfo->next_rec_engine = 0;
+		argp = tmpaudioinfo;
+		break;
+	case SNDCTL_DSP_GETPLAYVOL:
+		retval = ioctl(fd, AUDIO_GETBUFINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		*(uint *)argp = tmpinfo.play.gain;
+		break;
+	case SNDCTL_DSP_SETPLAYVOL:
+		retval = ioctl(fd, AUDIO_GETBUFINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		if (*(uint *)argp > 255)
+			tmpinfo.play.gain = 255;
+		else
+			tmpinfo.play.gain = *(uint *)argp;
+		retval = ioctl(fd, AUDIO_SETINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		break;
+	case SNDCTL_DSP_GETRECVOL:
+		retval = ioctl(fd, AUDIO_GETBUFINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		*(uint *)argp = tmpinfo.record.gain;
+		break;
+	case SNDCTL_DSP_SETRECVOL:
+		retval = ioctl(fd, AUDIO_GETBUFINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		if (*(uint *)argp > 255)
+			tmpinfo.record.gain = 255;
+		else
+			tmpinfo.record.gain = *(uint *)argp;
+		retval = ioctl(fd, AUDIO_SETINFO, &tmpinfo);
+		if (retval < 0)
+			return retval;
+		break;
+	case SNDCTL_DSP_SKIP:
+	case SNDCTL_DSP_SILENCE:
+		return EINVAL;
 	case SNDCTL_DSP_SETDUPLEX:
 		idat = 1;
 		retval = ioctl(fd, AUDIO_SETFD, &idat);
@@ -534,7 +720,7 @@ getdevinfo(int fd)
 	mixer_devinfo_t mi;
 	int i, j, e;
 	static struct {
-		char *name;
+		const char *name;
 		int code;
 	} *dp, devs[] = {
 		{ AudioNmicrophone,	SOUND_MIXER_MIC },
@@ -559,10 +745,10 @@ getdevinfo(int fd)
 /*		{ AudioNmixerout,	?? },*/
 		{ 0, -1 }
 	};
-	static struct audiodevinfo devcache = { 0 };
+	static struct audiodevinfo devcache = { .done = 0 };
 	struct audiodevinfo *di = &devcache;
 	struct stat sb;
-	int mlen, dlen;
+	size_t mlen, dlen;
 
 	/* Figure out what device it is so we can check if the
 	 * cached data is valid.
@@ -599,7 +785,8 @@ getdevinfo(int fd)
 				mlen = strlen(mi.label.name);
 				if (dlen < mlen
 				    && mi.label.name[mlen-dlen-1] == '.'
-				    && strcmp(dp->name, mi.label.name + mlen - dlen) == 0)
+				    && strcmp(dp->name,
+				    mi.label.name + mlen - dlen) == 0)
 					break;
 			}
 			if (dp->code >= 0) {
@@ -608,7 +795,7 @@ getdevinfo(int fd)
 				di->devmask |= 1 << dp->code;
 				if (mi.un.v.num_channels == 2)
 					di->stereomask |= 1 << dp->code;
-				strncpy(di->names[i], mi.label.name, 
+				strlcpy(di->names[i], mi.label.name,
 					sizeof di->names[i]);
 			}
 			break;
@@ -653,10 +840,10 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 	struct mixer_info *omi;
 	struct audio_device adev;
 	mixer_ctrl_t mc;
-	int idat;
+	u_long idat, n;
 	int i;
 	int retval;
-	int l, r, n, error, e;
+	int l, r, error, e;
 
 	idat = 0;
 	di = getdevinfo(fd);
@@ -675,8 +862,8 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 		omi = argp;
 		if (com == SOUND_MIXER_INFO)
 			omi->modify_counter = 1;
-		strncpy(omi->id, adev.name, sizeof omi->id);
-		strncpy(omi->name, adev.name, sizeof omi->name);
+		strlcpy(omi->id, adev.name, sizeof omi->id);
+		strlcpy(omi->name, adev.name, sizeof omi->name);
 		return 0;
 	case SOUND_MIXER_READ_RECSRC:
 		if (di->source == -1)
@@ -734,7 +921,8 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 				if (idat & (1 << i)) {
 					if (di->devmap[i] == -1)
 						return EINVAL;
-					mc.un.mask |= enum_to_mask(di, di->devmap[i]);
+					mc.un.mask |=
+					    enum_to_mask(di, di->devmap[i]);
 				}
 			}
 		}
@@ -748,14 +936,16 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 			mc.dev = di->devmap[n];
 			mc.type = AUDIO_MIXER_VALUE;
 		    doread:
-			mc.un.value.num_channels = di->stereomask & (1<<n) ? 2 : 1;
+			mc.un.value.num_channels =
+			    di->stereomask & (1 << (u_int)n) ? 2 : 1;
 			retval = ioctl(fd, AUDIO_MIXER_READ, &mc);
 			if (retval < 0)
 				return retval;
 			if (mc.type != AUDIO_MIXER_VALUE)
 				return EINVAL;
 			if (mc.un.value.num_channels != 2) {
-				l = r = mc.un.value.level[AUDIO_MIXER_LEVEL_MONO];
+				l = r =
+				    mc.un.value.level[AUDIO_MIXER_LEVEL_MONO];
 			} else {
 				l = mc.un.value.level[AUDIO_MIXER_LEVEL_LEFT];
 				r = mc.un.value.level[AUDIO_MIXER_LEVEL_RIGHT];
@@ -770,17 +960,18 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 			if (di->devmap[n] == -1)
 				return EINVAL;
 			idat = INTARG;
-			l = FROM_OSSVOL( idat       & 0xff);
-			r = FROM_OSSVOL((idat >> 8) & 0xff);
+			l = FROM_OSSVOL((u_int)idat & 0xff);
+			r = FROM_OSSVOL(((u_int)idat >> 8) & 0xff);
 			mc.dev = di->devmap[n];
 			mc.type = AUDIO_MIXER_VALUE;
-			if (di->stereomask & (1<<n)) {
+			if (di->stereomask & (1 << (u_int)n)) {
 				mc.un.value.num_channels = 2;
 				mc.un.value.level[AUDIO_MIXER_LEVEL_LEFT] = l;
 				mc.un.value.level[AUDIO_MIXER_LEVEL_RIGHT] = r;
 			} else {
 				mc.un.value.num_channels = 1;
-				mc.un.value.level[AUDIO_MIXER_LEVEL_MONO] = (l+r)/2;
+				mc.un.value.level[AUDIO_MIXER_LEVEL_MONO] =
+				    (l + r) / 2;
 			}
 			retval = ioctl(fd, AUDIO_MIXER_WRITE, &mc);
 			if (retval < 0)
@@ -794,7 +985,7 @@ mixer_ioctl(int fd, unsigned long com, void *argp)
 			return -1;
 		}
 	}
-	INTARG = idat;
+	INTARG = (int)idat;
 	return 0;
 }
 
@@ -806,7 +997,7 @@ static void
 setblocksize(int fd, struct audio_info *info)
 {
 	struct audio_info set;
-	int s;
+	size_t s;
 
 	if (info->blocksize & (info->blocksize-1)) {
 		for(s = 32; s < info->blocksize; s <<= 1)

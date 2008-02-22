@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_space.c,v 1.2 2007/12/15 00:39:14 perry Exp $ */
+/*	$NetBSD: omap_space.c,v 1.8 2018/03/16 17:56:32 ryo Exp $ */
 
 /*
  * bus_space functions for Texas Instruments OMAP processor.
@@ -73,14 +73,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_space.c,v 1.2 2007/12/15 00:39:14 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_space.c,v 1.8 2018/03/16 17:56:32 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* Prototypes for all the bus_space structure functions */
 bs_protos(omap);
@@ -90,89 +90,126 @@ bs_protos(bs_notimpl);
 
 struct bus_space omap_bs_tag = {
 	/* cookie */
-	(void *) 0,
+	.bs_cookie = (void *) 0,
 
 	/* mapping/unmapping */
-	omap_bs_map,
-	omap_bs_unmap,
-	omap_bs_subregion,
+	.bs_map = omap_bs_map,
+	.bs_unmap = omap_bs_unmap,
+	.bs_subregion = omap_bs_subregion,
 
 	/* allocation/deallocation */
-	omap_bs_alloc,	/* not implemented */
-	omap_bs_free,		/* not implemented */
+	.bs_alloc = omap_bs_alloc,	/* not implemented */
+	.bs_free = omap_bs_free,	/* not implemented */
 
 	/* get kernel virtual address */
-	omap_bs_vaddr,
+	.bs_vaddr = omap_bs_vaddr,
 
 	/* mmap */
-	bs_notimpl_bs_mmap,
+	.bs_mmap = bs_notimpl_bs_mmap,
 
 	/* barrier */
-	omap_bs_barrier,
+	.bs_barrier = omap_bs_barrier,
 
 	/* read (single) */
-	generic_bs_r_1,
-	generic_armv4_bs_r_2,
-	generic_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = generic_bs_r_1,
+	.bs_r_2 = generic_armv4_bs_r_2,
+	.bs_r_4 = generic_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	generic_bs_rm_1,
-	generic_armv4_bs_rm_2,
-	generic_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = generic_bs_rm_1,
+	.bs_rm_2 = generic_armv4_bs_rm_2,
+	.bs_rm_4 = generic_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	generic_bs_rr_1,
-	generic_armv4_bs_rr_2,
-	generic_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = generic_bs_rr_1,
+	.bs_rr_2 = generic_armv4_bs_rr_2,
+	.bs_rr_4 = generic_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	generic_bs_w_1,
-	generic_armv4_bs_w_2,
-	generic_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = generic_bs_w_1,
+	.bs_w_2 = generic_armv4_bs_w_2,
+	.bs_w_4 = generic_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	generic_bs_wm_1,
-	generic_armv4_bs_wm_2,
-	generic_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = generic_bs_wm_1,
+	.bs_wm_2 = generic_armv4_bs_wm_2,
+	.bs_wm_4 = generic_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	generic_bs_wr_1,
-	generic_armv4_bs_wr_2,
-	generic_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = generic_bs_wr_1,
+	.bs_wr_2 = generic_armv4_bs_wr_2,
+	.bs_wr_4 = generic_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	generic_bs_sr_1,
-	generic_armv4_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = generic_bs_sr_1,
+	.bs_sr_2 = generic_armv4_bs_sr_2,
+	.bs_sr_4 = generic_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	generic_armv4_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = generic_armv4_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
+
+#ifdef __BUS_SPACE_HAS_STREAM_METHODS
+	/* read (single) */
+	.bs_r_1_s = generic_bs_r_1,
+	.bs_r_2_s = generic_armv4_bs_r_2,
+	.bs_r_4_s = generic_bs_r_4,
+	.bs_r_8_s = bs_notimpl_bs_r_8,
+
+	/* read multiple */
+	.bs_rm_1_s = generic_bs_rm_1,
+	.bs_rm_2_s = generic_armv4_bs_rm_2,
+	.bs_rm_4_s = generic_bs_rm_4,
+	.bs_rm_8_s = bs_notimpl_bs_rm_8,
+
+	/* read region */
+	.bs_rr_1_s = generic_bs_rr_1,
+	.bs_rr_2_s = generic_armv4_bs_rr_2,
+	.bs_rr_4_s = generic_bs_rr_4,
+	.bs_rr_8_s = bs_notimpl_bs_rr_8,
+
+	/* write (single) */
+	.bs_w_1_s = generic_bs_w_1,
+	.bs_w_2_s = generic_armv4_bs_w_2,
+	.bs_w_4_s = generic_bs_w_4,
+	.bs_w_8_s = bs_notimpl_bs_w_8,
+
+	/* write multiple */
+	.bs_wm_1_s = generic_bs_wm_1,
+	.bs_wm_2_s = generic_armv4_bs_wm_2,
+	.bs_wm_4_s = generic_bs_wm_4,
+	.bs_wm_8_s = bs_notimpl_bs_wm_8,
+
+	/* write region */
+	.bs_wr_1_s = generic_bs_wr_1,
+	.bs_wr_2_s = generic_armv4_bs_wr_2,
+	.bs_wr_4_s = generic_bs_wr_4,
+	.bs_wr_8_s = bs_notimpl_bs_wr_8,
+#endif
 };
 
 int
 omap_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	      int flag, bus_space_handle_t *bshp)
 {
-	u_long startpa, endpa, pa;
-	vaddr_t va;
-	pt_entry_t *pte;
 	const struct pmap_devmap	*pd;
+	paddr_t startpa, endpa, pa;
+	vaddr_t va;
 
 	if ((pd = pmap_devmap_find_pa(bpa, size)) != NULL) {
 		/* Device was statically mapped. */
@@ -193,15 +230,8 @@ omap_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	*bshp = (bus_space_handle_t)(va + (bpa - startpa));
 
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
-		if ((flag & BUS_SPACE_MAP_CACHEABLE) == 0) {
-			pte = vtopte(va);
-			*pte &= ~L2_S_CACHE_MASK;
-			PTE_SYNC(pte);
-			/* XXX: pmap_kenter_pa() also does PTE_SYNC(). a bit of
-			 *      waste.
-			 */
-		}
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE,
+		    (flag & BUS_SPACE_MAP_CACHEABLE) ? 0 : PMAP_NOCACHE);
 	}
 	pmap_update(pmap_kernel());
 
@@ -268,4 +298,3 @@ omap_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 
 	panic("%s(): not implemented\n", __func__);
 }
-

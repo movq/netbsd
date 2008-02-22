@@ -1,6 +1,7 @@
-/*	$NetBSD: iavc_pci.c,v 1.7 2007/10/19 12:00:44 ad Exp $	*/
+/*	$NetBSD: iavc_pci.c,v 1.17 2016/07/11 11:31:51 msaitoh Exp $	*/
 
 /*
+	char intrbuf[PCI_INTRSTR_LEN];
  * Copyright (c) 2001-2003 Cubical Solutions Ltd.
  * All rights reserved.
  *
@@ -32,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iavc_pci.c,v 1.7 2007/10/19 12:00:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iavc_pci.c,v 1.17 2016/07/11 11:31:51 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -75,12 +76,12 @@ struct iavc_pci_softc {
 
 static const struct iavc_pci_product *find_cardname(struct pci_attach_args *);
 
-static int iavc_pci_probe(struct device *, struct cfdata *, void *);
-static void iavc_pci_attach(struct device *, struct device *, void *);
+static int iavc_pci_probe(device_t, cfdata_t, void *);
+static void iavc_pci_attach(device_t, device_t, void *);
 
 int iavc_pci_intr(void *);
 
-CFATTACH_DECL(iavc_pci, sizeof(struct iavc_pci_softc),
+CFATTACH_DECL_NEW(iavc_pci, sizeof(struct iavc_pci_softc),
     iavc_pci_probe, iavc_pci_attach, NULL, NULL);
 
 static const struct iavc_pci_product {
@@ -108,8 +109,7 @@ find_cardname(struct pci_attach_args * pa)
 }
 
 static int
-iavc_pci_probe(struct device * parent,
-	struct cfdata * match, void *aux)
+iavc_pci_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -120,27 +120,26 @@ iavc_pci_probe(struct device * parent,
 }
 
 static void
-iavc_pci_attach(struct device * parent,
-	struct device * self, void *aux)
+iavc_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct iavc_pci_softc *psc = (void *) self;
-	struct iavc_softc *sc = (void *) self;
+	struct iavc_pci_softc *psc = device_private(self);
+	struct iavc_softc *sc = &psc->sc_iavc;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	const struct iavc_pci_product *pp;
 	pci_intr_handle_t ih;
 	const char *intrstr;
 	int ret;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	pp = find_cardname(pa);
 	if (pp == NULL)
 		return;
 
+	sc->sc_dev = self;
 	sc->sc_t1 = 0;
 	sc->sc_dma = 0;
 	sc->dmat = pa->pa_dmat;
-
-	iavc_b1dma_reset(sc);
 
 	if (pci_mapreg_map(pa, IAVC_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
 		&sc->sc_io_bt, &sc->sc_io_bh, &psc->io_base, &psc->io_size)) {
@@ -155,9 +154,10 @@ iavc_pci_attach(struct device * parent,
 	}
 	aprint_normal(": %s\n", pp->name);
 
+	iavc_b1dma_reset(sc);
+
 	if (pp->npp_product == PCI_PRODUCT_AVM_T1) {
-		aprint_error("%s: sorry, PRI not yet supported\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "sorry, PRI not yet supported\n");
 		return;
 
 #if 0
@@ -166,11 +166,9 @@ iavc_pci_attach(struct device * parent,
 		ret = iavc_t1_detect(sc);
 		if (ret) {
 			if (ret < 6) {
-				aprint_error("%s: no card detected?\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(self, "no card detected?\n");
 			} else {
-				aprint_error("%s: black box not on\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(self, "black box not on\n");
 			}
 			return;
 		} else {
@@ -186,8 +184,7 @@ iavc_pci_attach(struct device * parent,
 		if (ret) {
 			ret = iavc_b1_detect(sc);
 			if (ret) {
-				aprint_error("%s: no card detected?\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(self, "no card detected?\n");
 				return;
 			}
 		} else {
@@ -208,23 +205,21 @@ iavc_pci_attach(struct device * parent,
 #endif
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, iavc_pci_intr, psc);
 	if (psc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	psc->sc_pc = pc;
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	memset(&sc->sc_txq, 0, sizeof(struct ifqueue));
 	sc->sc_txq.ifq_maxlen = sc->sc_capi.sc_nbch * 4;
@@ -243,64 +238,64 @@ iavc_pci_attach(struct device * parent,
 	/* lock & load DMA for TX */
 	if ((ret = bus_dmamem_alloc(sc->dmat, IAVC_DMA_SIZE, PAGE_SIZE, 0,
 	    &sc->txseg, 1, &sc->ntxsegs, BUS_DMA_ALLOCNOW)) != 0) {
-		aprint_error("%s: can't allocate tx DMA memory, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self,
+		    "can't allocate tx DMA memory, error = %d\n", ret);
 		goto fail1;
 	}
 
 	if ((ret = bus_dmamem_map(sc->dmat, &sc->txseg, sc->ntxsegs,
 	    IAVC_DMA_SIZE, &sc->sc_sendbuf, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: can't map tx DMA memory, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self, "can't map tx DMA memory, error = %d\n",
+		    ret);
 		goto fail2;
 	}
 
 	if ((ret = bus_dmamap_create(sc->dmat, IAVC_DMA_SIZE, 1,
 	    IAVC_DMA_SIZE, 0, BUS_DMA_ALLOCNOW | BUS_DMA_NOWAIT,
 	    &sc->tx_map)) != 0) {
-		aprint_error("%s: can't create tx DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self, "can't create tx DMA map, error = %d\n",
+		    ret);
 		goto fail3;
 	}
 
 	if ((ret = bus_dmamap_load(sc->dmat, sc->tx_map, sc->sc_sendbuf,
 	    IAVC_DMA_SIZE, NULL, BUS_DMA_WRITE | BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: can't load tx DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self, "can't load tx DMA map, error = %d\n",
+		    ret);
 		goto fail4;
 	}
 
 	/* do the same for RX */
 	if ((ret = bus_dmamem_alloc(sc->dmat, IAVC_DMA_SIZE, PAGE_SIZE, 0,
 	    &sc->rxseg, 1, &sc->nrxsegs, BUS_DMA_ALLOCNOW)) != 0) {
-		aprint_error("%s: can't allocate rx DMA memory, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self,
+		    "can't allocate rx DMA memory, error = %d\n", ret);
 		goto fail5;
 	}
 
 	if ((ret = bus_dmamem_map(sc->dmat, &sc->rxseg, sc->nrxsegs,
 	    IAVC_DMA_SIZE, &sc->sc_recvbuf, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: can't map rx DMA memory, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self,
+		    "can't map rx DMA memory, error = %d\n", ret);
 		goto fail6;
 	}
 
 	if ((ret = bus_dmamap_create(sc->dmat, IAVC_DMA_SIZE, 1, IAVC_DMA_SIZE,
 	    0, BUS_DMA_ALLOCNOW | BUS_DMA_NOWAIT, &sc->rx_map)) != 0) {
-		aprint_error("%s: can't create rx DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self, "can't create rx DMA map, error = %d\n",
+		    ret);
 		goto fail7;
 	}
 
 	if ((ret = bus_dmamap_load(sc->dmat, sc->rx_map, sc->sc_recvbuf,
 	    IAVC_DMA_SIZE, NULL, BUS_DMA_READ | BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: can't load rx DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, ret);
+		aprint_error_dev(self, "can't load rx DMA map, error = %d\n",
+		    ret);
 		goto fail8;
 	}
 
-	if (capi_ll_attach(&sc->sc_capi, sc->sc_dev.dv_xname, pp->name)) {
-		aprint_error("%s: capi attach failed\n", sc->sc_dev.dv_xname);
+	if (capi_ll_attach(&sc->sc_capi, device_xname(sc->sc_dev), pp->name)) {
+		aprint_error_dev(self, "capi attach failed\n");
 		goto fail9;
 	}
 	return;
@@ -338,9 +333,9 @@ iavc_pci_intr(void *arg)
 
 #if 0
 static int
-iavc_pci_detach(struct device * self, int flags)
+iavc_pci_detach(device_t self, int flags)
 {
-	struct iavc_pci_softc *psc = (void *) self;
+	struct iavc_pci_softc *psc = device_private(self);
 
 	bus_space_unmap(psc->sc_iavc.sc_mem_bt, psc->sc_iavc.sc_mem_bh,
 	    psc->mem_size);
@@ -356,28 +351,5 @@ iavc_pci_detach(struct device * self, int flags)
 	/* XXX: capi detach?!? */
 
 	return 0;
-}
-
-static int
-iavc_pci_activate(struct device * self, enum devact act)
-{
-	struct iavc_softc *psc = (struct iavc_softc *) self;
-	int error, s;
-
-	error = 0;
-
-	s = splnet();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-	case DVACT_DEACTIVATE:
-		/* XXX */
-		break;
-	}
-
-	splx(s);
-
-	return error;
 }
 #endif

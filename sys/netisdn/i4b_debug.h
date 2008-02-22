@@ -27,7 +27,7 @@
  *	i4b_debug.h - i4b debug header file
  *	-----------------------------------
  *
- *	$Id: i4b_debug.h,v 1.7 2007/12/15 00:39:36 perry Exp $
+ *	$Id: i4b_debug.h,v 1.10 2015/09/06 06:01:01 dholland Exp $
  *
  * $FreeBSD$
  *
@@ -37,6 +37,8 @@
 
 #ifndef _NETISDN_I4B_DEBUG_H_
 #define _NETISDN_I4B_DEBUG_H_
+
+#include <sys/ioccom.h>
 
 #if !defined DO_I4B_DEBUG
 # define DO_I4B_DEBUG 1		/* default = include debugging code */
@@ -56,7 +58,7 @@ extern unsigned int i4b_l4_debug;
 
 #define NDBGL1(bits, fmt, args...)				 	\
 	if(bits & i4b_l1_debug)						\
-	{ printf("%s (L1): %s: " fmt "\n", sc->sc_dev.dv_xname, __func__ , ##args ); }
+	{ printf("%s (L1): %s: " fmt "\n", device_xname(sc->sc_dev), __func__ , ##args ); }
 
 #define NDBGL2(bits, fmt, args...)				 	\
 	if(bits & i4b_l2_debug)						\

@@ -1,4 +1,4 @@
-/*	$NetBSD: mpuvar.h,v 1.8 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: mpuvar.h,v 1.11 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 struct mpu_softc {
-	struct device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	bus_space_tag_t iot;		/* tag */
 	bus_space_handle_t ioh;		/* handle */
+	kmutex_t *lock;
 	const char *model;
 	int	open;
 	void	(*intr)(void *, int);	/* midi input intr handler */

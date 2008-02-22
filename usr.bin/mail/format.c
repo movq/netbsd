@@ -1,4 +1,4 @@
-/*	$NetBSD: format.c,v 1.12 2007/11/14 22:06:04 christos Exp $	*/
+/*	$NetBSD: format.c,v 1.15 2009/04/11 14:22:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: format.c,v 1.12 2007/11/14 22:06:04 christos Exp $");
+__RCSID("$NetBSD: format.c,v 1.15 2009/04/11 14:22:32 christos Exp $");
 #endif /* not __lint__ */
 
 #include <time.h>
@@ -803,7 +796,7 @@ dateof(struct tm *tm, struct message *mp, int use_hl_date)
 		 */
 		tm->tm_isdst = -1; /* let mktime(3) determine tm_isdst */
 		headline[0] = '\0';
-		(void)mail_readline(setinput(mp), headline, sizeof(headline));
+		(void)readline(setinput(mp), headline, (int)sizeof(headline), 0);
 		parse(headline, &hl, pbuf);
 		if (hl.l_date == NULL)
 			warnx("invalid headline: `%s'", headline);
@@ -919,7 +912,7 @@ get_display_name(char *name)
 			if (!quoted && q < qend) {
 				*q++ = *p;
 				if (!is_WSP(*p)
-				    /* && !is_specials((unsigned char)*p) */ )
+				    /* && !is_specials((unsigned char)*p) */)
 					lastq = q;
 			}
 			break;

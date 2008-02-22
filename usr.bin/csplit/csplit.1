@@ -1,4 +1,4 @@
-.\"	$NetBSD: csplit.1,v 1.2 2006/09/27 17:41:30 wiz Exp $
+.\"	$NetBSD: csplit.1,v 1.5 2014/02/04 19:48:48 wiz Exp $
 .\"
 .\" Copyright (c) 2002 Tim J. Robbins.
 .\" All rights reserved.
@@ -26,7 +26,7 @@
 .\"
 .\" $FreeBSD: src/usr.bin/csplit/csplit.1,v 1.11 2005/01/25 22:29:51 tjr Exp $
 .\"
-.Dd January 26, 2005
+.Dd February 4, 2014
 .Dt CSPLIT 1
 .Os
 .Sh NAME
@@ -53,27 +53,39 @@ a dash
 .Nm
 reads from standard input.
 .Pp
+Files are created with a prefix of
+.Dq xx
+and two decimal digits.
+The size of each file is written to standard output
+as it is created.
+If an error occurs whilst files are being created,
+or a
+.Dv HUP ,
+.Dv INT ,
+or
+.Dv TERM
+signal is received,
+all files previously written are removed.
+.Pp
 The options are as follows:
 .Bl -tag -offset indent -width 10n
 .It Fl f Ar prefix
-Give created files names beginning with
-.Ar prefix .
-The default is
+Create file names beginning with
+.Ar prefix ,
+instead of
 .Dq xx .
 .It Fl k
-Do not remove output files if an error occurs or a
+Do not remove previously created files if an error occurs or a
 .Dv HUP ,
 .Dv INT ,
 or
 .Dv TERM
 signal is received.
 .It Fl n Ar number
-Use
+Create file names beginning with
 .Ar number
-of decimal digits after the
-.Ar prefix
-to form the file name.
-The default is 2.
+of decimal digits after the prefix,
+instead of 2.
 .It Fl s
 Do not write the size of each output file to standard output as it is
 created.
@@ -83,23 +95,13 @@ The
 .Ar args
 operands may be a combination of the following patterns:
 .Bl -tag -offset indent -width 10n
-.It Xo
-.Sm off
-.No / Ar regexp No /
-.Op Oo Cm + | - Oc Ar offset
-.Sm on
-.Xc
+.It / Ns Ar regexp Ns / Ns Oo Oo Cm + Ns | Ns Cm - Oc Ns Ar offset Oc
 Create a file containing the input from the current line to (but not including)
 the next line matching the given basic regular expression.
 An optional
 .Ar offset
 from the line that matched may be specified.
-.It Xo
-.Sm off
-.No % Ar regexp No %
-.Op Oo Cm + | - Oc Ar offset
-.Sm on
-.Xc
+.It % Ns Ar regexp Ns % Ns Oo Oo Cm + Ns | Ns Cm - Oc Ns Ar offset Oc
 Same as above but a file is not created for the output.
 .It Ar line_no
 Create containing the input from the current line to (but not including)
@@ -119,8 +121,6 @@ After all the patterns have been processed, the remaining input data
 .Pp
 Requesting to split at a line before the current line number or past the
 end of the file will result in an error.
-.Pp
-.Ex -std
 .Sh ENVIRONMENT
 The
 .Ev LANG , LC_ALL , LC_COLLATE ,
@@ -130,12 +130,14 @@ environment variables affect the execution of
 .Nm
 as described in
 .Xr environ 7 .
+.Sh EXIT STATUS
+.Ex -std
 .Sh EXAMPLES
 Split the
 .Xr mdoc 7
 file
 .Pa foo.1
-into one file for each section (up to 20):
+into one file for each section (up to 21 plus one for the rest, if any):
 .Pp
 .Dl "$ csplit -k foo.1 '%^\e.Sh%' '/^\e.Sh/' '{20}'"
 .Pp

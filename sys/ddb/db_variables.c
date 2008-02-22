@@ -1,4 +1,4 @@
-/*	$NetBSD: db_variables.c,v 1.39 2007/02/22 04:38:06 matt Exp $	*/
+/*	$NetBSD: db_variables.c,v 1.46 2018/02/17 00:41:09 sevan Exp $	*/
 
 /*
  * Mach Operating System
@@ -27,26 +27,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_variables.c,v 1.39 2007/02/22 04:38:06 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_variables.c,v 1.46 2018/02/17 00:41:09 sevan Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ddbparam.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 
-#include <machine/db_machdep.h>
-
+#include <ddb/ddb.h>
 #include <ddb/ddbvar.h>
-
-#include <ddb/db_lex.h>
-#include <ddb/db_variables.h>
-#include <ddb/db_command.h>
-#include <ddb/db_sym.h>
-#include <ddb/db_extern.h>
-#include <ddb/db_output.h>
-
 
 /*
  * If this is non-zero, the DDB will be entered when the system
@@ -73,6 +66,15 @@ int		db_fromconsole = DDB_FROMCONSOLE;
 #endif
 int		db_tee_msgbuf = DDB_TEE_MSGBUF;
 
+#ifndef DDB_PANICSTACKFRAMES
+#define DDB_PANICSTACKFRAMES 65535
+#endif
+int		db_panicstackframes = DDB_PANICSTACKFRAMES;
+
+#ifndef DDB_DUMPSTACK
+#define DDB_DUMPSTACK 1
+#endif
+int 		db_dumpstack = DDB_DUMPSTACK;
 
 static int	db_rw_internal_variable(const struct db_variable *, db_expr_t *,
 		    int);
@@ -80,16 +82,68 @@ static int	db_find_variable(const struct db_variable **);
 
 /* XXX must all be ints for sysctl. */
 const struct db_variable db_vars[] = {
-	{ "radix",	(void *)&db_radix,	db_rw_internal_variable, NULL },
-	{ "maxoff",	(void *)&db_maxoff,	db_rw_internal_variable, NULL },
-	{ "maxwidth",	(void *)&db_max_width,	db_rw_internal_variable, NULL },
-	{ "tabstops",	(void *)&db_tab_stop_width, db_rw_internal_variable, NULL },
-	{ "lines",	(void *)&db_max_line,	db_rw_internal_variable, NULL },
-	{ "onpanic",	(void *)&db_onpanic,	db_rw_internal_variable, NULL },
-	{ "fromconsole", (void *)&db_fromconsole, db_rw_internal_variable, NULL },
-	{ "tee_msgbuf",	(void *)&db_tee_msgbuf,	db_rw_internal_variable, NULL },
+	{
+		.name = "fromconsole",
+		.valuep = &db_fromconsole,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "maxoff",
+		.valuep = &db_maxoff,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "maxwidth",
+		.valuep = &db_max_width,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "lines",
+		.valuep = &db_max_line,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "onpanic",
+		.valuep = &db_onpanic,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "panicstackframes",
+		.valuep = &db_panicstackframes,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "dumpstack",
+		.valuep = &db_dumpstack,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "radix",
+		.valuep = &db_radix,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "tabstops",
+		.valuep = &db_tab_stop_width,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
+	{
+		.name = "tee_msgbuf",
+		.valuep = &db_tee_msgbuf,
+		.fcn = db_rw_internal_variable,
+		.modif = NULL,
+	},
 };
-const struct db_variable * const db_evars = db_vars + sizeof(db_vars)/sizeof(db_vars[0]);
+const struct db_variable * const db_evars = db_vars + __arraycount(db_vars);
 
 /*
  * ddb command line access to the DDB variables defined above.
@@ -108,14 +162,9 @@ db_rw_internal_variable(const struct db_variable *vp, db_expr_t *valp, int rw)
 /*
  * sysctl(3) access to the DDB variables defined above.
  */
+#ifdef _KERNEL
 SYSCTL_SETUP(sysctl_ddb_setup, "sysctl ddb subtree setup")
 {
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "ddb", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_DDB, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
@@ -166,14 +215,26 @@ SYSCTL_SETUP(sysctl_ddb_setup, "sysctl ddb subtree setup")
 		       SYSCTL_DESCR("Whether to tee ddb output to the msgbuf"),
 		       NULL, 0, &db_tee_msgbuf, 0,
 		       CTL_DDB, CTL_CREATE, CTL_EOL);
-
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_STRING, "commandonenter",
 		       SYSCTL_DESCR("Command to be executed on each ddb enter"),
-		       NULL, 0, &db_cmd_on_enter, DB_LINE_MAXLEN,
+		       NULL, 0, db_cmd_on_enter, DB_LINE_MAXLEN,
+		       CTL_DDB, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "panicstackframes",
+		       SYSCTL_DESCR("Number of stack frames to print on panic"),
+		       NULL, 0, &db_panicstackframes, 0,
+		       CTL_DDB, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "dumpstack",
+		       SYSCTL_DESCR("On panic print stack trace"),
+		       NULL, 0, &db_dumpstack, 0,
 		       CTL_DDB, CTL_CREATE, CTL_EOL);
 }
+#endif	/* _KERNEL */
 
 int
 db_find_variable(const struct db_variable **varp)
@@ -234,7 +295,7 @@ db_read_variable(const struct db_variable *vp, db_expr_t *valuep)
 	int (*func)(const struct db_variable *, db_expr_t *, int) = vp->fcn;
 
 	if (func == FCN_NULL)
-		*valuep = *(vp->valuep);
+		*valuep = *(db_expr_t *)vp->valuep;
 	else
 		(*func)(vp, valuep, DB_VAR_GET);
 }
@@ -245,7 +306,7 @@ db_write_variable(const struct db_variable *vp, db_expr_t *valuep)
 	int (*func)(const struct db_variable *, db_expr_t *, int) = vp->fcn;
 
 	if (func == FCN_NULL)
-		*(vp->valuep) = *valuep;
+		*(db_expr_t *)vp->valuep = *valuep;
 	else
 		(*func)(vp, valuep, DB_VAR_SET);
 }

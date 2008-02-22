@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_ioctl.c,v 1.10 2008/01/22 01:05:05 jmcneill Exp $ */
+/*	$NetBSD: linux32_ioctl.c,v 1.13 2009/08/18 02:02:58 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -32,18 +32,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.10 2008/01/22 01:05:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.13 2009/08/18 02:02:58 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/ucred.h>
+#include <sys/ioctl.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -55,9 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.10 2008/01/22 01:05:05 jmcneill 
 
 #include <compat/ossaudio/ossaudio.h>
 #include <compat/ossaudio/ossaudiovar.h>
-
-extern int linux_ioctl_socket(struct lwp *, 
-    struct linux_sys_ioctl_args *, register_t *);
 
 int
 linux32_sys_ioctl(struct lwp *l, const struct linux32_sys_ioctl_args *uap, register_t *retval)
@@ -103,15 +103,26 @@ linux32_sys_ioctl(struct lwp *l, const struct linux32_sys_ioctl_args *uap, regis
 			break;
 		}
 		break;
-	case 0x89: {
-		struct linux_sys_ioctl_args cup;
-
-		SCARG(&cup, fd) = SCARG(uap, fd);
-		SCARG(&cup, com) = (u_long)SCARG(uap, com);
-		SCARG(&cup, data) = SCARG_P32(uap, data);
-		error = linux_ioctl_socket(l, &cup, retval);
+	case 'V':	/* video4linux2 */
+	case 'd':	/* drm */
+	{
+		struct sys_ioctl_args ua;
+		u_long com = 0;
+		if (SCARG(uap, com) & IOC_IN)
+			com |= IOC_OUT;
+		if (SCARG(uap, com) & IOC_OUT)
+			com |= IOC_IN;
+		SCARG(&ua, fd) = SCARG(uap, fd);
+		SCARG(&ua, com) = SCARG(uap, com);
+		SCARG(&ua, com) &= ~IOC_DIRMASK;
+		SCARG(&ua, com) |= com;
+		SCARG(&ua, data) = SCARG_P32(uap, data);
+		error = sys_ioctl(l, (const void *)&ua, retval);
 		break;
 	}
+	case 0x89:
+		error = linux32_ioctl_socket(l, uap, retval);
+		break;
 	default:
 		printf("Not yet implemented ioctl group \'%c\'\n", group);
 		error = EINVAL;

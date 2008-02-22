@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_ioctl.h,v 1.18 2006/03/02 03:38:48 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_ioctl.h,v 1.24 2018/05/04 11:25:24 maxv Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -38,6 +38,7 @@
 /*
  * IEEE 802.11 ioctls.
  */
+#include <sys/ioccom.h>
 #include <net80211/_ieee80211.h>
 #include <net80211/ieee80211.h>
 #include <net80211/ieee80211_crypto.h>
@@ -300,7 +301,7 @@ enum {
 	IEEE80211_MACCMD_FLUSH		= 3,	/* flush ACL database */
 	IEEE80211_MACCMD_DETACH		= 4,	/* detach ACL policy */
 	IEEE80211_MACCMD_POLICY		= 5,	/* get ACL policy */
-	IEEE80211_MACCMD_LIST		= 6,	/* get ACL database */
+	IEEE80211_MACCMD_LIST		= 6	/* get ACL database */
 };
 
 struct ieee80211req_maclist {
@@ -413,7 +414,7 @@ struct ieee80211req {
 	char		i_name[IFNAMSIZ];	/* if_name, e.g. "wi0" */
 	u_int16_t	i_type;			/* req type */
 	int16_t		i_val;			/* Index or simple value */
-	int16_t		i_len;			/* Index or simple value */
+	u_int16_t	i_len;			/* Index or simple value */
 	void		*i_data;		/* Extra data */
 };
 
@@ -578,10 +579,6 @@ struct ieee80211_auth {
 	char		i_name[IFNAMSIZ];	/* if_name, e.g. "wi0" */
 	int		i_authtype;
 };
-
-#define	IEEE80211_AUTH_NONE	0
-#define	IEEE80211_AUTH_OPEN	1
-#define	IEEE80211_AUTH_SHARED	2
 
 #define	SIOCS80211AUTH		 _IOW('i', 236, struct ieee80211_auth)
 #define	SIOCG80211AUTH		_IOWR('i', 237, struct ieee80211_auth)

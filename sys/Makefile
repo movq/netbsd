@@ -1,21 +1,21 @@
-#	$NetBSD: Makefile,v 1.65 2007/09/24 14:19:36 pooka Exp $
+#	$NetBSD: Makefile,v 1.80 2017/05/27 21:02:55 bouyer Exp $
+
+.include <bsd.own.mk>
 
 SUBDIR=	altq arch compat dev fs miscfs \
-	net net80211 netatalk netbt netipsec netinet netinet6 \
-        netisdn netiso netkey netnatm netsmb \
+	net net80211 netatalk netbt netcan netipsec netinet netinet6 \
+        netisdn netkey netmpls netnatm netsmb \
 	nfs opencrypto sys ufs uvm
 
-.if (${MACHINE} != "vax" \
-  && ${MACHINE} != "evbppc")
-SUBDIR+=	rump
+# interrupt implementation depends on the kernel within the port
+#.if (${MACHINE} != "evbppc")
+.if make(obj) || make(cleandir) || ${MKKMOD} != "no"
+SUBDIR+=modules
 .endif
+#.endif
 
-.if (${MACHINE} != "evbppc")
-SUBDIR+=lkm
+.if make(includes) || make(obj) || make(cleandir)
+SUBDIR+= rump
 .endif
-
-# Speedup stubs for some subtrees that don't need to run these rules
-includes-lkm:
-	@true
 
 .include <bsd.kinc.mk>

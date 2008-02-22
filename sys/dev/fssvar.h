@@ -1,4 +1,4 @@
-/*	$NetBSD: fssvar.h,v 1.18 2008/01/04 21:33:17 xtraeme Exp $	*/
+/*	$NetBSD: fssvar.h,v 1.29 2015/09/06 06:00:59 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,14 +32,16 @@
 #ifndef _SYS_DEV_FSSVAR_H
 #define _SYS_DEV_FSSVAR_H
 
-#include <sys/simplelock.h>
+#include <sys/ioccom.h>
 
 #define FSS_UNCONFIG_ON_CLOSE	0x01	/* Unconfigure on last close */
+#define FSS_UNLINK_ON_CREATE	0x02	/* Unlink backing store on create */
 
 struct fss_set {
 	char		*fss_mount;	/* Mount point of file system */
 	char		*fss_bstore;	/* Path of backing store */
 	blksize_t	fss_csize;	/* Preferred cluster size */
+	int		fss_flags;	/* Initial flags */
 };
 
 struct fss_get {
@@ -57,36 +52,36 @@ struct fss_get {
 	blkcnt_t	fsg_bs_size;	/* # clusters on backing store */
 };
 
-#define FSSIOCSET	_IOW('F', 0, struct fss_set)	/* Configure */
+#define FSSIOCSET	_IOW('F', 5, struct fss_set)	/* Configure */
 #define FSSIOCGET	_IOR('F', 1, struct fss_get)	/* Status */
 #define FSSIOCCLR	_IO('F', 2)			/* Unconfigure */
 #define FSSIOFSET	_IOW('F', 3, int)		/* Set flags */
 #define FSSIOFGET	_IOR('F', 4, int)		/* Get flags */
-
 #ifdef _KERNEL
+#include <compat/sys/time_types.h>
+
+struct fss_set50 {
+	char		*fss_mount;	/* Mount point of file system */
+	char		*fss_bstore;	/* Path of backing store */
+	blksize_t	fss_csize;	/* Preferred cluster size */
+};
+
+struct fss_get50 {
+	char		fsg_mount[MNAMELEN]; /* Mount point of file system */
+	struct timeval50 fsg_time;	/* Time this snapshot was taken */
+	blksize_t	fsg_csize;	/* Current cluster size */
+	blkcnt_t	fsg_mount_size;	/* # clusters on file system */
+	blkcnt_t	fsg_bs_size;	/* # clusters on backing store */
+};
+
+#define FSSIOCSET50	_IOW('F', 0, struct fss_set50)	/* Old configure */
+#define FSSIOCGET50	_IOR('F', 1, struct fss_get50)	/* Old Status */
 
 #include <sys/bufq.h>
 
 #define FSS_CLUSTER_MAX	(1<<24)		/* Upper bound of clusters. The
 					   sc_copied map uses up to
 					   FSS_CLUSTER_MAX/NBBY bytes */
-
-#define FSS_LOCK(sc, s) \
-	do { \
-		(s) = splbio(); \
-		simple_lock(&(sc)->sc_slock); \
-	} while (/*CONSTCOND*/0)
-
-#define FSS_UNLOCK(sc, s) \
-	do { \
-		simple_unlock(&(sc)->sc_slock); \
-		splx((s)); \
-	} while (/*CONSTCOND*/0)
-
-/* Device to softc, NULL on error */
-#define FSS_DEV_TO_SOFTC(dev) \
-	(minor((dev)) < 0 || minor((dev)) >= NFSS ? NULL : \
-	    &fss_softc[minor((dev))])
 
 /* Check if still valid */
 #define FSS_ISVALID(sc) \
@@ -137,16 +132,17 @@ typedef enum {
 
 struct fss_cache {
 	fss_cache_type	fc_type;	/* Current state */
-	struct fss_softc *fc_softc;	/* Backlink to our softc */
-	volatile int	fc_xfercount;	/* Number of outstanding transfers */
 	u_int32_t	fc_cluster;	/* Cluster number of this entry */
+	kcondvar_t	fc_state_cv;	/* Signals state change from busy */
 	void *		fc_data;	/* Data */
 };
 
 struct fss_softc {
-	int		sc_unit;	/* Logical unit number */
-	struct simplelock sc_slock;	/* Protect this softc */
+	device_t	sc_dev;		/* Self */
+	kmutex_t	sc_slock;	/* Protect this softc */
 	kmutex_t	sc_lock;	/* Sleep lock for fss_ioctl */
+	kcondvar_t	sc_work_cv;	/* Signals work for the kernel thread */
+	kcondvar_t	sc_cache_cv;	/* Signals free cache slot */
 	volatile int	sc_flags;	/* Flags */
 #define FSS_ACTIVE	0x01		/* Snapshot is active */
 #define FSS_ERROR	0x02		/* I/O error occurred */
@@ -155,12 +151,12 @@ struct fss_softc {
 #define FSS_CDEV_OPEN	0x40		/* character device open */
 #define FSS_BDEV_OPEN	0x80		/* block device open */
 	int		sc_uflags;	/* User visible flags */
+	struct disk	*sc_dkdev;	/* Generic disk device info */
 	struct mount	*sc_mount;	/* Mount point */
 	char		sc_mntname[MNAMELEN]; /* Mount point */
 	struct timeval	sc_time;	/* Time this snapshot was taken */
 	dev_t		sc_bdev;	/* Underlying block device */
 	struct vnode	*sc_bs_vp;	/* Our backing store */
-	off_t		sc_bs_size;	/* Its size in bytes */
 	int		sc_bs_bshift;	/* Shift of backing store block */
 	u_int32_t	sc_bs_bmask;	/* Mask of backing store block */
 	struct lwp	*sc_bs_lwp;	/* Our kernel thread */
@@ -179,8 +175,6 @@ struct fss_softc {
 	int		sc_indir_dirty;	/* Current indir cluster modified */
 	u_int32_t	*sc_indir_data;	/* Current indir cluster data */
 };
-
-int fss_umount_hook(struct mount *, int);
 
 #endif /* _KERNEL */
 

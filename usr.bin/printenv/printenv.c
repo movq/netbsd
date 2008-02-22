@@ -1,4 +1,4 @@
-/*	$NetBSD: printenv.c,v 1.8 2003/08/07 11:15:31 agc Exp $	*/
+/*	$NetBSD: printenv.c,v 1.12 2011/09/06 18:26:55 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -31,13 +31,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-      The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 /*static char sccsid[] = "from: @(#)printenv.c	8.2 (Berkeley) 5/4/95";*/
-__RCSID("$NetBSD: printenv.c,v 1.8 2003/08/07 11:15:31 agc Exp $");
+__RCSID("$NetBSD: printenv.c,v 1.12 2011/09/06 18:26:55 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -46,9 +46,9 @@ __RCSID("$NetBSD: printenv.c,v 1.8 2003/08/07 11:15:31 agc Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
+__dead static void usage(void);
 
 /*
  * printenv
@@ -57,9 +57,7 @@ void	usage __P((void));
  * February, 1979
  */
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	extern char **environ;
 	char *cp, **ep;
@@ -80,6 +78,10 @@ main(argc, argv)
 			(void)printf("%s\n", *ep);
 		exit(0);
 	}
+	if (argc != 1)
+		usage();
+	if (strchr(*argv, '=') != NULL)
+		errx(1, "Invalid environment variable %s", *argv);
 	len = strlen(*argv);
 	for (ep = environ; *ep; ep++)
 		if (!memcmp(*ep, *argv, len)) {
@@ -92,9 +94,9 @@ main(argc, argv)
 	exit(1);
 }
 
-void
-usage()
+static void
+usage(void)
 {
-	(void)fprintf(stderr, "usage: printenv [name]\n");
+	(void)fprintf(stderr, "Usage: printenv [name]\n");
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pm.c,v 1.5 2007/03/04 06:00:33 christos Exp $	*/
+/*	$NetBSD: pm.c,v 1.15 2018/01/24 05:35:58 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,48 +29,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pm.c,v 1.5 2007/03/04 06:00:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pm.c,v 1.15 2018/01/24 05:35:58 riastradh Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
+#include <sys/device.h>
 #include <sys/ioctl.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
+#include <sys/systm.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -113,7 +75,7 @@ struct hwcursor64 {
 };
 
 struct pm_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	size_t			sc_cmap_size;
 	size_t			sc_fb_size;
 	int			sc_type;
@@ -126,8 +88,9 @@ struct pm_softc {
 };
 #define	WSDISPLAY_CMAP_DOLUT	0x20
 
-int	pm_match(struct device *, struct cfdata *, void *);
-void	pm_attach(struct device *, struct device *, void *);
+int	pm_match(device_t, cfdata_t, void *);
+void	pm_attach(device_t, device_t, void *);
+int	pm_check_vfb(void);
 int	pm_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 paddr_t	pm_mmap(void *, void *, off_t, int);
 int	pm_alloc_screen(void *, const struct wsscreen_descr *,
@@ -147,7 +110,7 @@ int	pm_get_cursor(struct pm_softc *, struct wsdisplay_cursor *);
 void	pm_set_curpos(struct pm_softc *, struct wsdisplay_curpos *);
 void	pm_init_cmap(struct pm_softc *);
 
-CFATTACH_DECL(pm, sizeof(struct pm_softc),
+CFATTACH_DECL_NEW(pm, sizeof(struct pm_softc),
    pm_match, pm_attach, NULL, NULL);
 
 struct rasops_info pm_ri;
@@ -179,7 +142,7 @@ const struct wsdisplay_accessops pm_accessops = {
 u_int	pm_creg;
 
 int
-pm_match(struct device *parent, struct cfdata *match, void *aux)
+pm_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ibus_attach_args *ia;
 	void *pmaddr;
@@ -197,20 +160,25 @@ pm_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-pm_attach(struct device *parent, struct device *self, void *aux)
+pm_attach(device_t parent, device_t self, void *aux)
 {
 	struct pm_softc *sc;
 	struct rasops_info *ri;
 	struct wsemuldisplaydev_attach_args waa;
 	int console;
 
-	sc = (struct pm_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	ri = &pm_ri;
 	console = (ri->ri_bits != NULL);
 
-	if (console)
+	if (console) {
 		sc->sc_nscreens = 1;
-	else
+		ri->ri_flg &= ~RI_NO_AUTO;
+	} else if (!pm_check_vfb()) {
+		printf(": VFB01/VFB02 frame buffer option not found\n");
+		return;
+	} else
 		pm_common_init();
 
 	printf(": %dx%d, %dbpp\n", ri->ri_width, ri->ri_height, ri->ri_depth);
@@ -226,6 +194,27 @@ pm_attach(struct device *parent, struct device *self, void *aux)
 	waa.accesscookie = sc;
 
 	config_found(self, &waa, wsemuldisplaydevprint);
+}
+
+int
+pm_check_vfb(void)
+{
+	int *mem;
+	const int magic = 0xcafebabe;
+
+	mem = (void *)MIPS_PHYS_TO_KSEG1(KN01_PHYS_FBUF_START);
+
+	*mem = magic;
+	wbflush();
+	if (*mem != magic)
+		return 0;
+
+	*mem = ~magic;
+	wbflush();
+	if (*mem != ~magic)
+		return 0;
+
+	return 1;
 }
 
 void
@@ -280,6 +269,8 @@ pm_common_init(void)
 	ri = &pm_ri;
 
 	ri->ri_flg = RI_CENTER;
+	if (ri->ri_bits == NULL)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = ((kn01csr & KN01_CSR_MONO) != 0 ? 1 : 8);
 	ri->ri_width = 1024;
 	ri->ri_height = 864;
@@ -300,13 +291,13 @@ pm_common_init(void)
 	wsfont_init();
 	if (ri->ri_depth == 8)
 		cookie = wsfont_find(NULL, 12, 0, 0, bior,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	else
 		cookie = wsfont_find(NULL, 8, 0, 0, bior,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, bior,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("pm: font table is empty\n");
 		return;
@@ -589,14 +580,12 @@ pm_flush(struct pm_softc *sc)
 	int v, i, x, y;
 	u_short *p, *pe;
 	struct hwcmap256 *cm;
-	struct rasops_info *ri;
 
 	if (sc->sc_changed == 0)
 		return (1);
 
 	vdac = (void *)MIPS_PHYS_TO_KSEG1(KN01_SYS_VDAC);
 	pcc = (void *)MIPS_PHYS_TO_KSEG1(KN01_SYS_PCC);
-	ri = &pm_ri;
 	v = sc->sc_changed;
 
 	if ((v & WSDISPLAY_CURSOR_DOCUR) != 0) {
@@ -702,7 +691,7 @@ pm_get_cmap(struct pm_softc *sc, struct wsdisplay_cmap *p)
 	index = p->index;
 	count = p->count;
 
-	if (index >= sc->sc_cmap_size || (index + count) > sc->sc_cmap_size)
+	if (index >= sc->sc_cmap_size || count > sc->sc_cmap_size - index)
 		return (EINVAL);
 
 	if ((rv = copyout(&sc->sc_cmap.r[index], p->red, count)) != 0)
@@ -721,7 +710,7 @@ pm_set_cmap(struct pm_softc *sc, struct wsdisplay_cmap *p)
 	index = p->index;
 	count = p->count;
 
-	if (index >= sc->sc_cmap_size || (index + count) > sc->sc_cmap_size)
+	if (index >= sc->sc_cmap_size || count > sc->sc_cmap_size - index)
 		return (EINVAL);
 
 	if ((rv = copyin(p->red, &sc->sc_cmap.r[index], count)) != 0)
@@ -753,7 +742,7 @@ pm_set_cursor(struct pm_softc *sc, struct wsdisplay_cursor *p)
 	if ((v & WSDISPLAY_CURSOR_DOCMAP) != 0) {
 		index = p->cmap.index;
 		count = p->cmap.count;
-		if (index >= 2 || (index + count) > 2)
+		if (index >= 2 || count > 2 - index)
 			return (EINVAL);
 
 		rv = copyin(p->cmap.red, &cc->cc_color[index], count);

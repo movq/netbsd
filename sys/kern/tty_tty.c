@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_tty.c,v 1.36 2007/11/26 19:02:05 pooka Exp $	*/
+/*	$NetBSD: tty_tty.c,v 1.40 2014/07/25 08:10:40 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1995
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.36 2007/11/26 19:02:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.40 2014/07/25 08:10:40 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +75,7 @@ cttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (!error)
 #endif /* PARANOID */
 		error = VOP_OPEN(ttyvp, flag, NOCRED);
-	VOP_UNLOCK(ttyvp, 0);
+	VOP_UNLOCK(ttyvp);
 	return (error);
 }
 
@@ -90,7 +90,7 @@ cttyread(dev_t dev, struct uio *uio, int flag)
 		return (EIO);
 	vn_lock(ttyvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_READ(ttyvp, uio, flag, NOCRED);
-	VOP_UNLOCK(ttyvp, 0);
+	VOP_UNLOCK(ttyvp);
 	return (error);
 }
 
@@ -105,7 +105,7 @@ cttywrite(dev_t dev, struct uio *uio, int flag)
 		return (EIO);
 	vn_lock(ttyvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_WRITE(ttyvp, uio, flag, NOCRED);
-	VOP_UNLOCK(ttyvp, 0);
+	VOP_UNLOCK(ttyvp);
 	return (error);
 }
 
@@ -121,13 +121,13 @@ cttyioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	if (cmd == TIOCSCTTY)		/* XXX */
 		return (EINVAL);
 	if (cmd == TIOCNOTTY) {
-		mutex_enter(&proclist_lock);
+		mutex_enter(proc_lock);
 		if (!SESS_LEADER(l->l_proc)) {
 			l->l_proc->p_lflag &= ~PL_CONTROLT;
 			rv = 0;
 		} else
 			rv = EINVAL;
-		mutex_exit(&proclist_lock);
+		mutex_exit(proc_lock);
 		return (rv);
 	}
 	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED));
@@ -157,6 +157,16 @@ cttykqfilter(dev_t dev, struct knote *kn)
 }
 
 const struct cdevsw ctty_cdevsw = {
-	cttyopen, nullclose, cttyread, cttywrite, cttyioctl,
-	nullstop, notty, cttypoll, nommap, cttykqfilter, D_TTY
+	.d_open = cttyopen,
+	.d_close = nullclose,
+	.d_read = cttyread,
+	.d_write = cttywrite,
+	.d_ioctl = cttyioctl,
+	.d_stop = nullstop,
+	.d_tty = notty,
+	.d_poll = cttypoll,
+	.d_mmap = nommap,
+	.d_kqfilter = cttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };

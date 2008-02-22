@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39clock.c,v 1.22 2008/01/04 22:13:57 ad Exp $ */
+/*	$NetBSD: tx39clock.c,v 1.27 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.22 2008/01/04 22:13:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.27 2012/10/27 17:17:54 chs Exp $");
 
 #include "opt_tx39clock_debug.h"
 
@@ -66,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.22 2008/01/04 22:13:57 ad Exp $");
 #define ISSETPRINT(r, m)						\
 	dbg_bitmask_print(r, TX39_CLOCK_EN ## m ## CLK, #m)
 
-void	tx39clock_init(struct device *);
+void	tx39clock_init(device_t);
 
 struct platform_clock tx39_clock = {
 #define CLOCK_RATE	100
@@ -74,12 +67,11 @@ struct platform_clock tx39_clock = {
 };
 
 struct txtime {
-	u_int32_t t_hi;
-	u_int32_t t_lo;
+	uint32_t t_hi;
+	uint32_t t_lo;
 };
 
 struct tx39clock_softc {
-	struct	device sc_dev;
 	tx_chipset_tag_t sc_tc;
 
 	int sc_alarm;
@@ -89,8 +81,8 @@ struct tx39clock_softc {
 	struct timecounter sc_tcounter;
 };
 
-int	tx39clock_match(struct device *, struct cfdata *, void *);
-void	tx39clock_attach(struct device *, struct device *, void *);
+int	tx39clock_match(device_t, cfdata_t, void *);
+void	tx39clock_attach(device_t, device_t, void *);
 #ifdef TX39CLOCK_DEBUG
 void	tx39clock_dump(tx_chipset_tag_t);
 #endif
@@ -99,25 +91,25 @@ void	tx39clock_cpuspeed(int *, int *);
 
 void	__tx39timer_rtcfreeze(tx_chipset_tag_t);
 void	__tx39timer_rtcreset(tx_chipset_tag_t);
-inline void	__tx39timer_rtcget(struct txtime *);
-inline time_t __tx39timer_rtc2sec(struct txtime *);
+void	__tx39timer_rtcget(struct txtime *);
+time_t __tx39timer_rtc2sec(struct txtime *);
 uint32_t tx39_timecount(struct timecounter *);
 
-CFATTACH_DECL(tx39clock, sizeof(struct tx39clock_softc),
+CFATTACH_DECL_NEW(tx39clock, sizeof(struct tx39clock_softc),
     tx39clock_match, tx39clock_attach, NULL, NULL);
 
 int
-tx39clock_match(struct device *parent, struct cfdata *cf, void *aux)
+tx39clock_match(device_t parent, cfdata_t cf, void *aux)
 {
 
-	return (ATTACH_FIRST);
+	return ATTACH_FIRST;
 }
 
 void
-tx39clock_attach(struct device *parent, struct device *self, void *aux)
+tx39clock_attach(device_t parent, device_t self, void *aux)
 {
 	struct txsim_attach_args *ta = aux;
-	struct tx39clock_softc *sc = (void*)self;
+	struct tx39clock_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 	txreg_t reg;
 
@@ -197,7 +189,7 @@ __tx39timer_rtcfreeze(tx_chipset_tag_t tc)
 	tx_conf_write(tc, TX39_TIMERCONTROL_REG, reg);
 }
 
-inline void
+void
 __tx39timer_rtcget(struct txtime *t)
 {
 	tx_chipset_tag_t tc;	
@@ -251,13 +243,13 @@ tx39_timecount(struct timecounter *tch)
 	 * always be consistent.  This is much faster than the routine which
 	 * has to get both values, improving the quality.
 	 */
-	return (tx_conf_read(tc, TX39_TIMERRTCLO_REG));
+	return tx_conf_read(tc, TX39_TIMERRTCLO_REG);
 }
 
 void
-tx39clock_init(struct device *dev)
+tx39clock_init(device_t self)
 {
-	struct tx39clock_softc *sc = (void*)dev;
+	struct tx39clock_softc *sc = device_private(self);
 	tx_chipset_tag_t tc = sc->sc_tc;
 	txreg_t reg;
 	int pcnt;
@@ -295,7 +287,7 @@ tx39clock_alarm_set(tx_chipset_tag_t tc, int msec)
 	sc->sc_alarm = TX39_MSEC2RTC(msec);
 	tx39clock_alarm_refill(tc);
 
-	return (0);
+	return 0;
 }
 
 void
@@ -303,15 +295,15 @@ tx39clock_alarm_refill(tx_chipset_tag_t tc)
 {
 	struct tx39clock_softc *sc = tc->tc_clockt;
 	struct txtime t;	
-	u_int64_t mytime;
+	uint64_t mytime;
 	
 	__tx39timer_rtcget(&t);
 
-	mytime = ((u_int64_t)t.t_hi << 32) | (u_int64_t)t.t_lo;
-	mytime += (u_int64_t)sc->sc_alarm;
+	mytime = ((uint64_t)t.t_hi << 32) | (uint64_t)t.t_lo;
+	mytime += (uint64_t)sc->sc_alarm;
 
-	t.t_hi = (u_int32_t)((mytime >> 32) & TX39_TIMERALARMHI_MASK);
-	t.t_lo = (u_int32_t)(mytime & 0xffffffff);
+	t.t_hi = (uint32_t)((mytime >> 32) & TX39_TIMERALARMHI_MASK);
+	t.t_lo = (uint32_t)(mytime & 0xffffffff);
 
 	tx_conf_write(tc, TX39_TIMERALARMHI_REG, t.t_hi);
 	tx_conf_write(tc, TX39_TIMERALARMLO_REG, t.t_lo);

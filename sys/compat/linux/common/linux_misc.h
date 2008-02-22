@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.h,v 1.15 2007/12/04 18:40:16 dsl Exp $	*/
+/*	$NetBSD: linux_misc.h,v 1.25 2016/08/31 08:12:44 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,14 +35,16 @@
 /*
  * Options passed to the Linux wait4() system call.
  */
-#define LINUX_WAIT4_WNOHANG   0x00000001
-#define LINUX_WAIT4_WUNTRACED 0x00000002
-#define LINUX_WAIT4_WNOTHREAD 0x20000000
-#define LINUX_WAIT4_WALL      0x40000000
-#define LINUX_WAIT4_WCLONE    0x80000000
+#define LINUX_WAIT4_WNOHANG	0x00000001
+#define LINUX_WAIT4_WUNTRACED	0x00000002
+#define LINUX_WAIT4_WCONTINUED	0x00000008
+#define LINUX_WAIT4_WNOTHREAD	0x20000000
+#define LINUX_WAIT4_WALL	0x40000000
+#define LINUX_WAIT4_WCLONE	0x80000000
 
 #define LINUX_WAIT4_KNOWNFLAGS (LINUX_WAIT4_WNOHANG | \
                                 LINUX_WAIT4_WUNTRACED | \
+                                LINUX_WAIT4_WCONTINUED | \
                                 LINUX_WAIT4_WNOTHREAD | \
                                 LINUX_WAIT4_WALL | \
                                 LINUX_WAIT4_WCLONE)
@@ -85,8 +80,10 @@ struct linux_sysinfo {
 #define	LINUX_RLIMIT_LOCKS	10
 #ifdef __mips__  /* XXX only mips32. On mips64, it's ~0ul */
 #define	LINUX_RLIM_INFINITY	0x7fffffffUL
+#define	LINUX32_RLIM_INFINITY	0x7fffffffU
 #else
 #define	LINUX_RLIM_INFINITY	~0ul
+#define	LINUX32_RLIM_INFINITY	~0u
 #endif
 
 
@@ -117,22 +114,40 @@ struct linux_sysinfo {
 #define	LINUX_SYSV2_SUPER_MAGIC		(LINUX_SYSV_MAGIC_BASE + 3)
 #define	LINUX_SYSV4_SUPER_MAGIC		(LINUX_SYSV_MAGIC_BASE + 2)
 #define	LINUX_SYSV_MAGIC_BASE		0x012FF7B3
+#define	LINUX_TMPFS_SUPER_MAGIC		0x01021994
 #define	LINUX_USBDEVICE_SUPER_MAGIC	0x00009fa2
 #define	LINUX_DEVPTS_SUPER_MAGIC	0x00001cd1
 #define	LINUX_XENIX_SUPER_MAGIC		(LINUX_SYSV_MAGIC_BASE + 1)
 
 struct linux_mnttypes {
-	const char *bsd;
-	int linux;
+	const char *mty_bsd;
+	int mty_linux;
 };
 extern const struct linux_mnttypes linux_fstypes[];
 extern const int linux_fstypes_cnt;
+
+/* Personality types. */
+#define LINUX_PER_QUERY		0xffffffff
+#define LINUX_PER_LINUX		0x00
+#define LINUX_PER_LINUX32	0x08
+#define LINUX_PER_MASK		0xff
+
+/* Personality flags. */
+#define LINUX_PER_ADDR_NO_RANDOMIZE	0x00040000
+
+/* 
+ * Convert POSIX_FADV_* constants from Linux to NetBSD
+ * (it's f(x)=x everywhere except S390)
+ */
+#define linux_to_bsd_posix_fadv(advice) (advice)
 
 #ifdef _KERNEL
 __BEGIN_DECLS
 int bsd_to_linux_wstat(int);
 int linux_select1(struct lwp *, register_t *, int, fd_set *, fd_set *,
-		       fd_set *, struct timeval *);
+		       fd_set *, struct linux_timeval *);
+int linux_do_sys_utimensat(struct lwp *, int, const char *,
+    struct timespec *, int, register_t *);
 __END_DECLS
 #endif /* !_KERNEL */
 

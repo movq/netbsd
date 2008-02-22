@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.5 2005/12/11 12:20:16 christos Exp $ */
+/*	$NetBSD: linux_socket.h,v 1.7 2014/01/25 13:49:27 njoly Exp $ */
 
 /*-
  * Copyright (c) 1995, 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,49 +32,19 @@
 #ifndef _POWERPC_LINUX_SOCKET_H
 #define _POWERPC_LINUX_SOCKET_H
 
-/*
- * Everything is from Linux's include/asm-ppc/socket.h
- */
+#include <compat/linux/common/linux_socket_generic.h>
 
-/*
- * Option levels for [gs]etsockopt(2).  Only SOL_SOCKET is different,
- * the rest matches IPPROTO_XXX
- */
-#define LINUX_SOL_SOCKET 1
-
-/*
- * Options for [gs]etsockopt(2), socket level.  For Linux, thay
- * are not masks, but just increasing numbers.
- */
-
-#define LINUX_SO_DEBUG		1
-#define LINUX_SO_REUSEADDR	2
-#define LINUX_SO_TYPE		3
-#define LINUX_SO_ERROR		4
-#define LINUX_SO_DONTROUTE	5
-#define LINUX_SO_BROADCAST	6
-#define LINUX_SO_SNDBUF		7
-#define LINUX_SO_RCVBUF		8
-#define LINUX_SO_KEEPALIVE	9
-#define LINUX_SO_OOBINLINE	10
-#define LINUX_SO_NO_CHECK	11
-#define LINUX_SO_PRIORITY	12
-#define LINUX_SO_LINGER		13
-#define LINUX_SO_BSDCOMPAT	14
-#define LINUX_SO_REUSEPORT	15	/* undef in Linux */
+#undef  LINUX_SO_RCVLOWAT
 #define LINUX_SO_RCVLOWAT	16
+#undef  LINUX_SO_SNDLOWAT
 #define LINUX_SO_SNDLOWAT	17
+#undef  LINUX_SO_RCVTIMEO
 #define LINUX_SO_RCVTIMEO	18
+#undef  LINUX_SO_SNDTIMEO
 #define LINUX_SO_SNDTIMEO	19
+#undef  LINUX_SO_PASSCRED
 #define LINUX_SO_PASSCRED	20
+#undef  LINUX_SO_PEERCRED
 #define LINUX_SO_PEERCRED	21
-#define LINUX_SO_SECURITY_AUTHENTICATION	22
-#define LINUX_SO_SECURITY_ENCRYPTION_TRANSPORT	23
-#define LINUX_SO_SECURITY_ENCRYPTION_NETWORK	24
-#define LINUX_SO_BINDTODEVICE		25
-#define LINUX_SO_ATTACH_FILTER	26
-#define LINUX_SO_DETACH_FILTER	27
-#define LINUX_SO_PEERNAME     28
-#define LINUX_SO_TIMESTAMP    29
 
 #endif /* !_POWERPC_LINUX_SOCKET_H */

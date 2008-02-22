@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.352 2017/11/07 14:56:03 christos Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -32,41 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- */
+
 /*-
  * Copyright (C) 1993	Allen K. Briggs, Chris P. Caputo,
  *			Michael L. Finch, Bradley A. Grantham, and
@@ -107,12 +74,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.352 2017/11/07 14:56:03 christos Exp $");
 
 #include "opt_adb.h"
+#include "opt_copy_symtab.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #include "akbd.h"
 #include "macfb.h"
@@ -124,6 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $"
 #include <sys/conf.h>
 #include <sys/core.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/extent.h>
 #include <sys/file.h>
 #include <sys/kcore.h>
@@ -138,14 +108,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $"
 #include <sys/reboot.h>
 #include <sys/signalvar.h>
 #include <sys/syscallargs.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
-#define ELFSIZE 32
 #include <sys/exec_elf.h>
+#include <sys/device.h>
+#include <sys/cpu.h>
 
 #include <m68k/cacheops.h>
 
@@ -156,6 +127,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $"
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
@@ -167,6 +139,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.320 2007/10/17 19:55:15 garbled Exp $"
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/iopreg.h>
 #include <machine/psc.h>
@@ -200,6 +173,7 @@ vaddr_t	SCSIBase;
 extern int numranges;
 extern u_long low[8];
 extern u_long high[8];
+extern int machineid;
 
 /* These are used to map NuBus space: */
 #define	NBMAXRANGES	16
@@ -216,18 +190,9 @@ struct mac68k_video mac68k_video;
 int	(*mac68k_bell_callback)(void *, int, int, int);
 void *	mac68k_bell_cookie;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
-int	physmem = MAXMEM;	/* max supported memory, changes to actual */
-
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- */
-int	safepri = PSL_LOWIPL;
 
 /*
  * Extent maps to manage all memory space, including I/O ranges.  Allocate
@@ -308,7 +273,7 @@ mac68k_init(void)
 	 * on the machine.  When the amount of RAM is found, all
 	 * extents of RAM are allocated from the map.
 	 */
-	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
+	iomem_ex = extent_create("iomem", 0x0, 0xffffffff,
 	    (void *)iomem_ex_storage, sizeof(iomem_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 
@@ -377,12 +342,12 @@ consinit(void)
 #if NZSC > 0 && defined(KGDB)
 		zs_kgdb_init();
 #endif
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 		/*
 		 * Initialize kernel debugger, if compiled in.
 		 */
 
-		ksyms_init(symsize, ssym, esym);
+		ksyms_addsyms_elf(symsize, ssym, esym);
 #endif
 
 		if (boothowto & RB_KDB) {
@@ -443,23 +408,10 @@ cpu_startup(void)
 
 	minaddr = 0;
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 	    VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -482,54 +434,18 @@ initcpu(void)
 
 void doboot(void) __attribute__((__noreturn__));
 
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
 int	waittime = -1;
 struct pcb dumppcb;
 
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 	extern u_long maxaddr;
 
-#if __GNUC__	/* XXX work around lame compiler problem (gcc 2.7.2) */
-	(void)&howto;
-#endif
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is cold, just halt. */
 	if (cold) {
@@ -557,6 +473,8 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		/* First try to power down under VIA control. */
@@ -604,7 +522,7 @@ cpu_init_kcore_hdr(void)
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 	int i;
 
-	bzero(&cpu_kcore_hdr, sizeof(cpu_kcore_hdr));
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr));
 
 	/*
 	 * Initialize the `dispatcher' portion of the header.
@@ -691,7 +609,7 @@ cpu_dump(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t *blknop)
 	CORE_SETMAGIC(*kseg, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
 	kseg->c_size = MDHDRSIZE - ALIGN(sizeof(kcore_seg_t));
 
-	bcopy(&cpu_kcore_hdr, chdr, sizeof(cpu_kcore_hdr_t));
+	memcpy(chdr, &cpu_kcore_hdr, sizeof(cpu_kcore_hdr_t));
 	error = (*dump)(dumpdev, *blknop, (void *)buf, sizeof(buf));
 	*blknop += btodb(sizeof(buf));
 	return (error);
@@ -716,7 +634,6 @@ cpu_dumpconf(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
-	const struct bdevsw *bdev;
 	int chdrsize;	/* size of dump header */
 	int nblks;	/* size of dump area */
 	int i;
@@ -724,18 +641,11 @@ cpu_dumpconf(void)
 	if (dumpdev == NODEV)
 		return;
 
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	chdrsize = cpu_dumpsize();
 
 	dumpsize = 0;
-	for (i = 0; m->ram_segs[i].size && i < M68K_NPHYS_RAM_SEGS; i++)
+	for (i = 0; i < M68K_NPHYS_RAM_SEGS && m->ram_segs[i].size; i++)
 		dumpsize += btoc(m->ram_segs[i].size);
 
 	/*
@@ -785,15 +695,15 @@ dumpsys(void)
 			return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	printf("dump ");
 
@@ -937,6 +847,16 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 	return error;
 }
 
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
+
 static char *envbuf = NULL;
 
 /*
@@ -951,12 +871,10 @@ getenvvars(u_long flag, char *buf)
 	extern long macos_gmtbias;
 	int root_scsi_id;
 	u_long root_ata_dev;
-#ifdef	__ELF__
 	int i;
 	Elf_Ehdr *ehdr;
 	Elf_Shdr *shp;
 	vaddr_t minsym;
-#endif
 
 	/*
 	 * If flag & 0x80000000 == 0, then we're booting with the old booter
@@ -981,7 +899,7 @@ getenvvars(u_long flag, char *buf)
 	/*
 	 * More misc stuff from booter.
 	 */
-	mac68k_machine.machineid = getenv("MACHINEID");
+	mac68k_machine.machineid = machineid = getenv("MACHINEID");
 	mac68k_machine.mach_processor = getenv("PROCESSOR");
 	mac68k_machine.mach_memsize = getenv("MEMSIZE");
 	mac68k_machine.do_graybars = getenv("GRAYBARS");
@@ -1041,7 +959,7 @@ getenvvars(u_long flag, char *buf)
 	 * Get end of symbols for kernel debugging
 	 */
 	esym = (int *)getenv("END_SYM");
-#ifndef SYMTAB_SPACE
+#ifndef makeoptions_COPY_SYMTAB
 	if (esym == (int *)0)
 #endif
 		esym = (int *)&end;
@@ -1069,7 +987,6 @@ getenvvars(u_long flag, char *buf)
  	ADBReInit_JTBL = getenv("ADBREINIT_JTBL");
  	mrg_ADBIntrPtr = (void *)getenv("ADBINTERRUPT");
 
-#ifdef	__ELF__
 	/*
 	 * Check the ELF headers.
 	 */
@@ -1096,10 +1013,6 @@ getenvvars(u_long flag, char *buf)
 
 	symsize = 1;
 	ssym = (int *)ehdr;
-#else
-	symsize = *(int *)&end;
-	ssym = ((int *)&end) + 1;
-#endif
 }
 
 static long
@@ -1961,8 +1874,6 @@ struct intvid_info_t {
  * 	...?
  */
 
-char	cpu_model[120];		/* for sysctl() */
-
 int	mach_cputype(void);
 
 int
@@ -1991,11 +1902,11 @@ identifycpu(void)
 		mpu = ("(unknown processor)");
 		break;
 	}
-	sprintf(cpu_model, "Apple Macintosh %s%s %s",
+	cpu_setmodel("Apple Macintosh %s%s %s",
 	    cpu_models[mac68k_machine.cpu_model_index].model_major,
 	    cpu_models[mac68k_machine.cpu_model_index].model_minor,
 	    mpu);
-	printf("%s\n", cpu_model);
+	printf("%s\n", cpu_getmodel());
 	printf("cpu: delay factor %d\n", delay_factor);
 	initfpu();
 }
@@ -2744,4 +2655,12 @@ mac68k_ring_bell(int freq, int length, int volume)
 		    freq, length, volume));
 	else
 		return (ENXIO);
+}
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+	extern u_long maxaddr;
+
+	return (pa < maxaddr) ? 0 : EFAULT;
 }

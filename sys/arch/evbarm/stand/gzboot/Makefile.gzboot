@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile.gzboot,v 1.14 2006/01/16 19:34:53 he Exp $
+#	$NetBSD: Makefile.gzboot,v 1.36 2017/04/08 19:53:20 christos Exp $
 
 NOMAN=  # defined
 
-.include <bsd.obj.mk>		# Pull in OBJDIR name rules.
+.include <bsd.init.mk>		# Pull in OBJDIR name rules.
 .include <bsd.own.mk>
+.include <bsd.klinks.mk>
 
 EVBARM_STAND=	${S}/arch/evbarm/stand
 
@@ -13,17 +14,17 @@ PROG=	${BASE}.bin
 WARNS=	1
 
 NEWVERSWHAT=	"Gzip Boot"
-VERSIONFILE=	${EVBARM_STAND}/gzboot/version
-
 BINMODE=644
 
 DBG=	-Os
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
+LIBCRTI=
 LIBC=
 LIBCRTBEGIN= 
 LIBCRTEND=      
+STRIPFLAG=
 
 .PATH: ${EVBARM_STAND}/gzboot
 .PATH: ${EVBARM_STAND}/board
@@ -34,6 +35,9 @@ STARTFILE= srtbegin.o
 
 CPPFLAGS+= -nostdinc -I. -I${EVBARM_STAND}/gzboot -I${EVBARM_STAND}/board
 CPPFLAGS+= -I${S} -I${S}/arch -I${S}/lib/libsa
+CPPFLAGS+= -I${S}/../common/dist/zlib
+CPPFLAGS+= ${ARM_APCS_FLAGS}
+CPPFLAGS+=	-marm
 
 CPPFLAGS+= -D_STANDALONE
 
@@ -48,25 +52,13 @@ CPPFLAGS+= -DMAXIMAGESIZE=${MAXIMAGESIZE}
 CPPFLAGS+= -DLOADADDR=${LOADADDR}
 
 COPTS+=	-ffreestanding
-CWARNFLAGS+= -Wno-main
+COPTS+=	-fno-stack-protector
+COPTS+=	-fno-unwind-tables
+CWARNFLAGS+= -Werror
+CWARNFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 
-CLEANFILES+= ${STARTFILE} vers.c ${BASE}.list
+CLEANFILES+= ${STARTFILE} ${BASE}.list
 CLEANFILES+= ${PROGSYM}
-SRCS+= vers.c
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.NOPATH: machine
-.endif
-
-realdepend realall: machine
-CLEANFILES+= arm machine
-
-machine::
-	-rm -f arm machine
-	ln -s ${S}/arch/evbarm/include machine
-	ln -s ${S}/arch/arm/include arm
-
-${OBJS}: machine
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -83,19 +75,16 @@ SA_AS=		library
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
 
-LDFLAGS= -M -T ${LDSCRIPT}
+DIRECT_LDFLAGS= -M -T ${LDSCRIPT} --fix-v4bx
 
 LIBLIST=${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBSA}
 
-.PHONY: vers.c
-vers.c: ${VERSIONFILE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.ALLSRC} '${PLATFORM}' \
-	    ${NEWVERSWHAT}
+.include "${S}/conf/newvers_stand.mk"
 
 ${PROG}: ${PROGSYM}
 	${OBJCOPY} -O binary ${PROGSYM} ${.TARGET}
@@ -114,5 +103,6 @@ FILES=	${PROGSYM}
 .include <bsd.prog.mk>
 
 ${PROGSYM}: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${LD} -o ${.TARGET} ${LDFLAGS} ${STARTFILE} \
+	${_MKTARGET_LINK}
+	${LD} -o ${.TARGET} ${DIRECT_LDFLAGS} ${STARTFILE} \
 	    ${OBJS} ${LIBLIST} > ${BASE}.list

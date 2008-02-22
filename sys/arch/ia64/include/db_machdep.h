@@ -1,4 +1,4 @@
-/* $NetBSD: db_machdep.h,v 1.2 2006/08/30 11:12:04 cherry Exp $ */
+/* $NetBSD: db_machdep.h,v 1.4 2017/11/06 03:47:47 christos Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -41,6 +41,7 @@
 #include <machine/ia64_cpu.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
@@ -122,7 +123,6 @@ int ia64_trap(int, int, db_regs_t *); /* See: trap.c */
  * We use Elf64 symbols in DDB.
  */
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE	64
 
 /*
  * Stuff for KGDB.

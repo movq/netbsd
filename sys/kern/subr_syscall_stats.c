@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_syscall_stats.c,v 1.1 2007/02/18 16:58:16 dsl Exp $	*/
+/*	$NetBSD: subr_syscall_stats.c,v 1.3 2014/02/25 18:30:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: subr_syscall_stats.c,v 1.1 2007/02/18 16:58:16 dsl Exp $");
+__RCSID("$NetBSD: subr_syscall_stats.c,v 1.3 2014/02/25 18:30:11 pooka Exp $");
 
 #include "opt_syscall_stats.h"
 
@@ -56,11 +53,6 @@ SYSCTL_SETUP(sysctl_syscall_setup, "sysctl system call stats")
 	const struct sysctlnode *cnode;
 	int kern_syscalls;
 
-        sysctl_createv(clog, 0, NULL, NULL,
-			CTLFLAG_PERMANENT,  
-			CTLTYPE_NODE, "kern", NULL,
-			NULL, 0, NULL, 0,
-			CTL_KERN, CTL_EOL);
         sysctl_createv(clog, 0, NULL, &cnode,
 			CTLFLAG_PERMANENT,  
 			CTLTYPE_NODE, "syscalls",

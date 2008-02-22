@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.6 2006/09/22 23:21:52 elad Exp $	*/
+/*	$NetBSD: bpf.c,v 1.13 2018/06/26 09:50:42 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,6 +44,7 @@
 #include <net/bpfdesc.h>
 #include <net/bpf.h>
 #include "netstat.h"
+#include "prog_ops.h"
 
 void
 bpf_stats(void)
@@ -70,19 +64,18 @@ bpf_stats(void)
 		printf("\t%" PRIu64 " total packets dropped\n", 
 		    bpf_s.bs_drop);
 	} else {
-		/* XXX */
-		errx(1, "bpf_stats not implemented using kvm");
+		warnx("BPF stats not available via KVM.");
 	}
 }
 
 void
-bpf_dump(char *interface)
+bpf_dump(const char *bpfif)
 {
 	struct bpf_d_ext *dpe;
 
 	if (use_sysctl) {
-		int	name[CTL_MAXNAME], rc, i;
-		size_t	sz, szproc;
+		int	name[CTL_MAXNAME], rc;
+		size_t	i, sz, szproc;
 		u_int	namelen;
 		void	*v;
 		struct kinfo_proc2 p;
@@ -100,7 +93,8 @@ bpf_dump(char *interface)
 		v = NULL;
 		sz = 0;
 		do {
-			rc = sysctl(&name[0], namelen, v, &sz, NULL, 0);
+			rc = prog_sysctl(&name[0], namelen,
+			    v, &sz, NULL, 0);
 			if (rc == -1 && errno != ENOMEM)
 				err(1, "sysctl: net.bpf.peers");
 			if (rc == -1 && v != NULL) {
@@ -123,8 +117,8 @@ bpf_dump(char *interface)
 #define BPFEXT(entry) dpe->entry
 
 		for (i = 0; i < (sz / sizeof(*dpe)); i++, dpe++) {
-			if (interface && 
-			    strncmp(BPFEXT(bde_ifname), interface, IFNAMSIZ))
+			if (bpfif && 
+			    strncmp(BPFEXT(bde_ifname), bpfif, IFNAMSIZ))
 				continue;
 			
 			printf("%-7d ", BPFEXT(bde_pid));
@@ -153,7 +147,8 @@ bpf_dump(char *interface)
 			
 			printf("%c", BPFEXT(bde_promisc) ? 'P' : '-');
 			printf("%c", BPFEXT(bde_immediate) ? 'R' : '-');
-			printf("%c", BPFEXT(bde_seesent) ? 'S' : '-');
+			printf("%c", (BPFEXT(bde_direction) == BPF_D_IN) ? '-'
+			    : (BPFEXT(bde_direction) == BPF_D_OUT) ? 'O' : 'S');
 			printf("%c", BPFEXT(bde_hdrcmplt) ? 'H' : '-');
 			printf("  %-8d ", BPFEXT(bde_bufsize));
 
@@ -166,13 +161,14 @@ bpf_dump(char *interface)
 			name[namelen++] = szproc;
 			name[namelen++] = 1;
 
-			if (sysctl(&name[0], namelen, &p, &szproc, 
+			if (prog_sysctl(&name[0], namelen, &p, &szproc, 
 			    NULL, 0) == -1)
 				printf("-\n");
 			else
 				printf("%s\n", p.p_comm);
 #undef BPFEXT
 		}
+		free(v);
 	} else {
                 /* XXX */
                 errx(1, "bpf_dump not implemented using kvm");

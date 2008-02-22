@@ -1,4 +1,4 @@
-/*	$NetBSD: tgets.c,v 1.6 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: tgets.c,v 1.8 2011/02/25 10:12:44 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -35,8 +35,7 @@
 #include "boot.h"
 
 int
-tgets(buf)
-	char *buf;
+tgets(char *buf)
 {
 	register int c;
 	register char *lp;
@@ -51,7 +50,7 @@ tgets(buf)
 			goto next;
 		delay(SCANWAIT);
 	}
-	return (-1);
+	return -1;
 next:
 #else
 	c = getchar();
@@ -72,7 +71,7 @@ next:
 				putchar('\b');
 			}
 			break;
-		case 'r'&037: {
+		case 'r' & 037: {
 			register char *p;
 
 			putchar('\n');
@@ -80,8 +79,8 @@ next:
 				putchar(*p);
 			break;
 		}
-		case 'u'&037:
-		case 'w'&037:
+		case 'u' & 037:
+		case 'w' & 037:
 			lp = buf;
 			putchar('\n');
 			break;

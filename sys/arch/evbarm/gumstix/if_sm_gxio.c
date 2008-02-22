@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_gxio.c,v 1.4 2007/10/17 19:54:12 garbled Exp $ */
+/*	$NetBSD: if_sm_gxio.c,v 1.11 2012/10/27 17:17:47 chs Exp $ */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_gxio.c,v 1.4 2007/10/17 19:54:12 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_gxio.c,v 1.11 2012/10/27 17:17:47 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -87,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_gxio.c,v 1.4 2007/10/17 19:54:12 garbled Exp $
 #include <net/if_media.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -100,39 +93,39 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_gxio.c,v 1.4 2007/10/17 19:54:12 garbled Exp $
 #include "locators.h"
 
 
-static int sm_gxio_match(struct device *, struct cfdata *, void *);
-static void sm_gxio_attach(struct device *, struct device *, void *);
+static int sm_gxio_match(device_t, struct cfdata *, void *);
+static void sm_gxio_attach(device_t, device_t, void *);
 
 static int ether_serial_digit = 1;
 
 struct sm_gxio_softc {
 	struct	smc91cxx_softc sc_smc;
-	void	*sc_ih;	
+	void	*sc_ih;
 };
 
-CFATTACH_DECL(sm_gxio, sizeof(struct sm_gxio_softc),
+CFATTACH_DECL_NEW(sm_gxio, sizeof(struct sm_gxio_softc),
     sm_gxio_match, sm_gxio_attach, NULL, NULL);
 
 
 /* ARGSUSED */
 static int
-sm_gxio_match(struct device *parent, struct cfdata *match, void *aux)
+sm_gxio_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct gxio_attach_args *gxa = aux;
 	bus_space_tag_t iot = gxa->gxa_iot;
 	bus_space_handle_t ioh;
-	u_int16_t tmp;
+	uint16_t tmp;
 	int rv = 0;
 	extern const char *smc91cxx_idstrs[];
 
 	/* Disallow wildcarded values. */
 	if (gxa->gxa_addr == GXIOCF_ADDR_DEFAULT)
-		return (0);
+		return 0;
 	if (gxa->gxa_gpirq == GXIOCF_GPIRQ_DEFAULT)
-		return (0);
+		return 0;
 
 	if (bus_space_map(iot, gxa->gxa_addr, SMC_IOSIZE, 0, &ioh) != 0)
-		return (0);
+		return 0;
 
 	/* Check that high byte of BANK_SELECT is what we expect. */
 	tmp = bus_space_read_2(iot, ioh, BANK_SELECT_REG_W);
@@ -143,7 +136,7 @@ sm_gxio_match(struct device *parent, struct cfdata *match, void *aux)
 	 * Switch to bank 0 and perform the test again.
 	 * XXX INVASIVE!
 	 */
-	bus_space_write_1(iot, ioh, BANK_SELECT_REG_W, 0);
+	bus_space_write_2(iot, ioh, BANK_SELECT_REG_W, 0);
 	tmp = bus_space_read_2(iot, ioh, BANK_SELECT_REG_W);
 	if ((tmp & BSR_DETECT_MASK) != BSR_DETECT_VALUE)
 		goto out;
@@ -152,7 +145,7 @@ sm_gxio_match(struct device *parent, struct cfdata *match, void *aux)
 	 * Check for a recognized chip id.
 	 * XXX INVASIVE!
 	 */
-	bus_space_write_1(iot, ioh, BANK_SELECT_REG_W, 3);
+	bus_space_write_2(iot, ioh, BANK_SELECT_REG_W, 3);
 	tmp = bus_space_read_2(iot, ioh, REVISION_REG_W);
 	if (smc91cxx_idstrs[RR_ID(tmp)] == NULL)
 		goto out;
@@ -167,49 +160,49 @@ sm_gxio_match(struct device *parent, struct cfdata *match, void *aux)
 
  out:
 	bus_space_unmap(iot, ioh, SMC_IOSIZE);
-	return (rv);
+	return rv;
 }
 
 /* ARGSUSED */
-void
-sm_gxio_attach(struct device *parent, struct device *self, void *aux)
+static void
+sm_gxio_attach(device_t parent, device_t self, void *aux)
 {
 	struct sm_gxio_softc *gsc = device_private(self);
 	struct smc91cxx_softc *sc = &gsc->sc_smc;
 	struct gxio_attach_args *gxa = aux;
 	bus_space_handle_t ioh;
-	u_int8_t myea[ETHER_ADDR_LEN];
+	uint8_t myea[ETHER_ADDR_LEN];
 
 	aprint_normal("\n");
 	aprint_naive("\n");
+
+	KASSERT(system_serial_high != 0 || system_serial_low != 0);
 
 	/* Map i/o space. */
 	if (bus_space_map(gxa->gxa_iot, gxa->gxa_addr, SMC_IOSIZE, 0, &ioh))
 		panic("sm_gxio_attach: can't map i/o space");
 
+	sc->sc_dev = self;
 	sc->sc_bst = gxa->gxa_iot;
 	sc->sc_bsh = ioh;
 
 	/* should always be enabled */
 	sc->sc_flags |= SMC_FLAGS_ENABLED;
 
-	if (system_serial_high != 0 || system_serial_low != 0) {
-		myea[0] = ((system_serial_high >> 8) & 0xfe) | 0x02;
-		myea[1] = system_serial_high;
-		myea[2] = system_serial_low >> 24;
-		myea[3] = system_serial_low >> 16;
-		myea[4] = system_serial_low >> 8;
-		myea[5] = (system_serial_low & 0xc0) |
-		    (1 << 4) | ((ether_serial_digit++) & 0x0f);
-		smc91cxx_attach(sc, myea);
-	} else
-		smc91cxx_attach(sc, NULL);
+	myea[0] = ((system_serial_high >> 8) & 0xfe) | 0x02;
+	myea[1] = system_serial_high;
+	myea[2] = system_serial_low >> 24;
+	myea[3] = system_serial_low >> 16;
+	myea[4] = system_serial_low >> 8;
+	myea[5] = (system_serial_low & 0xc0) |
+	    (1 << 4) | ((ether_serial_digit++) & 0x0f);
+	smc91cxx_attach(sc, myea);
 
 	/* Establish the interrupt handler. */
 	gsc->sc_ih = gxio_intr_establish(gxa->gxa_sc,
 	    gxa->gxa_gpirq, IST_EDGE_RISING, IPL_NET, smc91cxx_intr, sc);
 
 	if (gsc->sc_ih == NULL)
-		aprint_error("%s: couldn't establish interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "couldn't establish interrupt handler\n");
 }

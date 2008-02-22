@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.c,v 1.30 2008/02/06 22:12:39 dsl Exp $ */
+/* $NetBSD: syscall.c,v 1.42 2013/06/26 15:09:59 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,17 +65,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -96,34 +89,28 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.30 2008/02/06 22:12:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.42 2013/06/26 15:09:59 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 #include <sys/ktrace.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/alpha.h>
 #include <machine/userret.h>
 
-void	syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
-void	syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
+void	syscall(struct lwp *, uint64_t, struct trapframe *);
 
 void
 syscall_intern(struct proc *p)
 {
 
-	if (trace_is_enabled(p))
-		p->p_md.md_syscall = syscall_fancy;
-	else
-		p->p_md.md_syscall = syscall_plain;
+	p->p_md.md_syscall = syscall;
 }
 
 /*
@@ -139,21 +126,21 @@ syscall_intern(struct proc *p)
  * in the trap frame.  On return, it restores the callee-saved registers,
  * a3, and v0 from the frame before returning to the user process.
  */
+
 void
-syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
+syscall(struct lwp *l, uint64_t code, struct trapframe *tf)
 {
 	const struct sysent *callp;
 	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];				/* XXX */
+	uint64_t rval[2];
+	uint64_t *args, copyargs[10];
 	u_int hidden, nargs;
-	struct proc *p = l->l_proc;
-	bool needlock;
+	struct proc * const p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
 
-	uvmexp.syscalls++;
-	l->l_md.md_tf = framep;
+	curcpu()->ci_data.cpu_nsyscall++;
+	l->l_md.md_tf = tf;
 
 	callp = p->p_emul->e_sysent;
 
@@ -164,7 +151,7 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 		 * syscall() and __syscall() are handled the same on
 		 * the alpha, as everything is 64-bit aligned, anyway.
 		 */
-		code = framep->tf_regs[FRAME_A0];
+		code = tf->tf_regs[FRAME_A0];
 		hidden = 1;
 		break;
 	default:
@@ -179,156 +166,50 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	switch (nargs) {
 	default:
 		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
-		if (error)
-			goto bad;
-	case 6:	
-		copyargs[5] = framep->tf_regs[FRAME_A5];
-	case 5:	
-		copyargs[4] = framep->tf_regs[FRAME_A4];
-	case 4:	
-		copyargs[3] = framep->tf_regs[FRAME_A3];
-		copyargs[2] = framep->tf_regs[FRAME_A2];
-		copyargs[1] = framep->tf_regs[FRAME_A1];
-		copyargs[0] = framep->tf_regs[FRAME_A0];
-		args = copyargs;
-		break;
-	case 3:	
-	case 2:	
-	case 1:	
-	case 0:
-		args = &framep->tf_regs[FRAME_A0];
-		break;
-	}
-	args += hidden;
-
-	rval[0] = 0;
-	rval[1] = 0;
-
-	needlock = (callp->sy_flags & SYCALL_MPSAFE) == 0;
-	if (needlock) {
-		KERNEL_LOCK(1, l);
-	}
-	error = (*callp->sy_call)(l, args, rval);
-	if (needlock) {
-		KERNEL_UNLOCK_LAST(l);
-	}
-
-	switch (error) {
-	case 0:
-		framep->tf_regs[FRAME_V0] = rval[0];
-		framep->tf_regs[FRAME_A4] = rval[1];
-		framep->tf_regs[FRAME_A3] = 0;
-		break;
-	case ERESTART:
-		framep->tf_regs[FRAME_PC] -= 4;
-		break;
-	case EJUSTRETURN:
-		break;
-	default:
-	bad:
-		framep->tf_regs[FRAME_V0] = error;
-		framep->tf_regs[FRAME_A3] = 1;
-		break;
-	}
-
-	userret(l);
-}
-
-void
-syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
-{
-	const struct sysent *callp;
-	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];
-	u_int hidden, nargs;
-	struct proc *p = l->l_proc;
-
-	LWP_CACHE_CREDS(l, p);
-
-	KERNEL_LOCK(1, l);
-
-	uvmexp.syscalls++;
-	l->l_md.md_tf = framep;
-
-	callp = p->p_emul->e_sysent;
-
-	switch (code) {
-	case SYS_syscall:
-	case SYS___syscall:
-		/*
-		 * syscall() and __syscall() are handled the same on
-		 * the alpha, as everything is 64-bit aligned, anyway.
-		 */
-		code = framep->tf_regs[FRAME_A0];
-		hidden = 1;
-		break;
-	default:
-		hidden = 0;
-		break;
-	}
-
-	code &= (SYS_NSYSENT - 1);
-	callp += code;
-
-	nargs = callp->sy_narg + hidden;
-	switch (nargs) {
-	default:
-		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
+		    (nargs - 6) * sizeof(uint64_t));
 		if (error) {
-			args = copyargs;
-			KERNEL_UNLOCK_LAST(l);
 			goto bad;
 		}
 	case 6:	
-		copyargs[5] = framep->tf_regs[FRAME_A5];
+		copyargs[5] = tf->tf_regs[FRAME_A5];
 	case 5:	
-		copyargs[4] = framep->tf_regs[FRAME_A4];
+		copyargs[4] = tf->tf_regs[FRAME_A4];
 	case 4:	
-		copyargs[3] = framep->tf_regs[FRAME_A3];
-		copyargs[2] = framep->tf_regs[FRAME_A2];
-		copyargs[1] = framep->tf_regs[FRAME_A1];
-		copyargs[0] = framep->tf_regs[FRAME_A0];
+		copyargs[3] = tf->tf_regs[FRAME_A3];
+		copyargs[2] = tf->tf_regs[FRAME_A2];
+		copyargs[1] = tf->tf_regs[FRAME_A1];
+		copyargs[0] = tf->tf_regs[FRAME_A0];
 		args = copyargs;
 		break;
 	case 3:	
 	case 2:	
 	case 1:	
 	case 0:
-		args = &framep->tf_regs[FRAME_A0];
+		args = &tf->tf_regs[FRAME_A0];
 		break;
 	}
 	args += hidden;
 
-	if ((error = trace_enter(code, args, callp->sy_narg)) != 0)
-		goto out;
+	error = sy_invoke(callp, l, args, rval, code);
 
-	rval[0] = 0;
-	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
-out:
-	KERNEL_UNLOCK_LAST(l);
-	switch (error) {
-	case 0:
-		framep->tf_regs[FRAME_V0] = rval[0];
-		framep->tf_regs[FRAME_A4] = rval[1];
-		framep->tf_regs[FRAME_A3] = 0;
-		break;
-	case ERESTART:
-		framep->tf_regs[FRAME_PC] -= 4;
-		break;
-	case EJUSTRETURN:
-		break;
-	default:
-	bad:
-		framep->tf_regs[FRAME_V0] = error;
-		framep->tf_regs[FRAME_A3] = 1;
-		break;
+	if (__predict_true(error == 0)) {
+		tf->tf_regs[FRAME_V0] = rval[0];
+		tf->tf_regs[FRAME_A4] = rval[1];
+		tf->tf_regs[FRAME_A3] = 0;
+	} else {
+		switch (error) {
+		case ERESTART:
+			tf->tf_regs[FRAME_PC] -= 4;
+			break;
+		case EJUSTRETURN:
+			break;
+		default:
+		bad:
+			tf->tf_regs[FRAME_V0] = error;
+			tf->tf_regs[FRAME_A3] = 1;
+			break;
+		}
 	}
-
-	trace_exit(code, rval, error);
 
 	userret(l);
 }
@@ -339,13 +220,22 @@ out:
 void
 child_return(void *arg)
 {
-	struct lwp *l = arg;
+	struct lwp * const l = arg;
 
 	/*
-	 * Return values in the frame set by cpu_fork().
+	 * Return values in the frame set by cpu_lwp_fork().
 	 */
 
-	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 	ktrsysret(SYS_fork, 0, 0);
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l);
 }

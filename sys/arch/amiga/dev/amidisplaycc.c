@@ -1,4 +1,4 @@
-/*	$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos Exp $ */
+/*	$NetBSD: amidisplaycc.c,v 1.31 2018/01/28 10:00:31 jandberg Exp $ */
 
 /*-
  * Copyright (c) 2000 Jukka Andberg.
@@ -28,15 +28,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.31 2018/01/28 10:00:31 jandberg Exp $");
 
 /*
  * wscons interface to amiga custom chips. Contains the necessary functions
  * to render text on bitmapped screens. Uses the functions defined in
  * grfabs_reg.h for display creation/destruction and low level setup.
  *
- * For each virtual terminal a new screen ('view') is allocated.
- * Also one more is allocated for the mapped screen on demand.
+ * For each virtual terminal a new screen (a grfabs view) is allocated.
+ * Also one more view is allocated for the mapped screen on demand.
  */
 
 #include "amidisplaycc.h"
@@ -60,15 +60,12 @@ __KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos E
 #include <amiga/dev/viewioctl.h>
 #include <amiga/amiga/device.h>
 #include <dev/wscons/wsconsio.h>
-#include <dev/rcons/raster.h>
 #include <dev/wscons/wscons_raster.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/cons.h>
 #include <dev/wsfont/wsfont.h>
 
-#include <machine/stdarg.h>
-
-/* These can be lowered if you are sure you dont need that much colors. */
+/* These can be lowered if you are sure you don't need that much colors. */
 #define MAXDEPTH 8
 #define MAXROWS 128
 
@@ -79,8 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: amidisplaycc.c,v 1.20 2007/03/04 05:59:16 christos E
 struct amidisplaycc_screen;
 struct amidisplaycc_softc
 {
-	struct device dev;
-
 	struct amidisplaycc_screen  * currentscreen;
 
 	/* display turned on? */
@@ -99,10 +94,10 @@ struct amidisplaycc_softc
  * Configuration stuff.
  */
 
-static int  amidisplaycc_match(struct device *, struct cfdata *, void *);
-static void amidisplaycc_attach(struct device *, struct device *, void *);
+static int  amidisplaycc_match(device_t, cfdata_t, void *);
+static void amidisplaycc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(amidisplaycc, sizeof(struct amidisplaycc_softc),
+CFATTACH_DECL_NEW(amidisplaycc, sizeof(struct amidisplaycc_softc),
     amidisplaycc_match, amidisplaycc_attach, NULL, NULL);
 
 static int amidisplaycc_attached;
@@ -180,15 +175,11 @@ const struct wsdisplay_emulops amidisplaycc_emulops = {
 	amidisplaycc_allocattr
 };
 
-/* add some of our own data to the wsscreen_descr */
+/* Add some of our own data to the wsscreen_descr */
 struct amidisplaycc_screen_descr {
 	struct wsscreen_descr  wsdescr;
 	int                    depth;
 };
-
-/*
- * List of supported screenmodes. Almost anything can be given here.
- */
 
 #define ADCC_SCREEN(name, width, height, depth, fontwidth, fontheight) \
     /* CONSTCOND */ \
@@ -202,10 +193,10 @@ struct amidisplaycc_screen_descr {
     depth }
 
 /*
- * Screen types.
+ * List of supported screen types.
  *
- * The first in list is used for the console screen.
- * A suitable screen mode is guessed for it by looking
+ * The first item in list is used for the console screen.
+ * A suitable screen size is guessed for it by looking
  * at the GRF_* options.
  */
 struct amidisplaycc_screen_descr amidisplaycc_screentab[] = {
@@ -257,7 +248,7 @@ const struct wsscreen_descr *amidisplaycc_screens[] = {
 #define NELEMS(arr) (sizeof(arr)/sizeof((arr)[0]))
 
 /*
- * This structure also is passed to wscons. It contains pointers
+ * This structure is passed to wscons. It contains pointers
  * to the available display modes.
  */
 
@@ -348,7 +339,7 @@ static int aga_enable = 0;
  * This gets called at console init to determine the priority of
  * this console device.
  *
- * Of course pointers to this and other functions must present
+ * Pointers to this and other functions must present
  * in constab[] in conf.c for this to work.
  */
 void
@@ -379,8 +370,6 @@ amidisplaycc_cninit(struct consdev  * cd)
 	/*
 	 * This will do the basic stuff we also need.
 	 */
-	config_console();
-
 	grfcc_probe();
 
 #if NVIEW>0
@@ -409,14 +398,14 @@ amidisplaycc_cninit(struct consdev  * cd)
 }
 
 static int
-amidisplaycc_match(struct device *pdp, struct cfdata *cfp, void *auxp)
+amidisplaycc_match(device_t parent, cfdata_t cf, void *aux)
 {
-	char *name = auxp;
+	char *name = aux;
 
 	if (matchname("amidisplaycc", name) == 0)
 		return (0);
 
-	/* Allow only one of us now. Not sure about that. */
+	/* Allow only one of us. */
 	if (amidisplaycc_attached)
 		return (0);
 
@@ -425,14 +414,14 @@ amidisplaycc_match(struct device *pdp, struct cfdata *cfp, void *auxp)
 
 /* ARGSUSED */
 static void
-amidisplaycc_attach(struct device *pdp, struct device *dp, void *auxp)
+amidisplaycc_attach(device_t parent, device_t self, void *aux)
 {
 	struct wsemuldisplaydev_attach_args    waa;
 	struct amidisplaycc_softc            * adp;
 
 	amidisplaycc_attached = 1;
 
-	adp = (struct amidisplaycc_softc*)dp;
+	adp = device_private(self);
 
 	grfcc_probe();
 
@@ -449,6 +438,7 @@ amidisplaycc_attach(struct device *pdp, struct device *dp, void *auxp)
 		       aga_enable ? "(AGA)" : "");
 
 		if (amidisplaycc_consolescreen.isconsole) {
+			amidisplaycc_consolescreen.device = adp;
 			adp->currentscreen = &amidisplaycc_consolescreen;
 			printf(" (console)");
 		} else
@@ -481,17 +471,16 @@ amidisplaycc_attach(struct device *pdp, struct device *dp, void *auxp)
 		waa.scrdata = &amidisplaycc_screenlist;
 		waa.console = amidisplaycc_consolescreen.isconsole;
 		waa.accessops = &amidisplaycc_accessops;
-		waa.accesscookie = dp;
-		config_found(dp, &waa, wsemuldisplaydevprint);
+		waa.accesscookie = adp;
+		config_found(self, &waa, wsemuldisplaydevprint);
 
 		wsfont_init();
 	}
 }
 
-
 /*
- * Color, bgcolor and style are packed into one long attribute.
- * These macros are used to create/split the attribute
+ * Foreground color, background color, and style are packed into one
+ * long attribute. These macros are used to create/split the attribute.
  */
 
 #define MAKEATTR(fg, bg, mode) (((fg)<<16) | ((bg)<<8) | (mode))
@@ -548,9 +537,6 @@ amidisplaycc_cursor(void *screen, int on, int row, int col)
 }
 
 
-/*
- * This obviously does something important, don't ask me what.
- */
 int
 amidisplaycc_mapchar(void *screen, int ch, unsigned int *chp)
 {
@@ -785,8 +771,6 @@ amidisplaycc_erasecols(void *screen, int row, int startcol, int ncols,
 
 /*
  * Copy a number of rows to another location on the screen.
- * Combined with eraserows it can be used to perform operation
- * also known as 'scrolling'.
  */
 
 void
@@ -893,10 +877,10 @@ amidisplaycc_copyrows(void *screen, int srcrow, int dstrow, int nrows)
 
 				if (copysize > 0) {
 					/* Do it all */
-					bzero(dst, copysize);
+					memset(dst, 0, copysize);
 				} else {
 					for (i = 0 ; i < fontheight ; i++) {
-						bzero(dst, widthbytes);
+						memset(dst, 0, widthbytes);
 						dst += linebytes;
 					}
 				}
@@ -1077,11 +1061,6 @@ amidisplaycc_ioctl(void *dp, void *vs, u_long cmd, void *data, int flag,
 					       (struct wsdisplay_cmap*)data));
 	}
 
-	dprintf("amidisplaycc: unknown ioctl %lx (grp:'%c' num:%d)\n",
-		(long)cmd,
-		(char)((cmd&0xff00)>>8),
-		(int)(cmd&0xff));
-
 	return (EPASSTHROUGH);
 
 #undef UINTDATA
@@ -1174,9 +1153,8 @@ amidisplaycc_mmap(void *dp, void *vs, off_t off, int prot)
 	}
 
 	/*
-	 * As we all know by now, we are mapping our special
-	 * screen here so our pretty text consoles are left
-	 * untouched.
+	 * Screen reserved for graphics is used to avoid writing
+	 * over the text screens.
 	 */
 
 	bm = adp->gfxview->bitmap;
@@ -1190,12 +1168,13 @@ amidisplaycc_mmap(void *dp, void *vs, off_t off, int prot)
 	rv = (paddr_t)bm->hardware_address;
 	rv += off;
 
-	return (rv >> PGSHIFT);
+	return MD_BTOP(rv);
 }
 
 
 /*
  * Create a new screen.
+ *
  * NULL dp signifies console and then memory is allocated statically
  * and the screen is automatically displayed.
  *
@@ -1263,8 +1242,7 @@ amidisplaycc_alloc_screen(void *dp, const struct wsscreen_descr *screenp,
 
 		scr->isconsole = 1;
 	} else {
-		scr = malloc(sizeof(adccscr_t), M_DEVBUF, M_WAITOK);
-		bzero(scr, sizeof(adccscr_t));
+		scr = malloc(sizeof(adccscr_t), M_DEVBUF, M_WAITOK|M_ZERO);
 	}
 
 	scr->view = view;
@@ -1455,8 +1433,8 @@ amidisplaycc_show_screen(void *dp, void *screen, int waitok,
 int
 amidisplaycc_load_font(void *dp, void *cookie, struct wsdisplay_font *font)
 {
-	struct amidisplaycc_softc   * adp;
-	struct amidisplaycc_screen  * scr;
+	struct amidisplaycc_softc   * adp __diagused;
+	struct amidisplaycc_screen  * scr __diagused;
 
 	adp = dp;
 	scr = cookie;
@@ -1841,7 +1819,8 @@ amidisplaycc_setfont(struct amidisplaycc_screen *scr, const char *fontname)
 		scr->fontheight,
 		1,
 		WSDISPLAY_FONTORDER_L2R,
-		WSDISPLAY_FONTORDER_L2R);
+		WSDISPLAY_FONTORDER_L2R,
+		WSFONT_FIND_BITMAP);
 
 	if (wsfontcookie == -1)
 		return (EINVAL);
@@ -1895,6 +1874,22 @@ amidisplaycc_getbuiltinfont(void)
 void
 amidisplaycc_pollc(void *cookie, int on)
 {
+	if (amidisplaycc_consolescreen.isconsole)
+	{
+		if (on) 
+		{
+			/* About to use console, so make it visible */
+			grf_display_view(amidisplaycc_consolescreen.view);
+		}
+		if (!on && 
+		    amidisplaycc_consolescreen.isconsole && 
+		    amidisplaycc_consolescreen.device != NULL && 
+		    amidisplaycc_consolescreen.device->currentscreen != NULL) 
+		{
+			/* Restore the correct view after done with console use */
+			grf_display_view(amidisplaycc_consolescreen.device->currentscreen->view);
+		}
+	}
 }
 
 /*

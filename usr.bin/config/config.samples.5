@@ -1,4 +1,4 @@
-.\" $NetBSD: config.samples.5,v 1.3 2007/09/10 10:54:21 cube Exp $
+.\" $NetBSD: config.samples.5,v 1.6 2014/03/06 15:00:21 riastradh Exp $
 .\"
 .\"  Copyright (c) 2006 The NetBSD Foundation.
 .\"  All rights reserved.
@@ -11,9 +11,6 @@
 .\"  2. Redistributions in binary form must reproduce the above copyright
 .\"     notice, this list of conditions and the following disclaimer in the
 .\"     documentation and/or other materials provided with the distribution.
-.\"  3. Neither the name of The NetBSD Foundation nor the names of its
-.\"     contributors may be used to endorse or promote products derived
-.\"     from this software without specific prior written permission.
 .\"
 .\"  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\"  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +72,7 @@ the bus.
 The driver has to try accessing the device in order to discover it.
 That implies locators must be specified to some extent: a driver would
 usually need the base address of the device, some need the IRQ line that the
-device is configured to use, thoug some others would just try a set of known
+device is configured to use, though some others would just try a set of known
 values, at the risk of badly interacting with other devices on the bus.
 .Ss Hard-wiring kernel configuration
 This technique consists in specifying exactly the location of the devices on a
@@ -187,7 +184,7 @@ no device at isa0
 .Ed
 .Ss Interface attributes
 .Em Interface attributes
-are a subtility of
+are a subtlety of
 .Xr config 1
 and
 .Xr autoconf 9 ,
@@ -225,13 +222,13 @@ Of course, it is possible to specify
 .Bd -literal -offset indent
 audio* at auvia?
 .Ed
-in the kernel configuration file, but then one instance per audio controler
+in the kernel configuration file, but then one instance per audio controller
 would be needed.
 .Em Interface attributes
 reflect the fact there is a standard way to attach a device to its parent, no
 matter what the latter is precisely.
 It also means lower maintainance of the kernel configuration files because
-drivers for audio controlers are added more easily.
+drivers for audio controllers are added more easily.
 .Pp
 Most attachments are done through
 .Em interface attributes ,

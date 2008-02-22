@@ -1,4 +1,4 @@
-/*	$NetBSD: ahd_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: ahd_pci.c,v 1.37 2018/06/23 06:45:51 maxv Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -45,11 +45,12 @@
  * $FreeBSD: src/sys/dev/aic7xxx/aic79xx_pci.c,v 1.16 2003/06/28 04:39:49 gibbs Exp $
  */
 /*
- * Ported from FreeBSD by Pascal Renauld, Network Storage Solutions, Inc. - April 2003
+ * Ported from FreeBSD by Pascal Renauld, Network Storage Solutions, Inc.
+ *  - April 2003
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.37 2018/06/23 06:45:51 maxv Exp $");
 
 #define AHD_PCI_IOADDR	PCI_MAPREG_START	/* I/O Address */
 #define AHD_PCI_MEMADDR	(PCI_MAPREG_START + 4)	/* Mem I/O Address */
@@ -79,6 +80,7 @@ ahd_compose_id(u_int device, u_int vendor, u_int subdevice, u_int subvendor)
 #define ID_AIC7901			0x800F9005FFFF9005ull
 #define ID_AHA_29320A			0x8000900500609005ull
 #define ID_AHA_29320ALP			0x8017900500449005ull
+#define ID_AHA_29320LPE			0x8017900500459005ull
 
 #define ID_AIC7901A			0x801E9005FFFF9005ull
 #define ID_AHA_29320LP			0x8014900500449005ull
@@ -127,7 +129,7 @@ static ahd_device_setup_t ahd_aic7901A_setup;
 static ahd_device_setup_t ahd_aic7902_setup;
 static ahd_device_setup_t ahd_aic790X_setup;
 
-static struct ahd_pci_identity ahd_pci_ident_table [] =
+static const struct ahd_pci_identity ahd_pci_ident_table[] =
 {
 	/* aic7901 based controllers */
 	{
@@ -140,6 +142,12 @@ static struct ahd_pci_identity ahd_pci_ident_table [] =
 		ID_AHA_29320ALP,
 		ID_ALL_MASK,
 		"Adaptec 29320ALP Ultra320 SCSI adapter",
+		ahd_aic7901_setup
+	},
+	{
+		ID_AHA_29320LPE,
+		ID_ALL_MASK,
+		"Adaptec 29320LPE Ultra320 SCSI adapter",
 		ahd_aic7901_setup
 	},
 	/* aic7901A based controllers */
@@ -286,8 +294,7 @@ ahd_find_pci_device(pcireg_t id, pcireg_t subid)
 }
 
 static int
-ahd_pci_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+ahd_pci_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahd_pci_identity *entry;
@@ -299,10 +306,10 @@ ahd_pci_probe(struct device *parent, struct cfdata *match,
 }
 
 static void
-ahd_pci_attach(struct device *parent, struct device *self, void *aux)
+ahd_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args	*pa = aux;
-	struct ahd_softc       	*ahd = (void *)self;
+	struct ahd_softc       	*ahd = device_private(self);
 
 	const struct ahd_pci_identity *entry;
 
@@ -317,8 +324,10 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_intr_handle_t  	ih;
 	const char         	*intrstr;
 	struct ahd_pci_busdata 	*bd;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	ahd_set_name(ahd, ahd->sc_dev.dv_xname);
+	ahd->sc_dev = self;
+	ahd_set_name(ahd, device_xname(self));
 	ahd->parent_dmat = pa->pa_dmat;
 
 	command = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
@@ -328,12 +337,12 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 		return;
 
 	/* Keep information about the PCI bus */
-	bd = malloc(sizeof (struct ahd_pci_busdata), M_DEVBUF, M_NOWAIT);
+	bd = malloc(sizeof (struct ahd_pci_busdata), M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (bd == NULL) {
-		aprint_error("%s: unable to allocate bus-specific data\n", ahd_name(ahd));
+		aprint_error("%s: unable to allocate bus-specific data\n",
+		    ahd_name(ahd));
 		return;
 	}
-	memset(bd, 0, sizeof(struct ahd_pci_busdata));
 
 	bd->pc = pa->pa_pc;
 	bd->tag = pa->pa_tag;
@@ -345,12 +354,11 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	ahd->description = entry->name;
 
 	ahd->seep_config = malloc(sizeof(*ahd->seep_config),
-				  M_DEVBUF, M_NOWAIT);
+				  M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (ahd->seep_config == NULL) {
 		aprint_error("%s: cannot malloc seep_config!\n", ahd_name(ahd));
 		return;
 	}
-	memset(ahd->seep_config, 0, sizeof(*ahd->seep_config));
 
 	LIST_INIT(&ahd->pending_scbs);
 	ahd_timer_init(&ahd->reset_timer);
@@ -361,7 +369,8 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	ahd->int_coalescing_maxcmds = AHD_INT_COALESCING_MAXCMDS_DEFAULT;
 	ahd->int_coalescing_mincmds = AHD_INT_COALESCING_MINCMDS_DEFAULT;
 	ahd->int_coalescing_threshold = AHD_INT_COALESCING_THRESHOLD_DEFAULT;
-	ahd->int_coalescing_stop_threshold = AHD_INT_COALESCING_STOP_THRESHOLD_DEFAULT;
+	ahd->int_coalescing_stop_threshold =
+	    AHD_INT_COALESCING_STOP_THRESHOLD_DEFAULT;
 
 	if (ahd_platform_alloc(ahd, NULL) != 0) {
                 ahd_free(ahd);
@@ -394,8 +403,8 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (!pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_PCIX,
 	    &bd->pcix_off, NULL)) {
 		if (ahd->chip & AHD_PCIX)
-			aprint_error("%s: warning: can't find PCI-X capability\n",
-			    ahd->sc_dev.dv_xname);
+			aprint_error_dev(self,
+			    "warning: can't find PCI-X capability\n");
 		ahd->chip &= ~AHD_PCIX;
 		ahd->chip |= AHD_PCI;
 		ahd->bugs &= ~AHD_PCIX_BUG_MASK;
@@ -437,10 +446,8 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
                         	       PCI_COMMAND_STATUS_REG, command);
 		}
 #ifdef AHD_DEBUG
-		printf("%s: doing memory mapping tag0 0x%x, tag1 0x%x, "
-		    "shs0 0x%lx, shs1 0x%lx\n",
-		    ahd_name(ahd), ahd->tags[0], ahd->tags[1],
-		    ahd->bshs[0], ahd->bshs[1]);
+		printf("%s: doing memory mapping shs0 0x%lx, shs1 0x%lx\n",
+		    ahd_name(ahd), ahd->bshs[0], ahd->bshs[1]);
 #endif
 	}
 
@@ -464,9 +471,8 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
                         	       PCI_COMMAND_STATUS_REG, command);
 		}
 #ifdef AHD_DEBUG
-		printf("%s: doing io mapping tag0 0x%x, tag1 0x%x, "
-		    "shs0 0x%lx, shs1 0x%lx\n", ahd_name(ahd), ahd->tags[0],
-		    ahd->tags[1], ahd->bshs[0], ahd->bshs[1]);
+		printf("%s: doing io mapping shs0 0x%lx, shs1 0x%lx\n",
+		    ahd_name(ahd), ahd->bshs[0], ahd->bshs[1]);
 #endif
 
 	}
@@ -480,10 +486,9 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	aprint_naive("\n");
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, ahd, 
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", ahd->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 	/*
@@ -531,7 +536,7 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 		ahd_free(ahd);
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	ahd->ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, ahd_intr, ahd);
 	if (ahd->ih == NULL) {
 		aprint_error("%s: couldn't establish interrupt",
@@ -567,7 +572,7 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	ahd_attach(ahd);
 }
 
-CFATTACH_DECL(ahd_pci, sizeof(struct ahd_softc),
+CFATTACH_DECL_NEW(ahd_pci, sizeof(struct ahd_softc),
     ahd_pci_probe, ahd_pci_attach, NULL, NULL);
 
 /*
@@ -1027,7 +1032,7 @@ ahd_pci_split_intr(struct ahd_softc *ahd, u_int intstat)
 	 * additionally have SG engine splits to look at.
 	 */
 	pcix_status = pci_conf_read(bd->pc, bd->tag,
-	    bd->pcix_off + PCI_PCIX_STATUS);
+	    bd->pcix_off + PCIX_STATUS);
 	printf("%s: PCI Split Interrupt - PCI-X status = 0x%x\n",
 	       ahd_name(ahd), pcix_status);
 
@@ -1076,7 +1081,7 @@ ahd_pci_split_intr(struct ahd_softc *ahd, u_int intstat)
 	/*
 	 * Clear PCI-X status bits.
 	 */
-	pci_conf_write(bd->pc, bd->tag, bd->pcix_off + PCI_PCIX_STATUS,
+	pci_conf_write(bd->pc, bd->tag, bd->pcix_off + PCIX_STATUS,
 	    pcix_status);
 	ahd_outb(ahd, CLRINT, CLRSPLTINT);
 	ahd_restore_modes(ahd, saved_modes);
@@ -1119,9 +1124,10 @@ ahd_aic790X_setup(struct ahd_softc *ahd, struct pci_attach_args	*pa)
 	printf("\n%s: aic7902 chip revision 0x%x\n", ahd_name(ahd), rev);
 #endif
 	if (rev < ID_AIC7902_PCI_REV_A4) {
-		aprint_error("%s: Unable to attach to unsupported chip revision %d\n",
-		       ahd_name(ahd), rev);
-		pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, 0);
+		aprint_error("%s: Unable to attach to "
+		    "unsupported chip revision %d\n", ahd_name(ahd), rev);
+		pci_conf_write(pa->pa_pc, pa->pa_tag,
+		    PCI_COMMAND_STATUS_REG, 0);
 		return (ENXIO);
 	}
 
@@ -1177,7 +1183,8 @@ ahd_aic790X_setup(struct ahd_softc *ahd, struct pci_attach_args	*pa)
 		 * 	 folks!
 		 */
 		devconfig1 = pci_conf_read(pa->pa_pc, pa->pa_tag, DEVCONFIG1);
-		pci_conf_write(pa->pa_pc, pa->pa_tag, DEVCONFIG1, devconfig1|PREQDIS);
+		pci_conf_write(pa->pa_pc, pa->pa_tag,
+		    DEVCONFIG1, devconfig1|PREQDIS);
 		devconfig1 = pci_conf_read(pa->pa_pc, pa->pa_tag, DEVCONFIG1);
 	}
 

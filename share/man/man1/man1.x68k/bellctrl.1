@@ -1,4 +1,4 @@
-.\"	$NetBSD: bellctrl.1,v 1.11 2002/02/13 08:17:27 ross Exp $
+.\"	$NetBSD: bellctrl.1,v 1.15 2017/07/04 06:34:03 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Takuya Harakawa.
 .\" All rights reserved.
@@ -41,8 +41,10 @@
 .Nd opm bell emulation preference utility
 .Sh SYNOPSIS
 .Nm bellctrl
-[-\fBb\fP] [\fBb\fP \fIon/off\fP] [\fBb\fP [\fIvolume\fP [\fIpitch\fP [\fIduration\fP]]]
-[\fBv\fP \fIdefault\fP]
+.Op Fl b
+.Op Sy b Ar on/off
+.Op Sy b Op Ar volume Op Ar pitch Op Ar duration
+.Op Sy v Ar default
 .Op Fl v Ar voicefile
 .Sh DESCRIPTION
 .Nm
@@ -61,12 +63,10 @@ set to that value, as a percentage of its maximum.
 Like wise, the second numerical parameter specifies the bell pitch,
 in hertz, and the third numerical parameter specifies the duration
 in milliseconds.
-.Pp
-.It \fBv\fP Ar default
+.It Sy v Ar default
 The
 .Ar default
 argument cause the voice parameter to be reset to the system default.
-.Pp
 .It Fl v Ar voicefile
 The
 .Fl v
@@ -75,4 +75,5 @@ option sets the voice parameter to given voice parameter file (
 .El
 .Sh AUTHORS
 .Nm
-was written by Takuya Harakawa \*[Lt]ussy@int.titech.ac.jp\*[Gt].
+was written by
+.An Takuya Harakawa Aq Mt ussy@int.titech.ac.jp .

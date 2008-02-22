@@ -1,4 +1,4 @@
-/*	$NetBSD: genfs_vnops.c,v 1.164 2008/02/05 14:19:53 ad Exp $	*/
+/*	$NetBSD: genfs_vnops.c,v 1.199 2017/10/25 08:12:39 maya Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,22 +57,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.164 2008/02/05 14:19:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.199 2017/10/25 08:12:39 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
 #include <sys/mount.h>
+#include <sys/fstrans.h>
 #include <sys/namei.h>
-#include <sys/vnode.h>
+#include <sys/vnode_impl.h>
 #include <sys/fcntl.h>
 #include <sys/kmem.h>
 #include <sys/poll.h>
 #include <sys/mman.h>
 #include <sys/file.h>
 #include <sys/kauth.h>
-#include <sys/fstrans.h>
+#include <sys/stat.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
@@ -128,8 +122,8 @@ genfs_abortop(void *v)
 		struct componentname *a_cnp;
 	} */ *ap = v;
 
-	if ((ap->a_cnp->cn_flags & (HASBUF | SAVESTART)) == HASBUF)
-		PNBUF_PUT(ap->a_cnp->cn_pnbuf);
+	(void)ap;
+
 	return (0);
 }
 
@@ -177,7 +171,8 @@ genfs_einval(void *v)
 
 /*
  * Called when an fs doesn't support a particular vop.
- * This takes care to vrele, vput, or vunlock passed in vnodes.
+ * This takes care to vrele, vput, or vunlock passed in vnodes
+ * and calls VOP_ABORTOP for a componentname (in non-rename VOP).
  */
 int
 genfs_eopnotsupp(void *v)
@@ -188,14 +183,35 @@ genfs_eopnotsupp(void *v)
 	} */ *ap = v;
 	struct vnodeop_desc *desc = ap->a_desc;
 	struct vnode *vp, *vp_last = NULL;
-	int flags, i, j, offset;
+	int flags, i, j, offset_cnp, offset_vp;
+
+	KASSERT(desc->vdesc_offset != VOP_LOOKUP_DESCOFFSET);
+	KASSERT(desc->vdesc_offset != VOP_ABORTOP_DESCOFFSET);
+
+	/*
+	 * Abort any componentname that lookup potentially left state in.
+	 *
+	 * As is logical, componentnames for VOP_RENAME are handled by
+	 * the caller of VOP_RENAME.  Yay, rename!
+	 */
+	if (desc->vdesc_offset != VOP_RENAME_DESCOFFSET &&
+	    (offset_vp = desc->vdesc_vp_offsets[0]) != VDESC_NO_OFFSET &&
+	    (offset_cnp = desc->vdesc_componentname_offset) != VDESC_NO_OFFSET){
+		struct componentname *cnp;
+		struct vnode *dvp;
+
+		dvp = *VOPARG_OFFSETTO(struct vnode **, offset_vp, ap);
+		cnp = *VOPARG_OFFSETTO(struct componentname **, offset_cnp, ap);
+
+		VOP_ABORTOP(dvp, cnp);
+	}
 
 	flags = desc->vdesc_flags;
 	for (i = 0; i < VDESC_MAX_VPS; flags >>=1, i++) {
-		if ((offset = desc->vdesc_vp_offsets[i]) == VDESC_NO_OFFSET)
+		if ((offset_vp = desc->vdesc_vp_offsets[i]) == VDESC_NO_OFFSET)
 			break;	/* stop at end of list */
 		if ((j = flags & VDESC_VP0_WILLPUT)) {
-			vp = *VOPARG_OFFSETTO(struct vnode **, offset, ap);
+			vp = *VOPARG_OFFSETTO(struct vnode **, offset_vp, ap);
 
 			/* Skip if NULL */
 			if (!vp)
@@ -210,9 +226,6 @@ genfs_eopnotsupp(void *v)
 					vput(vp);
 					vp_last = vp;
 				}
-				break;
-			case VDESC_VP0_WILLUNLOCK:
-				VOP_UNLOCK(vp, 0);
 				break;
 			case VDESC_VP0_WILLRELE:
 				vrele(vp);
@@ -262,6 +275,52 @@ genfs_revoke(void *v)
 }
 
 /*
+ * Lock the node (for deadfs).
+ */
+int
+genfs_deadlock(void *v)
+{
+	struct vop_lock_args /* {
+		struct vnode *a_vp;
+		int a_flags;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
+	int flags = ap->a_flags;
+	krw_t op;
+
+	if (! ISSET(flags, LK_RETRY))
+		return ENOENT;
+
+	op = (ISSET(flags, LK_EXCLUSIVE) ? RW_WRITER : RW_READER);
+	if (ISSET(flags, LK_NOWAIT)) {
+		if (! rw_tryenter(&vip->vi_lock, op))
+			return EBUSY;
+	} else {
+		rw_enter(&vip->vi_lock, op);
+	}
+	VSTATE_ASSERT_UNLOCKED(vp, VS_RECLAIMED);
+	return 0;
+}
+
+/*
+ * Unlock the node (for deadfs).
+ */
+int
+genfs_deadunlock(void *v)
+{
+	struct vop_unlock_args /* {
+		struct vnode *a_vp;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
+
+	rw_exit(&vip->vi_lock);
+
+	return 0;
+}
+
+/*
  * Lock the node.
  */
 int
@@ -271,15 +330,20 @@ genfs_lock(void *v)
 		struct vnode *a_vp;
 		int a_flags;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
+	vnode_t *vp = ap->a_vp;
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 	int flags = ap->a_flags;
+	krw_t op;
 
-	if ((flags & LK_INTERLOCK) != 0) {
-		flags &= ~LK_INTERLOCK;
-		mutex_exit(&vp->v_interlock);
+	op = (ISSET(flags, LK_EXCLUSIVE) ? RW_WRITER : RW_READER);
+	if (ISSET(flags, LK_NOWAIT)) {
+		if (! rw_tryenter(&vip->vi_lock, op))
+			return EBUSY;
+	} else {
+		rw_enter(&vip->vi_lock, op);
 	}
-
-	return (vlockmgr(vp->v_vnlock, flags));
+	VSTATE_ASSERT_UNLOCKED(vp, VS_ACTIVE);
+	return 0;
 }
 
 /*
@@ -290,13 +354,13 @@ genfs_unlock(void *v)
 {
 	struct vop_unlock_args /* {
 		struct vnode *a_vp;
-		int a_flags;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
+	vnode_t *vp = ap->a_vp;
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
-	KASSERT(ap->a_flags == 0);
+	rw_exit(&vip->vi_lock);
 
-	return (vlockmgr(vp->v_vnlock, LK_RELEASE));
+	return 0;
 }
 
 /*
@@ -308,9 +372,16 @@ genfs_islocked(void *v)
 	struct vop_islocked_args /* {
 		struct vnode *a_vp;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
+	vnode_t *vp = ap->a_vp;
+	vnode_impl_t *vip = VNODE_TO_VIMPL(vp);
 
-	return (vlockstatus(vp->v_vnlock));
+	if (rw_write_held(&vip->vi_lock))
+		return LK_EXCLUSIVE;
+
+	if (rw_read_held(&vip->vi_lock))
+		return LK_SHARED;
+
+	return 0;
 }
 
 /*
@@ -319,18 +390,7 @@ genfs_islocked(void *v)
 int
 genfs_nolock(void *v)
 {
-	struct vop_lock_args /* {
-		struct vnode *a_vp;
-		int a_flags;
-		struct lwp *a_l;
-	} */ *ap = v;
 
-	/*
-	 * Since we are not using the lock manager, we must clear
-	 * the interlock here.
-	 */
-	if (ap->a_flags & LK_INTERLOCK)
-		mutex_exit(&ap->a_vp->v_interlock);
 	return (0);
 }
 
@@ -352,6 +412,26 @@ int
 genfs_mmap(void *v)
 {
 
+	return (0);
+}
+
+/*
+ * VOP_PUTPAGES() for vnodes which never have pages.
+ */
+
+int
+genfs_null_putpages(void *v)
+{
+	struct vop_putpages_args /* {
+		struct vnode *a_vp;
+		voff_t a_offlo;
+		voff_t a_offhi;
+		int a_flags;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+
+	KASSERT(vp->v_uobj.uo_npages == 0);
+	mutex_exit(vp->v_interlock);
 	return (0);
 }
 
@@ -386,9 +466,9 @@ filt_genfsdetach(struct knote *kn)
 {
 	struct vnode *vp = (struct vnode *)kn->kn_hook;
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_REMOVE(&vp->v_klist, kn, knote, kn_selnext);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 }
 
 static int
@@ -403,19 +483,45 @@ filt_genfsread(struct knote *kn, long hint)
 	 */
 	switch (hint) {
 	case NOTE_REVOKE:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
 		return (1);
 	case 0:
-		mutex_enter(&vp->v_interlock);
-		kn->kn_data = vp->v_size - kn->kn_fp->f_offset;
+		mutex_enter(vp->v_interlock);
+		kn->kn_data = vp->v_size - ((file_t *)kn->kn_obj)->f_offset;
 		rv = (kn->kn_data != 0);
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		return rv;
 	default:
-		KASSERT(mutex_owned(&vp->v_interlock));
-		kn->kn_data = vp->v_size - kn->kn_fp->f_offset;
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_data = vp->v_size - ((file_t *)kn->kn_obj)->f_offset;
 		return (kn->kn_data != 0);
+	}
+}
+
+static int
+filt_genfswrite(struct knote *kn, long hint)
+{
+	struct vnode *vp = (struct vnode *)kn->kn_hook;
+
+	/*
+	 * filesystem is gone, so set the EOF flag and schedule
+	 * the knote for deletion.
+	 */
+	switch (hint) {
+	case NOTE_REVOKE:
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
+		return (1);
+	case 0:
+		mutex_enter(vp->v_interlock);
+		kn->kn_data = 0;
+		mutex_exit(vp->v_interlock);
+		return 1;
+	default:
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_data = 0;
+		return 1;
 	}
 }
 
@@ -427,31 +533,47 @@ filt_genfsvnode(struct knote *kn, long hint)
 
 	switch (hint) {
 	case NOTE_REVOKE:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= EV_EOF;
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
 		return (1);
 	case 0:
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		fflags = kn->kn_fflags;
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		break;
 	default:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
 		fflags = kn->kn_fflags;
 		break;
 	}
 
-	return (kn->kn_fflags != 0);
+	return (fflags != 0);
 }
 
-static const struct filterops genfsread_filtops =
-	{ 1, NULL, filt_genfsdetach, filt_genfsread };
-static const struct filterops genfsvnode_filtops =
-	{ 1, NULL, filt_genfsdetach, filt_genfsvnode };
+static const struct filterops genfsread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_genfsdetach,
+	.f_event = filt_genfsread,
+};
+
+static const struct filterops genfswrite_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_genfsdetach,
+	.f_event = filt_genfswrite,
+};
+
+static const struct filterops genfsvnode_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_genfsdetach,
+	.f_event = filt_genfsvnode,
+};
 
 int
 genfs_kqfilter(void *v)
@@ -469,6 +591,9 @@ genfs_kqfilter(void *v)
 	case EVFILT_READ:
 		kn->kn_fop = &genfsread_filtops;
 		break;
+	case EVFILT_WRITE:
+		kn->kn_fop = &genfswrite_filtops;
+		break;
 	case EVFILT_VNODE:
 		kn->kn_fop = &genfsvnode_filtops;
 		break;
@@ -478,9 +603,9 @@ genfs_kqfilter(void *v)
 
 	kn->kn_hook = vp;
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_INSERT_HEAD(&vp->v_klist, kn, kn_selnext);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	return (0);
 }
@@ -501,10 +626,269 @@ genfs_node_rdlock(struct vnode *vp)
 	rw_enter(&gp->g_glock, RW_READER);
 }
 
+int
+genfs_node_rdtrylock(struct vnode *vp)
+{
+	struct genfs_node *gp = VTOG(vp);
+
+	return rw_tryenter(&gp->g_glock, RW_READER);
+}
+
 void
 genfs_node_unlock(struct vnode *vp)
 {
 	struct genfs_node *gp = VTOG(vp);
 
 	rw_exit(&gp->g_glock);
+}
+
+int
+genfs_node_wrlocked(struct vnode *vp)
+{
+	struct genfs_node *gp = VTOG(vp);
+
+	return rw_write_held(&gp->g_glock);
+}
+
+/*
+ * Do the usual access checking.
+ * file_mode, uid and gid are from the vnode in question,
+ * while acc_mode and cred are from the VOP_ACCESS parameter list
+ */
+int
+genfs_can_access(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
+    mode_t acc_mode, kauth_cred_t cred)
+{
+	mode_t mask;
+	int error, ismember;
+
+	mask = 0;
+
+	/* Otherwise, check the owner. */
+	if (kauth_cred_geteuid(cred) == uid) {
+		if (acc_mode & VEXEC)
+			mask |= S_IXUSR;
+		if (acc_mode & VREAD)
+			mask |= S_IRUSR;
+		if (acc_mode & VWRITE)
+			mask |= S_IWUSR;
+		return ((file_mode & mask) == mask ? 0 : EACCES);
+	}
+
+	/* Otherwise, check the groups. */
+	error = kauth_cred_ismember_gid(cred, gid, &ismember);
+	if (error)
+		return (error);
+	if (kauth_cred_getegid(cred) == gid || ismember) {
+		if (acc_mode & VEXEC)
+			mask |= S_IXGRP;
+		if (acc_mode & VREAD)
+			mask |= S_IRGRP;
+		if (acc_mode & VWRITE)
+			mask |= S_IWGRP;
+		return ((file_mode & mask) == mask ? 0 : EACCES);
+	}
+
+	/* Otherwise, check everyone else. */
+	if (acc_mode & VEXEC)
+		mask |= S_IXOTH;
+	if (acc_mode & VREAD)
+		mask |= S_IROTH;
+	if (acc_mode & VWRITE)
+		mask |= S_IWOTH;
+	return ((file_mode & mask) == mask ? 0 : EACCES);
+}
+
+/*
+ * Common routine to check if chmod() is allowed.
+ *
+ * Policy:
+ *   - You must own the file, and
+ *     - You must not set the "sticky" bit (meaningless, see chmod(2))
+ *     - You must be a member of the group if you're trying to set the
+ *       SGIDf bit
+ *
+ * cred - credentials of the invoker
+ * vp - vnode of the file-system object
+ * cur_uid, cur_gid - current uid/gid of the file-system object
+ * new_mode - new mode for the file-system object
+ *
+ * Returns 0 if the change is allowed, or an error value otherwise.
+ */
+int
+genfs_can_chmod(enum vtype type, kauth_cred_t cred, uid_t cur_uid,
+    gid_t cur_gid, mode_t new_mode)
+{
+	int error;
+
+	/* The user must own the file. */
+	if (kauth_cred_geteuid(cred) != cur_uid)
+		return (EPERM);
+
+	/*
+	 * Unprivileged users can't set the sticky bit on files.
+	 */
+	if ((type != VDIR) && (new_mode & S_ISTXT))
+		return (EFTYPE);
+
+	/*
+	 * If the invoker is trying to set the SGID bit on the file,
+	 * check group membership.
+	 */
+	if (new_mode & S_ISGID) {
+		int ismember;
+
+		error = kauth_cred_ismember_gid(cred, cur_gid,
+		    &ismember);
+		if (error || !ismember)
+			return (EPERM);
+	}
+
+	return (0);
+}
+
+/*
+ * Common routine to check if chown() is allowed.
+ *
+ * Policy:
+ *   - You must own the file, and
+ *     - You must not try to change ownership, and
+ *     - You must be member of the new group
+ *
+ * cred - credentials of the invoker
+ * cur_uid, cur_gid - current uid/gid of the file-system object
+ * new_uid, new_gid - target uid/gid of the file-system object
+ *
+ * Returns 0 if the change is allowed, or an error value otherwise.
+ */
+int	
+genfs_can_chown(kauth_cred_t cred, uid_t cur_uid,
+    gid_t cur_gid, uid_t new_uid, gid_t new_gid)
+{
+	int error, ismember;
+
+	/*
+	 * You can only change ownership of a file if:
+	 * You own the file and...
+	 */
+	if (kauth_cred_geteuid(cred) == cur_uid) {
+		/*
+		 * You don't try to change ownership, and...
+		 */
+		if (new_uid != cur_uid)
+			return (EPERM);
+
+		/*
+		 * You don't try to change group (no-op), or...
+		 */
+		if (new_gid == cur_gid)
+			return (0);
+
+		/*
+		 * Your effective gid is the new gid, or...
+		 */
+		if (kauth_cred_getegid(cred) == new_gid)
+			return (0);
+
+		/*
+		 * The new gid is one you're a member of.
+		 */
+		ismember = 0;
+		error = kauth_cred_ismember_gid(cred, new_gid,
+		    &ismember);
+		if (!error && ismember)
+			return (0);
+	}
+
+	return (EPERM);
+}
+
+int
+genfs_can_chtimes(vnode_t *vp, u_int vaflags, uid_t owner_uid,
+    kauth_cred_t cred)
+{
+	int error;
+
+	/* Must be owner, or... */
+	if (kauth_cred_geteuid(cred) == owner_uid)
+		return (0);
+
+	/* set the times to the current time, and... */
+	if ((vaflags & VA_UTIMES_NULL) == 0)
+		return (EPERM);
+
+	/* have write access. */
+	error = VOP_ACCESS(vp, VWRITE, cred);
+	if (error)
+		return (error);
+
+	return (0);
+}
+
+/*
+ * Common routine to check if chflags() is allowed.
+ *
+ * Policy:
+ *   - You must own the file, and
+ *   - You must not change system flags, and
+ *   - You must not change flags on character/block devices.
+ *
+ * cred - credentials of the invoker
+ * owner_uid - uid of the file-system object
+ * changing_sysflags - true if the invoker wants to change system flags
+ */
+int
+genfs_can_chflags(kauth_cred_t cred, enum vtype type, uid_t owner_uid,
+    bool changing_sysflags)
+{
+
+	/* The user must own the file. */
+	if (kauth_cred_geteuid(cred) != owner_uid) {
+		return EPERM;
+	}
+
+	if (changing_sysflags) {
+		return EPERM;
+	}
+
+	/*
+	 * Unprivileged users cannot change the flags on devices, even if they
+	 * own them.
+	 */
+	if (type == VCHR || type == VBLK) {
+		return EPERM;
+	}
+
+	return 0;
+}
+
+/*
+ * Common "sticky" policy.
+ *
+ * When a directory is "sticky" (as determined by the caller), this
+ * function may help implementing the following policy:
+ * - Renaming a file in it is only possible if the user owns the directory
+ *   or the file being renamed.
+ * - Deleting a file from it is only possible if the user owns the
+ *   directory or the file being deleted.
+ */
+int
+genfs_can_sticky(kauth_cred_t cred, uid_t dir_uid, uid_t file_uid)
+{
+	if (kauth_cred_geteuid(cred) != dir_uid &&
+	    kauth_cred_geteuid(cred) != file_uid)
+		return EPERM;
+
+	return 0;
+}
+
+int
+genfs_can_extattr(kauth_cred_t cred, int access_mode, vnode_t *vp,
+    const char *attr)
+{
+	/* We can't allow privileged namespaces. */
+	if (strncasecmp(attr, "system", 6) == 0)
+		return EPERM;
+
+	return VOP_ACCESS(vp, access_mode, cred);
 }

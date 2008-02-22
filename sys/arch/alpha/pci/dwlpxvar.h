@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpxvar.h,v 1.8 2001/07/27 00:25:20 thorpej Exp $ */
+/* $NetBSD: dwlpxvar.h,v 1.11 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -59,25 +59,25 @@ struct dwlpx_config {
 };
 
 struct dwlpx_softc {
-	struct device		dwlpx_dev;
+	device_t		dwlpx_dev;
 	struct dwlpx_config	dwlpx_cc;	/* config info */
-	u_int16_t		dwlpx_dtype;	/* Node Type */
-	u_int8_t		dwlpx_node;	/* TurboLaser Node */
-	u_int8_t		dwlpx_hosenum;	/* Hose Number */
-	u_int8_t		dwlpx_nhpc;	/* # of hpcs */
-	u_int8_t		dwlpx_sgmapsz;	/* size of SGMAP */
+	uint16_t		dwlpx_dtype;	/* Node Type */
+	uint8_t		dwlpx_node;	/* TurboLaser Node */
+	uint8_t		dwlpx_hosenum;	/* Hose Number */
+	uint8_t		dwlpx_nhpc;	/* # of hpcs */
+	uint8_t		dwlpx_sgmapsz;	/* size of SGMAP */
 };
 #define	DWLPX_NONE	0
 #define	DWLPX_SG32K	1
 #define	DWLPX_SG64K	2
 #define	DWLPX_SG128K	3
 
-void	dwlpx_init __P((struct dwlpx_softc *));
-void	dwlpx_pci_init __P((pci_chipset_tag_t, void *));
-void	dwlpx_dma_init __P((struct dwlpx_config *));
+void	dwlpx_init(struct dwlpx_softc *);
+void	dwlpx_pci_init(pci_chipset_tag_t, void *);
+void	dwlpx_dma_init(struct dwlpx_config *);
 
-void	dwlpx_bus_io_init __P((bus_space_tag_t, void *));
-void	dwlpx_bus_mem_init __P((bus_space_tag_t, void *));
+void	dwlpx_bus_io_init(bus_space_tag_t, void *);
+void	dwlpx_bus_mem_init(bus_space_tag_t, void *);
 
 /*
  * Each DWLPX supports up to 15 devices, 12 of which are PCI slots.

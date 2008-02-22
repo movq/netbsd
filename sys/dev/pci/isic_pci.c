@@ -1,4 +1,4 @@
-/* $NetBSD: isic_pci.c,v 1.29 2007/10/19 12:00:50 ad Exp $ */
+/* $NetBSD: isic_pci.c,v 1.41 2016/07/14 10:19:06 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_pci.c,v 1.29 2007/10/19 12:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_pci.c,v 1.41 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -75,15 +68,16 @@ __KERNEL_RCSID(0, "$NetBSD: isic_pci.c,v 1.29 2007/10/19 12:00:50 ad Exp $");
 
 extern const struct isdn_layer1_isdnif_driver isic_std_driver;
 
-static int isic_pci_match(struct device *, struct cfdata *, void *);
-static void isic_pci_attach(struct device *, struct device *, void *);
+static int isic_pci_match(device_t, cfdata_t, void *);
+static void isic_pci_attach(device_t, device_t, void *);
 static const struct isic_pci_product * find_matching_card(struct pci_attach_args *pa);
 
-static void isic_pci_isdn_attach(struct pci_isic_softc *psc, struct pci_attach_args *pa, const char *cardname);
-static int isic_pci_detach(struct device *self, int flags);
-static int isic_pci_activate(struct device *self, enum devact act);
+static void isic_pci_isdn_attach(struct pci_isic_softc *psc,
+    struct pci_attach_args *pa, const char *cardname);
+static int isic_pci_detach(device_t self, int flags);
+static int isic_pci_activate(device_t self, enum devact act);
 
-CFATTACH_DECL(isic_pci, sizeof(struct pci_isic_softc),
+CFATTACH_DECL_NEW(isic_pci, sizeof(struct pci_isic_softc),
     isic_pci_match, isic_pci_attach, isic_pci_detach, isic_pci_activate);
 
 static const struct isic_pci_product {
@@ -103,8 +97,8 @@ static const struct isic_pci_product {
 	{ 0, 0, 0, NULL, NULL, NULL },
 };
 
-static const struct isic_pci_product * find_matching_card(pa)
-	struct pci_attach_args *pa;
+static const struct isic_pci_product * find_matching_card(
+    struct pci_attach_args *pa)
 {
 	const struct isic_pci_product * pp = NULL;
 
@@ -120,8 +114,7 @@ static const struct isic_pci_product * find_matching_card(pa)
  * Match card
  */
 static int
-isic_pci_match(struct device *parent,
-	struct cfdata *match, void *aux)
+isic_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -135,18 +128,21 @@ isic_pci_match(struct device *parent,
  * Attach the card
  */
 static void
-isic_pci_attach(struct device *parent, struct device *self, void *aux)
+isic_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct pci_isic_softc *psc = (void*) self;
+	struct pci_isic_softc *psc = device_private(self);
 	struct isic_softc *sc = &psc->sc_isic;
 	struct pci_attach_args *pa = aux;
 	const struct isic_pci_product * prod;
+
+	aprint_naive("\n");
+	sc->sc_dev = self;
 
 	/* Redo probe */
 	prod = find_matching_card(pa);
 	if (prod == NULL) return; /* oops - not found?!? */
 
-	printf(": %s\n", prod->name);
+	aprint_normal(": %s\n", prod->name);
 
 	callout_init(&sc->sc_T3_callout, 0);
 	callout_init(&sc->sc_T4_callout, 0);
@@ -156,22 +152,22 @@ isic_pci_attach(struct device *parent, struct device *self, void *aux)
 		return;
 
 	/* generic setup, if needed for this card */
-	if (prod->pciattach) prod->pciattach(psc, pa, prod->name);
+	if (prod->pciattach)
+		prod->pciattach(psc, pa, prod->name);
 }
 
 /*---------------------------------------------------------------------------*
  *	isic - pci device driver attach routine
  *---------------------------------------------------------------------------*/
 static void
-isic_pci_isdn_attach(psc, pa, cardname)
-	struct pci_isic_softc *psc;
-	struct pci_attach_args *pa;
-	const char *cardname;
+isic_pci_isdn_attach(struct pci_isic_softc *psc, struct pci_attach_args *pa,
+    const char *cardname)
 {
 	struct isic_softc *sc = &psc->sc_isic;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	const char *intrstr;
+	char intrbuf[PCI_INTRSTR_LEN];
 
   	static const char *ISACversion[] = {
   		"2085 Version A1/A2 or 2086/2186 Version 1.1",
@@ -201,16 +197,16 @@ isic_pci_isdn_attach(psc, pa, cardname)
 		switch(ret)
 		{
 			case 0x01:
-				printf("%s: IPAC PSB2115 Version 1.1\n", sc->sc_dev.dv_xname);
+				printf("%s: IPAC PSB2115 Version 1.1\n", device_xname(sc->sc_dev));
 				break;
 
 			case 0x02:
-				printf("%s: IPAC PSB2115 Version 1.2\n", sc->sc_dev.dv_xname);
+				printf("%s: IPAC PSB2115 Version 1.2\n", device_xname(sc->sc_dev));
 				break;
 
 			default:
 				printf("%s: Error, IPAC version %d unknown!\n",
-					sc->sc_dev.dv_xname, ret);
+					device_xname(sc->sc_dev), ret);
 				return;
 		}
 	}
@@ -225,14 +221,14 @@ isic_pci_isdn_attach(psc, pa, cardname)
 	                case ISAC_VB2:
 			case ISAC_VB3:
 				printf("%s: ISAC %s (IOM-%c)\n",
-					sc->sc_dev.dv_xname,
+					device_xname(sc->sc_dev),
 					ISACversion[sc->sc_isac_version],
 					sc->sc_bustyp == BUS_TYPE_IOM1 ? '1' : '2');
 				break;
 
 			default:
 				printf("%s: Error, ISAC version %d unknown!\n",
-					sc->sc_dev.dv_xname, sc->sc_isac_version);
+					device_xname(sc->sc_dev), sc->sc_isac_version);
 				return;
 		}
 
@@ -245,34 +241,33 @@ isic_pci_isdn_attach(psc, pa, cardname)
 			case HSCX_VA3:
 			case HSCX_V21:
 				printf("%s: HSCX %s\n",
-					sc->sc_dev.dv_xname,
+					device_xname(sc->sc_dev),
 					HSCXversion[sc->sc_hscx_version]);
 				break;
 
 			default:
 				printf("%s: Error, HSCX version %d unknown!\n",
-					sc->sc_dev.dv_xname, sc->sc_hscx_version);
+					device_xname(sc->sc_dev), sc->sc_hscx_version);
 				return;
 		}
 	}
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, isic_intr_qs1p, psc);
 	if (psc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	psc->sc_pc = pc;
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	sc->sc_intr_valid = ISIC_INTR_DISABLED;
 
@@ -310,34 +305,30 @@ isic_pci_isdn_attach(psc, pa, cardname)
 
 
 static int
-isic_pci_detach(struct device *self, int flags)
+isic_pci_detach(device_t self, int flags)
 {
-	struct pci_isic_softc *psc = (struct pci_isic_softc *)self;
+	struct pci_isic_softc *psc = device_private(self);
 
-	bus_space_unmap(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h, psc->sc_size);
-	bus_space_free(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h, psc->sc_size);
+	bus_space_unmap(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h,
+	    psc->sc_size);
+	bus_space_free(psc->sc_isic.sc_maps[0].t, psc->sc_isic.sc_maps[0].h,
+	    psc->sc_size);
 	pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
 
 	return (0);
 }
 
 static int
-isic_pci_activate(struct device *self, enum devact act)
+isic_pci_activate(device_t self, enum devact act)
 {
-	struct pci_isic_softc *psc = (struct pci_isic_softc *)self;
-	int error = 0, s;
+	struct pci_isic_softc *psc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		psc->sc_isic.sc_intr_valid = ISIC_INTR_DYING;
 		isic_detach_bri(&psc->sc_isic);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (error);
 }

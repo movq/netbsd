@@ -1,4 +1,4 @@
-/* $NetBSD: wsconsio.h,v 1.88 2007/08/27 02:01:23 macallan Exp $ */
+/* $NetBSD: wsconsio.h,v 1.121 2017/08/31 19:55:43 jmcneill Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -46,6 +46,7 @@
 
 #include <sys/types.h>
 #include <sys/ioccom.h>
+#include <sys/time.h>
 #include <dev/wscons/wsksymvar.h>
 
 
@@ -57,6 +58,7 @@ struct wscons_event {
 	int		value;
 	struct timespec	time;
 };
+#define WSEVENT_VERSION	1
 
 /* Event type definitions.  Comment for each is information in value. */
 #define	WSCONS_EVENT_KEY_UP		1	/* key code */
@@ -75,7 +77,7 @@ struct wscons_event {
 #define	WSCONS_EVENT_MOUSE_DELTA_W	14	/* W delta amount */
 #define	WSCONS_EVENT_MOUSE_ABSOLUTE_W	15	/* W location */
 
-#define WSCONS_EVENT_ASCII			13	/* data is an ASCII code */
+
 /*
  * Keyboard ioctls (0 - 31)
  */
@@ -104,6 +106,9 @@ struct wscons_event {
 #define	WSKBD_TYPE_EWS4800	20	/* NEC EWS4800 */
 #define	WSKBD_TYPE_BLUETOOTH	21	/* Bluetooth keyboard */
 #define	WSKBD_TYPE_ZAURUS	22	/* Sharp Zaurus keyboard */
+#define	WSKBD_TYPE_LUNA		23	/* OMRON SX-9100 LUNA */
+#define	WSKBD_TYPE_RFB		24	/* Usermode vnc remote keyboard */
+#define	WSKBD_TYPE_EPOC		25	/* Psion EPOC machine keyboard */
 
 /* Manipulate the keyboard bell. */
 struct wskbd_bell_data {
@@ -183,6 +188,10 @@ struct wskbd_scroll_data {
 #define	WSKBDIO_GETSCROLL	_IOR('W', 23, struct wskbd_scroll_data)
 #define	WSKBDIO_SETSCROLL	_IOW('W', 24, struct wskbd_scroll_data)
 
+/* Set event struct version */
+#define WSKBDIO_SETVERSION	_IOW('W', 25, int)
+#define WSKBDIO_EVENT_VERSION	WSEVENT_VERSION
+
 /*
  * Mouse ioctls (32 - 63)
  */
@@ -257,6 +266,9 @@ struct wsmouse_repeat {
 #define WSMOUSEIO_GETREPEAT	_IOR('W', 39, struct wsmouse_repeat)
 #define WSMOUSEIO_SETREPEAT	_IOW('W', 40, struct wsmouse_repeat)
 
+#define WSMOUSEIO_SETVERSION	_IOW('W', 41, int)
+#define WSMOUSE_EVENT_VERSION	WSEVENT_VERSION
+
 /*
  * Display ioctls (64 - 95)
  */
@@ -288,12 +300,12 @@ struct wsmouse_repeat {
 #define	WSDISPLAY_TYPE_SB_P9100	22	/* Tadpole SPARCbook P9100 */
 #define	WSDISPLAY_TYPE_EGA	23	/* (generic) EGA */
 #define	WSDISPLAY_TYPE_DCPVR	24	/* Dreamcast PowerVR */
-#define	WSDISPLAY_TYPE_GATOR	25	/* HP Gator */
+#define	WSDISPLAY_TYPE_GBOX	25	/* HP Gator */
 #define	WSDISPLAY_TYPE_TOPCAT	26	/* HP TopCat */
-#define	WSDISPLAY_TYPE_RENAISSANCE	27	/* HP Renaissance */
+#define	WSDISPLAY_TYPE_RBOX	27	/* HP Renaissance */
 #define	WSDISPLAY_TYPE_CATSEYE	28	/* HP CatsEye */
-#define	WSDISPLAY_TYPE_DAVINCI	29	/* HP DaVinci */
-#define	WSDISPLAY_TYPE_TIGER	30	/* HP Tiger */
+#define	WSDISPLAY_TYPE_DVBOX	29	/* HP DaVinci */
+#define	WSDISPLAY_TYPE_TVRX	30	/* HP TigerShark */
 #define	WSDISPLAY_TYPE_HYPERION	31	/* HP Hyperion */
 #define	WSDISPLAY_TYPE_AMIGACC	32	/* Amiga custom chips */
 #define	WSDISPLAY_TYPE_SUN24	33	/* Sun 24 bit framebuffers */
@@ -306,12 +318,29 @@ struct wsmouse_repeat {
 #define	WSDISPLAY_TYPE_STI	40	/* HP STI framebuffers */
 #define	WSDISPLAY_TYPE_HDLCD	41	/* Hitachi HD44780 based LCDs */
 #define	WSDISPLAY_TYPE_VESA	42	/* VESA BIOS framebuffer */
-#define	WSDISPLAY_TYPE_XILFB 	43 	/* Xilinx TFT cores */
-#define WSDISPLAY_TYPE_LIGHT	44	/* SGI Light (a.k.a. Entry/Starter) */
-#define WSDISPLAY_TYPE_GENFB	45	/* generic nondescript framebuffer */
-#define WSDISPLAY_TYPE_CRIME	46	/* SGI O2 */
-#define WSDISPLAY_TYPE_PXALCD	47	/* PXA2x0 LCD controller */
-#define WSDISPLAY_TYPE_AG10	48	/* Fujitsu AG-10e */
+#define	WSDISPLAY_TYPE_XILFB	43 	/* Xilinx TFT cores */
+#define	WSDISPLAY_TYPE_LIGHT	44	/* SGI Light (a.k.a. Entry/Starter) */
+#define	WSDISPLAY_TYPE_GENFB	45	/* generic nondescript framebuffer */
+#define	WSDISPLAY_TYPE_CRIME	46	/* SGI O2 */
+#define	WSDISPLAY_TYPE_PXALCD	47	/* PXA2x0 LCD controller */
+#define	WSDISPLAY_TYPE_AG10	48	/* Fujitsu AG-10e */
+#define	WSDISPLAY_TYPE_DL	49	/* DisplayLink DL-1x0/DL-1x5 */
+#define	WSDISPLAY_TYPE_XVR1000	50	/* Sun XVR-1000 */
+#define	WSDISPLAY_TYPE_LUNA	51	/* OMRON SX-9100 LUNA */
+#define	WSDISPLAY_TYPE_GRF	52	/* wsdisplay on top of grf(4) */
+#define	WSDISPLAY_TYPE_VNC	53	/* Usermode vnc framebuffer */
+#define	WSDISPLAY_TYPE_VALKYRIE	54	/* Apple onboard video 'valkyrie' */
+#define	WSDISPLAY_TYPE_IMXIPU	55	/* i.MX ipu */
+#define	WSDISPLAY_TYPE_VC4	56	/* Broadcom VideoCore 4 */
+#define	WSDISPLAY_TYPE_OMAP3	57	/* OMAP 3530 */
+#define	WSDISPLAY_TYPE_WINDERMERE 58	/* SoC for EPOC32 Series 5mx */
+#define	WSDISPLAY_TYPE_CLPS711X	59	/* CL PS-711x  */
+#define	WSDISPLAY_TYPE_ALLWINNER 60	/* Allwinner ARM SoC */
+#define	WSDISPLAY_TYPE_MGX	61	/* SSB 4096V-MGX */
+#define	WSDISPLAY_TYPE_MESON	62	/* Amlogic Meson ARM SoC */
+#define	WSDISPLAY_TYPE_TEGRA	63	/* NVIDIA Tegra ARM SoC */
+#define	WSDISPLAY_TYPE_PLATINUM	64	/* onboard fb in PowerMac 7200 */
+#define	WSDISPLAY_TYPE_PLFB	65	/* ARM PrimeCell PL11x */
 
 /* Basic display information.  Not applicable to all display types. */
 struct wsdisplay_fbinfo {
@@ -394,6 +423,7 @@ struct wsdisplay_font {
 #define	WSDISPLAY_FONTENC_PCVT 2
 #define	WSDISPLAY_FONTENC_ISO7 3 /* greek */
 #define	WSDISPLAY_FONTENC_ISO2 4 /* east european */
+#define	WSDISPLAY_FONTENC_KOI8_R 5 /* russian */
 	u_int fontwidth, fontheight, stride;
 #define	WSDISPLAY_MAXFONTSZ	(512*1024)
 	int bitorder, byteorder;
@@ -432,7 +462,14 @@ struct wsdisplay_kbddata {
 };
 #define	_O_WSDISPLAYIO_SETKEYBOARD	_IOWR('W', 81, struct wsdisplay_kbddata)
 
-/* Misc control.  Not applicable to all display types. */
+/*
+ * Misc control.  Not applicable to all display types.
+ * - WSDISPLAYIO_PARAM_BACKLIGHT should be an on/off switch for screensavers,
+ *   it should turn the display dark / turn the backlight off without changing
+ *   the brightness value so screensavers and such can just flip the switch
+ *   without caring about actual brightness settings
+ * - WSDISPLAYIO_PARAM_BRIGHTNESS should set display / backlight brightness
+ */
 struct wsdisplay_param {
 	int param;
 #define	WSDISPLAYIO_PARAM_BACKLIGHT	1
@@ -493,18 +530,21 @@ struct wsdisplay_msgattrs {
 /* Display information: number of bytes per row, may be same as pixels */
 #define	WSDISPLAYIO_LINEBYTES	_IOR('W', 95, u_int)
 
-/*
- * Mux ioctls (96 - 127)
- */
+/* WSMUXIO_OINJECTEVENT	was 96, but does not conflict because arg sizes */
 
-#define	WSMUXIO_INJECTEVENT	_IOW('W', 96, struct wscons_event)
-#define	WSMUX_INJECTEVENT	WSMUXIO_INJECTEVENT /* XXX compat */
+#define WSDISPLAYIO_SETVERSION	_IOW('W', 96, int)
+#define WSDISPLAYIO_EVENT_VERSION	WSEVENT_VERSION
+
+/*
+ * Mux ioctls (97 - 127)
+ */
 
 struct wsmux_device {
 	int type;
 #define	WSMUX_MOUSE	1
 #define	WSMUX_KBD	2
 #define	WSMUX_MUX	3
+#define	WSMUX_BELL	4
 	int idx;
 };
 #define	WSMUXIO_ADD_DEVICE	_IOW('W', 97, struct wsmux_device)
@@ -519,5 +559,127 @@ struct wsmux_device_list {
 };
 #define	WSMUXIO_LIST_DEVICES	_IOWR('W', 99, struct wsmux_device_list)
 #define	WSMUX_LIST_DEVICES	WSMUXIO_LIST_DEVICES /* XXX compat */
+
+#define	WSMUXIO_INJECTEVENT	_IOW('W', 100, struct wscons_event)
+#define	WSMUX_INJECTEVENT	WSMUXIO_INJECTEVENT /* XXX compat */
+
+/* Mapping information retrieval. */
+struct wsdisplayio_bus_id {
+    u_int bus_type;
+#define WSDISPLAYIO_BUS_PCI	0
+#define WSDISPLAYIO_BUS_SBUS	1
+#define WSDISPLAYIO_BUS_SOC	2
+    union bus_data {
+        struct bus_pci {
+            uint32_t domain;
+            uint32_t bus;
+            uint32_t device;
+            uint32_t function;
+        } pci;
+        struct bus_sbus {
+            uint32_t fb_instance;
+        } sbus;
+        /* so the size doesn't change if we add more bus types */
+        char pad[32];
+    } ubus;
+};
+
+#define WSDISPLAYIO_GET_BUSID	_IOR('W', 101, struct wsdisplayio_bus_id)
+
+/*
+ * retrieving EDID data from a wsdisplay driver
+ * The EDID block will be written into a buffer pointed at by edid_data,
+ * the caller must fill in buffer_size and edid_data, the driver will set
+ * data_size to the number of bytes actually written.
+ * If the buffer is too small the call will fail with EAGAIN and the driver
+ * will set data_size without writing anything into the buffer.
+ */
+
+struct wsdisplayio_edid_info {
+	uint32_t buffer_size;
+	uint32_t data_size;
+	void *edid_data;
+};
+#define WSDISPLAYIO_GET_EDID	_IOWR('W', 102, struct wsdisplayio_edid_info)
+
+/* 
+ * this is for enabling and disabling interrupt-driven drawing
+ * pass 1 to enable polling, 0 to go back to normal
+ * the kernel itself will call this on the console device when entering or
+ * leaving ddb and on panic
+ * may have side effects like hard switching to the virtual console which
+ * shows kernel output, resetting the video hardware etc. - not really for
+ * userland to mess with
+ */
+#define WSDISPLAYIO_SET_POLLING	_IOW('W', 103, int)
+#define WSDISPLAYIOMGWEHITANDKILLEDASKUNK WSDISPLAYIO_SET_POLLING
+
+/*
+ * this is supposed to replace WSDISPLAYIO_GINFO, WSDISPLAYIO_GTYPE,
+ * WSDISPLAYIO_LINEBYTES etc.
+ */
+
+/* format type - colour index, 'true' colour etc. */
+#define WSFB_RGB	0
+#define WSFB_CI		1	/* colour indexed, see subtype */
+#define WSFB_GREYSCALE	2
+#define WSFB_YUV	3
+
+struct wsdisplayio_fbinfo {
+	uint64_t fbi_fbsize;		/* framebuffer size in bytes */
+	uint64_t fbi_fboffset;		/* start of visible fb, in bytes */ 
+	uint32_t fbi_width;		/* in pixels */
+	uint32_t fbi_height;		/* in lines */
+	uint32_t fbi_stride;		/* in bytes */
+	uint32_t fbi_bitsperpixel;
+	uint32_t fbi_pixeltype;		/* see above */
+	union _fbi_subtype {
+		struct _fbi_rgbmasks {
+			/* offsets from the right, size in bits */
+			uint32_t red_offset;
+			uint32_t red_size;
+			uint32_t green_offset;
+			uint32_t green_size;
+			uint32_t blue_offset;
+			uint32_t blue_size;
+			uint32_t alpha_offset;
+			uint32_t alpha_size;
+		} fbi_rgbmasks;
+		struct _fbi_cmapinfo {
+			uint32_t cmap_entries;
+		} fbi_cmapinfo;
+		/* 
+		 * TODO:
+		 * add parameter blocks for greyscale, yuv etc.
+		 */
+	} fbi_subtype;
+	uint32_t fbi_flags;
+};
+
+/* fbi_flags */
+#define WSFB_VRAM_IS_RAM	0x0001	/* hint for wsfb - don't shadow */
+#define WSFB_VRAM_IS_SPLIT	0x0002	/* workaround for wildcat... */
+
+#define WSDISPLAYIO_GET_FBINFO	_IOWR('W', 104, struct wsdisplayio_fbinfo)
+
+struct wsdisplayio_blit {
+	uint32_t serial;
+	uint32_t op;
+	uint32_t srcx;
+	uint32_t srcy;
+	uint32_t dstx;
+	uint32_t dsty;
+	uint32_t width;
+	uint32_t height;
+	uint32_t pen;
+};
+
+/* blit ops */
+#define WSFB_BLIT_FILL		1	/* fill rectangle */
+#define WSFB_BLIT_COPY		2	/* copy rectangle */
+#define WSFB_BLIT_TRANS		3	/* copy rectangle with color key */
+
+#define WSDISPLAYIO_DOBLIT   	_IOWR('W', 105, struct wsdisplayio_blit)
+#define WSDISPLAYIO_WAITBLIT 	_IOWR('W', 106, struct wsdisplayio_blit)
 
 #endif /* _DEV_WSCONS_WSCONSIO_H_ */

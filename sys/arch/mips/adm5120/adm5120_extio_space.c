@@ -1,4 +1,4 @@
-/* $NetBSD: adm5120_extio_space.c,v 1.1 2007/03/20 08:52:03 dyoung Exp $ */
+/* $NetBSD: adm5120_extio_space.c,v 1.4 2011/07/01 18:38:48 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -12,9 +12,6 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -44,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,11 +60,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm5120_extio_space.c,v 1.1 2007/03/20 08:52:03 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm5120_extio_space.c,v 1.4 2011/07/01 18:38:48 dyoung Exp $");
 
 #include <sys/param.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <mips/adm5120/include/adm5120reg.h>
 #include <mips/adm5120/include/adm5120_extiovar.h>
 

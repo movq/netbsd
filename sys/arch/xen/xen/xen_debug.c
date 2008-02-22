@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_debug.c,v 1.5 2007/11/22 16:17:09 bouyer Exp $	*/
+/*	$NetBSD: xen_debug.c,v 1.9 2016/07/07 06:55:40 msaitoh Exp $	*/
 
 /*
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -56,14 +51,13 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_debug.c,v 1.5 2007/11/22 16:17:09 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_debug.c,v 1.9 2016/07/07 06:55:40 msaitoh Exp $");
 
 #define XENDEBUG
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <machine/stdarg.h>
 #include <xen/xen.h>
 #include <xen/hypervisor.h>
 
@@ -106,7 +100,7 @@ void failsafe_callback(void);
 
 void xen_dbglow_init(void);
 void
-xen_dbglow_init()
+xen_dbglow_init(void)
 {
 	start_info_t *si;
 #if 0
@@ -129,9 +123,9 @@ xen_dbglow_init()
 	printk("  nr_pages:   %lu",   si->nr_pages);
 	printk("  shared_inf: %p (was %p)\n",  HYPERVISOR_shared_info,
 	    si->shared_info);
-	printk("  pt_base:    %p",    (void *)si->pt_base); 
+	printk("  pt_base:    %p",    (void *)si->pt_base);
 	printk("  mod_start:  0x%lx\n", si->mod_start);
-	printk("  mod_len:    %lu\n", si->mod_len); 
+	printk("  mod_len:    %lu\n", si->mod_len);
 #if 0
 	printk("  net_rings: ");
 	for (i = 0; i < MAX_DOMAIN_VIFS; i++) {
@@ -439,6 +433,6 @@ void
 trap_init(void)
 {
 
-	HYPERVISOR_set_trap_table(trap_table);    
+	HYPERVISOR_set_trap_table(trap_table);
 }
 #endif

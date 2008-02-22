@@ -1,4 +1,4 @@
-.\"	$NetBSD: dab.6,v 1.3 2005/09/15 02:10:37 wiz Exp $
+.\"	$NetBSD: dab.6,v 1.7 2015/02/12 06:24:21 dholland Exp $
 .\"
 .\" Copyright (c) 2003 Thomas Klausner.
 .\"
@@ -10,8 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -24,7 +22,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 24, 2003
+.Dd October 7, 2012
 .Dt DAB 6
 .Os
 .Sh NAME
@@ -72,7 +70,7 @@ redraw the screen, and
 .Ic q
 quits the game.
 .Pp
-Support options are:
+Supported options are:
 .Bl -tag -width XXnXngamesXXXXX
 .It Fl a
 Don't use the alternate character set.
@@ -97,13 +95,17 @@ and
 .Ar ydim
 define the size of the board in the x and y
 dimensions.
+If the dimensions specified are
+.Dv 0
+then the maximum dimensions for the size of the screen are
+used.
 .Sh SEE ALSO
 .Rs
 .%A Elwyn R. Berlekamp
 .%T The Dots and Boxes Game: Sophisticated Child's Play
 .%D 2000
 .%I A K Peters
-.%O http://www.akpeters.com/book.asp?bID=111
+.%U http://www.akpeters.com/book.asp?bID=111
 .Re
 .Sh AUTHORS
 .An Christos Zoulas

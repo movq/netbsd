@@ -1,4 +1,4 @@
-/*	$NetBSD: opms.c,v 1.16 2007/03/04 05:59:33 christos Exp $	*/
+/*	$NetBSD: opms.c,v 1.22 2017/10/25 08:12:37 maya Exp $	*/
 /*	$OpenBSD: pccons.c,v 1.22 1999/01/30 22:39:37 imp Exp $	*/
 /*	NetBSD: pms.c,v 1.21 1995/04/18 02:25:18 mycroft Exp	*/
 
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.16 2007/03/04 05:59:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.22 2017/10/25 08:12:37 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.16 2007/03/04 05:59:33 christos Exp $");
 #include <sys/proc.h>
 #include <sys/conf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/kbdreg.h>
 #include <machine/mouse.h>
 
@@ -139,8 +139,18 @@ dev_type_poll(opmspoll);
 dev_type_kqfilter(opmskqfilter);
 
 const struct cdevsw opms_cdevsw = {
-	opmsopen, opmsclose, opmsread, nowrite, opmsioctl,
-	nostop, notty, opmspoll, nommap, opmskqfilter,
+	.d_open = opmsopen,
+	.d_close = opmsclose,
+	.d_read = opmsread,
+	.d_write = nowrite,
+	.d_ioctl = opmsioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = opmspoll,
+	.d_mmap = nommap,
+	.d_kqfilter = opmskqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 static inline void pms_dev_cmd(uint8_t);
@@ -198,6 +208,7 @@ opms_common_attach(struct opms_softc *sc, bus_space_tag_t opms_iot,
 {
 
 	kbd_context_init(opms_iot, config);
+	selinit(&sc->sc_rsel);
 
 	/* Other initialization was done by opmsprobe. */
 	sc->sc_state = 0;
@@ -206,12 +217,9 @@ opms_common_attach(struct opms_softc *sc, bus_space_tag_t opms_iot,
 int
 opmsopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = PMSUNIT(dev);
 	struct opms_softc *sc;
 
-	if (unit >= opms_cd.cd_ndevs)
-		return ENXIO;
-	sc = opms_cd.cd_devs[unit];
+	sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	if (!sc)
 		return ENXIO;
 
@@ -244,7 +252,7 @@ opmsopen(dev_t dev, int flag, int mode, struct lwp *l)
 int
 opmsclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 
 	/* Disable interrupts. */
 	pms_dev_cmd(PMS_DEV_DISABLE);
@@ -261,7 +269,7 @@ opmsclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 opmsread(dev_t dev, struct uio *uio, int flag)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	int s;
 	int error = 0;
 	size_t length;
@@ -307,7 +315,7 @@ opmsread(dev_t dev, struct uio *uio, int flag)
 int
 opmsioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	struct mouseinfo info;
 	int s;
 	int error;
@@ -418,7 +426,7 @@ opmsintr(void *arg)
 				sc->sc_state &= ~PMS_ASLP;
 				wakeup((void *)sc);
 			}
-			selnotify(&sc->sc_rsel, 0);
+			selnotify(&sc->sc_rsel, 0, 0);
 		}
 
 		break;
@@ -429,7 +437,7 @@ opmsintr(void *arg)
 int
 opmspoll(dev_t dev, int events, struct lwp *l)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	int revents = 0;
 	int s = spltty();
 
@@ -464,13 +472,17 @@ filt_opmsread(struct knote *kn, long hint)
 	return kn->kn_data > 0;
 }
 
-static const struct filterops opmsread_filtops =
-	{ 1, NULL, filt_opmsrdetach, filt_opmsread };
+static const struct filterops opmsread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_opmsrdetach,
+	.f_event = filt_opmsread,
+};
 
 int
 opmskqfilter(dev_t dev, struct knote *kn)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	struct klist *klist;
 	int s;
 

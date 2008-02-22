@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_open.c,v 1.15 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: rec_open.c,v 1.22 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_open.c	8.10 (Berkeley) 9/1/94";
-#else
-__RCSID("$NetBSD: rec_open.c,v 1.15 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rec_open.c,v 1.22 2016/09/24 21:31:25 christos Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -72,10 +70,8 @@ __rec_open(const char *fname, int flags, mode_t mode, const RECNOINFO *openinfo,
 	dbp = NULL;
 	/* Open the user's file -- if this fails, we're done. */
 	if (fname != NULL) {
-		if ((rfd = open(fname, flags, mode)) == -1)
-			return (NULL);
-		if (fcntl(rfd, F_SETFD, FD_CLOEXEC) == -1)
-			goto err;
+		if ((rfd = __dbopen(fname, flags, mode, NULL)) == -1)
+			return NULL;
 	}
 
 	/* Create a btree in memory (backed by disk). */

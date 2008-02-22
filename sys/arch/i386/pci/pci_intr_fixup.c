@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_intr_fixup.c,v 1.46 2006/12/10 04:16:46 uwe Exp $	*/
+/*	$NetBSD: pci_intr_fixup.c,v 1.50 2014/09/09 06:38:33 apb Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.46 2006/12/10 04:16:46 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.50 2014/09/09 06:38:33 apb Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -79,7 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.46 2006/12/10 04:16:46 uwe Exp 
 #include <sys/queue.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pci/pcireg.h>
@@ -155,7 +148,7 @@ const struct pciintr_icu_table {
 	  ich_init, NULL },			/* ICH3M */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801DB_LPC,
 	  ich_init, NULL },			/* ICH4 */
-	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801DB_ISA,
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801DBM_LPC,
 	  ich_init, NULL },			/* ICH4M */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801EB_LPC,
 	  ich_init, NULL },			/* ICH5 */
@@ -726,6 +719,8 @@ pciintr_do_header_fixup(pci_chipset_tag_t pc, pcitag_t tag,
 			PCIBIOS_PRINTV((" %3d", l->irq));
 		PCIBIOS_PRINTV(("  %d   ", l->fixup_stage));
 	}
+#else
+	__USE(id);
 #endif
 	
 	/*

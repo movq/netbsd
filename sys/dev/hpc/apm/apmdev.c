@@ -1,4 +1,4 @@
-/*	$NetBSD: apmdev.c,v 1.15 2007/12/14 00:51:44 uwe Exp $ */
+/*	$NetBSD: apmdev.c,v 1.31 2017/10/25 08:12:38 maya Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,14 +33,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.15 2007/12/14 00:51:44 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.31 2017/10/25 08:12:38 maya Exp $");
 
 #ifdef _KERNEL_OPT
-#include "opt_apmdev.h"
-#endif
-
-#ifdef APM_NOIDLE
-#error APM_NOIDLE option deprecated; use APM_NO_IDLE instead
+#include "opt_apm.h"
 #endif
 
 #if defined(DEBUG) && !defined(APMDEBUG)
@@ -60,8 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.15 2007/12/14 00:51:44 uwe Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/mutex.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -72,52 +59,28 @@ __KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.15 2007/12/14 00:51:44 uwe Exp $");
 
 #include <dev/hpc/apm/apmvar.h>
 
-#include <machine/stdarg.h>
+#ifdef APMDEBUG
+#define DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)
 
-#if defined(APMDEBUG)
-#define	DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)
-
-#define	APMDEBUG_INFO		0x01
-#define	APMDEBUG_APMCALLS	0x02
-#define	APMDEBUG_EVENTS		0x04
-#define	APMDEBUG_PROBE		0x10
-#define	APMDEBUG_ATTACH		0x40
-#define	APMDEBUG_DEVICE		0x20
-#define	APMDEBUG_ANOM		0x40
 
 #ifdef APMDEBUG_VALUE
 int	apmdebug = APMDEBUG_VALUE;
 #else
 int	apmdebug = 0;
-#endif
+#endif /* APMDEBUG_VALUE */
+
 #else
 #define	DPRINTF(f, x)		/**/
-#endif
+#endif /* APMDEBUG */
 
-#define APM_NEVENTS 16
-
-struct apm_softc {
-	struct device sc_dev;
-	struct selinfo sc_rsel;
-	struct selinfo sc_xsel;
-	int	sc_flags;
-	int	event_count;
-	int	event_ptr;
-	int	sc_power_state;
-	lwp_t	*sc_thread;
-	kmutex_t sc_mutex;
-	struct apm_event_info event_list[APM_NEVENTS];
-	struct apm_accessops *ops;
-	void *cookie;
-};
 #define	SCFLAG_OREAD	0x0000001
 #define	SCFLAG_OWRITE	0x0000002
 #define	SCFLAG_OPEN	(SCFLAG_OREAD|SCFLAG_OWRITE)
 
 #define	APMUNIT(dev)	(minor(dev)&0xf0)
-#define	APMDEV(dev)	(minor(dev)&0x0f)
-#define APMDEV_NORMAL	0
-#define APMDEV_CTL	8
+#define	APM(dev)	(minor(dev)&0x0f)
+#define APM_NORMAL	0
+#define APM_CTL	8
 
 /*
  * A brief note on the locking protocol: it's very simple; we
@@ -125,11 +88,13 @@ struct apm_softc {
  * APM module.  This is both the APM thread itself, as well as
  * user context.
  */
-#define	APM_LOCK(apmsc)		mutex_enter(&(apmsc)->sc_mutex)
-#define	APM_UNLOCK(apmsc)	mutex_exit(&(apmsc)->sc_mutex)
+#define	APM_LOCK(apmsc)						\
+	(void) mutex_enter(&(apmsc)->sc_lock)
+#define	APM_UNLOCK(apmsc)						\
+	(void) mutex_exit(&(apmsc)->sc_lock)
 
-static void	apmattach(struct device *, struct device *, void *);
-static int	apmmatch(struct device *, struct cfdata *, void *);
+static void	apmdevattach(device_t, device_t, void *);
+static int	apmdevmatch(device_t, cfdata_t, void *);
 
 static void	apm_event_handle(struct apm_softc *, u_int, u_int);
 static void	apm_periodic_check(struct apm_softc *);
@@ -140,14 +105,13 @@ static void	apm_perror(const char *, int, ...)
 static void	apm_power_print(struct apm_softc *, struct apm_power_info *);
 #endif
 static int	apm_record_event(struct apm_softc *, u_int);
-static void	apm_set_ver(struct apm_softc *, u_long);
+static void	apm_set_ver(struct apm_softc *);
 static void	apm_standby(struct apm_softc *);
-static const char *apm_strerror(int);
 static void	apm_suspend(struct apm_softc *);
 static void	apm_resume(struct apm_softc *, u_int, u_int);
 
-CFATTACH_DECL(apmdev, sizeof(struct apm_softc),
-    apmmatch, apmattach, NULL, NULL);
+CFATTACH_DECL_NEW(apmdev, sizeof(struct apm_softc),
+    apmdevmatch, apmdevattach, NULL, NULL);
 
 extern struct cfdriver apmdev_cd;
 
@@ -158,22 +122,22 @@ dev_type_poll(apmdevpoll);
 dev_type_kqfilter(apmdevkqfilter);
 
 const struct cdevsw apmdev_cdevsw = {
-	apmdevopen, apmdevclose, noread, nowrite, apmdevioctl,
-	nostop, notty, apmdevpoll, nommap, apmdevkqfilter, D_OTHER
+	.d_open = apmdevopen,
+	.d_close = apmdevclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = apmdevioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = apmdevpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = apmdevkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 /* configurable variables */
 int	apm_bogus_bios = 0;
-#ifdef APM_DISABLE
-int	apm_enabled = 0;
-#else
-int	apm_enabled = 1;
-#endif
-#ifdef APM_NO_IDLE
-int	apm_do_idle = 0;
-#else
-int	apm_do_idle = 1;
-#endif
 #ifdef APM_NO_STANDBY
 int	apm_do_standby = 0;
 #else
@@ -199,7 +163,7 @@ int	apm_evindex;
 
 static int apm_spl;		/* saved spl while suspended */
 
-static const char *
+const char *
 apm_strerror(int code)
 {
 	switch (code) {
@@ -254,10 +218,11 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 {
 
 	if (pi->battery_life != APM_BATT_LIFE_UNKNOWN) {
-		printf("%s: battery life expectancy: %d%%\n",
-		    sc->sc_dev.dv_xname, pi->battery_life);
+		aprint_normal_dev(sc->sc_dev,
+		    "battery life expectancy: %d%%\n",
+		    pi->battery_life);
 	}
-	printf("%s: A/C state: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "A/C state: ");
 	switch (pi->ac_state) {
 	case APM_AC_OFF:
 		printf("off\n");
@@ -273,8 +238,8 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 		printf("unknown\n");
 		break;
 	}
-	if (apm_major == 1 && apm_minor == 0) {
-		printf("%s: battery charge state:", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "battery charge state:");
+	if (apm_minver == 0)
 		switch (pi->battery_state) {
 		case APM_BATT_HIGH:
 			printf("high\n");
@@ -295,22 +260,26 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 			printf("undecoded state %x\n", pi->battery_state);
 			break;
 		}
-	} else {
-		if (pi->battery_state&APM_BATT_FLAG_CHARGING)
-			printf("charging ");
+	else if (apm_minver >= 1) {
+		if (pi->battery_flags & APM_BATT_FLAG_NO_SYSTEM_BATTERY)
+			printf(" no battery");
+		else {
+			if (pi->battery_flags & APM_BATT_FLAG_HIGH)
+				printf(" high");
+			if (pi->battery_flags & APM_BATT_FLAG_LOW)
+				printf(" low");
+			if (pi->battery_flags & APM_BATT_FLAG_CRITICAL)
+				printf(" critical");
+			if (pi->battery_flags & APM_BATT_FLAG_CHARGING)
+				printf(" charging");
 		}
-		if (pi->battery_state&APM_BATT_FLAG_UNKNOWN)
-			printf("unknown\n");
-		else if (pi->battery_state&APM_BATT_FLAG_CRITICAL)
-			printf("critical\n");
-		else if (pi->battery_state&APM_BATT_FLAG_LOW)
-			printf("low\n");
-		else if (pi->battery_state&APM_BATT_FLAG_HIGH)
-			printf("high\n");
-	}
-	if (pi->minutes_left != 0) {
-		printf("%s: estimated ", sc->sc_dev.dv_xname);
-		printf("%dh ", pi->minutes_left / 60);
+		printf("\n");
+		if (pi->minutes_valid) {
+			aprint_normal_dev(sc->sc_dev, "estimated ");
+			if (pi->minutes_left / 60)
+				printf("%dh ", pi->minutes_left / 60);
+			printf("%dm\n", pi->minutes_left % 60);
+		}
 	}
 	return;
 }
@@ -319,11 +288,12 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 static void
 apm_suspend(struct apm_softc *sc)
 {
+	int error;
 
 	if (sc->sc_power_state == PWR_SUSPEND) {
 #ifdef APMDEBUG
-		printf("%s: apm_suspend: already suspended?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev,
+		    "apm_suspend: already suspended?\n");
 #endif
 		return;
 	}
@@ -336,18 +306,22 @@ apm_suspend(struct apm_softc *sc)
 
 	dopowerhooks(PWR_SUSPEND);
 
-	/* XXX cgd */
-	(void)sc->ops->set_powstate(sc->cookie, APM_DEV_ALLDEVS, APM_SYS_SUSPEND);
+	error = (*sc->sc_ops->aa_set_powstate)(sc->sc_cookie, APM_DEV_ALLDEVS,
+	    APM_SYS_SUSPEND);
+
+	if (error)
+		apm_resume(sc, 0, 0);
 }
 
 static void
 apm_standby(struct apm_softc *sc)
 {
+	int error;
 
 	if (sc->sc_power_state == PWR_STANDBY) {
 #ifdef APMDEBUG
-		printf("%s: apm_standby: already standing by?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev,
+		    "apm_standby: already standing by?\n");
 #endif
 		return;
 	}
@@ -359,8 +333,11 @@ apm_standby(struct apm_softc *sc)
 	apm_spl = splhigh();
 
 	dopowerhooks(PWR_STANDBY);
-	/* XXX cgd */
-	(void)sc->ops->set_powstate(sc->cookie, APM_DEV_ALLDEVS, APM_SYS_STANDBY);
+
+	error = (*sc->sc_ops->aa_set_powstate)(sc->sc_cookie, APM_DEV_ALLDEVS,
+	    APM_SYS_STANDBY);
+	if (error)
+		apm_resume(sc, 0, 0);
 }
 
 static void
@@ -369,19 +346,18 @@ apm_resume(struct apm_softc *sc, u_int event_type, u_int event_info)
 
 	if (sc->sc_power_state == PWR_RESUME) {
 #ifdef APMDEBUG
-		printf("%s: apm_resume: already running?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev, "apm_resume: already running?\n");
 #endif
 		return;
 	}
 	sc->sc_power_state = PWR_RESUME;
 
+#if 0 /* XXX: def TIME_FREQ */
 	/*
 	 * Some system requires its clock to be initialized after hybernation.
 	 */
-/* XXX
-	initrtclock();
-*/
+	initrtclock(TIMER_FREQ);
+#endif
 
 	inittodr(time_second);
 	dopowerhooks(PWR_RESUME);
@@ -404,15 +380,15 @@ apm_record_event(struct apm_softc *sc, u_int event_type)
 
 	if ((sc->sc_flags & SCFLAG_OPEN) == 0)
 		return 1;		/* no user waiting */
-	if (sc->event_count == APM_NEVENTS)
+	if (sc->sc_event_count == APM_NEVENTS)
 		return 1;			/* overflow */
-	evp = &sc->event_list[sc->event_ptr];
-	sc->event_count++;
-	sc->event_ptr++;
-	sc->event_ptr %= APM_NEVENTS;
+	evp = &sc->sc_event_list[sc->sc_event_ptr];
+	sc->sc_event_count++;
+	sc->sc_event_ptr++;
+	sc->sc_event_ptr %= APM_NEVENTS;
 	evp->type = event_type;
 	evp->index = ++apm_evindex;
-	selnotify(&sc->sc_rsel, 0);
+	selnotify(&sc->sc_rsel, 0, 0);
 	return (sc->sc_flags & SCFLAG_OWRITE) ? 0 : 1; /* user may handle */
 }
 
@@ -427,18 +403,16 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 	case APM_USER_STANDBY_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: user standby request\n"));
 		if (apm_do_standby) {
-			if (apm_record_event(sc, event_code))
+			if (apm_op_inprog == 0 && apm_record_event(sc, event_code))
 				apm_userstandbys++;
 			apm_op_inprog++;
-			(void)sc->ops->set_powstate(sc->cookie,
-						    APM_DEV_ALLDEVS,
-						    APM_LASTREQ_INPROG);
+			(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+			    APM_DEV_ALLDEVS, APM_LASTREQ_INPROG);
 		} else {
-			(void)sc->ops->set_powstate(sc->cookie,
-						    APM_DEV_ALLDEVS,
-						    APM_LASTREQ_REJECTED);
+			(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+			    APM_DEV_ALLDEVS, APM_LASTREQ_REJECTED);
 			/* in case BIOS hates being spurned */
-			sc->ops->enable(sc->cookie, 1);
+			(*sc->sc_ops->aa_enable)(sc->sc_cookie, 1);
 		}
 		break;
 
@@ -451,29 +425,27 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 			apm_damn_fool_bios = 1;
 		}
 		if (apm_do_standby) {
-			if (apm_record_event(sc, event_code))
+			if (apm_op_inprog == 0 &&
+			    apm_record_event(sc, event_code))
 				apm_standbys++;
 			apm_op_inprog++;
-			(void)sc->ops->set_powstate(sc->cookie,
-						    APM_DEV_ALLDEVS,
-						    APM_LASTREQ_INPROG);
+			(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+			    APM_DEV_ALLDEVS, APM_LASTREQ_INPROG);
 		} else {
-			(void)sc->ops->set_powstate(sc->cookie,
-						    APM_DEV_ALLDEVS,
-						    APM_LASTREQ_REJECTED);
+			(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+			    APM_DEV_ALLDEVS, APM_LASTREQ_REJECTED);
 			/* in case BIOS hates being spurned */
-			sc->ops->enable(sc->cookie, 1);
+			(*sc->sc_ops->aa_enable)(sc->sc_cookie, 1);
 		}
 		break;
 
 	case APM_USER_SUSPEND_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: user suspend request\n"));
-		if (apm_record_event(sc, event_code))
+		if (apm_op_inprog == 0 && apm_record_event(sc, event_code))
 			apm_suspends++;
 		apm_op_inprog++;
-		(void)sc->ops->set_powstate(sc->cookie,
-					    APM_DEV_ALLDEVS,
-					    APM_LASTREQ_INPROG);
+		(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+		    APM_DEV_ALLDEVS, APM_LASTREQ_INPROG);
 		break;
 
 	case APM_SUSPEND_REQ:
@@ -484,22 +456,23 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 			/* just give up the fight */
 			apm_damn_fool_bios = 1;
 		}
-		if (apm_record_event(sc, event_code))
+		if (apm_op_inprog == 0 && apm_record_event(sc, event_code))
 			apm_suspends++;
 		apm_op_inprog++;
-		(void)sc->ops->set_powstate(sc->cookie,
-					    APM_DEV_ALLDEVS,
-					    APM_LASTREQ_INPROG);
+		(void)(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie,
+		    APM_DEV_ALLDEVS, APM_LASTREQ_INPROG);
 		break;
 
 	case APM_POWER_CHANGE:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: power status change\n"));
-		error = sc->ops->get_powstat(sc->cookie, &pi);
+		error = (*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0, &pi);
 #ifdef APM_POWER_PRINT
 		/* only print if nobody is catching events. */
 		if (error == 0 &&
 		    (sc->sc_flags & (SCFLAG_OREAD|SCFLAG_OWRITE)) == 0)
 			apm_power_print(sc, &pi);
+#else
+		__USE(error);
 #endif
 		apm_record_event(sc, event_code);
 		break;
@@ -542,9 +515,9 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 			DPRINTF(APMDEBUG_EVENTS, ("apm: unexpected event\n"));
 		} else {
 			u_int numbatts, capflags;
-			sc->ops->get_capabilities(sc->cookie,
-						  &numbatts, &capflags);
-			sc->ops->get_powstat(sc->cookie, &pi); /* XXX */
+			(*sc->sc_ops->aa_get_capabilities)(sc->sc_cookie,
+			    &numbatts, &capflags);
+			(*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0, &pi);
 		}
 		break;
 
@@ -579,12 +552,11 @@ apm_periodic_check(struct apm_softc *sc)
 	 * suspend/standby
 	 */
 	if (apm_op_inprog)
-		sc->ops->set_powstate(sc->cookie, APM_DEV_ALLDEVS,
-				      APM_LASTREQ_INPROG);
+		(*sc->sc_ops->aa_set_powstate)(sc->sc_cookie, APM_DEV_ALLDEVS,
+		    APM_LASTREQ_INPROG);
 
-	while ((error = sc->ops->get_event(sc->cookie, &event_code,
-					   &event_info)) == 0
-	       && !apm_damn_fool_bios)
+	while ((error = (*sc->sc_ops->aa_get_event)(sc->sc_cookie, &event_code,
+	    &event_info)) == 0 && !apm_damn_fool_bios)
 		apm_event_handle(sc, event_code, event_info);
 
 	if (error != APM_ERR_NOEVENTS)
@@ -601,20 +573,20 @@ apm_periodic_check(struct apm_softc *sc)
 }
 
 static void
-apm_set_ver(struct apm_softc *self, u_long detail)
+apm_set_ver(struct apm_softc *sc)
 {
 
 	if (apm_v12_enabled &&
-	    APM_MAJOR_VERS(detail) == 1 &&
-	    APM_MINOR_VERS(detail) == 2) {
+	    APM_MAJOR_VERS(sc->sc_vers) == 1 &&
+	    APM_MINOR_VERS(sc->sc_vers) == 2) {
 		apm_majver = 1;
 		apm_minver = 2;
 		goto ok;
 	}
 
 	if (apm_v11_enabled &&
-	    APM_MAJOR_VERS(detail) == 1 &&
-	    APM_MINOR_VERS(detail) == 1) {
+	    APM_MAJOR_VERS(sc->sc_vers) == 1 &&
+	    APM_MINOR_VERS(sc->sc_vers) == 1) {
 		apm_majver = 1;
 		apm_minver = 1;
 	} else {
@@ -622,105 +594,33 @@ apm_set_ver(struct apm_softc *self, u_long detail)
 		apm_minver = 0;
 	}
 ok:
-	printf("Power Management spec V%d.%d", apm_majver, apm_minver);
+	aprint_normal("Power Management spec V%d.%d", apm_majver, apm_minver);
 	apm_inited = 1;
-	if (detail & APM_IDLE_SLOWS) {
-#ifdef DIAGNOSTIC
-		/* not relevant often */
-		printf(" (slowidle)");
-#endif
-		/* leave apm_do_idle at its user-configured setting */
-	} else
-		apm_do_idle = 0;
-#ifdef DIAGNOSTIC
-	if (detail & APM_BIOS_PM_DISABLED)
-		printf(" (BIOS mgmt disabled)");
-	if (detail & APM_BIOS_PM_DISENGAGED)
-		printf(" (BIOS managing devices)");
-#endif
 }
 
 static int
-apmmatch(struct device *parent,
-	 struct cfdata *match, void *aux)
+apmdevmatch(device_t parent, cfdata_t match, void *aux)
 {
 
-	/* There can be only one! */
-	if (apm_inited)
-		return 0;
-
-	return (1);
+	return apm_match();
 }
 
 static void
-apmattach(struct device *parent, struct device *self, void *aux)
+apmdevattach(device_t parent, device_t self, void *aux)
 {
-	struct apm_softc *sc = (void *)self;
+	struct apm_softc *sc;
 	struct apmdev_attach_args *aaa = aux;
-	struct apm_power_info pinfo;
-	u_int numbatts, capflags;
-	int error;
 
-	printf(": ");
+	sc = device_private(self);
+	sc->sc_dev = self;
 
-	sc->ops = aaa->accessops;
-	sc->cookie = aaa->accesscookie;
+	sc->sc_detail = aaa->apm_detail;
+	sc->sc_vers = aaa->apm_detail & 0xffff; /* XXX: magic */
 
-	switch ((APM_MAJOR_VERS(aaa->apm_detail) << 8) +
-		APM_MINOR_VERS(aaa->apm_detail)) {
-	case 0x0100:
-		apm_v11_enabled = 0;
-		apm_v12_enabled = 0;
-		break;
-	case 0x0101:
-		apm_v12_enabled = 0;
-		/* fall through */
-	case 0x0102:
-	default:
-		break;
-	}
+	sc->sc_ops = aaa->accessops;
+	sc->sc_cookie = aaa->accesscookie;
 
-	apm_set_ver(sc, aaa->apm_detail);	/* prints version info */
-	printf("\n");
-	if (apm_minver >= 2)
-		sc->ops->get_capabilities(sc->cookie, &numbatts, &capflags);
-
-	/*
-	 * enable power management
-	 */
-	sc->ops->enable(sc->cookie, 1);
-
-	error = sc->ops->get_powstat(sc->cookie, &pinfo);
-	if (error == 0) {
-#ifdef APM_POWER_PRINT
-		apm_power_print(apmsc, &pinfo);
-#endif
-	} else
-		apm_perror("get power status", error);
-	sc->ops->cpu_busy(sc->cookie);
-
-	mutex_init(&sc->sc_mutex, MUTEX_DEFAULT, IPL_NONE);
-
-	/* Initial state is `resumed'. */
-	sc->sc_power_state = PWR_RESUME;
-
-	/* Do an initial check. */
-	apm_periodic_check(sc);
-
-	/*
-	 * Create a kernel thread to periodically check for APM events,
-	 * and notify other subsystems when they occur.
-	 */
-	if (kthread_create(PRI_NONE, 0, NULL, apm_thread, sc,
-	    &sc->sc_thread, "%s", sc->sc_dev.dv_xname) != 0) {
-		/*
-		 * We were unable to create the APM thread; bail out.
-		 */
-		sc->ops->disconnect(sc->cookie);
-		printf("%s: unable to create thread, "
-		    "kernel APM support disabled\n",
-		       sc->sc_dev.dv_xname);
-	}
+	apm_attach(sc);
 }
 
 /*
@@ -734,6 +634,85 @@ apmprint(void *aux, const char *pnp)
 
 	return (UNCONF);
 }
+
+int
+apm_match(void)
+{
+	static int got;
+	return !got++;
+}
+
+void
+apm_attach(struct apm_softc *sc)
+{
+	struct apm_power_info pinfo;
+	u_int numbatts, capflags;
+	int error;
+
+	aprint_naive("\n");
+	aprint_normal(": ");
+
+	switch ((APM_MAJOR_VERS(sc->sc_vers) << 8) + APM_MINOR_VERS(sc->sc_vers)) {
+	case 0x0100:
+		apm_v11_enabled = 0;
+		apm_v12_enabled = 0;
+		break;
+	case 0x0101:
+		apm_v12_enabled = 0;
+		/* fall through */
+	case 0x0102:
+	default:
+		break;
+	}
+
+	apm_set_ver(sc);	/* prints version info */
+	aprint_normal("\n");
+	if (apm_minver >= 2)
+		(*sc->sc_ops->aa_get_capabilities)(sc->sc_cookie, &numbatts,
+		    &capflags);
+
+	/*
+	 * enable power management
+	 */
+	(*sc->sc_ops->aa_enable)(sc->sc_cookie, 1);
+
+	error = (*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0, &pinfo);
+	if (error == 0) {
+#ifdef APM_POWER_PRINT
+		apm_power_print(sc, &pinfo);
+#endif
+	} else
+		apm_perror("get power status", error);
+
+	if (sc->sc_ops->aa_cpu_busy)
+		(*sc->sc_ops->aa_cpu_busy)(sc->sc_cookie);
+
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+
+	/* Initial state is `resumed'. */
+	sc->sc_power_state = PWR_RESUME;
+	selinit(&sc->sc_rsel);
+	selinit(&sc->sc_xsel);
+
+	/* Do an initial check. */
+	apm_periodic_check(sc);
+
+	/*
+	 * Create a kernel thread to periodically check for APM events,
+	 * and notify other subsystems when they occur.
+	 */
+	if (kthread_create(PRI_NONE, 0, NULL, apm_thread, sc,
+	    &sc->sc_thread, "%s", device_xname(sc->sc_dev)) != 0) {
+		/*
+		 * We were unable to create the APM thread; bail out.
+		 */
+		if (sc->sc_ops->aa_disconnect)
+			(*sc->sc_ops->aa_disconnect)(sc->sc_cookie);
+		aprint_error_dev(sc->sc_dev, "unable to create thread, "
+		    "kernel APM support disabled\n");
+	}
+}
+
 void
 apm_thread(void *arg)
 {
@@ -753,14 +732,11 @@ apm_thread(void *arg)
 int
 apmdevopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = APMUNIT(dev);
-	int ctl = APMDEV(dev);
+	int ctl = APM(dev);
 	int error = 0;
 	struct apm_softc *sc;
 
-	if (unit >= apmdev_cd.cd_ndevs)
-		return ENXIO;
-	sc = apmdev_cd.cd_devs[unit];
+	sc = device_lookup_private(&apmdev_cd, APMUNIT(dev));
 	if (!sc)
 		return ENXIO;
 
@@ -772,7 +748,7 @@ apmdevopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	APM_LOCK(sc);
 	switch (ctl) {
-	case APMDEV_CTL:
+	case APM_CTL:
 		if (!(flag & FWRITE)) {
 			error = EINVAL;
 			break;
@@ -783,7 +759,7 @@ apmdevopen(dev_t dev, int flag, int mode, struct lwp *l)
 		}
 		sc->sc_flags |= SCFLAG_OWRITE;
 		break;
-	case APMDEV_NORMAL:
+	case APM_NORMAL:
 		if (!(flag & FREAD) || (flag & FWRITE)) {
 			error = EINVAL;
 			break;
@@ -803,24 +779,24 @@ int
 apmdevclose(dev_t dev, int flag, int mode,
 	    struct lwp *l)
 {
-	struct apm_softc *sc = apmdev_cd.cd_devs[APMUNIT(dev)];
-	int ctl = APMDEV(dev);
+	struct apm_softc *sc = device_lookup_private(&apmdev_cd, APMUNIT(dev));
+	int ctl = APM(dev);
 
 	DPRINTF(APMDEBUG_DEVICE,
 	    ("apmclose: pid %d flag %x mode %x\n", l->l_proc->p_pid, flag, mode));
 
 	APM_LOCK(sc);
 	switch (ctl) {
-	case APMDEV_CTL:
+	case APM_CTL:
 		sc->sc_flags &= ~SCFLAG_OWRITE;
 		break;
-	case APMDEV_NORMAL:
+	case APM_NORMAL:
 		sc->sc_flags &= ~SCFLAG_OREAD;
 		break;
 	}
 	if ((sc->sc_flags & SCFLAG_OPEN) == 0) {
-		sc->event_count = 0;
-		sc->event_ptr = 0;
+		sc->sc_event_count = 0;
+		sc->sc_event_ptr = 0;
 	}
 	APM_UNLOCK(sc);
 	return 0;
@@ -830,7 +806,7 @@ int
 apmdevioctl(dev_t dev, u_long cmd, void *data, int flag,
 	    struct lwp *l)
 {
-	struct apm_softc *sc = apmdev_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apmdev_cd, APMUNIT(dev));
 	struct apm_power_info *powerp;
 	struct apm_event_info *evp;
 #if 0
@@ -863,21 +839,22 @@ apmdevioctl(dev_t dev, u_long cmd, void *data, int flag,
 		break;
 
 	case APM_IOC_NEXTEVENT:
-		if (!sc->event_count)
+		if (!sc->sc_event_count)
 			error = EAGAIN;
 		else {
 			evp = (struct apm_event_info *)data;
-			i = sc->event_ptr + APM_NEVENTS - sc->event_count;
+			i = sc->sc_event_ptr + APM_NEVENTS - sc->sc_event_count;
 			i %= APM_NEVENTS;
-			*evp = sc->event_list[i];
-			sc->event_count--;
+			*evp = sc->sc_event_list[i];
+			sc->sc_event_count--;
 		}
 		break;
 
 	case OAPM_IOC_GETPOWER:
 	case APM_IOC_GETPOWER:
 		powerp = (struct apm_power_info *)data;
-		if ((error = sc->ops->get_powstat(sc->cookie, powerp)) != 0) {
+		if ((error = (*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0,
+		    powerp)) != 0) {
 			apm_perror("ioctl get power status", error);
 			error = EIO;
 			break;
@@ -887,7 +864,7 @@ apmdevioctl(dev_t dev, u_long cmd, void *data, int flag,
 			break;
 		case 1:
 		default:
-			batt_flags = powerp->battery_state;
+			batt_flags = powerp->battery_flags;
 			powerp->battery_state = APM_BATT_UNKNOWN;
 			if (batt_flags & APM_BATT_FLAG_HIGH)
 				powerp->battery_state = APM_BATT_HIGH;
@@ -914,12 +891,12 @@ apmdevioctl(dev_t dev, u_long cmd, void *data, int flag,
 int
 apmdevpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct apm_softc *sc = apmdev_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apmdev_cd, APMUNIT(dev));
 	int revents = 0;
 
 	APM_LOCK(sc);
 	if (events & (POLLIN | POLLRDNORM)) {
-		if (sc->event_count)
+		if (sc->sc_event_count)
 			revents |= events & (POLLIN | POLLRDNORM);
 		else
 			selrecord(l, &sc->sc_rsel);
@@ -944,17 +921,21 @@ filt_apmread(struct knote *kn, long hint)
 {
 	struct apm_softc *sc = kn->kn_hook;
 
-	kn->kn_data = sc->event_count;
+	kn->kn_data = sc->sc_event_count;
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops apmread_filtops =
-	{ 1, NULL, filt_apmrdetach, filt_apmread };
+static const struct filterops apmread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_apmrdetach,
+	.f_event = filt_apmread,
+};
 
 int
 apmdevkqfilter(dev_t dev, struct knote *kn)
 {
-	struct apm_softc *sc = apmdev_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apmdev_cd, APMUNIT(dev));
 	struct klist *klist;
 
 	switch (kn->kn_filter) {

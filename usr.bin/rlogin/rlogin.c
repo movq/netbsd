@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $	*/
+/*	$NetBSD: rlogin.c,v 1.44 2015/10/28 08:15:53 shm Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rlogin.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $");
+__RCSID("$NetBSD: rlogin.c,v 1.44 2015/10/28 08:15:53 shm Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +56,7 @@ __RCSID("$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $");
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
 
 #include <err.h>
 #include <errno.h>
@@ -73,7 +74,6 @@ __RCSID("$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $");
 
 #include "getport.h"
 
-
 #ifndef TIOCPKT_WINDOW
 #define	TIOCPKT_WINDOW	0x80
 #endif
@@ -87,11 +87,11 @@ __RCSID("$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $");
 #define CCEQ(val, c)	(c == val ? val != _POSIX_VDISABLE : 0)
 #endif
 
-int eight, rem;
-struct termios deftty;
+static int eight, rem;
+static struct termios deftty;
 
-int noescape;
-u_char escapechar = '~';
+static int noescape;
+static u_char escapechar = '~';
 
 #ifdef OLDSUN
 struct winsize {
@@ -101,30 +101,29 @@ struct winsize {
 #else
 #define	get_window_size(fd, wp)	ioctl(fd, TIOCGWINSZ, wp)
 #endif
-struct	winsize winsize;
+static struct	winsize winsize;
 
-void		catch_child(int);
-void		copytochild(int);
-void		doit(sigset_t *);
-void		done(int);
-void		echo(int);
-u_int		getescape(char *);
-void		lostpeer(int);
-int		main(int, char **);
-void		mode(int);
-void		msg(const char *);
-void		oob(int);
-int		reader(sigset_t *);
-void		sendwindow(void);
-void		setsignal(int);
-void		sigwinch(int);
-void		stop(int);
-void		usage(void);
-void		writer(void);
-void		writeroob(int);
+static void		catch_child(int);
+static void		copytochild(int);
+__dead static void	doit(sigset_t *);
+__dead static void	done(int);
+static void		echo(int);
+static u_int		getescape(char *);
+__dead static void	lostpeer(int);
+static void		mode(int);
+static void		msg(const char *);
+static void		oob(int);
+static int		reader(sigset_t *);
+static void		sendwindow(void);
+static void		setsignal(int);
+static void		sigwinch(int);
+static void		stop(int);
+__dead static void	usage(void);
+static void		writer(void);
+static void		writeroob(int);
 
 #ifdef OLDSUN
-int		get_window_size(int, struct winsize *);
+static int		get_window_size(int, struct winsize *);
 #endif
 
 int
@@ -135,7 +134,7 @@ main(int argc, char *argv[])
 	struct termios tty;
 	sigset_t smask;
 	uid_t uid;
-	int argoff, ch, dflag, one;
+	int argoff, ch, dflag, nflag, one;
 	int i, len, len2;
 	int family = AF_UNSPEC;
 	char *host, *p, *user, *name, term[1024] = "network";
@@ -144,7 +143,7 @@ main(int argc, char *argv[])
 	char *service = NULL;
 	struct rlimit rlim;
 
-	argoff = dflag = 0;
+	argoff = dflag = nflag = 0;
 	one = 1;
 	host = user = NULL;
 	sp = NULL;
@@ -161,7 +160,7 @@ main(int argc, char *argv[])
 		argoff = 1;
 	}
 
-#define	OPTIONS	"468dEe:l:p:"
+#define	OPTIONS	"468dEe:l:np:"
 	while ((ch = getopt(argc - argoff, argv + argoff, OPTIONS)) != -1)
 		switch(ch) {
 		case '4':
@@ -185,6 +184,9 @@ main(int argc, char *argv[])
 			break;
 		case 'l':
 			user = optarg;
+			break;
+		case 'n':
+			nflag = 1;
 			break;
 		case 'p':
 			sp = getport(service = optarg, "tcp");
@@ -229,12 +231,12 @@ main(int argc, char *argv[])
 	if ((p = getenv("TERM")) != NULL)
 		(void)strlcpy(term, p, sizeof(term));
 	len = strlen(term);
-	if (len < (sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
+	if (len < (int)(sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
 		/* start at 2 to include the / */
 		for (ospeed = i = cfgetospeed(&tty), len2 = 2; i > 9; len2++)
 			i /= 10;
 
-		if (len + len2 < sizeof(term))
+		if (len + len2 < (int)sizeof(term))
 			(void)snprintf(term + len, len2 + 1, "/%d", ospeed);
 	}
 
@@ -259,34 +261,34 @@ main(int argc, char *argv[])
 	(void)sigaction(SIGURG, &sa, (struct sigaction *) 0);
 	sa.sa_handler = writeroob;
 	(void)sigaction(SIGUSR1, &sa, (struct sigaction *) 0);
-	
+
 	/* don't dump core */
 	rlim.rlim_cur = rlim.rlim_max = 0;
 	if (setrlimit(RLIMIT_CORE, &rlim) < 0)
 		warn("setrlimit");
 
 	rem = rcmd_af(&host, sp->s_port, name, user, term, 0, family);
-
-
 	if (rem < 0)
 		exit(1);
 
 	if (dflag &&
 	    setsockopt(rem, SOL_SOCKET, SO_DEBUG, &one, sizeof(one)) < 0)
 		warn("setsockopt DEBUG (ignored)");
-    {
-	struct sockaddr_storage ss;
-	socklen_t sslen;
-	sslen = sizeof(ss);
-	if (getsockname(rem, (struct sockaddr *)&ss, &sslen) == 0
-	 && ((struct sockaddr *)&ss)->sa_family == AF_INET) {
-		one = IPTOS_LOWDELAY;
-		if (setsockopt(rem, IPPROTO_IP, IP_TOS, (char *)&one,
-				sizeof(int)) < 0) {
-			warn("setsockopt TOS (ignored)");
+	if (nflag &&
+	    setsockopt(rem, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) < 0)
+		warn("setsockopt NODELAY (ignored)");
+
+	{
+		struct sockaddr_storage ss;
+		socklen_t sslen = sizeof(ss);
+		if (getsockname(rem, (struct sockaddr *)&ss, &sslen) == 0
+		     && ((struct sockaddr *)&ss)->sa_family == AF_INET) {
+			one = IPTOS_LOWDELAY;
+			if (setsockopt(rem, IPPROTO_IP, IP_TOS, (char *)&one,
+			    sizeof(int)) < 0)
+				warn("setsockopt TOS (ignored)");
 		}
 	}
-    }
 
 	(void)setuid(uid);
 	doit(&smask);
@@ -294,9 +296,9 @@ main(int argc, char *argv[])
 	return (0);
 }
 
-pid_t child;
+static pid_t child;
 
-void
+static void
 doit(sigset_t *smask)
 {
 	struct sigaction sa;
@@ -340,7 +342,7 @@ doit(sigset_t *smask)
 }
 
 /* trap a signal, unless it is being ignored. */
-void
+static void
 setsignal(int sig)
 {
 	struct sigaction sa;
@@ -360,7 +362,7 @@ setsignal(int sig)
 	(void)sigprocmask(SIG_SETMASK, &sigs, (sigset_t *) 0);
 }
 
-void
+static void
 done(int status)
 {
 	pid_t w;
@@ -381,13 +383,13 @@ done(int status)
 	exit(status);
 }
 
-int dosigwinch;
+static int dosigwinch;
 
 /*
  * This is called when the reader process gets the out-of-band (urgent)
  * request to turn on the window-changing protocol.
  */
-void
+static void
 writeroob(int signo)
 {
 	struct sigaction sa;
@@ -402,7 +404,7 @@ writeroob(int signo)
 	dosigwinch = 1;
 }
 
-void
+static void
 catch_child(int signo)
 {
 	int status;
@@ -425,7 +427,7 @@ catch_child(int signo)
  * ~^Z				suspend rlogin process.
  * ~<delayed-suspend char>	suspend rlogin process, but leave reader alone.
  */
-void
+static void
 writer(void)
 {
 	int bol, local, n;
@@ -472,14 +474,14 @@ writer(void)
 				continue;
 			}
 			if (c != escapechar) {
-					(void)write(rem, &escapechar, 1);
+				(void)write(rem, &escapechar, 1);
 			}
 		}
 
-			if (write(rem, &c, 1) == 0) {
-				msg("line gone");
-				break;
-			}
+		if (write(rem, &c, 1) == 0) {
+			msg("line gone");
+			break;
+		}
 
 		bol = CCEQ(deftty.c_cc[VKILL], c) ||
 		    CCEQ(deftty.c_cc[VEOF], c) ||
@@ -489,7 +491,7 @@ writer(void)
 	}
 }
 
-void
+static void
 echo(int i)
 {
 	char c = (char)i;
@@ -512,7 +514,7 @@ echo(int i)
 	(void)write(STDOUT_FILENO, buf, p - buf);
 }
 
-void
+static void
 stop(int all)
 {
 	struct sigaction sa;
@@ -529,7 +531,7 @@ stop(int all)
 	sigwinch(0);			/* check for size changes */
 }
 
-void
+static void
 sigwinch(int signo)
 {
 	struct winsize ws;
@@ -544,7 +546,7 @@ sigwinch(int signo)
 /*
  * Send the window size to the server via the magic escape
  */
-void
+static void
 sendwindow(void)
 {
 	struct winsize *wp;
@@ -560,7 +562,7 @@ sendwindow(void)
 	wp->ws_xpixel = htons(winsize.ws_xpixel);
 	wp->ws_ypixel = htons(winsize.ws_ypixel);
 
-		(void)write(rem, obuf, sizeof(obuf));
+	(void)write(rem, obuf, sizeof(obuf));
 }
 
 /*
@@ -569,12 +571,12 @@ sendwindow(void)
 #define	READING	1
 #define	WRITING	2
 
-jmp_buf rcvtop;
-pid_t ppid;
-int rcvcnt, rcvstate;
-char rcvbuf[8 * 1024];
+static jmp_buf rcvtop;
+static pid_t ppid;
+static int rcvcnt, rcvstate;
+static char rcvbuf[8 * 1024];
 
-void
+static void
 oob(int signo)
 {
 	struct termios tty;
@@ -590,7 +592,7 @@ oob(int signo)
 			 * to send it yet if we are blocked for output and
 			 * our input buffer is full.
 			 */
-			if (rcvcnt < sizeof(rcvbuf)) {
+			if (rcvcnt < (int)sizeof(rcvbuf)) {
 				n = read(rem, rcvbuf + rcvcnt,
 				    sizeof(rcvbuf) - rcvcnt);
 				if (n <= 0)
@@ -655,7 +657,7 @@ oob(int signo)
 }
 
 /* reader: read from remote: line -> 1 */
-int
+static int
 reader(sigset_t *smask)
 {
 	pid_t pid;
@@ -690,8 +692,7 @@ reader(sigset_t *smask)
 		rcvcnt = 0;
 		rcvstate = READING;
 
-			rcvcnt = read(rem, rcvbuf, sizeof (rcvbuf));
-
+		rcvcnt = read(rem, rcvbuf, sizeof (rcvbuf));
 		if (rcvcnt == 0)
 			return (0);
 		if (rcvcnt < 0) {
@@ -703,7 +704,7 @@ reader(sigset_t *smask)
 	}
 }
 
-void
+static void
 mode(int f)
 {
 	struct termios tty;
@@ -734,39 +735,39 @@ mode(int f)
 	}
 }
 
-void
+static void
 lostpeer(int signo)
 {
 	struct sigaction sa;
 	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = SIG_IGN;
+	sigemptyset(&sa.sa_mask);
 	(void)sigaction(SIGPIPE, &sa, (struct sigaction *)0);
 	msg("\aconnection closed.");
 	done(1);
 }
 
 /* copy SIGURGs to the child process. */
-void
+static void
 copytochild(int signo)
 {
 
 	(void)kill(child, SIGURG);
 }
 
-void
+static void
 msg(const char *str)
 {
 
 	(void)fprintf(stderr, "rlogin: %s\r\n", str);
 }
 
-
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: rlogin [-%s]%s[-e char] [-l username] [-p port] [username@]host\n",
-	    "468Ed", " ");
+	    "Usage: %s [-468dEn] [-e char] [-l username] [-p port] "
+	    "[username@]host\n", getprogname());
 	exit(1);
 }
 
@@ -775,10 +776,8 @@ usage(void)
  * Suns and others.  Suns have only a `ttysize', so we convert it to a winsize.
  */
 #ifdef OLDSUN
-int
-get_window_size(fd, wp)
-	int fd;
-	struct winsize *wp;
+static int
+get_window_size(int fd, struct winsize *wp)
 {
 	struct ttysize ts;
 	int error;
@@ -793,7 +792,7 @@ get_window_size(fd, wp)
 }
 #endif
 
-u_int
+static u_int
 getescape(char *p)
 {
 	long val;

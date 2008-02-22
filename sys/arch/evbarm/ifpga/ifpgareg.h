@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpgareg.h,v 1.3 2005/12/11 12:17:09 christos Exp $ */
+/*	$NetBSD: ifpgareg.h,v 1.7 2015/01/27 16:34:34 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -32,6 +32,10 @@
 /* System clock defaults. */
 
 #define IFPGA_UART_CLK			14745600 /* Uart REFCLK freq */
+#define IFPGA_UART_SIZE			0x24
+
+#define IFPGA_MMC_CLK			14745600 /* MMC_5 freq */
+#define IFPGA_MMC_SIZE			0x1000
 
 /*
  * IFPGA registers
@@ -167,6 +171,7 @@
 #define TIMERx_MAX			0xffff	/* Max count value */
 
 #define TIMERx_CTRL_ENABLE		0x80	/* Timer enable */
+#define TIMERx_CTRL_RAISE_IRQ		0x20	/* Raise IRQ on tick */
 #define TIMERx_CTRL_MODE_ONCE		0x00	/* Single shot */
 #define TIMERx_CTRL_MODE_PERIODIC	0x40	/* Single shot */
 #define TIMERx_CTRL_PRESCALE_DIV1	0x00	/* CLK / 1 */
@@ -209,7 +214,11 @@
 #define IFPGA_INTR_UARTINT0		0x00000002
 #define IFPGA_INTR_SOFTINT		0x00000001
 
+#if defined(INTEGRATOR_CP)
+#define IFPGA_INTR_HWMASK		0x08bfffff
+#else
 #define IFPGA_INTR_HWMASK		0x003fffff
+#endif
 
 /* ... and the corresponding numbers.  */
 #define IFPGA_INTRNUM_APCINT		21

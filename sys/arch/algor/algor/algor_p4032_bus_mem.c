@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p4032_bus_mem.c,v 1.4 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: algor_p4032_bus_mem.c,v 1.6 2011/07/08 18:48:55 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_mem.c,v 1.4 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_mem.c,v 1.6 2011/07/08 18:48:55 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,40 +44,41 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p4032_bus_mem.c,v 1.4 2005/12/11 12:16:08 chri
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/locore.h>
+#include <mips/locore.h>
 
 #include <algor/algor/algor_p4032reg.h>
 #include <algor/algor/algor_p4032var.h>
 
 #include <algor/pci/vtpbcvar.h>
 
-#define	CHIP		algor_p4032
+#define	CHIP			algor_p4032
 
 #define	CHIP_EX_MALLOC_SAFE(v)	(((struct p4032_config *)(v))->ac_mallocsafe)
-#define	CHIP_MEM_EXTENT(v)	(((struct p4032_config *)(v))->ac_mem_ex)
+#define	CHIP_EXTENT(v)		(((struct p4032_config *)(v))->ac_mem_ex)
+#define CHIP_MEM
 
 /* MEM region 1 */
-#define	CHIP_MEM_W1_BUS_START(v)	\
+#define	CHIP_W1_BUS_START(v)	\
 	(vtpbc_configuration.vt_pci_membase + 0x00000000UL)
-#define	CHIP_MEM_W1_BUS_END(v)		\
+#define	CHIP_W1_BUS_END(v)	\
 	(vtpbc_configuration.vt_pci_membase + 0x007fffffUL)
-#define	CHIP_MEM_W1_SYS_START(v)	P4032_ISAMEM
-#define	CHIP_MEM_W1_SYS_END(v)		(P4032_ISAMEM + CHIP_MEM_W1_BUS_END(v))
+#define	CHIP_W1_SYS_START(v)	P4032_ISAMEM
+#define	CHIP_W1_SYS_END(v)	(P4032_ISAMEM + CHIP_W1_BUS_END(v))
 
 /* MEM region 2 */
-#define	CHIP_MEM_W2_BUS_START(v)	\
+#define	CHIP_W2_BUS_START(v)	\
 	(vtpbc_configuration.vt_pci_membase + 0x01000000UL)
-#define	CHIP_MEM_W2_BUS_END(v)		\
+#define	CHIP_W2_BUS_END(v)	\
 	(vtpbc_configuration.vt_pci_membase + 0x07ffffffUL)
-#define	CHIP_MEM_W2_SYS_START(v)	P4032_PCIMEM
-#define	CHIP_MEM_W2_SYS_END(v)		(P4032_PCIMEM + 0x06ffffffUL)
+#define	CHIP_W2_SYS_START(v)	P4032_PCIMEM
+#define	CHIP_W2_SYS_END(v)	(P4032_PCIMEM + 0x06ffffffUL)
 
 #if 0 /* XXX Should implement access to this via TLB or 64-bit KSEG */
 /* MEM region 3 */
-#define	CHIP_MEM_W3_BUS_START(v)	0x20000000UL
-#define	CHIP_MEM_W3_BUS_END(v)		0xffffffffUL
-#define	CHIP_MEM_W3_SYS_START(v)	P4032_PCIMEM_HI
-#define	CHIP_MEM_W3_SYS_END(v)		(P4032_PCIMEM_HI + 0xe0000000UL)
+#define	CHIP_W3_BUS_START(v)	0x20000000UL
+#define	CHIP_W3_BUS_END(v)	0xffffffffUL
+#define	CHIP_W3_SYS_START(v)	P4032_PCIMEM_HI
+#define	CHIP_W3_SYS_END(v)	(P4032_PCIMEM_HI + 0xe0000000UL)
 #endif
 
-#include <algor/pci/pci_alignstride_bus_mem_chipdep.c>
+#include <mips/mips/bus_space_alignstride_chipdep.c>

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.17 2008/02/06 22:12:40 dsl Exp $ */
+/*	$NetBSD: syscall.c,v 1.29 2015/10/04 08:19:13 joerg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.17 2008/02/06 22:12:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.29 2015/10/04 08:19:13 joerg Exp $");
 
 #include "opt_sparc_arch.h"
 #include "opt_multiprocessor.h"
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.17 2008/02/06 22:12:40 dsl Exp $");
 #include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 #include <sys/ktrace.h>
 
 #include <uvm/uvm_extern.h>
@@ -98,14 +99,13 @@ static inline int getargs(struct proc *p, struct trapframe *,
 #ifdef FPU_DEBUG
 static inline void save_fpu(struct trapframe *);
 #endif
-void syscall_plain(register_t, struct trapframe *, register_t);
-void syscall_fancy(register_t, struct trapframe *, register_t);
+void syscall(register_t, struct trapframe *, register_t);
 
 static inline int
 handle_new(struct trapframe *tf, register_t *code)
 {
-	int new = *code & (SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	*code &= ~(SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
+	int new = *code & (SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	*code &= ~(SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
 	return new;
 }
 
@@ -143,7 +143,7 @@ getargs(struct proc *p, struct trapframe *tf, register_t *code,
 		break;
 	}
 
-	if (*code < 0 || *code >= p->p_emul->e_nsysent)
+	if (*code >= p->p_emul->e_nsysent)
 		return ENOSYS;
 
 	*callp += *code;
@@ -186,10 +186,8 @@ void
 syscall_intern(struct proc *p)
 {
 
-	if (trace_is_enabled(p))
-		p->p_md.md_syscall = syscall_fancy;
-	else
-		p->p_md.md_syscall = syscall_plain;
+	p->p_trace_enabled = trace_is_enabled(p);
+	p->p_md.md_syscall = syscall;
 }
 
 /*
@@ -201,7 +199,7 @@ syscall_intern(struct proc *p)
  * thing that made the system call, and are named that way here.
  */
 void
-syscall_plain(register_t code, struct trapframe *tf, register_t pc)
+syscall(register_t code, struct trapframe *tf, register_t pc)
 {
 	const struct sysent *callp;
 	struct proc *p;
@@ -212,7 +210,7 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 	register_t i;
 	u_quad_t sticks;
 
-	uvmexp.syscalls++;	/* XXXSMP */
+	curcpu()->ci_data.cpu_nsyscall++;	/* XXXSMP */
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
@@ -231,14 +229,7 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 	rval.o[0] = 0;
 	rval.o[1] = tf->tf_out[1];
 
-        /* Lock the kernel if the syscall isn't MP-safe. */
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		error = (*callp->sy_call)(l, &args, rval.o);
-	} else {
-		KERNEL_LOCK(1, l);
-		error = (*callp->sy_call)(l, &args, rval.o);
-		KERNEL_UNLOCK_LAST(l);
-	}
+	error = sy_invoke(callp, l, args.i, rval.o, code);
 
 	switch (error) {
 	case 0:
@@ -246,8 +237,14 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 		tf->tf_out[0] = rval.o[0];
 		tf->tf_out[1] = rval.o[1];
 		if (new) {
-			/* jmp %g2 (or %g7, deprecated) on success */
-			i = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
+			/* jmp %g5, (or %g2 or %g7, deprecated) on success */
+			if (__predict_true((new & SYSCALL_G5RFLAG) ==
+					SYSCALL_G5RFLAG))
+				i = tf->tf_global[5];
+			else if (new & SYSCALL_G2RFLAG)
+				i = tf->tf_global[2];
+			else
+				i = tf->tf_global[7];
 			if (i & 3) {
 				error = EINVAL;
 				goto bad;
@@ -277,97 +274,6 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 		tf->tf_npc = i + 4;
 		break;
 	}
-
-	userret(l, pc, sticks);
-	share_fpu(l, tf);
-}
-
-void
-syscall_fancy(register_t code, struct trapframe *tf, register_t pc)
-{
-	const struct sysent *callp;
-	struct proc *p;
-	struct lwp *l;
-	int error, new;
-	union args args;
-	union rval rval;
-	register_t i;
-	u_quad_t sticks;
-
-	uvmexp.syscalls++;	/* XXXSMP */
-	l = curlwp;
-	p = l->l_proc;
-	LWP_CACHE_CREDS(l, p);
-
-	sticks = p->p_sticks;
-	l->l_md.md_tf = tf;
-
-#ifdef FPU_DEBUG
-	save_fpu(tf);
-#endif
-	new = handle_new(tf, &code);
-
-	if ((error = getargs(p, tf, &code, &callp, &args)) != 0)
-		goto bad;
-
-	KERNEL_LOCK(1, l);
-	if ((error = trace_enter(code, args.i, callp->sy_narg)) != 0) {
-		KERNEL_UNLOCK_LAST(l);
-		goto out;
-	}
-
-	rval.o[0] = 0;
-	rval.o[1] = tf->tf_out[1];
-
-        /* Lock the kernel if the syscall isn't MP-safe. */
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		KERNEL_UNLOCK_LAST(l);
-		error = (*callp->sy_call)(l, &args, rval.o);
-	} else {
-		error = (*callp->sy_call)(l, &args, rval.o);
-		KERNEL_UNLOCK_LAST(l);
-	}
-
-out:
-	switch (error) {
-	case 0:
-		/* Note: fork() does not return here in the child */
-		tf->tf_out[0] = rval.o[0];
-		tf->tf_out[1] = rval.o[1];
-		if (new) {
-			/* jmp %g2 (or %g7, deprecated) on success */
-			i = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
-			if (i & 3) {
-				error = EINVAL;
-				goto bad;
-			}
-		} else {
-			/* old system call convention: clear C on success */
-			tf->tf_psr &= ~PSR_C;	/* success */
-			i = tf->tf_npc;
-		}
-		tf->tf_pc = i;
-		tf->tf_npc = i + 4;
-		break;
-
-	case ERESTART:
-	case EJUSTRETURN:
-		/* nothing to do */
-		break;
-
-	default:
-	bad:
-		if (p->p_emul->e_errno)
-			error = p->p_emul->e_errno[error];
-		tf->tf_out[0] = error;
-		tf->tf_psr |= PSR_C;	/* fail */
-		i = tf->tf_npc;
-		tf->tf_pc = i;
-		tf->tf_npc = i + 4;
-		break;
-	}
-
-	trace_exit(code, rval.o, error);
 
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -382,10 +288,20 @@ child_return(void *arg)
 	struct lwp *l = arg;
 
 	/*
-	 * Return values in the frame set by cpu_fork().
+	 * Return values in the frame set by cpu_lwp_fork().
 	 */
-	KERNEL_UNLOCK_LAST(l);
 	userret(l, l->l_md.md_tf->tf_pc, 0);
-	ktrsysret((l->l_proc->p_sflag & PS_PPWAIT) ? SYS_vfork : SYS_fork,
+	ktrsysret((l->l_proc->p_lflag & PL_PPWAIT) ? SYS_vfork : SYS_fork,
 	    0, 0);
 }
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l, l->l_md.md_tf->tf_pc, 0);
+}
+

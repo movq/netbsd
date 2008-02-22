@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.19 2007/03/08 17:14:16 he Exp $ */
+/*	$NetBSD: bootxx.c,v 1.26 2015/10/08 20:58:13 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,7 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>
 #include <sys/bootblock.h>
 
 #include <lib/libkern/libkern.h>
@@ -92,7 +86,7 @@ main(void)
 	io.f_flags = F_RAW;
 	if (devopen(&io, 0, &dummy1)) {
 		panic("%s: can't open device `%s'", progname,
-			prom_bootdevice != NULL ? prom_bootdevice : "unknown");
+			prom_bootdevice[0] ? prom_bootdevice : "unknown");
 	}
 
 	(void)loadboot(&io, (void *)PROM_LOADADDR);
@@ -132,32 +126,18 @@ loadboot(struct open_file *f, char *addr)
 			printf("%s: read failure", progname);
 			_rtt();
 		}
-		bcopy(buf, addr, bbinfo.bbi_block_size);
+		memcpy(addr, buf, bbinfo.bbi_block_size);
 		if (n != bbinfo.bbi_block_size)
 			panic("%s: short read", progname);
 		if (i == 0) {
 			int m = N_GETMAGIC(*(struct exec *)addr);
 			if (m == ZMAGIC || m == NMAGIC || m == OMAGIC) {
 				/* Move exec header out of the way */
-				bcopy(addr, addr - sizeof(struct exec), n);
+				memcpy(addr - sizeof(struct exec), addr, n);
 				addr -= sizeof(struct exec);
 			}
 		}
 		addr += n;
 	}
 
-}
-
-/*
- * We don't need the overlap handling feature that the libkern version
- * of bcopy() provides. We DO need code compactness..
- */
-void
-bcopy(const void *src, void *dst, size_t n)
-{
-	const char *p = src;
-	char *q = dst;
-
-	while (n-- > 0)
-		*q++ = *p++;
 }

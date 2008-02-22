@@ -1,4 +1,4 @@
-/*	$NetBSD: hp.c,v 1.8 2005/12/11 12:19:30 christos Exp $ */
+/*	$NetBSD: hp.c,v 1.11 2018/03/19 15:43:45 ragge Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -87,7 +82,7 @@ hpopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		bootrpb.adpphy = adpadr;
 		bootrpb.unit = unit;
 	}
-	bzero(&hplabel, sizeof(struct disklabel));
+	memset(&hplabel, 0, sizeof(struct disklabel));
 
 	hplabel.d_secpercyl = 32;
 	hplabel.d_nsectors = 32;
@@ -113,13 +108,9 @@ int
 hpstrategy(void *f, int func, daddr_t dblk,
     size_t size, void *buf, size_t *rsize)
 {
-	unsigned int pfnum, mapnr, nsize, bn, cn, sn, tn;
+	unsigned int bn, cn, sn, tn;
 
-	pfnum = (u_int)buf >> VAX_PGSHIFT;
-
-	for(mapnr = 0, nsize = size; (nsize + VAX_NBPG) > 0;
-	    nsize -= VAX_NBPG, mapnr++, pfnum++)
-		MBA_WCSR(MAPREG(mapnr), PG_V | pfnum);
+	(void)ubmap(0, (int)buf, size);
 
 	MBA_WCSR(MBA_VAR, ((u_int)buf & VAX_PGOFSET));
 	MBA_WCSR(MBA_BC, (~size) + 1);

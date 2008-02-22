@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetround.S,v 1.5 2002/01/13 21:45:43 thorpej Exp $	*/
+/*	$NetBSD: fpgetround.S,v 1.7 2014/05/23 02:34:19 uebayasi Exp $	*/
 
 /*
  * Written by J.T. Conklin, Apr 4, 1995
@@ -7,16 +7,22 @@
 
 #include <machine/asm.h>
 
+/*
+ * XXX load only x87 state.
+ */
+
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(fpgetround, _fpgetround)
 ENTRY(_fpgetround)
 #else
 ENTRY(fpgetround)
 #endif
-	subl $4,%esp
-	fnstcw (%esp)
-	movl (%esp),%eax
-	rorl $10,%eax
-	andl $3,%eax
-	addl $4,%esp
+	fnstcw -4(%esp)
+	movl -4(%esp), %eax
+	andl $0x00000c00, %eax
 	ret
+#ifdef WEAK_ALIAS
+END(_fpgetround)
+#else
+END(fpgetround)
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_milan.c,v 1.8 2005/12/11 12:16:59 christos Exp $	*/
+/*	$NetBSD: isa_milan.c,v 1.16 2018/01/20 19:36:47 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_milan.c,v 1.8 2005/12/11 12:16:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_milan.c,v 1.16 2018/01/20 19:36:47 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -68,7 +61,7 @@ static u_int16_t imask_enable = 0xffff;
 static isa_intr_info_t milan_isa_iinfo[MILAN_MAX_ISA_INTS];
 
 void
-isa_bus_init()
+isa_bus_init(void)
 {
 	volatile u_int8_t	*icu;
 
@@ -103,7 +96,7 @@ isa_bus_init()
  * array for enabled interrupts.
  */
 static void
-new_imask()
+new_imask(void)
 {
 	int		irq;
 	u_int16_t	nmask = 0;
@@ -120,8 +113,7 @@ new_imask()
 }
 
 static void
-isa_callback(vector)
-	int	vector;
+isa_callback(int vector)
 {
 	isa_intr_info_t	*iinfo_p;
 	int		s;
@@ -130,16 +122,17 @@ isa_callback(vector)
 
 	s = splx(iinfo_p->ipl);
 	(void) (iinfo_p->ifunc)(iinfo_p->iarg);
-	if (vector > 7)
+	if (vector > 7) {
 		WICU(AD_8259_SLAVE, 0x60 | (vector & 7));
-	else WICU(AD_8259_MASTER, 0x60 | (vector & 7));
+		vector = IRQ_SLAVE;
+	}
+	WICU(AD_8259_MASTER, 0x60 | (vector & 7));
 	splx(s);
 }
 
 void milan_isa_intr(int, int);
 void
-milan_isa_intr(vector, sr)
-	int	vector, sr;
+milan_isa_intr(int vector, int sr)
 {
 	isa_intr_info_t *iinfo_p;
 	int		s;
@@ -148,10 +141,6 @@ milan_isa_intr(vector, sr)
 		printf("milan_isa_intr: Bogus vector %d\n", vector);
 		return;
 	}
-
-	/* Ack cascade 0x60 == Specific EOI		*/
-	if (vector > 7)
-		WICU(AD_8259_MASTER, 0x60|IRQ_SLAVE);
 
 	iinfo_p = &milan_isa_iinfo[vector];
 	if (iinfo_p->ifunc == NULL) {
@@ -168,9 +157,11 @@ milan_isa_intr(vector, sr)
 	else {
 		s = splx(iinfo_p->ipl);
 		(void) (iinfo_p->ifunc)(iinfo_p->iarg);
-		if (vector > 7)
+		if (vector > 7) {
 			WICU(AD_8259_SLAVE, 0x60 | (vector & 7));
-		else WICU(AD_8259_MASTER, 0x60 | (vector & 7));
+			vector = IRQ_SLAVE;
+		}
+		WICU(AD_8259_MASTER, 0x60 | (vector & 7));
 		splx(s);
 	}
 }
@@ -182,11 +173,7 @@ milan_isa_intr(vector, sr)
 #define	MILAN_AVAIL_ISA_INTS	0x1720
 
 int
-isa_intr_alloc(ic, mask, type, irq)
-	isa_chipset_tag_t ic;
-	int mask;
-	int type;
-	int *irq;
+isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
 	int	i;
 
@@ -208,11 +195,7 @@ isa_intr_alloc(ic, mask, type, irq)
 }
 
 void *
-isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
-	isa_chipset_tag_t ic;
-	int		  irq, type, level;
-	int		  (*ih_fun) __P((void *));
-	void		  *ih_arg;
+isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_fun)(void *), void *ih_arg)
 {
 	isa_intr_info_t *iinfo_p;
 
@@ -226,7 +209,7 @@ isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
 
 	iinfo_p->slot  = 0;	/* Unused on Milan */
 	iinfo_p->ihand = NULL;	/* Unused on Milan */
-	iinfo_p->ipl   = level;
+	iinfo_p->ipl   = ipl2psl_table[level];
 	iinfo_p->ifunc = ih_fun;
 	iinfo_p->iarg  = ih_arg;
 
@@ -235,9 +218,7 @@ isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
 }
 
 void
-isa_intr_disestablish(ic, handler)
-	isa_chipset_tag_t	ic;
-	void			*handler;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *handler)
 {
 	isa_intr_info_t *iinfo_p = (isa_intr_info_t *)handler;
 

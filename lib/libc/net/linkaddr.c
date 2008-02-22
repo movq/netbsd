@@ -1,4 +1,4 @@
-/*	$NetBSD: linkaddr.c,v 1.14 2005/11/29 03:11:59 christos Exp $	*/
+/*	$NetBSD: linkaddr.c,v 1.22 2016/12/07 10:03:29 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)linkaddr.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: linkaddr.c,v 1.14 2005/11/29 03:11:59 christos Exp $");
+__RCSID("$NetBSD: linkaddr.c,v 1.22 2016/12/07 10:03:29 pgoyette Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -57,14 +57,12 @@ __RCSID("$NetBSD: linkaddr.c,v 1.14 2005/11/29 03:11:59 christos Exp $");
 #define LETTER	(4*3)
 
 void
-link_addr(addr, sdl)
-	register const char *addr;
-	register struct sockaddr_dl *sdl;
+link_addr(const char *addr, struct sockaddr_dl *sdl)
 {
-	register char *cp = sdl->sdl_data;
+	char *cp = sdl->sdl_data;
 	char *cplim = sdl->sdl_len + (char *)(void *)sdl;
-	register int byte = 0, state = NAMING;
-	register int newaddr = 0;	/* pacify gcc */
+	int byte = 0, state = NAMING;
+	size_t newaddr = 0;	/* pacify gcc */
 
 	_DIAGASSERT(addr != NULL);
 	_DIAGASSERT(sdl != NULL);
@@ -95,18 +93,19 @@ link_addr(addr, sdl)
 			continue;
 		case NAMING | DELIM:
 			state = RESET;
-			sdl->sdl_nlen = cp - sdl->sdl_data;
+			_DIAGASSERT(__type_fit(uint8_t, cp - sdl->sdl_data));
+			sdl->sdl_nlen = (uint8_t)(cp - sdl->sdl_data);
 			continue;
 		case GOTTWO | DIGIT:
 			*cp++ = byte;
 			/* FALLTHROUGH */
 		case RESET | DIGIT:
 			state = GOTONE;
-			byte = newaddr;
+			byte = (int)newaddr;
 			continue;
 		case GOTONE | DIGIT:
 			state = GOTTWO;
-			byte = newaddr + (byte << 4);
+			byte = (int)newaddr + (byte << 4);
 			continue;
 		default: /* | DELIM */
 			state = RESET;
@@ -122,48 +121,77 @@ link_addr(addr, sdl)
 		}
 		break;
 	} while (cp < cplim); 
-	sdl->sdl_alen = cp - LLADDR(sdl);
+
+	_DIAGASSERT(__type_fit(uint8_t, cp - LLADDR(sdl)));
+	sdl->sdl_alen = (uint8_t)(cp - LLADDR(sdl));
 	newaddr = cp - (char *)(void *)sdl;
-	if ((size_t) newaddr > sizeof(*sdl))
-		sdl->sdl_len = newaddr;
+	if (newaddr > sizeof(*sdl)) {
+		_DIAGASSERT(__type_fit(uint8_t, newaddr));
+		sdl->sdl_len = (uint8_t)newaddr;
+	}
 	return;
 }
 
 static const char hexlist[16] = "0123456789abcdef";
 
 char *
-link_ntoa(sdl)
-	register const struct sockaddr_dl *sdl;
+link_ntoa(const struct sockaddr_dl *sdl)
 {
 	static char obuf[64];
-	register char *out = obuf; 
-	register size_t i;
+	char *out = obuf; 
+	size_t i;
 	const u_char *in = (const u_char *)CLLADDR(sdl);
 	const u_char *inlim = in + sdl->sdl_alen;
 	int firsttime = 1;
 
 	_DIAGASSERT(sdl != NULL);
 
+#define ADDC(ch) \
+	do { \
+		if (out >= obuf + sizeof(obuf) - 1) \
+			return obuf; \
+		*out++ = (ch); \
+	} while (/*CONSTCOND*/0)
+
+	/*
+	 * This is not needed on the first call, as the static
+	 * obuf wil be fully init'd to 0 by default.   But after
+	 * obuf has been returned to userspace the first time,
+	 * anything may have been written to it, so, let's be safe.
+	 *
+	 * (An alternative method would be to make ADDC() more
+	 *  complex:
+	 *	if (out < obuf + sizeof(obuf) - ((ch) != '\0'))
+	 *		*out++ = (ch);
+	 *  so it never returns, and the final ADDC(0) always works
+	 *  but that evaluates 'ch' twice, and is slower, so ...)
+	 */
+	obuf[sizeof(obuf) - 1] = '\0';
+
 	if (sdl->sdl_nlen) {
-		(void)memcpy(obuf, sdl->sdl_data, (size_t)sdl->sdl_nlen);
-		out += sdl->sdl_nlen;
+		if (sdl->sdl_nlen >= sizeof(obuf))
+			i = sizeof(obuf) - 1;
+		else
+			i = sdl->sdl_nlen;
+		(void)memcpy(obuf, sdl->sdl_data, i);
+		out += i;
 		if (sdl->sdl_alen)
-			*out++ = ':';
+			ADDC(':');
 	}
 	while (in < inlim) {
 		if (firsttime)
 			firsttime = 0;
 		else
-			*out++ = '.';
+			ADDC('.');
 		i = *in++;
 		if (i > 0xf) {
-			out[1] = hexlist[i & 0xf];
+			size_t j = i & 0xf;
 			i >>= 4;
-			out[0] = hexlist[i];
-			out += 2;
+			ADDC(hexlist[i]);
+			ADDC(hexlist[j]);
 		} else
-			*out++ = hexlist[i];
+			ADDC(hexlist[i]);
 	}
-	*out = 0;
-	return (obuf);
+	ADDC('\0');
+	return obuf;
 }

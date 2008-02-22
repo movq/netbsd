@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_term.c,v 1.44 2007/01/17 21:44:50 hubertf Exp $	*/
+/*	$NetBSD: sys_term.c,v 1.47 2013/06/28 15:48:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sys_term.c	8.4+1 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: sys_term.c,v 1.44 2007/01/17 21:44:50 hubertf Exp $");
+__RCSID("$NetBSD: sys_term.c,v 1.47 2013/06/28 15:48:02 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -44,8 +44,12 @@ __RCSID("$NetBSD: sys_term.c,v 1.44 2007/01/17 21:44:50 hubertf Exp $");
 #include <util.h>
 #include <vis.h>
 
+#ifdef SUPPORT_UTMP
 #include <utmp.h>
-struct	utmp wtmp;
+#endif
+#ifdef SUPPORT_UTMPX
+#include <utmpx.h>
+#endif
 
 #define SCPYN(a, b)	(void) strncpy(a, b, sizeof(a))
 #define SCMPN(a, b)	strncmp(a, b, sizeof(a))
@@ -54,7 +58,7 @@ struct termios termbuf, termbuf2;	/* pty control structure */
 
 void getptyslave(void);
 int cleanopen(char *);
-char **addarg(char **, char *);
+char **addarg(char **, const char *);
 void scrub_env(void);
 int getent(char *, char *);
 char *getstr(const char *, char **);
@@ -84,7 +88,7 @@ init_termbuf(void)
 void
 copy_termbuf(char *cp, int len)
 {
-	if (len > sizeof(termbuf))
+	if ((size_t)len > sizeof(termbuf))
 		len = sizeof(termbuf);
 	memmove((char *)&termbuf, cp, len);
 	termbuf2 = termbuf;
@@ -677,7 +681,7 @@ start_login(char *host, int autologin, char *name)
 }
 
 char **
-addarg(char **argv, char *val)
+addarg(char **argv, const char *val)
 {
 	char **cpp;
 	char **nargv;
@@ -686,7 +690,7 @@ addarg(char **argv, char *val)
 		/*
 		 * 10 entries, a leading length, and a null
 		 */
-		argv = (char **)malloc(sizeof(*argv) * 12);
+		argv = malloc(sizeof(*argv) * 12);
 		if (argv == NULL)
 			return(NULL);
 		*argv++ = (char *)10;
@@ -696,9 +700,8 @@ addarg(char **argv, char *val)
 		;
 	if (cpp == &argv[(long)argv[-1]]) {
 		--argv;
-		nargv = (char **)realloc(argv,
-		    sizeof(*argv) * ((long)(*argv) + 10 + 2));
-		if (argv == NULL) {
+		nargv = realloc(argv, sizeof(*argv) * ((long)(*argv) + 10 + 2));
+		if (nargv == NULL) {
 			fatal(net, "not enough memory");
 			/*NOTREACHED*/
 		}
@@ -707,7 +710,7 @@ addarg(char **argv, char *val)
 		argv++;
 		cpp = &argv[(long)argv[-1] - 10];
 	}
-	*cpp++ = val;
+	*cpp++ = __UNCONST(val);
 	*cpp = 0;
 	return(argv);
 }

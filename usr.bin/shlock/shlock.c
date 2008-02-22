@@ -1,4 +1,4 @@
-/*	$NetBSD: shlock.c,v 1.9 2006/10/07 21:13:00 elad Exp $	*/
+/*	$NetBSD: shlock.c,v 1.13 2015/04/10 09:34:43 tron Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: shlock.c,v 1.9 2006/10/07 21:13:00 elad Exp $");
+__RCSID("$NetBSD: shlock.c,v 1.13 2015/04/10 09:34:43 tron Exp $");
 #endif
 
 #include <sys/types.h>
@@ -95,11 +88,11 @@ __RCSID("$NetBSD: shlock.c,v 1.9 2006/10/07 21:13:00 elad Exp $");
 #define	TRUE	1
 #define	FALSE	0
 
-int	Debug = FALSE;
-char	*Pname;
-const char USAGE[] = "%s: USAGE: %s [-du] [-p PID] -f file\n";
-const char E_unlk[] = "%s: unlink(%s): %s\n";
-const char E_open[] = "%s: open(%s): %s\n";
+static int	Debug = FALSE;
+static char	*Pname;
+static const char USAGE[] = "%s: USAGE: %s [-du] [-p PID] -f file\n";
+static const char E_unlk[] = "%s: unlink(%s): %s\n";
+static const char E_open[] = "%s: open(%s): %s\n";
 
 #define	dprintf	if (Debug) printf
 
@@ -110,12 +103,11 @@ const char E_open[] = "%s: open(%s): %s\n";
 */
 
 /* the following is in case you need to make the prototypes go away. */
-char	*xtmpfile(char *, pid_t, int);
-int	p_exists(pid_t);
-int	cklock(char *, int);
-int	mklock(char *, pid_t, int);
-void	bad_usage(void);
-int	main(int, char **);
+static char	*xtmpfile(char *, pid_t, int);
+static int	p_exists(pid_t);
+static int	cklock(char *, int);
+static int	mklock(char *, pid_t, int);
+__dead static void	bad_usage(void);
 
 /*
 ** Create a temporary file, all ready to lock with.
@@ -123,23 +115,23 @@ int	main(int, char **);
 ** gave us a full path, instead of using the current directory
 ** which might not be in the same filesystem.
 */
-char *
-xtmpfile(char *file, __pid_t pid, int uucpstyle)
+static char *
+xtmpfile(char *file, pid_t pid, int uucpstyle)
 {
 	int	fd;
 	int	len;
 	char	*cp, buf[BUFSIZ];
 	static char	tempname[BUFSIZ];
 
-	sprintf(buf, "shlock%ld", (u_long)getpid());
-	if ((cp = strrchr(strcpy(tempname, file), '/')) != (char *)NULL) {
+	sprintf(buf, "shlock%ld", (long)getpid());
+	if ((cp = strrchr(strcpy(tempname, file), '/')) != NULL) {
 		*++cp = '\0';
 		(void) strcat(tempname, buf);
 	} else
 		(void) strcpy(tempname, buf);
 	dprintf("%s: temporary filename: %s\n", Pname, tempname);
 
-	sprintf(buf, "%ld\n", (u_long)pid);
+	sprintf(buf, "%ld\n", (long)pid);
 	len = strlen(buf);
 openloop:
 	if ((fd = open(tempname, O_RDWR|O_CREAT|O_EXCL, 0644)) < 0) {
@@ -150,7 +142,7 @@ openloop:
 			if (unlink(tempname) < 0) {
 				fprintf(stderr, E_unlk,
 					Pname, tempname, strerror(errno));
-				return((char *)NULL);
+				return (NULL);
 			}
 			/*
 			** Further profanity
@@ -159,7 +151,7 @@ openloop:
 		default:
 			fprintf(stderr, E_open,
 				Pname, tempname, strerror(errno));
-			return((char *)NULL);
+			return (NULL);
 		}
 	}
 
@@ -173,13 +165,13 @@ openloop:
 		(write(fd, buf, len) < 0))
 	{
 		fprintf(stderr, "%s: write(%s,%ld): %s\n",
-			Pname, tempname, (u_long)pid, strerror(errno));
+			Pname, tempname, (long)pid, strerror(errno));
 		(void) close(fd);
 		if (unlink(tempname) < 0) {
 			fprintf(stderr, E_unlk,
 				Pname, tempname, strerror(errno));
 		}
-		return((char *)NULL);
+		return (NULL);
 	}
 	(void) close(fd);
 	return(tempname);
@@ -189,10 +181,10 @@ openloop:
 ** Does the PID exist?
 ** Send null signal to find out.
 */
-int
-p_exists(__pid_t pid)
+static int
+p_exists(pid_t pid)
 {
-	dprintf("%s: process %ld is ", Pname, (u_long)pid);
+	dprintf("%s: process %ld is ", Pname, (long)pid);
 	if (pid <= 0) {
 		dprintf("invalid\n");
 		return(FALSE);
@@ -229,7 +221,7 @@ p_exists(__pid_t pid)
 **	o	No clean up to do if the system or application crashes.
 **
 */
-int
+static int
 cklock(char *file, int uucpstyle)
 {
 	int	fd = open(file, O_RDONLY);
@@ -257,15 +249,15 @@ cklock(char *file, int uucpstyle)
 	return(p_exists(uucpstyle ? pid : atoi(buf)));
 }
 
-int
-mklock(char *file, __pid_t pid, int uucpstyle)
+static int
+mklock(char *file, pid_t pid, int uucpstyle)
 {
 	char	*tmp;
 	int	retcode = FALSE;
 
 	dprintf("%s: trying lock <%s> for process %ld\n", Pname, file,
-	    (u_long)pid);
-	if ((tmp = xtmpfile(file, pid, uucpstyle)) == (char *)NULL)
+	    (long)pid);
+	if ((tmp = xtmpfile(file, pid, uucpstyle)) == NULL)
 		return(FALSE);
 
 linkloop:
@@ -305,7 +297,7 @@ linkloop:
 	return(retcode);
 }
 
-void
+static void
 bad_usage(void)
 {
 	fprintf(stderr, USAGE, Pname, Pname);
@@ -316,7 +308,7 @@ int
 main(int ac, char **av)
 {
 	int	x;
-	char	*file = (char *)NULL;
+	char	*file = NULL;
 	pid_t	pid = 0;
 	int	uucpstyle = FALSE;	/* indicating UUCP style locks */
 	int	only_check = TRUE;	/* don't make a lock */
@@ -359,7 +351,7 @@ main(int ac, char **av)
 		}
 	}
 
-	if (file == (char *)NULL || (!only_check && pid <= 0)) {
+	if (file == NULL || (!only_check && pid <= 0)) {
 		bad_usage();
 	}
 

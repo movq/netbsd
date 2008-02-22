@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.27 2008/02/20 17:05:52 matt Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.46 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -44,12 +44,26 @@
 #include <sys/callout.h>
 #include <sys/selinfo.h>		/* for struct selinfo */
 #include <net/if.h>			/* for IFNAMSIZ */
+#include <net/bpfjit.h>			/* for bpfjit_function_t */
+#ifdef _KERNEL
+#include <sys/pslist.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+#include <sys/psref.h>
+#endif
+
+struct bpf_filter {
+	struct bpf_insn *bf_insn; 	/* filter code */
+	size_t		bf_size;
+	bpfjit_func_t	bf_jitcode;	/* compiled filter program */
+};
 
 /*
  * Descriptor associated with each open bpf file.
  */
 struct bpf_d {
-	struct bpf_d	*bd_next;	/* Linked list of descriptors */
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	struct bpf_d	*_bd_next;	/* Linked list of descriptors */
 	/*
 	 * Buffer slots: two mbuf clusters buffer the incoming packets.
 	 *   The model has three slots.  Sbuf is always occupied.
@@ -69,7 +83,12 @@ struct bpf_d {
 
 	struct bpf_if *	bd_bif;		/* interface descriptor */
 	u_long		bd_rtout;	/* Read timeout in 'ticks' */
-	struct bpf_insn *bd_filter; 	/* filter code */
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	struct bpf_insn *_bd_filter; 	/* filter code */
+	/*
+	 * XXX we should make the counters per-CPU once we retire kvm(3) users
+	 * that directly access them.
+	 */
 	u_long		bd_rcount;	/* number of packets received */
 	u_long		bd_dcount;	/* number of packets dropped */
 	u_long		bd_ccount;	/* number of packets captured */
@@ -78,7 +97,8 @@ struct bpf_d {
 	u_char		bd_state;	/* idle, waiting, or timed out */
 	u_char		bd_immediate;	/* true to return on packet arrival */
 	int		bd_hdrcmplt;	/* false to fill in src lladdr */
-	int		bd_seesent;	/* true if bpf should see sent packets */
+	u_int		bd_direction;	/* select packet direction */
+	int 		bd_feedback;	/* true to feed back sent packets */
 	int		bd_async;	/* non-zero if packet reception should generate signal */
 	pid_t		bd_pgid;	/* process or group id for signal */
 #if BSD < 199103
@@ -91,7 +111,26 @@ struct bpf_d {
 #endif
 	callout_t	bd_callout;	/* for BPF timeouts with select */
 	pid_t		bd_pid;		/* corresponding PID */
-	LIST_ENTRY(bpf_d) bd_list;	/* list of all BPF's */
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	LIST_ENTRY(bpf_d) _bd_list;	/* list of all BPF's */
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	void		*bd_sih;	/* soft interrupt handle */
+	struct timespec bd_atime;	/* access time */
+	struct timespec bd_mtime;	/* modification time */
+	struct timespec bd_btime;	/* birth time */
+#ifdef _LP64
+	int		bd_compat32;	/* 32-bit stream on LP64 system */
+#endif
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	bpfjit_func_t	bd_jitcode;	/* compiled filter program */
+	struct bpf_filter *bd_filter;
+#ifdef _KERNEL
+	struct pslist_entry	bd_bif_dlist_entry; /* For bpf_if */
+	struct pslist_entry	bd_bpf_dlist_entry; /* For the global list */
+	kmutex_t	*bd_mtx;
+	kmutex_t	*bd_buf_mtx;
+	kcondvar_t	bd_cv;
+#endif
 };
 
 
@@ -110,7 +149,7 @@ struct bpf_d_ext {
 	uint8_t		bde_state;
 	uint8_t		bde_immediate;
 	int32_t		bde_hdrcmplt;
-	int32_t		bde_seesent;
+	uint32_t	bde_direction;
 	pid_t		bde_pid;
 	uint64_t	bde_rcount;		/* number of packets received */
 	uint64_t	bde_dcount;		/* number of packets dropped */
@@ -123,16 +162,21 @@ struct bpf_d_ext {
  * Descriptor associated with each attached hardware interface.
  */
 struct bpf_if {
-	struct bpf_if *bif_next;	/* list of all interfaces */
-	struct bpf_d *bif_dlist;	/* descriptor list */
+	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
+	struct bpf_if *_bif_next;	/* list of all interfaces */
+	struct bpf_d *_bif_dlist;	/* descriptor list */
 	struct bpf_if **bif_driverp;	/* pointer into softc */
 	u_int bif_dlt;			/* link layer type */
 	u_int bif_hdrlen;		/* length of header (with padding) */
-	struct ifnet *bif_ifp;		/* correspoding interface */
-};
-
+	struct ifnet *bif_ifp;		/* corresponding interface */
+	void *bif_si;
+	struct mbuf *bif_mbuf_head;
+	struct mbuf *bif_mbuf_tail;
 #ifdef _KERNEL
-int	 bpf_setf __P((struct bpf_d *, struct bpf_program *));
+	struct pslist_entry bif_iflist_entry;
+	struct pslist_head bif_dlist_head;
+	struct psref_target bif_psref;
 #endif
+};
 
 #endif /* !_NET_BPFDESC_H_ */

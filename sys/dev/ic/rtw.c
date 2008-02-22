@@ -1,4 +1,4 @@
-/* $NetBSD: rtw.c,v 1.98 2007/12/21 18:22:43 dyoung Exp $ */
+/* $NetBSD: rtw.c,v 1.128 2018/06/26 06:48:00 msaitoh Exp $ */
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 David Young.  All rights
  * reserved.
@@ -13,9 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -35,9 +32,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.98 2007/12/21 18:22:43 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.128 2018/06/26 06:48:00 msaitoh Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -48,12 +44,12 @@ __KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.98 2007/12/21 18:22:43 dyoung Exp $");
 #include <sys/kernel.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/device.h>
+#include <sys/sockio.h>
 
 #include <machine/endian.h>
 #include <sys/bus.h>
 #include <sys/intr.h>	/* splnet */
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -63,9 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.98 2007/12/21 18:22:43 dyoung Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <dev/ic/rtwreg.h>
 #include <dev/ic/rtwvar.h>
@@ -91,6 +85,12 @@ static int rtw_rxbufs_limit = RTW_RXQLEN;
 int rtw_dwelltime = 200;	/* milliseconds */
 static struct ieee80211_cipher rtw_cipher_wep;
 
+static void rtw_disable_interrupts(struct rtw_regs *);
+static void rtw_enable_interrupts(struct rtw_softc *);
+
+static int rtw_init(struct ifnet *);
+static void rtw_softintr(void *);
+
 static void rtw_start(struct ifnet *);
 static void rtw_reset_oactive(struct rtw_softc *);
 static struct mbuf *rtw_beacon_alloc(struct rtw_softc *,
@@ -107,6 +107,7 @@ static int rtw_wep_decap(struct ieee80211_key *, struct mbuf *, int);
 static void rtw_wep_setkeys(struct rtw_softc *, struct ieee80211_key *, int);
 
 static void rtw_led_attach(struct rtw_led_state *, void *);
+static void rtw_led_detach(struct rtw_led_state *);
 static void rtw_led_init(struct rtw_regs *);
 static void rtw_led_slowblink(void *);
 static void rtw_led_fastblink(void *);
@@ -128,7 +129,7 @@ static void rtw_txring_fixup(struct rtw_softc *sc, const char *fn, int ln);
 /*
  * Setup sysctl(3) MIB, hw.rtw.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
 SYSCTL_SETUP(sysctl_rtw, "sysctl rtw(4) subtree setup")
 {
@@ -136,14 +137,9 @@ SYSCTL_SETUP(sysctl_rtw, "sysctl rtw(4) subtree setup")
 	const struct sysctlnode *cnode, *rnode;
 
 	if ((rc = sysctl_createv(clog, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &rnode, &rnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "rtw",
 	    "Realtek RTL818x 802.11 controls",
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 #ifdef RTW_DEBUG
@@ -550,13 +546,14 @@ static int
 rtw_key_delete(struct ieee80211com *ic, const struct ieee80211_key *k)
 {
 	struct rtw_softc *sc = ic->ic_ifp->if_softc;
-	u_int keyix = k->wk_keyix;
 
-	DPRINTF(sc, RTW_DEBUG_KEY, ("%s: delete key %u\n", __func__, keyix));
+	DPRINTF(sc, RTW_DEBUG_KEY, ("%s: delete key %u\n", __func__,
+	    k->wk_keyix));
 
-	if (keyix >= IEEE80211_WEP_NKID)
-		return 0;
-	if (k->wk_keylen != 0)
+	KASSERT(k->wk_keyix < IEEE80211_WEP_NKID);
+
+	if (k->wk_keylen != 0 &&
+	    k->wk_cipher->ic_cipher == IEEE80211_CIPHER_WEP)
 		sc->sc_flags &= ~RTW_F_DK_VALID;
 
 	return 1;
@@ -570,8 +567,7 @@ rtw_key_set(struct ieee80211com *ic, const struct ieee80211_key *k,
 
 	DPRINTF(sc, RTW_DEBUG_KEY, ("%s: set key %u\n", __func__, k->wk_keyix));
 
-	if (k->wk_keyix >= IEEE80211_WEP_NKID)
-		return 0;
+	KASSERT(k->wk_keyix < IEEE80211_WEP_NKID);
 
 	sc->sc_flags &= ~RTW_F_DK_VALID;
 
@@ -590,6 +586,18 @@ rtw_key_update_begin(struct ieee80211com *ic)
 }
 
 static void
+rtw_tx_kick(struct rtw_regs *regs, uint8_t ringsel)
+{
+	uint8_t tppoll;
+
+	tppoll = RTW_READ8(regs, RTW_TPPOLL);
+	tppoll &= ~RTW_TPPOLL_SALL;
+	tppoll |= ringsel & RTW_TPPOLL_ALL;
+	RTW_WRITE8(regs, RTW_TPPOLL, tppoll);
+	RTW_SYNC(regs, RTW_TPPOLL, RTW_TPPOLL);
+}
+
+static void
 rtw_key_update_end(struct ieee80211com *ic)
 {
 	struct ifnet *ifp = ic->ic_ifp;
@@ -598,8 +606,7 @@ rtw_key_update_end(struct ieee80211com *ic)
 	DPRINTF(sc, RTW_DEBUG_KEY, ("%s:\n", __func__));
 
 	if ((sc->sc_flags & RTW_F_DK_VALID) != 0 ||
-	    (sc->sc_flags & RTW_F_ENABLED) == 0 ||
-	    (sc->sc_flags & RTW_F_INVALID) != 0)
+	    !device_is_active(sc->sc_dev))
 		return;
 
 	rtw_io_enable(sc, RTW_CR_RE | RTW_CR_TE, 0);
@@ -608,11 +615,11 @@ rtw_key_update_end(struct ieee80211com *ic)
 	    (ifp->if_flags & IFF_RUNNING) != 0);
 }
 
-static inline int
+static bool
 rtw_key_hwsupp(uint32_t flags, const struct ieee80211_key *k)
 {
 	if (k->wk_cipher->ic_cipher != IEEE80211_CIPHER_WEP)
-		return 0;
+		return false;
 
 	return	((flags & RTW_C_RXWEP_40) != 0 && k->wk_keylen == 5) ||
 		((flags & RTW_C_RXWEP_104) != 0 && k->wk_keylen == 13);
@@ -622,14 +629,14 @@ static void
 rtw_wep_setkeys(struct rtw_softc *sc, struct ieee80211_key *wk, int txkey)
 {
 	uint8_t psr, scr;
-	int i, keylen;
+	int i, keylen = 0;
 	struct rtw_regs *regs;
 	union rtw_keys *rk;
 
 	regs = &sc->sc_regs;
 	rk = &sc->sc_keys;
 
-	(void)memset(rk, 0, sizeof(rk));
+	(void)memset(rk, 0, sizeof(*rk));
 
 	/* Temporarily use software crypto for all keys. */
 	for (i = 0; i < IEEE80211_WEP_NKID; i++) {
@@ -646,7 +653,7 @@ rtw_wep_setkeys(struct rtw_softc *sc, struct ieee80211_key *wk, int txkey)
 	if ((sc->sc_ic.ic_flags & IEEE80211_F_PRIVACY) == 0)
 		goto out;
 
-	for (keylen = i = 0; i < IEEE80211_WEP_NKID; i++) {
+	for (i = 0; i < IEEE80211_WEP_NKID; i++) {
 		if (!rtw_key_hwsupp(sc->sc_flags, &wk[i]))
 			continue;
 		if (i == txkey) {
@@ -677,7 +684,11 @@ out:
 	    RTW_DK0, rk->rk_words, __arraycount(rk->rk_words));
 
 	bus_space_barrier(regs->r_bt, regs->r_bh, RTW_DK0, sizeof(rk->rk_words),
-	    BUS_SPACE_BARRIER_SYNC);
+	    BUS_SPACE_BARRIER_READ|BUS_SPACE_BARRIER_WRITE);
+
+	RTW_DPRINTF(RTW_DEBUG_KEY,
+	    ("%s.%d: scr %02" PRIx8 ", keylen %d\n", __func__, __LINE__, scr,
+	     keylen));
 
 	RTW_WBW(regs, RTW_DK0, RTW_PSR);
 	RTW_WRITE8(regs, RTW_PSR, psr);
@@ -815,7 +826,6 @@ rtw_srom_parse(struct rtw_srom *sr, uint32_t *flags, uint8_t *cs_threshold,
 	const char *rfname, *paname;
 	char scratch[sizeof("unknown 0xXX")];
 	uint16_t srom_version;
-	uint8_t mac[IEEE80211_ADDR_LEN];
 
 	*flags &= ~(RTW_F_DIGPHY|RTW_F_DFLANTB|RTW_F_ANTDIV);
 	*rcr &= ~(RTW_RCR_ENCS1 | RTW_RCR_ENCS2);
@@ -830,12 +840,14 @@ rtw_srom_parse(struct rtw_srom *sr, uint32_t *flags, uint8_t *cs_threshold,
 		rtw_srom_defaults(sr, flags, cs_threshold, rfchipid, rcr);
 		return 0;
 	} else {
-		aprint_verbose_dev(dev, "SROM version %d.%d",
+		aprint_verbose_dev(dev, "SROM version %d.%d\n",
 		    srom_version >> 8, srom_version & 0xff);
 	}
 
+	uint8_t mac[IEEE80211_ADDR_LEN];
 	for (i = 0; i < IEEE80211_ADDR_LEN; i++)
 		mac[i] = RTW_SR_GET(sr, RTW_SR_MAC + i);
+	__USE(mac);
 
 	RTW_DPRINTF(RTW_DEBUG_ATTACH,
 	    ("%s: EEPROM MAC %s\n", device_xname(dev), ether_sprintf(mac)));
@@ -1039,9 +1051,13 @@ rtw_set_rfprog(struct rtw_regs *regs, enum rtw_rfchipid rfchipid,
 
 	RTW_WBR(regs, RTW_CONFIG4, RTW_CONFIG4);
 
+#ifdef RTW_DEBUG
 	RTW_DPRINTF(RTW_DEBUG_INIT,
 	    ("%s: %s RF programming method, %#02x\n", device_xname(dev), method,
 	    RTW_READ8(regs, RTW_CONFIG4)));
+#else
+	__USE(method);
+#endif
 }
 
 static inline void
@@ -1360,12 +1376,17 @@ rtw_rxdesc_init(struct rtw_rxdesc_blk *rdb, struct rtw_rxsoft *rs,
 	octl = rd->rd_ctl;
 	rd->rd_ctl = htole32(ctl);
 
+#ifdef RTW_DEBUG
 	RTW_DPRINTF(
 	    kick ? (RTW_DEBUG_RECV_DESC | RTW_DEBUG_IO_KICK)
 	         : RTW_DEBUG_RECV_DESC,
 	    ("%s: rd %p buf %08x -> %08x ctl %08x -> %08x\n", __func__, rd,
 	     le32toh(obuf), le32toh(rd->rd_buf), le32toh(octl),
 	     le32toh(rd->rd_ctl)));
+#else
+	__USE(octl);
+	__USE(obuf);
+#endif
 
 	/* sync the descriptor */
 	bus_dmamap_sync(rdb->rdb_dmat, rdb->rdb_dmamap,
@@ -1377,11 +1398,9 @@ static void
 rtw_rxdesc_init_all(struct rtw_rxdesc_blk *rdb, struct rtw_rxsoft *ctl, int kick)
 {
 	int i;
-	struct rtw_rxdesc *rd;
 	struct rtw_rxsoft *rs;
 
 	for (i = 0; i < rdb->rdb_ndesc; i++) {
-		rd = &rdb->rdb_desc[i];
 		rs = &ctl[i];
 		rtw_rxdesc_init(rdb, rs, i, kick);
 	}
@@ -1421,6 +1440,10 @@ rtw_io_enable(struct rtw_softc *sc, uint8_t flags, int enable)
 	if (cr & RTW_CR_TE)
 		rtw_txring_fixup(sc, __func__, __LINE__);
 #endif
+	if (cr & RTW_CR_TE) {
+		rtw_tx_kick(&sc->sc_regs,
+		    RTW_TPPOLL_HPQ | RTW_TPPOLL_NPQ | RTW_TPPOLL_LPQ);
+	}
 }
 
 static void
@@ -1434,7 +1457,7 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 							 * hardware -> net80211
 							 */
 	u_int next, nproc = 0;
-	int hwrate, len, rate, rssi, sq;
+	int hwrate, len, rate, rssi, sq, s;
 	uint32_t hrssi, hstat, htsfth, htsftl;
 	struct rtw_rxdesc *rd;
 	struct rtw_rxsoft *rs;
@@ -1517,7 +1540,10 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 			goto next;
 		}
 		if (len > rs->rs_mbuf->m_len) {
-			aprint_error_dev(sc->sc_dev, "rx frame too long\n");
+			aprint_error_dev(sc->sc_dev,
+			    "rx frame too long, %d > %d, %08" PRIx32
+			    ", desc %d\n",
+			    len, rs->rs_mbuf->m_len, hstat, next);
 			ifp->if_ierrors++;
 			goto next;
 		}
@@ -1581,10 +1607,12 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 		/* Note well: now we cannot recycle the rs_mbuf unless
 		 * we restore its original length.
 		 */
-		m->m_pkthdr.rcvif = ifp;
+		m_set_rcvif(m, ifp);
 		m->m_pkthdr.len = m->m_len = len;
 
 		wh = mtod(m, struct ieee80211_frame_min *);
+
+		s = splnet();
 
 		if (!IS_BEACON(wh->i_fc[0]))
 			sc->sc_led_state.ls_event |= RTW_LED_S_RX;
@@ -1599,7 +1627,6 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 		}
 #endif /* RTW_DEBUG */
 
-#if NBPFILTER > 0
 		if (sc->sc_radiobpf != NULL) {
 			struct rtw_rx_radiotap_header *rr = &sc->sc_rxtap;
 
@@ -1623,13 +1650,13 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 				    htole16(UINT8_MAX - sq);
 			}
 
-			bpf_mtap2(sc->sc_radiobpf, rr,
-			    sizeof(sc->sc_rxtapu), m);
+			bpf_mtap2(sc->sc_radiobpf,
+			    rr, sizeof(sc->sc_rxtapu), m, BPF_D_IN);
 		}
-#endif /* NBPFILTER > 0 */
 
 		if ((hstat & RTW_RXSTAT_RES) != 0) {
 			m_freem(m);
+			splx(s);
 			goto next;
 		}
 
@@ -1640,6 +1667,7 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 		ni = ieee80211_find_rxnode(&sc->sc_ic, wh);
 		ieee80211_input(&sc->sc_ic, m, ni, rssi, htsftl);
 		ieee80211_free_node(ni);
+		splx(s);
 next:
 		rtw_rxdesc_init(rdb, rs, next, 0);
 	}
@@ -1710,10 +1738,14 @@ rtw_collect_txpkt(struct rtw_softc *sc, struct rtw_txdesc_blk *tdb,
 		condstring = "error";
 	}
 
+#ifdef RTW_DEBUG
 	DPRINTF(sc, RTW_DEBUG_XMIT_DESC,
 	    ("%s: ts %p txdesc[%d, %d] %s tries rts %u data %u\n",
 	    device_xname(sc->sc_dev), ts, ts->ts_first, ts->ts_last,
 	    condstring, rts_retry, data_retry));
+#else
+	__USE(condstring);
+#endif
 }
 
 static void
@@ -1737,10 +1769,11 @@ rtw_reset_oactive(struct rtw_softc *sc)
 }
 
 /* Collect transmitted packets. */
-static void
+static bool
 rtw_collect_txring(struct rtw_softc *sc, struct rtw_txsoft_blk *tsb,
     struct rtw_txdesc_blk *tdb, int force)
 {
+	bool collected = false;
 	int ndesc;
 	struct rtw_txsoft *ts;
 
@@ -1793,6 +1826,8 @@ rtw_collect_txring(struct rtw_softc *sc, struct rtw_txsoft_blk *tsb,
 			break;
 		}
 
+		collected = true;
+
 		rtw_collect_txpkt(sc, tdb, ts, ndesc);
 		SIMPLEQ_REMOVE_HEAD(&tsb->tsb_dirtyq, ts_q);
 		SIMPLEQ_INSERT_TAIL(&tsb->tsb_freeq, ts, ts_q);
@@ -1802,15 +1837,19 @@ rtw_collect_txring(struct rtw_softc *sc, struct rtw_txsoft_blk *tsb,
 	if (ts == NULL)
 		tsb->tsb_tx_timer = 0;
 	rtw_reset_oactive(sc);
+
+	return collected;
 }
 
 static void
 rtw_intr_tx(struct rtw_softc *sc, uint16_t isr)
 {
-	int pri;
+	int pri, s;
 	struct rtw_txsoft_blk	*tsb;
 	struct rtw_txdesc_blk	*tdb;
 	struct ifnet *ifp = &sc->sc_if;
+
+	s = splnet();
 
 	for (pri = 0; pri < RTW_NTXPRI; pri++) {
 		tsb = &sc->sc_txsoft_blk[pri];
@@ -1819,9 +1858,9 @@ rtw_intr_tx(struct rtw_softc *sc, uint16_t isr)
 	}
 
 	if ((isr & RTW_INTR_TX) != 0)
-		rtw_start(ifp);
+		rtw_start(ifp); /* in softint */
 
-	return;
+	splx(s);
 }
 
 static void
@@ -1833,17 +1872,26 @@ rtw_intr_beacon(struct rtw_softc *sc, uint16_t isr)
 	struct rtw_txdesc_blk *tdb = &sc->sc_txdesc_blk[RTW_TXPRIBCN];
 	struct rtw_txsoft_blk *tsb = &sc->sc_txsoft_blk[RTW_TXPRIBCN];
 	struct mbuf *m;
+	int s;
+
+	s = splnet();
 
 	tsfth = RTW_READ(&sc->sc_regs, RTW_TSFTRH);
 	tsftl = RTW_READ(&sc->sc_regs, RTW_TSFTRL);
 
 	if ((isr & (RTW_INTR_TBDOK|RTW_INTR_TBDER)) != 0) {
 		next = rtw_txring_next(&sc->sc_regs, tdb);
+#ifdef RTW_DEBUG
 		RTW_DPRINTF(RTW_DEBUG_BEACON,
 		    ("%s: beacon ring %sprocessed, isr = %#04" PRIx16
 		     ", next %u expected %u, %" PRIu64 "\n", __func__,
 		     (next == tdb->tdb_next) ? "" : "un", isr, next,
 		     tdb->tdb_next, (uint64_t)tsfth << 32 | tsftl));
+#else
+		__USE(next);
+		__USE(tsfth);
+		__USE(tsftl);
+#endif
 		if ((RTW_READ8(&sc->sc_regs, RTW_TPPOLL) & RTW_TPPOLL_BQ) == 0)
 			rtw_collect_txring(sc, tsb, tdb, 1);
 	}
@@ -1862,12 +1910,15 @@ rtw_intr_beacon(struct rtw_softc *sc, uint16_t isr)
 		if (m == NULL) {
 			aprint_error_dev(sc->sc_dev,
 			    "could not allocate beacon\n");
+			splx(s);
 			return;
 		}
-		m->m_pkthdr.rcvif = (void *)ieee80211_ref_node(ic->ic_bss);
+		M_SETCTX(m, ieee80211_ref_node(ic->ic_bss));
 		IF_ENQUEUE(&sc->sc_beaconq, m);
-		rtw_start(&sc->sc_if);
+		rtw_start(&sc->sc_if); /* in softint */
 	}
+
+	splx(s);
 }
 
 static void
@@ -2039,10 +2090,14 @@ rtw_txdescs_reset(struct rtw_softc *sc)
 static void
 rtw_intr_ioerror(struct rtw_softc *sc, uint16_t isr)
 {
+	int s;
+
 	aprint_error_dev(sc->sc_dev, "tx fifo underflow\n");
 
 	RTW_DPRINTF(RTW_DEBUG_BUGS, ("%s: cleaning up xmit, isr %" PRIx16
 	    "\n", device_xname(sc->sc_dev), isr));
+
+	s = splnet();
 
 #ifdef RTW_DEBUG
 	rtw_dump_rings(sc);
@@ -2056,6 +2111,8 @@ rtw_intr_ioerror(struct rtw_softc *sc, uint16_t isr)
 #ifdef RTW_DEBUG
 	rtw_dump_rings(sc);
 #endif /* RTW_DEBUG */
+
+	splx(s);
 }
 
 static inline void
@@ -2069,34 +2126,40 @@ rtw_suspend_ticks(struct rtw_softc *sc)
 static inline void
 rtw_resume_ticks(struct rtw_softc *sc)
 {
-	uint32_t tsftrl0, tsftrl1, next_tick;
+	uint32_t tsftrl0, tsftrl1, next_tint;
 
 	tsftrl0 = RTW_READ(&sc->sc_regs, RTW_TSFTRL);
 
 	tsftrl1 = RTW_READ(&sc->sc_regs, RTW_TSFTRL);
-	next_tick = tsftrl1 + 1000000;
-	RTW_WRITE(&sc->sc_regs, RTW_TINT, next_tick);
+	next_tint = tsftrl1 + 1000000;
+	RTW_WRITE(&sc->sc_regs, RTW_TINT, next_tint);
 
 	sc->sc_do_tick = 1;
 
+#ifdef RTW_DEBUG
 	RTW_DPRINTF(RTW_DEBUG_TIMEOUT,
 	    ("%s: resume ticks delta %#08x now %#08x next %#08x\n",
-	    device_xname(sc->sc_dev), tsftrl1 - tsftrl0, tsftrl1, next_tick));
+	    device_xname(sc->sc_dev), tsftrl1 - tsftrl0, tsftrl1, next_tint));
+#else
+	__USE(tsftrl0);
+#endif
 }
 
 static void
 rtw_intr_timeout(struct rtw_softc *sc)
 {
+	int s;
+
+	s = splnet();
 	RTW_DPRINTF(RTW_DEBUG_TIMEOUT, ("%s: timeout\n", device_xname(sc->sc_dev)));
 	if (sc->sc_do_tick)
 		rtw_resume_ticks(sc);
-	return;
+	splx(s);
 }
 
 int
 rtw_intr(void *arg)
 {
-	int i;
 	struct rtw_softc *sc = arg;
 	struct rtw_regs *regs = &sc->sc_regs;
 	uint16_t isr;
@@ -2106,12 +2169,39 @@ rtw_intr(void *arg)
 	 * If the interface isn't running, the interrupt couldn't
 	 * possibly have come from us.
 	 */
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0 ||
-	    (ifp->if_flags & IFF_RUNNING) == 0 ||
-	    !device_is_active(sc->sc_dev)) {
+	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
+	    !device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER)) {
 		RTW_DPRINTF(RTW_DEBUG_INTR, ("%s: stray interrupt\n",
 		    device_xname(sc->sc_dev)));
 		return (0);
+	}
+
+	isr = RTW_READ16(regs, RTW_ISR);
+	if (isr == 0)
+		return (0);
+
+	/* Disable interrupts. */
+	RTW_WRITE16(regs, RTW_IMR, 0);
+	RTW_WBW(regs, RTW_IMR, RTW_IMR);
+
+	softint_schedule(sc->sc_soft_ih);
+	return (1);
+}
+
+static void
+rtw_softintr(void *arg)
+{
+	int i;
+	struct rtw_softc *sc = arg;
+	struct rtw_regs *regs = &sc->sc_regs;
+	uint16_t isr;
+	struct ifnet *ifp = &sc->sc_if;
+
+	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
+	    !device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER)) {
+		RTW_DPRINTF(RTW_DEBUG_INTR, ("%s: stray interrupt\n",
+		    device_xname(sc->sc_dev)));
+		return;
 	}
 
 	for (i = 0; i < 10; i++) {
@@ -2175,8 +2265,12 @@ rtw_intr(void *arg)
 		if ((isr & RTW_INTR_TIMEOUT) != 0)
 			rtw_intr_timeout(sc);
 	}
+	if (i == 10)
+		softint_schedule(sc->sc_soft_ih);
 
-	return 1;
+	/* Re-enable interrupts */
+	RTW_WRITE16(regs, RTW_IMR, sc->sc_inten);
+	RTW_WBW(regs, RTW_IMR, RTW_IMR);
 }
 
 /* Must be called at splnet. */
@@ -2188,14 +2282,11 @@ rtw_stop(struct ifnet *ifp, int disable)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct rtw_regs *regs = &sc->sc_regs;
 
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0)
-		return;
-
 	rtw_suspend_ticks(sc);
 
 	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
-	if ((sc->sc_flags & RTW_F_INVALID) == 0) {
+	if (device_has_power(sc->sc_dev)) {
 		/* Disable interrupts. */
 		RTW_WRITE16(regs, RTW_IMR, 0);
 
@@ -2218,12 +2309,12 @@ rtw_stop(struct ifnet *ifp, int disable)
 
 	rtw_rxbufs_release(sc->sc_dmat, &sc->sc_rxsoft[0]);
 
-	if (disable)
-		rtw_disable(sc);
-
 	/* Mark the interface as not running.  Cancel the watchdog timer. */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+
+	if (disable)
+		pmf_device_suspend(sc->sc_dev, &sc->sc_qual);
 
 	return;
 }
@@ -2447,7 +2538,7 @@ rtw_tune(struct rtw_softc *sc)
 
 	/* TBD wait for Tx to complete */
 
-	KASSERT((sc->sc_flags & RTW_F_ENABLED) != 0);
+	KASSERT(device_has_power(sc->sc_dev));
 
 	if ((rc = rtw_phy_init(&sc->sc_regs, sc->sc_rf,
 	    rtw_chan2txpower(&sc->sc_srom, ic, ic->ic_curchan), sc->sc_csthr,
@@ -2465,43 +2556,39 @@ rtw_tune(struct rtw_softc *sc)
 	return rc;
 }
 
-void
-rtw_disable(struct rtw_softc *sc)
+bool
+rtw_suspend(device_t self, const pmf_qual_t *qual)
 {
 	int rc;
+	struct rtw_softc *sc = device_private(self);
 
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0)
-		return;
+	sc->sc_flags &= ~RTW_F_DK_VALID;
+
+	if (!device_has_power(self))
+		return false;
 
 	/* turn off PHY */
-	if ((sc->sc_flags & RTW_F_INVALID) == 0 &&
-	    (rc = rtw_pwrstate(sc, RTW_OFF)) != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "failed to turn off PHY (%d)\n", rc);
+	if ((rc = rtw_pwrstate(sc, RTW_OFF)) != 0) {
+		aprint_error_dev(self, "failed to turn off PHY (%d)\n", rc);
+		return false;
 	}
 
-	if (sc->sc_disable != NULL)
-		(*sc->sc_disable)(sc);
+	rtw_disable_interrupts(&sc->sc_regs);
 
-	sc->sc_flags &= ~RTW_F_ENABLED;
+	return true;
 }
 
-int
-rtw_enable(struct rtw_softc *sc)
+bool
+rtw_resume(device_t self, const pmf_qual_t *qual)
 {
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0) {
-		if (sc->sc_enable != NULL && (*sc->sc_enable)(sc) != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    "device enable failed\n");
-			return (EIO);
-		}
-		sc->sc_flags |= RTW_F_ENABLED;
-                /* Power may have been removed, and WEP keys thus
-                 * reset.
-		 */
-		sc->sc_flags &= ~RTW_F_DK_VALID;
-	}
-	return (0);
+	struct rtw_softc *sc = device_private(self);
+
+	/* Power may have been removed, resetting WEP keys.
+	 */
+	sc->sc_flags &= ~RTW_F_DK_VALID;
+	rtw_enable_interrupts(sc);
+
+	return true;
 }
 
 static void
@@ -2528,7 +2615,16 @@ rtw_transmit_config(struct rtw_regs *regs)
 	RTW_SYNC(regs, RTW_TCR, RTW_TCR);
 }
 
-static inline void
+static void
+rtw_disable_interrupts(struct rtw_regs *regs)
+{
+	RTW_WRITE16(regs, RTW_IMR, 0);
+	RTW_WBW(regs, RTW_IMR, RTW_ISR);
+	RTW_WRITE16(regs, RTW_ISR, 0xffff);
+	RTW_SYNC(regs, RTW_IMR, RTW_ISR);
+}
+
+static void
 rtw_enable_interrupts(struct rtw_softc *sc)
 {
 	struct rtw_regs *regs = &sc->sc_regs;
@@ -2684,13 +2780,14 @@ rtw_init(struct ifnet *ifp)
 	struct rtw_softc *sc = (struct rtw_softc *)ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct rtw_regs *regs = &sc->sc_regs;
-	int rc = 0;
+	int rc;
 
-	if ((rc = rtw_enable(sc)) != 0)
-		goto out;
-
-	/* Cancel pending I/O and reset. */
-	rtw_stop(ifp, 0);
+	if (device_is_active(sc->sc_dev)) {
+		/* Cancel pending I/O and reset. */
+		rtw_stop(ifp, 0);
+	} else if (!pmf_device_resume(sc->sc_dev, &sc->sc_qual) ||
+	           !device_is_active(sc->sc_dev))
+		return 0;
 
 	DPRINTF(sc, RTW_DEBUG_TUNE, ("%s: channel %d freq %d flags 0x%04x\n",
 	    __func__, ieee80211_chan2ieee(ic, ic->ic_curchan),
@@ -2799,6 +2896,7 @@ rtw_led_newstate(struct rtw_softc *sc, enum ieee80211_state nstate)
 	switch (nstate) {
 	case IEEE80211_S_INIT:
 		rtw_led_init(&sc->sc_regs);
+		aprint_debug_dev(sc->sc_dev, "stopping blink\n");
 		callout_stop(&ls->ls_slow_ch);
 		callout_stop(&ls->ls_fast_ch);
 		ls->ls_slowblink = 0;
@@ -2806,6 +2904,7 @@ rtw_led_newstate(struct rtw_softc *sc, enum ieee80211_state nstate)
 		ls->ls_default = 0;
 		break;
 	case IEEE80211_S_SCAN:
+		aprint_debug_dev(sc->sc_dev, "scheduling blink\n");
 		callout_schedule(&ls->ls_slow_ch, RTW_LED_SLOW_TICKS);
 		callout_schedule(&ls->ls_fast_ch, RTW_LED_FAST_TICKS);
 		/*FALLTHROUGH*/
@@ -2895,6 +2994,7 @@ rtw_led_fastblink(void *arg)
 		rtw_led_set(ls, &sc->sc_regs, sc->sc_hwverid);
 	splx(s);
 
+	aprint_debug_dev(sc->sc_dev, "scheduling fast blink\n");
 	callout_schedule(&ls->ls_fast_ch, RTW_LED_FAST_TICKS);
 }
 
@@ -2909,10 +3009,18 @@ rtw_led_slowblink(void *arg)
 	ls->ls_state ^= RTW_LED_S_SLOW;
 	rtw_led_set(ls, &sc->sc_regs, sc->sc_hwverid);
 	splx(s);
+	aprint_debug_dev(sc->sc_dev, "scheduling slow blink\n");
 	callout_schedule(&ls->ls_slow_ch, RTW_LED_SLOW_TICKS);
 }
 
-static inline void
+static void
+rtw_led_detach(struct rtw_led_state *ls)
+{
+	callout_destroy(&ls->ls_fast_ch);
+	callout_destroy(&ls->ls_slow_ch);
+}
+
+static void
 rtw_led_attach(struct rtw_led_state *ls, void *arg)
 {
 	callout_init(&ls->ls_fast_ch, 0);
@@ -2929,15 +3037,24 @@ rtw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	s = splnet();
 	if (cmd == SIOCSIFFLAGS) {
-		if ((ifp->if_flags & IFF_UP) != 0) {
-			if ((sc->sc_flags & RTW_F_ENABLED) != 0)
-				rtw_pktfilt_load(sc);
-			else
-				rc = rtw_init(ifp);
+		if ((rc = ifioctl_common(ifp, cmd, data)) != 0)
+			;
+		else switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_UP:
+			rc = rtw_init(ifp);
 			RTW_PRINT_REGS(&sc->sc_regs, ifp->if_xname, __func__);
-		} else if ((sc->sc_flags & RTW_F_ENABLED) != 0) {
+			break;
+		case IFF_UP|IFF_RUNNING:
+			if (device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER))
+				rtw_pktfilt_load(sc);
+			RTW_PRINT_REGS(&sc->sc_regs, ifp->if_xname, __func__);
+			break;
+		case IFF_RUNNING:
 			RTW_PRINT_REGS(&sc->sc_regs, ifp->if_xname, __func__);
 			rtw_stop(ifp, 1);
+			break;
+		default:
+			break;
 		}
 	} else if ((rc = ieee80211_ioctl(&sc->sc_ic, cmd, data)) != ENETRESET)
 		;	/* nothing to do */
@@ -2946,8 +3063,7 @@ rtw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		if (ifp->if_flags & IFF_RUNNING)
 			rtw_pktfilt_load(sc);
 		rc = 0;
-	} else if ((sc->sc_flags & RTW_F_ENABLED) != 0)
-		/* reinitialize h/w if activated */
+	} else if ((ifp->if_flags & IFF_UP) != 0)
 		rc = rtw_init(ifp);
 	else
 		rc = 0;
@@ -2999,8 +3115,8 @@ rtw_80211_dequeue(struct rtw_softc *sc, struct ifqueue *ifq, int pri,
 		return NULL;
 	}
 	IF_DEQUEUE(ifq, m);
-	*nip = (struct ieee80211_node *)m->m_pkthdr.rcvif;
-	m->m_pkthdr.rcvif = NULL;
+	*nip = M_GETCTX(m, struct ieee80211_node *);
+	M_SETCTX(m, NULL);
 	KASSERT(*nip != NULL);
 	return m;
 }
@@ -3073,10 +3189,7 @@ rtw_dequeue(struct ifnet *ifp, struct rtw_txsoft_blk **tsbp,
 	}
 	DPRINTF(sc, RTW_DEBUG_XMIT, ("%s: dequeue data frame\n", __func__));
 	ifp->if_opackets++;
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0, BPF_D_OUT);
 	eh = mtod(m0, struct ether_header *);
 	*nip = ieee80211_find_txnode(&sc->sc_ic, eh->ether_dhost);
 	if (*nip == NULL) {
@@ -3192,7 +3305,6 @@ rtw_print_txdesc(struct rtw_softc *sc, const char *action,
 static void
 rtw_start(struct ifnet *ifp)
 {
-	uint8_t tppoll;
 	int desc, i, lastdesc, npkt, rate;
 	uint32_t proto_ctl0, ctl0, ctl1;
 	bus_dmamap_t		dmamap;
@@ -3299,7 +3411,8 @@ rtw_start(struct ifnet *ifp)
                  * seem to care, since we don't activate h/w Tx
                  * encryption.
 		 */
-		if (k != NULL) {
+		if (k != NULL &&
+		    k->wk_cipher->ic_cipher == IEEE80211_CIPHER_WEP) {
 			ctl0 |= __SHIFTIN(k->wk_keyix, RTW_TXCTL0_KEYID_MASK) &
 			    RTW_TXCTL0_KEYID_MASK;
 		}
@@ -3341,19 +3454,16 @@ rtw_start(struct ifnet *ifp)
 
 		KASSERT(ts->ts_first < tdb->tdb_ndesc);
 
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf != NULL)
-			bpf_mtap((void *)ic->ic_rawbpf, m0);
+		bpf_mtap3(ic->ic_rawbpf, m0, BPF_D_OUT);
 
 		if (sc->sc_radiobpf != NULL) {
 			struct rtw_tx_radiotap_header *rt = &sc->sc_txtap;
 
 			rt->rt_rate = rate;
 
-			bpf_mtap2(sc->sc_radiobpf, (void *)rt,
-			    sizeof(sc->sc_txtapu), m0);
+			bpf_mtap2(sc->sc_radiobpf, rt, sizeof(sc->sc_txtapu),
+			    m0, BPF_D_OUT);
 		}
-#endif /* NBPFILTER > 0 */
 
 		for (i = 0, lastdesc = desc = ts->ts_first;
 		     i < dmamap->dm_nsegs;
@@ -3415,11 +3525,7 @@ rtw_start(struct ifnet *ifp)
 			sc->sc_led_state.ls_event |= RTW_LED_S_TX;
 		tsb->tsb_tx_timer = 5;
 		ifp->if_timer = 1;
-		tppoll = RTW_READ8(&sc->sc_regs, RTW_TPPOLL);
-		tppoll &= ~RTW_TPPOLL_SALL;
-		tppoll |= tsb->tsb_poll & RTW_TPPOLL_ALL;
-		RTW_WRITE8(&sc->sc_regs, RTW_TPPOLL, tppoll);
-		RTW_SYNC(&sc->sc_regs, RTW_TPPOLL, RTW_TPPOLL);
+		rtw_tx_kick(&sc->sc_regs, tsb->tsb_poll);
 	}
 out:
 	DPRINTF(sc, RTW_DEBUG_XMIT, ("%s: leave\n", __func__));
@@ -3436,6 +3542,7 @@ static void
 rtw_idle(struct rtw_regs *regs)
 {
 	int active;
+	uint8_t tppoll;
 
 	/* request stop DMA; wait for packets to stop transmitting. */
 
@@ -3443,9 +3550,11 @@ rtw_idle(struct rtw_regs *regs)
 	RTW_WBR(regs, RTW_TPPOLL, RTW_TPPOLL);
 
 	for (active = 0; active < 300 &&
-	     (RTW_READ8(regs, RTW_TPPOLL) & RTW_TPPOLL_ACTIVE) != 0; active++)
+	     (tppoll = RTW_READ8(regs, RTW_TPPOLL) & RTW_TPPOLL_ACTIVE) != 0;
+	     active++)
 		DELAY(10);
-	printf("%s: transmit DMA idle in %dus\n", __func__, active * 10);
+	printf("%s: transmit DMA idle in %dus, tppoll %02" PRIx8 "\n", __func__,
+	    active * 10, tppoll);
 }
 
 static void
@@ -3459,7 +3568,7 @@ rtw_watchdog(struct ifnet *ifp)
 
 	ifp->if_timer = 0;
 
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0)
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	for (pri = 0; pri < RTW_NTXPRI; pri++) {
@@ -3469,6 +3578,9 @@ rtw_watchdog(struct ifnet *ifp)
 			continue;
 		else if (--tsb->tsb_tx_timer == 0) {
 			if (SIMPLEQ_EMPTY(&tsb->tsb_dirtyq))
+				continue;
+			else if (rtw_collect_txring(sc, tsb,
+			    &sc->sc_txdesc_blk[pri], 0))
 				continue;
 			printf("%s: transmit timeout, priority %d\n",
 			    ifp->if_xname, pri);
@@ -3486,9 +3598,9 @@ rtw_watchdog(struct ifnet *ifp)
 		 * TBD Stop/restart just the broken rings?
 		 */
 		rtw_idle(&sc->sc_regs);
-		rtw_io_enable(sc, RTW_CR_TE, 0);
+		rtw_io_enable(sc, RTW_CR_RE | RTW_CR_TE, 0);
 		rtw_txdescs_reset(sc);
-		rtw_io_enable(sc, RTW_CR_TE, 1);
+		rtw_io_enable(sc, RTW_CR_RE | RTW_CR_TE, 1);
 		rtw_start(ifp);
 	}
 	ieee80211_watchdog(&sc->sc_ic);
@@ -3550,8 +3662,10 @@ rtw_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 
 	ostate = ic->ic_state;
 
+	aprint_debug_dev(sc->sc_dev, "%s: l.%d\n", __func__, __LINE__);
 	rtw_led_newstate(sc, nstate);
 
+	aprint_debug_dev(sc->sc_dev, "%s: l.%d\n", __func__, __LINE__);
 	if (nstate == IEEE80211_S_INIT) {
 		callout_stop(&sc->sc_scan_ch);
 		sc->sc_cur_chan = IEEE80211_CHAN_ANY;
@@ -3632,7 +3746,8 @@ rtw_recv_mgmt(struct ieee80211com *ic, struct mbuf *m,
 	case IEEE80211_FC0_SUBTYPE_PROBE_RESP:
 	case IEEE80211_FC0_SUBTYPE_BEACON:
 		if (ic->ic_opmode == IEEE80211_M_IBSS &&
-		    ic->ic_state == IEEE80211_S_RUN) {
+		    ic->ic_state == IEEE80211_S_RUN &&
+		    device_is_active(sc->sc_dev)) {
 			uint64_t tsf = rtw_tsf_extend(&sc->sc_regs, rstamp);
 			if (le64toh(ni->ni_tstamp.tsf) >= tsf)
 				(void)ieee80211_ibss_merge(ni);
@@ -3689,7 +3804,7 @@ rtw_media_status(struct ifnet *ifp, struct ifmediareq *imr)
 {
 	struct rtw_softc *sc = ifp->if_softc;
 
-	if ((sc->sc_flags & RTW_F_ENABLED) == 0) {
+	if (!device_is_active(sc->sc_dev)) {
 		imr->ifm_active = IFM_IEEE80211 | IFM_NONE;
 		imr->ifm_status = 0;
 		return;
@@ -3718,7 +3833,7 @@ rtw_set80211props(struct ieee80211com *ic)
 	ic->ic_phytype = IEEE80211_T_DS;
 	ic->ic_opmode = IEEE80211_M_STA;
 	ic->ic_caps = IEEE80211_C_PMGT | IEEE80211_C_IBSS |
-	    IEEE80211_C_HOSTAP | IEEE80211_C_MONITOR;
+	    IEEE80211_C_HOSTAP | IEEE80211_C_MONITOR | IEEE80211_C_WEP;
 
 	nrate = 0;
 	ic->ic_sup_rates[IEEE80211_MODE_11B].rs_rates[nrate++] =
@@ -3932,10 +4047,18 @@ rtw_attach(struct rtw_softc *sc)
 	struct rtw_txsoft_blk *tsb;
 	int pri, rc;
 
+	pmf_self_suspensor_init(sc->sc_dev, &sc->sc_suspensor, &sc->sc_qual);
+
 	rtw_cipher_wep = ieee80211_cipher_wep;
 	rtw_cipher_wep.ic_decap = rtw_wep_decap;
 
 	NEXT_ATTACH_STATE(sc, DETACHED);
+
+	sc->sc_soft_ih = softint_establish(SOFTINT_NET, rtw_softintr, sc);
+	if (sc->sc_soft_ih == NULL) {
+		aprint_error_dev(sc->sc_dev, "could not establish softint\n");
+		goto err;
+	}
 
 	switch (RTW_READ(&sc->sc_regs, RTW_TCR) & RTW_TCR_HWVERID_MASK) {
 	case RTW_TCR_HWVERID_F:
@@ -4102,12 +4225,20 @@ rtw_attach(struct rtw_softc *sc)
 	rtw_set80211props(&sc->sc_ic);
 
 	rtw_led_attach(&sc->sc_led_state, (void *)sc);
+	NEXT_ATTACH_STATE(sc, FINISH_LED_ATTACH);
 
 	/*
 	 * Call MI attach routines.
 	 */
-	if_attach(ifp);
-	ieee80211_ifattach(&sc->sc_ic);
+	rc = if_initialize(ifp);
+	if (rc != 0) {
+		aprint_error_dev(sc->sc_dev, "if_initialize failed(%d)\n", rc);
+		goto err;
+	}
+	ieee80211_ifattach(ic);
+	/* Use common softint-based if_input */
+	ifp->if_percpuq = if_percpuq_create(ifp);
+	if_register(ifp);
 
 	rtw_set80211methods(&sc->sc_mtbl, &sc->sc_ic);
 
@@ -4122,16 +4253,8 @@ rtw_attach(struct rtw_softc *sc)
 
 	rtw_init_radiotap(sc);
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + 64, &sc->sc_radiobpf);
-#endif
-
-	if (!pmf_device_register(sc->sc_dev, NULL, NULL)) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-	} else
-		pmf_class_network_register(sc->sc_dev, &sc->sc_if);
 
 	NEXT_ATTACH_STATE(sc, FINISHED);
 
@@ -4149,7 +4272,6 @@ rtw_detach(struct rtw_softc *sc)
 	int pri, s;
 
 	s = splnet();
-	sc->sc_flags |= RTW_F_INVALID;
 
 	switch (sc->sc_attach_state) {
 	case FINISHED:
@@ -4159,6 +4281,8 @@ rtw_detach(struct rtw_softc *sc)
 		callout_stop(&sc->sc_scan_ch);
 		ieee80211_ifdetach(&sc->sc_ic);
 		if_detach(ifp);
+	case FINISH_LED_ATTACH:
+		rtw_led_detach(&sc->sc_led_state);
 		/*FALLTHROUGH*/
 	case FINISH_ID_STA:
 	case FINISH_RF_ATTACH:
@@ -4200,29 +4324,13 @@ rtw_detach(struct rtw_softc *sc)
 		    sc->sc_desc_nsegs);
 		/*FALLTHROUGH*/
 	case DETACHED:
+		if (sc->sc_soft_ih != NULL) {
+			softint_disestablish(sc->sc_soft_ih);
+			sc->sc_soft_ih = NULL;
+		}
 		NEXT_ATTACH_STATE(sc, DETACHED);
 		break;
 	}
 	splx(s);
 	return 0;
-}
-
-int
-rtw_activate(device_t self, enum devact act)
-{
-	struct rtw_softc *sc = device_private(self);
-	int rc = 0, s;
-
-	s = splnet();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rc = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if_deactivate(&sc->sc_if);
-		break;
-	}
-	splx(s);
-	return rc;
 }

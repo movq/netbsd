@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:10:44 thorpej Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.7 2016/09/21 06:49:39 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,40 +30,43 @@
  */
 
 #include "SYS.h"
-#include <machine/mcontext.h>
+#include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	ASMSTR("$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:10:44 thorpej Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.7 2016/09/21 06:49:39 skrll Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
-#ifdef __ABICALLS__
-	.abicalls
-#endif
 	.set	reorder
-	
+
 NESTED(swapcontext, CALLFRAME_SIZ, ra)
 	.mask	0x80000030, (CALLFRAME_RA - CALLFRAME_SIZ)
-	subu	sp, sp, CALLFRAME_SIZ
-	sw	ra, CALLFRAME_RA(sp)	# save ra
-	sw	a0, 0(sp)		# stash away oucp
-	sw	a1, 4(sp)		# stash away ucp
+	PIC_PROLOGUE(swapcontext)
+	PTR_SUBU	sp, sp, CALLFRAME_SIZ
+	PTR_S		ra, CALLFRAME_RA(sp)	# save ra
+	PTR_S		a0, 0(sp)		# stash away oucp
+	PTR_S		a1, SZREG(sp)		# stash away ucp
 	SYSTRAP(getcontext)
-	lw	ra, CALLFRAME_RA(sp)
-	bne	a3, zero, 1f
+	PTR_L		ra, CALLFRAME_RA(sp)
+	bne		a3, zero, 1f
 
-	lw	v1, 0(sp)		# load oucp again for adjustment
-	lw	a0, 4(sp)		# load ucp
-	addiu	v0, sp, CALLFRAME_SIZ
+	PTR_L		v1, 0(sp)		# load oucp again for adjustment
+	PTR_L		a0, SZREG(sp)		# load ucp
+	PTR_ADDIU	v0, sp, CALLFRAME_SIZ
 	REG_PROLOGUE
-	REG_S	zero, (_OFFSETOF_UC_GREGS + _REG_V0 * SZREG)(v1)
-	REG_S	ra, (_OFFSETOF_UC_GREGS + _REG_EPC * SZREG)(v1)
-	REG_S	v0, (_OFFSETOF_UC_GREGS + _REG_SP * SZREG)(v1)
+	REG_S		zero, _OFFSETOF_UC_GREGS_V0(v1)
+#if defined(__mips_n32) || defined(__mips_n64)
+	/* PIC_PROLOGUE saved gp in t3 */
+	REG_S		t3, _OFFSETOF_UC_GREGS_GP(v1)
+#endif
+	REG_S		ra, _OFFSETOF_UC_GREGS_EPC(v1)
+	REG_S		v0, _OFFSETOF_UC_GREGS_SP(v1)
 	REG_EPILOGUE
 
-	SYSTRAP(setcontext)
+	PIC_TAILCALL(setcontext)
 	/* NOTREACHED */
 1:
-	addiu	sp, sp, CALLFRAME_SIZ
-	la	t9, _C_LABEL(__cerror)
-	jr	t9
+	PTR_ADDU	sp, sp, CALLFRAME_SIZ
+	SETUP_GPX(t0);
+	SETUP_GP64(t3,swapcontext);
+	PIC_TAILCALL(__cerror)
 END(swapcontext)

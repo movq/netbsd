@@ -1,4 +1,4 @@
-/*	$NetBSD: uba.c,v 1.76 2007/10/19 12:01:09 ad Exp $	   */
+/*	$NetBSD: uba.c,v 1.80 2017/05/22 17:22:29 ragge Exp $	   */
 /*
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -44,13 +44,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -69,20 +62,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.76 2007/10/19 12:01:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.80 2017/05/22 17:22:29 ragge Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <machine/scb.h>
@@ -94,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.76 2007/10/19 12:01:09 ad Exp $");
 #include "ioconf.h"
 #include "locators.h"
 
-static int ubasearch (struct device *, struct cfdata *,
+static int ubasearch (device_t, cfdata_t,
 		      const int *, void *);
 static int ubaprint (void *, const char *);
 
@@ -110,7 +100,7 @@ uba_enqueue(struct uba_unit *uu)
 	struct uba_softc *uh;
 	int s;
 
-	uh = (void *)device_parent((struct device *)(uu->uu_softc));
+	uh = device_private(device_parent(uu->uu_dev));
 
 	s = spluba();
 	SIMPLEQ_INSERT_TAIL(&uh->uh_resq, uu, uu_resq);
@@ -142,12 +132,12 @@ uba_done(struct uba_softc *uh)
  * register for reset first through this routine.
  */
 void
-uba_reset_establish(void (*reset)(struct device *), struct device *dev)
+uba_reset_establish(void (*reset)(device_t), device_t dev)
 {
-	struct uba_softc *uh = (void *)device_parent(dev);
+	struct uba_softc *uh = device_private(device_parent(dev));
 	struct uba_reset *ur;
 
-	ur = malloc(sizeof(struct uba_reset), M_DEVBUF, M_NOWAIT);
+	ur = malloc(sizeof(struct uba_reset), M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (ur == NULL)
 		panic("uba_reset_establish");
 	ur->ur_dev = dev;
@@ -231,12 +221,12 @@ ubareset(struct uba_softc *uh)
 
 	s = spluba();
 	SIMPLEQ_INIT(&uh->uh_resq);
-	printf("%s: reset", uh->uh_dev.dv_xname);
+	printf("%s: reset", device_xname(uh->uh_dev));
 	(*uh->uh_ubainit)(uh);
 
 	ur = SIMPLEQ_FIRST(&uh->uh_resetq);
 	if (ur) do {
-		printf(" %s", ur->ur_dev->dv_xname);
+		printf(" %s", device_xname(ur->ur_dev));
 		(*ur->ur_reset)(ur->ur_dev);
 	} while ((ur = SIMPLEQ_NEXT(ur, ur_resetq)));
 
@@ -278,7 +268,7 @@ uba_attach(struct uba_softc *sc, paddr_t iopagephys)
 	/*
 	 * Now start searching for devices.
 	 */
-	config_search_ia(ubasearch,(struct device *)sc, "uba", NULL);
+	config_search_ia(ubasearch, sc->uh_dev, "uba", NULL);
 
 	if (sc->uh_afterscan)
 		(*sc->uh_afterscan)(sc);
@@ -287,10 +277,9 @@ uba_attach(struct uba_softc *sc, paddr_t iopagephys)
 }
 
 int
-ubasearch(struct device *parent, struct cfdata *cf,
-	  const int *ldesc, void *aux)
+ubasearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct	uba_softc *sc = (struct uba_softc *)parent;
+	struct	uba_softc *sc = device_private(parent);
 	struct	uba_attach_args ua;
 	int	i, csr, vec, br;
 
@@ -333,7 +322,7 @@ ubasearch(struct device *parent, struct cfdata *cf,
 
 fail:
 	printf("%s%d at %s csr %o %s\n",
-	    cf->cf_name, cf->cf_unit, parent->dv_xname,
+	    cf->cf_name, cf->cf_unit, device_xname(parent),
 	    csr, (i ? "zero vector" : "didn't interrupt"));
 
 forgetit:

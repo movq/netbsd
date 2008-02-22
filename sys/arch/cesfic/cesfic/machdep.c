@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.67 2016/12/22 16:05:14 cherry Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,48 +37,9 @@
  *
  *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.74 92/12/20$
- *
- *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.67 2016/12/22 16:05:14 cherry Exp $");
 
 #include "opt_bufcache.h"
 #include "opt_ddb.h"
@@ -85,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
 #include "opt_compat_netbsd.h"
 #include "opt_sysv.h"
 #include "opt_panicbutton.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
 #include <sys/callout.h>
 #include <sys/conf.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
@@ -104,18 +68,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
 #include <sys/signalvar.h>
 #include <sys/syscallargs.h>
 #include <sys/tty.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ksyms.h>
-#ifdef SYSVMSG
-#include <sys/msg.h>
-#endif
-#ifdef SYSVSEM
-#include <sys/sem.h>
-#endif
-#ifdef SYSVSHM
-#include <sys/shm.h>
-#endif
+#include <sys/module.h>
+#include <sys/cpu.h>
 #include <sys/kgdb.h>
 
 #include <machine/db_machdep.h>
@@ -125,6 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 
@@ -135,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/31 13:38:47 ad Exp $");
 #include <sys/sysctl.h>
 #include <sys/device.h>
 #include <dev/cons.h>
+#include <dev/mm.h>
 #include <dev/ic/z8530reg.h>
 #include <machine/z8530var.h>
 #include <cesfic/dev/zsvar.h>
@@ -147,42 +105,33 @@ char machine[] = MACHINE;		/* CPU "architecture" */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
-
-extern vaddr_t virtual_avail;
 
 /*
  * Declare these as initialized data so we can patch them.
  */
 /*int	maxmem;*/			/* max memory per process */
-int	physmem = MAXMEM;	/* max supported memory, changes to actual */
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- */
-int	safepri = PSL_LOWIPL;
+extern psize_t physmem;			/* max supported memory, changes to actual */
 
 extern	u_int lowram;
 
-void fic_init __P((void));
+void fic_init(void);
 
 /* prototypes for local functions */
-void    identifycpu __P((void));
-void	dumpmem __P((int *, int, int));
-char	*hexstr __P((int, int));
+void    identifycpu(void);
+void	dumpmem(int *, int, int);
+char	*hexstr(int, int);
 
 /* functions called from locore.s */
-void    dumpsys __P((void));
-void    straytrap __P((int, u_short));
-void	nmihand __P((struct frame));
+void    dumpsys(void);
+void    straytrap(int, u_short);
+void	nmihand(struct frame);
 
 int	delay_divisor;		/* delay constant */
 
-extern void sicinit __P((void*));
+extern void sicinit(void*);
 
-void fic_init()
+void fic_init(void)
 {
 	int i;
 
@@ -221,9 +170,7 @@ void fic_init()
 }
 
 int
-zs_check_kgdb(cs, dev)
-	struct zs_chanstate *cs;
-	int dev;
+zs_check_kgdb(struct zs_chanstate *cs, int dev)
 {
 	
 	if((boothowto & RB_KDB) && (dev == makedev(10, 0)))
@@ -231,16 +178,13 @@ zs_check_kgdb(cs, dev)
 	return (0);
 }
 
-void zs_kgdb_cnputc __P((dev_t, int));
-void zs_kgdb_cnputc(dev, c)
-dev_t dev;
-int c;
+void zs_kgdb_cnputc(dev_t, int);
+void zs_kgdb_cnputc(dev_t dev, int c)
 {
 	zscnputc(dev, c);
 }
-int zs_kgdb_cngetc __P((dev_t));
-int zs_kgdb_cngetc(dev)
-dev_t dev;
+int zs_kgdb_cngetc(dev_t);
+int zs_kgdb_cngetc(dev_t dev)
 {
 	return (zscngetc(dev));
 }
@@ -250,9 +194,9 @@ dev_t dev;
  * before vm init or startup.  Do enough configuration
  * to choose and initialize a console.
  */
-extern void sic_enable_int __P((int, int, int, int, int));
+extern void sic_enable_int(int, int, int, int, int);
 void
-consinit()
+consinit(void)
 {
 
 	/*
@@ -273,9 +217,6 @@ consinit()
 		zscons.cn_getc = zs_kgdb_cngetc;
 	}
 #endif
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init(0, 0, 0);
-#endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -288,7 +229,7 @@ consinit()
  * initialize CPU, and do autoconfiguration.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 #ifdef DEBUG
@@ -298,6 +239,7 @@ cpu_startup()
 	pmapdebug = 0;
 #endif
 
+	cpu_setmodel("FIC8234");
 	if (fputype != FPU_NONE)
 		m68k_make_fpu_idle_frame();
 
@@ -309,25 +251,12 @@ cpu_startup()
 	printf("real mem  = %d\n", ctob(physmem));
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -336,52 +265,13 @@ cpu_startup()
 }
 
 /*
- * Set registers on exec.
- * XXX Should clear registers except sp, pc,
- * but would break init; should be fixed soon.
- */
-void
-setregs(l, pack, stack)
-	struct lwp *l;
-	struct exec_package *pack;
-	u_long stack;
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
-/*
  * Info for CTL_HW
  */
-char	cpu_model[] = "FIC8234";
 
 void
-identifycpu()
+identifycpu(void)
 {
-	printf("%s\n", cpu_model);
+	printf("%s\n", cpu_getmodel());
 	printf("delay constant: %d\n", delay_divisor);
 }
 
@@ -407,17 +297,13 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 int	waittime = -1;
 
 void
-cpu_reboot(howto, bootstr)
-	int howto;
-	char *bootstr;
+cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 
-#if __GNUC__	/* XXX work around lame compiler problem (gcc 2.7.2) */
-	(void)&howto;
-#endif
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is cold, just halt. */
 	if (cold) {
@@ -446,6 +332,8 @@ cpu_reboot(howto, bootstr)
  haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 #if defined(PANICWAIT) && !defined(DDB)
 	if ((howto & RB_HALT) == 0 && panicstr) {
@@ -482,21 +370,13 @@ long	dumplo = 0;		/* blocks */
  * reduce the chance that swapping trashes it.
  */
 void
-cpu_dumpconf()
+cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		return;
 
@@ -521,12 +401,12 @@ cpu_dumpconf()
  * in locore.s or by cpu_reboot() here in machdep.c
  */
 void
-dumpsys()
+dumpsys(void)
 {
 	const struct bdevsw *bdev;
 	daddr_t blkno;		/* current block to write */
 				/* dump routine */
-	int (*dump) __P((dev_t, daddr_t, void *, size_t));
+	int (*dump)(dev_t, daddr_t, void *, size_t);
 	int pg;			/* page being dumped */
 	vm_offset_t maddr;	/* PA being dumped */
 	int error;		/* error code from (*dump)() */
@@ -550,7 +430,7 @@ dumpsys()
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev 0x%x, offset %ld\n", dumpdev, dumplo);
+	printf("\ndumping to dev %"PRIx64", offset %ld\n", dumpdev, dumplo);
 
 	printf("dump ");
 	maddr = lowram;
@@ -600,9 +480,7 @@ dumpsys()
 }
 
 void
-straytrap(pc, evec)
-	int pc;
-	u_short evec;
+straytrap(int pc, u_short evec)
 {
 	printf("unexpected trap (vector offset %x) from %x\n",
 	       evec & 0xFFF, pc);
@@ -613,8 +491,7 @@ straytrap(pc, evec)
 int	*nofault;
 
 int
-badaddr(addr)
-	void *addr;
+badaddr(void *addr)
 {
 	int i;
 	label_t	faultbuf;
@@ -625,13 +502,13 @@ badaddr(addr)
 		return (1);
 	}
 	i = *(volatile short *)addr;
+	__USE(i);
 	nofault = (int *) 0;
 	return (0);
 }
 
 int
-badbaddr(addr)
-	void *addr;
+badbaddr(void *addr)
 {
 	int i;
 	label_t	faultbuf;
@@ -642,6 +519,7 @@ badbaddr(addr)
 		return (1);
 	}
 	i = *(volatile char *)addr;
+	__USE(i);
 	nofault = (int *) 0;
 	return (0);
 }
@@ -653,13 +531,12 @@ badbaddr(addr)
 int panicbutton = 1;	/* non-zero if panic buttons are enabled */
 int candbdiv = 2;	/* give em half a second (hz / candbdiv) */
 
-void	candbtimer __P((void *));
+void	candbtimer(void *);
 
 int crashandburn;
 
 void
-candbtimer(arg)
-	void *arg;
+candbtimer(void *arg)
 {
 
 	crashandburn = 0;
@@ -672,8 +549,7 @@ static int innmihand;	/* simple mutex */
  * Level 7 interrupts can be caused by the keyboard or parity errors.
  */
 void
-nmihand(frame)
-	struct frame frame;
+nmihand(struct frame frame)
 {
 
 	/* Prevent unwanted recursion. */
@@ -703,9 +579,7 @@ nmihand(frame)
  *	done on little-endian machines...  -- cgd
  */
 int
-cpu_exec_aout_makecmds(l, epp)
-	struct lwp *l;
-	struct exec_package *epp;
+cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 #if defined(COMPAT_NOMID) || defined(COMPAT_44)
 	u_long midmag, magic;
@@ -735,3 +609,20 @@ cpu_exec_aout_makecmds(l, epp)
 
 	return ENOEXEC;
 }
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return (pa < lowram || pa >= 0xfffffffc) ? EFAULT : 0;
+}
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

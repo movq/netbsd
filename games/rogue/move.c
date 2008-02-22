@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.11 2008/01/14 03:50:02 dholland Exp $	*/
+/*	$NetBSD: move.c,v 1.13 2011/05/23 23:01:17 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: move.c,v 1.11 2008/01/14 03:50:02 dholland Exp $");
+__RCSID("$NetBSD: move.c,v 1.13 2011/05/23 23:01:17 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,7 +57,14 @@ __RCSID("$NetBSD: move.c,v 1.11 2008/01/14 03:50:02 dholland Exp $");
 
 short m_moves = 0;
 boolean jump = 0;
-const char *you_can_move_again = "you can move again";
+const char you_can_move_again[] = "you can move again";
+
+static boolean can_turn(short, short);
+static boolean check_hunger(boolean);
+static char gr_dir(void);
+static void heal(void);
+static boolean next_to_something(int, int);
+static void turn_passage(short, boolean);
 
 int
 one_move_rogue(short dirch, short pickup)
@@ -231,7 +238,7 @@ is_passable(int row, int col)
 	return(dungeon[row][col] & (FLOOR | TUNNEL | DOOR | STAIRS | TRAP));
 }
 
-boolean
+static boolean
 next_to_something(int drow, int dcol)
 {
 	short i, j, i_end, j_end, row, col;
@@ -364,7 +371,7 @@ is_direction(short c, short *d)
 	return(1);
 }
 
-boolean
+static boolean
 check_hunger(boolean msg_only)
 {
 	short i, n;
@@ -398,7 +405,7 @@ check_hunger(boolean msg_only)
 					mv_mons();
 				}
 			}
-			messagef(1, you_can_move_again);
+			messagef(1, "%s", you_can_move_again);
 		}
 	}
 	if (msg_only) {
@@ -504,7 +511,7 @@ rest(int count)
 	}
 }
 
-char
+static char
 gr_dir(void)
 {
 	short d;
@@ -540,7 +547,7 @@ gr_dir(void)
 	return(d);
 }
 
-void
+static void
 heal(void)
 {
 	static short heal_exp = -1, n, c = 0;
@@ -605,7 +612,7 @@ heal(void)
 	}
 }
 
-boolean
+static boolean
 can_turn(short nrow, short ncol)
 {
 	if ((dungeon[nrow][ncol] & TUNNEL) && is_passable(nrow, ncol)) {
@@ -614,7 +621,7 @@ can_turn(short nrow, short ncol)
 	return(0);
 }
 
-void
+static void
 turn_passage(short dir, boolean fast)
 {
 	short crow = rogue.row, ccol = rogue.col, turns = 0;

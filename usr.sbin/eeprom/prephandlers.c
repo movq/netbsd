@@ -1,4 +1,4 @@
-/*	$NetBSD: prephandlers.c,v 1.1 2007/03/01 16:49:48 garbled Exp $	*/
+/*	$NetBSD: prephandlers.c,v 1.4 2013/07/02 11:59:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@ extern int verbose;
 
 static char err_str[BUFSIZE];
 
-static void prep_notsupp(struct extabent *, struct pnviocdesc *, char *);
+static void prep_notsupp(const struct extabent *, struct pnviocdesc *, char *);
 
 /*
  * XXX
@@ -72,7 +65,7 @@ static void prep_notsupp(struct extabent *, struct pnviocdesc *, char *);
  * There are several known fields that I either don't know how to
  * deal with or require special treatment.
  */
-static struct extabent prepextab[] = {
+static const struct extabent prepextab[] = {
 	{NULL, prep_notsupp},
 };
 #define BARF(str1, str2) {						\
@@ -95,7 +88,7 @@ char *
 prep_handler(char *keyword, char *arg)
 {
 	struct pnviocdesc nvio;
-	struct extabent *ex;
+	const struct extabent *ex;
 	char nvio_buf[BUFSIZE];
 	int fd;
 
@@ -118,8 +111,10 @@ prep_handler(char *keyword, char *arg)
 
 			nvio.pnv_buf = &nvio_buf[0];
 			nvio.pnv_buflen = sizeof(nvio_buf);
-			if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0)
+			if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0) {
+				(void)close(fd);
 				BARF("PNVIOCGET", strerror(errno));
+			}
 
 			if (nvio.pnv_buflen <= 0) {
 				printf("nothing available for %s\n", keyword);
@@ -138,8 +133,10 @@ out:
 			nvio.pnv_buflen = strlen(arg);
 		}
 
-		if (ioctl(fd, PNVIOCSET, (char *) &nvio) < 0)
+		if (ioctl(fd, PNVIOCSET, (char *) &nvio) < 0) {
+			(void)close(fd);
 			BARF("invalid keyword", keyword);
+		}
 
 		if (verbose) {
 			printf("new: ");
@@ -151,8 +148,10 @@ out:
 	} else {
 		nvio.pnv_buf = &nvio_buf[0];
 		nvio.pnv_buflen = sizeof(nvio_buf);
-		if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0)
+		if (ioctl(fd, PNVIOCGET, (char *) &nvio) < 0) {
+			(void)close(fd);
 			BARF("PNVIOCGET", strerror(errno));
+		}
 
 		if (nvio.pnv_buflen <= 0) {
 			(void) snprintf(err_str, sizeof err_str,
@@ -170,7 +169,7 @@ out:
 }
 /* ARGSUSED */
 static void
-prep_notsupp(struct extabent * exent, struct pnviocdesc * nviop, char *arg)
+prep_notsupp(const struct extabent * exent, struct pnviocdesc * nviop, char *arg)
 {
 
 	warnx("property `%s' not yet supported", exent->ex_keyword);
@@ -181,7 +180,7 @@ prep_notsupp(struct extabent * exent, struct pnviocdesc * nviop, char *arg)
  */
 
 void
-prep_dump()
+prep_dump(void)
 {
 	struct pnviocdesc nvio1, nvio2;
 	char buf1[BUFSIZE], buf2[BUFSIZE], buf3[BUFSIZE], buf4[BUFSIZE];

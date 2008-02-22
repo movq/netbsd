@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.127 2008/01/12 09:54:29 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.154 2016/05/31 03:25:46 dholland Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,52 +37,15 @@
  *
  *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.74 92/12/20$
- *
- *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.127 2008/01/12 09:54:29 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.154 2016/05/31 03:25:46 dholland Exp $");
 
 #include "opt_ddb.h"
 #include "opt_m060sp.h"
+#include "opt_modular.h"
 #include "opt_panicbutton.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,17 +62,20 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.127 2008/01/12 09:54:29 tsutsui Exp $"
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
+#include <sys/device.h>
+#include <sys/cpu.h>
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 #include <sys/exec_elf.h>
 #endif
 
@@ -120,13 +87,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.127 2008/01/12 09:54:29 tsutsui Exp $"
 #define _MVME68K_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 #undef _MVME68K_BUS_DMA_PRIVATE
-#include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/prom.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/vmparam.h>
 #include <m68k/include/cacheops.h>
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
 
@@ -147,8 +115,6 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 /*
@@ -159,13 +125,6 @@ struct	mvmeprom_brdid  boardid;
 paddr_t msgbufpa;		/* PA of message buffer */
 
 int	maxmem;			/* max memory per process */
-int	physmem;		/* size of physical memory */
-
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- */
-int	safepri = PSL_LOWIPL;
 
 /*
  * The driver for the ethernet chip appropriate to the
@@ -350,6 +309,10 @@ mvme147_init(void)
 		bus_space_write_1(bt, bh, PCCREG_TMR1_CONTROL, PCC_TIMERCLEAR);
 		/* retry! */
 	}
+	/* just in case */
+	if (delay_divisor == 0) {
+		delay_divisor = 1;
+	}
 
 	bus_space_unmap(bt, bh, PCCREG_SIZE);
 
@@ -438,12 +401,12 @@ consinit(void)
 	 */
 	cninit();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern char end[];
 		extern int *esym;
 
-		ksyms_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+		ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
 		    (void *)&end, esym);
 	}
 #endif
@@ -503,22 +466,10 @@ cpu_startup(void)
 
 	minaddr = 0;
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 	    VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -532,85 +483,39 @@ cpu_startup(void)
 	initcpu();
 }
 
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-	extern void m68881_restore(struct fpframe *);
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
-/*
- * Info for CTL_HW
- */
-char	cpu_model[124];
-
 void
 identifycpu(void)
 {
 	char board_str[16];
-	char cpu_str[32];
-	char mmu_str[16];
-	char fpu_str[16];
-	int len = 0;
-
-	memset(cpu_model, 0, sizeof(cpu_model));
-	memset(board_str, 0, sizeof(board_str));
-	memset(cpu_str, 0, sizeof(cpu_str));
-	memset(mmu_str, 0, sizeof(mmu_str));
-	memset(fpu_str, 0, sizeof(cpu_str));
+	const char *cpu_str, *mmu_str, *fpu_str, *cache_str;
 
 	/* Fill in the CPU string. */
 	switch (cputype) {
 #ifdef M68020
 	case CPU_68020:
-		sprintf(cpu_str, "MC68020 CPU");
-		sprintf(fpu_str, "MC68881 FPU");	/* XXX */
+		cpu_str = "MC68020 CPU";
+		fpu_str = ", MC68881 FPU";	/* XXX */
 		break;
 #endif
 
 #ifdef M68030
 	case CPU_68030:
-		sprintf(cpu_str, "MC68030 CPU+MMU");
-		sprintf(fpu_str, "MC68882 FPU");	/* XXX */
+		cpu_str = "MC68030 CPU+MMU";
+		fpu_str = ", MC68882 FPU";	/* XXX */
 		break;
 #endif
 
 #ifdef M68040
 	case CPU_68040:
-		sprintf(cpu_str, "MC68040 CPU+MMU+FPU");
+		cpu_str = "MC68040 CPU+MMU+FPU";
+		fpu_str = "";
 		break;
 #endif
 
 #ifdef M68060
 	case CPU_68060:
-		sprintf(cpu_str, "MC68060 CPU+MMU+FPU");
+		cpu_str = "MC68060 CPU+MMU+FPU";
+		fpu_str = "";
 		break;
 #endif
 
@@ -622,40 +527,31 @@ identifycpu(void)
 	/* Fill in the MMU string; only need to handle one case. */
 	switch (mmutype) {
 	case MMU_68851:
-		sprintf(mmu_str, "MC68851 MMU");
+		mmu_str = ", MC68851 MMU";
+		break;
+	default:
+		mmu_str = "";
 		break;
 	}
 
-	/* XXX Find out FPU type and fill in string here. */
-
 	/* Fill in board model string. */
 	switch (machineid) {
-#ifdef MVME147
+#if defined(MVME_147) || defined(MVME162) || defined(MVME167) || defined(MVME172) || defined(MVME177)
 	case MVME_147:
-	    {
-		char *suffix = (char *)&boardid.suffix;
-		len = sprintf(board_str, "%x", machineid);
-		if (suffix[0] != '\0') {
-			board_str[len++] = suffix[0];
-			if (suffix[1] != '\0')
-				board_str[len++] = suffix[1];
-		}
-		break;
-	    }
-#endif
-
-#if defined(MVME162) || defined(MVME167) || defined(MVME172) || defined(MVME177)
 	case MVME_162:
 	case MVME_167:
 	case MVME_172:
 	case MVME_177:
 	    {
 		char *suffix = (char *)&boardid.suffix;
-		len = sprintf(board_str, "%x", machineid);
-		if (suffix[0] != '\0') {
+		int len = snprintf(board_str, sizeof(board_str), "%x",
+		    machineid);
+		if (suffix[0] != '\0' && len > 0 &&
+		    len + 3 < sizeof(board_str)) {
 			board_str[len++] = suffix[0];
 			if (suffix[1] != '\0')
 				board_str[len++] = suffix[1];
+			board_str[len] = '\0';
 		}
 		break;
 	    }
@@ -665,33 +561,29 @@ identifycpu(void)
 		panic("startup");
 	}
 
-	len = sprintf(cpu_model, "Motorola MVME-%s: %d.%dMHz %s", board_str,
-	    cpuspeed / 100, (cpuspeed % 100) / 10, cpu_str);
-
-	cpuspeed /= 100;
-
-	if (mmu_str[0] != '\0')
-		len += sprintf(cpu_model + len, ", %s", mmu_str);
-
-	if (fpu_str[0] != '\0')
-		len += sprintf(cpu_model + len, ", %s", fpu_str);
-
-#if defined(M68040) || defined(M68060)
 	switch (cputype) {
 #if defined(M68040)
 	case CPU_68040:
-		strcat(cpu_model, ", 4k+4k on-chip physical I/D caches");
+		cache_str = ", 4k+4k on-chip physical I/D caches";
 		break;
 #endif
 #if defined(M68060)
 	case CPU_68060:
-		strcat(cpu_model, ", 8k+8k on-chip physical I/D caches");
+		cache_str = ", 8k+8k on-chip physical I/D caches";
 		break;
 #endif
+	default:
+		cache_str = "";
+		break;
 	}
-#endif
 
-	printf("%s\n", cpu_model);
+	cpu_setmodel("Motorola MVME-%s: %d.%dMHz %s%s%s%s",
+	    board_str, cpuspeed / 100, (cpuspeed % 100) / 10, cpu_str,
+	    mmu_str, fpu_str, cache_str);
+
+	cpuspeed /= 100;
+
+	printf("%s\n", cpu_getmodel());
 }
 
 /*
@@ -720,10 +612,11 @@ int	waittime = -1;
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* Save the RB_SBOOT flag. */
 	howto |= (boothowto & RB_SBOOT);
@@ -755,6 +648,8 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 #if defined(PANICWAIT) && !defined(DDB)
 	if ((howto & RB_HALT) == 0 && panicstr) {
@@ -915,19 +810,11 @@ long	dumplo = 0;		/* blocks */
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		goto bad;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		goto bad;
-	}
-	if (bdev->d_psize == NULL)
-		goto bad;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		goto bad;
 
@@ -980,14 +867,14 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -1012,7 +899,8 @@ dumpsys(void)
 
 			/* Print out how many MBs we have left to go. */
 			if ((totalbytesleft % (1024*1024)) == 0)
-				printf("%ld ", totalbytesleft / (1024 * 1024));
+				printf_nolog("%ld ",
+				    totalbytesleft / (1024 * 1024));
 
 			/* Limit size for next transfer. */
 			n = bytes - i;
@@ -1177,19 +1065,30 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
     return ENOEXEC;
 }
 
-const static int ipl2psl_table[] = {
-	[IPL_NONE] = PSL_IPL0,
-	[IPL_SOFTBIO] = PSL_IPL1,
-	[IPL_SOFTCLOCK] = PSL_IPL1,
-	[IPL_SOFTNET] = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL1,
-	[IPL_VM] = PSL_IPL3,
-	[IPL_SCHED] = PSL_IPL7,
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
+
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL1,
+	[IPL_VM]         = PSL_S | PSL_IPL3,
+	[IPL_SCHED]      = PSL_S | PSL_IPL7,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
 
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
 {
 
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
+	return (pa < lowram || pa >= 0xfffffffc) ? EFAULT : 0;
 }

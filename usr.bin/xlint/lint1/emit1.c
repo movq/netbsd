@@ -1,4 +1,4 @@
-/* $NetBSD: emit1.c,v 1.16 2005/09/24 15:30:35 perry Exp $ */
+/* $NetBSD: emit1.c,v 1.20 2017/12/26 17:02:19 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: emit1.c,v 1.16 2005/09/24 15:30:35 perry Exp $");
+__RCSID("$NetBSD: emit1.c,v 1.20 2017/12/26 17:02:19 christos Exp $");
 #endif
 
 #include <ctype.h>
@@ -54,6 +54,9 @@ static	void	outfstrg(strg_t *);
  * node of type type_t
  * a node is coded as follows:
  *	_Bool			B
+ *	_Complex float		s X
+ *	_Complex double		X 
+ *	_Complex long double	l X 
  *	char			C
  *	signed char		s C
  *	unsigned char		u C
@@ -121,6 +124,9 @@ outtype(type_t *tp)
 		case ENUM:	t = 'T';	s = 'e';	break;
 		case STRUCT:	t = 'T';	s = 's';	break;
 		case UNION:	t = 'T';	s = 'u';	break;
+		case FCOMPLEX:	t = 'X';	s = 's';	break;
+		case DCOMPLEX:	t = 'X';	s = '\0';	break;
+		case LCOMPLEX:	t = 'X';	s = 'l';	break;
 		default:
 			LERROR("outtyp()");
 		}
@@ -360,6 +366,9 @@ outfdef(sym_t *fsym, pos_t *posp, int rval, int osdef, sym_t *args)
 	if (osdef)
 		/* old style function definition */
 		outchar('o');
+
+	if (fsym->s_inline)
+		outchar('i');
 
 	if (fsym->s_scl == STATIC)
 		outchar('s');

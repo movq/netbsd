@@ -1,7 +1,7 @@
-/* $NetBSD: wsevent.c,v 1.24 2007/12/05 17:19:57 pooka Exp $ */
+/* $NetBSD: wsevent.c,v 1.39 2018/06/14 10:30:55 uwe Exp $ */
 
 /*-
- * Copyright (c) 2006 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -111,12 +104,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsevent.c,v 1.24 2007/12/05 17:19:57 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsevent.c,v 1.39 2018/06/14 10:30:55 uwe Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_compat_netbsd.h"
+#include "opt_modular.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/fcntl.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
@@ -134,6 +132,11 @@ __KERNEL_RCSID(0, "$NetBSD: wsevent.c,v 1.24 2007/12/05 17:19:57 pooka Exp $");
  */
 #define	WSEVENT_QSIZE	256
 
+#define EVSIZE(ver)	((ver) == WSEVENT_VERSION ? \
+    sizeof(struct wscons_event) : \
+    sizeof(struct owscons_event))
+#define EVARRAY(ev, idx) (&(ev)->q[(idx)])
+
 /*
  * Priority of code managing wsevent queues.  PWSEVENT is set just above
  * PSOCK, which is just above TTIPRI, on the theory that mouse and keyboard
@@ -141,6 +144,8 @@ __KERNEL_RCSID(0, "$NetBSD: wsevent.c,v 1.24 2007/12/05 17:19:57 pooka Exp $");
  */
 #define	PWSEVENT	23
 #define	splwsevent()	spltty()
+
+static void	wsevent_intr(void *);
 
 /*
  * Initialize a wscons_event queue.
@@ -155,10 +160,14 @@ wsevent_init(struct wseventvar *ev, struct proc *p)
 #endif
 		return;
 	}
+	/* For binary compat. New code must call WSxxxIO_SETVERSION */
+	ev->version = 0;
 	ev->get = ev->put = 0;
-	ev->q = malloc((u_long)WSEVENT_QSIZE * sizeof(struct wscons_event),
-		       M_DEVBUF, M_WAITOK|M_ZERO);
+	ev->q = kmem_alloc(WSEVENT_QSIZE * sizeof(*ev->q), KM_SLEEP);
+	selinit(&ev->sel);
 	ev->io = p;
+	ev->sih = softint_establish(SOFTINT_MPSAFE | SOFTINT_CLOCK,
+	    wsevent_intr, ev);
 }
 
 /*
@@ -173,8 +182,58 @@ wsevent_fini(struct wseventvar *ev)
 #endif
 		return;
 	}
-	free(ev->q, M_DEVBUF);
+	seldestroy(&ev->sel);
+	kmem_free(ev->q, WSEVENT_QSIZE * sizeof(*ev->q));
 	ev->q = NULL;
+	softint_disestablish(ev->sih);
+}
+
+#if defined(COMPAT_50) || defined(MODULAR)
+static int
+wsevent_copyout_events50(const struct wscons_event *events, int cnt,
+    struct uio *uio)
+{
+	int i;
+
+	for (i = 0; i < cnt; i++) {
+		const struct wscons_event *ev = &events[i];
+		struct owscons_event ev50;
+		int error;
+
+		ev50.type = ev->type;
+		ev50.value = ev->value;
+		timespec_to_timespec50(&ev->time, &ev50.time);
+
+		error = uiomove(&ev50, sizeof(ev50), uio);
+		if (error) {
+			return error;
+		}
+	}
+	return 0;
+}
+#else /* defined(COMPAT_50) || defined(MODULAR) */
+static int
+wsevent_copyout_events50(const struct wscons_event *events, int cnt,
+    struct uio *uio)
+{
+
+	return EINVAL;
+}
+#endif /* defined(COMPAT_50) || defined(MODULAR) */
+
+static int
+wsevent_copyout_events(const struct wscons_event *events, int cnt,
+    struct uio *uio, int ver)
+{
+
+	switch (ver) {
+	case 0:
+		return wsevent_copyout_events50(events, cnt, uio);
+	case WSEVENT_VERSION:
+		return uiomove(__UNCONST(events), cnt * sizeof(*events), uio);
+	default:
+		panic("%s: unknown version %d", __func__, ver);
+	}
 }
 
 /*
@@ -185,11 +244,13 @@ int
 wsevent_read(struct wseventvar *ev, struct uio *uio, int flags)
 {
 	int s, n, cnt, error;
+	const int ver = ev->version;
+	const size_t evsize = EVSIZE(ver);
 
 	/*
 	 * Make sure we can return at least 1.
 	 */
-	if (uio->uio_resid < sizeof(struct wscons_event))
+	if (uio->uio_resid < evsize)
 		return (EMSGSIZE);	/* ??? */
 	s = splwsevent();
 	while (ev->get == ev->put) {
@@ -198,8 +259,7 @@ wsevent_read(struct wseventvar *ev, struct uio *uio, int flags)
 			return (EWOULDBLOCK);
 		}
 		ev->wanted = 1;
-		error = tsleep(ev, PWSEVENT | PCATCH,
-		    "wsevent_read", 0);
+		error = tsleep(ev, PWSEVENT | PCATCH, "wsevent_read", 0);
 		if (error) {
 			splx(s);
 			return (error);
@@ -214,11 +274,10 @@ wsevent_read(struct wseventvar *ev, struct uio *uio, int flags)
 	else
 		cnt = ev->put - ev->get;	/* events in [get..put) */
 	splx(s);
-	n = howmany(uio->uio_resid, sizeof(struct wscons_event));
+	n = howmany(uio->uio_resid, evsize);
 	if (cnt > n)
 		cnt = n;
-	error = uiomove(&ev->q[ev->get],
-	    cnt * sizeof(struct wscons_event), uio);
+	error = wsevent_copyout_events(EVARRAY(ev, ev->get), cnt, uio, ver);
 	n -= cnt;
 	/*
 	 * If we do not wrap to 0, used up all our space, or had an error,
@@ -230,8 +289,7 @@ wsevent_read(struct wseventvar *ev, struct uio *uio, int flags)
 		return (error);
 	if (cnt > n)
 		cnt = n;
-	error = uiomove(&ev->q[0],
-	    cnt * sizeof(struct wscons_event), uio);
+	error = wsevent_copyout_events(EVARRAY(ev, 0), cnt, uio, ver);
 	ev->get = cnt;
 	return (error);
 }
@@ -275,16 +333,19 @@ filt_wseventread(struct knote *kn, long hint)
 	if (ev->get < ev->put)
 		kn->kn_data = ev->put - ev->get;
 	else
-		kn->kn_data = (WSEVENT_QSIZE - ev->get) +
-		    ev->put;
+		kn->kn_data = (WSEVENT_QSIZE - ev->get) + ev->put;
 
-	kn->kn_data *= sizeof(struct wscons_event);
+	kn->kn_data *= EVSIZE(ev->version);
 
 	return (1);
 }
 
-static const struct filterops wsevent_filtops =
-	{ 1, NULL, filt_wseventrdetach, filt_wseventread };
+static const struct filterops wsevent_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_wseventrdetach,
+	.f_event = filt_wseventread,
+};
 
 int
 wsevent_kqfilter(struct wseventvar *ev, struct knote *kn)
@@ -318,7 +379,7 @@ void
 wsevent_wakeup(struct wseventvar *ev)
 {
 
-	selnotify(&ev->sel, 0);
+	selnotify(&ev->sel, 0, 0);
 
 	if (ev->wanted) {
 		ev->wanted = 0;
@@ -326,9 +387,24 @@ wsevent_wakeup(struct wseventvar *ev)
 	}
 
 	if (ev->async) {
-		mutex_enter(&proclist_mutex);
+		softint_schedule(ev->sih);
+	}
+}
+
+/*
+ * Soft interrupt handler: sends signal to async proc.
+ */
+static void
+wsevent_intr(void *cookie)
+{
+	struct wseventvar *ev;
+
+	ev = cookie;
+
+	if (ev->async) {
+		mutex_enter(proc_lock);
 		psignal(ev->io, SIGIO);
-		mutex_exit(&proclist_mutex);
+		mutex_exit(proc_lock);
 	}
 }
 
@@ -363,15 +439,36 @@ wsevent_inject(struct wseventvar *ev, struct wscons_event *events,
 	for (i = 0; i < nevents; i++) {
 		struct wscons_event *we;
 
-		we = &ev->q[ev->put];
+		we = EVARRAY(ev, ev->put);
 		we->type = events[i].type;
 		we->value = events[i].value;
 		we->time = t;
 
 		ev->put = (ev->put + 1) % WSEVENT_QSIZE;
 	}
-
 	wsevent_wakeup(ev);
 
+	return 0;
+}
+
+int
+wsevent_setversion(struct wseventvar *ev, int vers)
+{
+	if (ev == NULL)
+		return EINVAL;
+
+	switch (vers) {
+	case 0:
+	case WSEVENT_VERSION:
+		break;
+	default:
+		return EINVAL;
+	}
+
+	if (vers == ev->version)
+		return 0;
+
+	ev->get = ev->put = 0;
+	ev->version = vers;
 	return 0;
 }

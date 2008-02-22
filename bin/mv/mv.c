@@ -1,4 +1,4 @@
-/* $NetBSD: mv.c,v 1.39 2008/01/16 11:43:34 hubertf Exp $ */
+/* $NetBSD: mv.c,v 1.45 2016/02/28 10:59:29 mrg Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mv.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: mv.c,v 1.39 2008/01/16 11:43:34 hubertf Exp $");
+__RCSID("$NetBSD: mv.c,v 1.45 2016/02/28 10:59:29 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: mv.c,v 1.39 2008/01/16 11:43:34 hubertf Exp $");
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/extattr.h>
 
 #include <err.h>
 #include <errno.h>
@@ -64,14 +65,21 @@ __RCSID("$NetBSD: mv.c,v 1.39 2008/01/16 11:43:34 hubertf Exp $");
 
 #include "pathnames.h"
 
-int fflg, iflg, vflg;
-int stdin_ok;
+static int fflg, iflg, vflg;
+static int stdin_ok;
+static sig_atomic_t pinfo;
 
-int	copy(char *, char *);
-int	do_move(char *, char *);
-int	fastcopy(char *, char *, struct stat *);
-void	usage(void);
-int	main(int, char *[]);
+static int	copy(char *, char *);
+static int	do_move(char *, char *);
+static int	fastcopy(char *, char *, struct stat *);
+__dead static void	usage(void);
+
+static void
+progress(int sig __unused)
+{
+
+	pinfo++;
+}
 
 int
 main(int argc, char *argv[])
@@ -108,6 +116,8 @@ main(int argc, char *argv[])
 		usage();
 
 	stdin_ok = isatty(STDIN_FILENO);
+
+	(void)signal(SIGINFO, progress);
 
 	/*
 	 * If the stat on the target fails or the target isn't a directory,
@@ -150,7 +160,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-int
+static int
 do_move(char *from, char *to)
 {
 	struct stat sb;
@@ -252,13 +262,19 @@ do_move(char *from, char *to)
 	    fastcopy(from, to, &sb) : copy(from, to));
 }
 
-int
+static int
 fastcopy(char *from, char *to, struct stat *sbp)
 {
+#if defined(__NetBSD__)
+	struct timespec ts[2];
+#else
 	struct timeval tval[2];
-	static u_int blen;
+#endif
+	static blksize_t blen;
 	static char *bp;
-	int nread, from_fd, to_fd;
+	int from_fd, to_fd;
+	ssize_t nread;
+	off_t total = 0;
 
 	if ((from_fd = open(from, O_RDONLY, 0)) < 0) {
 		warn("%s", from);
@@ -272,15 +288,26 @@ fastcopy(char *from, char *to, struct stat *sbp)
 	}
 	if (!blen && !(bp = malloc(blen = sbp->st_blksize))) {
 		warn(NULL);
+		blen = 0;
 		(void)close(from_fd);
 		(void)close(to_fd);
 		return (1);
 	}
-	while ((nread = read(from_fd, bp, blen)) > 0)
+	while ((nread = read(from_fd, bp, blen)) > 0) {
 		if (write(to_fd, bp, nread) != nread) {
 			warn("%s", to);
 			goto err;
 		}
+		total += nread;
+		if (pinfo) {
+			int pcent = (int)((100.0 * total) / sbp->st_size);
+
+			pinfo = 0;
+			(void)fprintf(stderr, "%s => %s %llu/%llu bytes %d%% "
+			    "written\n", from, to, (unsigned long long)total,
+			    (unsigned long long)sbp->st_size, pcent);
+		}
+	}
 	if (nread < 0) {
 		warn("%s", from);
 err:		if (unlink(to))
@@ -289,10 +316,19 @@ err:		if (unlink(to))
 		(void)close(to_fd);
 		return (1);
 	}
+
+	if (fcpxattr(from_fd, to_fd) == -1)
+		warn("%s: error copying extended attributes", to);
+
 	(void)close(from_fd);
 #ifdef BSD4_4
+#if defined(__NetBSD__)
+	ts[0] = sbp->st_atimespec;
+	ts[1] = sbp->st_mtimespec;
+#else
 	TIMESPEC_TO_TIMEVAL(&tval[0], &sbp->st_atimespec);
 	TIMESPEC_TO_TIMEVAL(&tval[1], &sbp->st_mtimespec);
+#endif
 #else
 	tval[0].tv_sec = sbp->st_atime;
 	tval[1].tv_sec = sbp->st_mtime;
@@ -302,7 +338,11 @@ err:		if (unlink(to))
 #ifdef __SVR4
 	if (utimes(to, tval))
 #else
+#if defined(__NetBSD__)
+	if (futimens(to_fd, ts))
+#else
 	if (futimes(to_fd, tval))
+#endif
 #endif
 		warn("%s: set times", to);
 	if (fchown(to_fd, sbp->st_uid, sbp->st_gid)) {
@@ -331,7 +371,7 @@ err:		if (unlink(to))
 	return (0);
 }
 
-int
+static int
 copy(char *from, char *to)
 {
 	pid_t pid;
@@ -376,7 +416,7 @@ copy(char *from, char *to)
 	return (0);
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: %s [-fiv] source target\n"

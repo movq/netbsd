@@ -1,4 +1,4 @@
-/*	$NetBSD: c_nec_jazz.c,v 1.12 2006/06/24 03:50:38 tsutsui Exp $	*/
+/*	$NetBSD: c_nec_jazz.c,v 1.14 2013/12/16 15:46:57 mrg Exp $	*/
 
 /*-
  * Copyright (C) 2000 Shuichiro URATA.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: c_nec_jazz.c,v 1.12 2006/06/24 03:50:38 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: c_nec_jazz.c,v 1.14 2013/12/16 15:46:57 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,14 +65,13 @@ struct timer_jazzio_config timer_nec_jazz_conf = {
 uint32_t
 timer_nec_jazz_intr(uint32_t mask, struct clockframe *cf)
 {
-	int temp;
 
-	temp = in32(RD94_SYS_INTSTAT3);
+	(void)in32(RD94_SYS_INTSTAT3);
 	last_cp0_count = mips3_cp0_count_read();
 	hardclock(cf);
 	timer_jazzio_ev.ev_count++;
 
-	return ~MIPS_INT_MASK_3; /* Keep clock interrupts enabled */
+	return MIPS_INT_MASK_3;	/* Keep clock interrupts enabled */
 }
 
 void

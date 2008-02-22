@@ -1,4 +1,4 @@
-.\"     $NetBSD: buffercache.9,v 1.22 2007/07/14 10:52:48 ad Exp $
+.\"     $NetBSD: buffercache.9,v 1.32 2017/04/10 22:49:35 maya Exp $
 .\"
 .\" Copyright (c)2003 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -101,13 +101,12 @@
 .\"
 .\"
 .\" ------------------------------------------------------------
-.Dd October 4, 2006
+.Dd April 11, 2017
 .Dt BUFFERCACHE 9
 .Os
 .Sh NAME
 .Nm buffercache ,
 .Nm bread ,
-.Nm breada ,
 .Nm breadn ,
 .Nm bwrite ,
 .Nm bawrite ,
@@ -116,45 +115,35 @@
 .Nm geteblk ,
 .Nm incore ,
 .Nm allocbuf ,
-.Nm brelse ,
-.Nm biodone ,
-.Nm biowait
+.Nm brelse
 .Nd buffer cache interfaces
 .\" ------------------------------------------------------------
 .Sh SYNOPSIS
 .In sys/buf.h
 .Ft int
 .Fn bread "struct vnode *vp" "daddr_t blkno" "int size" \
-"struct kauth_cred *cred" "struct buf **bpp"
+"int flags" "buf_t **bpp"
 .Ft int
 .Fn breadn "struct vnode *vp" "daddr_t blkno" "int size" \
 "daddr_t rablks[]" "int rasizes[]" "int nrablks" \
-"struct kauth_cred *cred" "struct buf **bpp"
+"int flags" "buf_t **bpp"
 .Ft int
-.Fn breada "struct vnode *vp" "daddr_t blkno" "int size" \
-"daddr_t rablkno" "int rabsize" \
-"struct kauth_cred *cred" "struct buf **bpp"
-.Ft int
-.Fn bwrite "struct buf *bp"
+.Fn bwrite "buf_t *bp"
 .Ft void
-.Fn bawrite "struct buf *bp"
+.Fn bawrite "buf_t *bp"
 .Ft void
-.Fn bdwrite "struct buf *bp"
-.Ft struct buf *
+.Fn bdwrite "buf_t *bp"
+.Ft buf_t *
 .Fn getblk "struct vnode *vp" "daddr_t blkno" "int size" \
 "int slpflag" "int slptimeo"
-.Ft struct buf *
+.Ft buf_t *
 .Fn geteblk "int size"
-.Ft struct buf *
+.Ft buf_t *
 .Fn incore "struct vnode *vp" "daddr_t blkno"
 .Ft void
-.Fn allocbuf "struct buf *bp" "int size" "int preserve"
+.Fn allocbuf "buf_t *bp" "int size" "int preserve"
 .Ft void
-.Fn brelse "struct buf *bp"
-.Ft void
-.Fn biodone "struct buf *bp"
-.Ft int
-.Fn biowait "struct buf *bp"
+.Fn brelse "buf_t *bp" "int set"
 .\" ------------------------------------------------------------
 .Sh DESCRIPTION
 The
@@ -170,11 +159,11 @@ In addition to describing a cached block, a
 .Em buf
 structure is also used to describe an I/O request as a part of
 the disk driver interface.
-.\" XXX struct buf, B_ flags, MP locks, etc
+.\" XXX buf_t, B_ flags, MP locks, etc
 .\" ------------------------------------------------------------
 .Sh FUNCTIONS
 .Bl -tag -width compact
-.It Fn bread "vp" "blkno" "size" "cred" "bpp"
+.It Fn bread "vp" "blkno" "size" "flags" "bpp"
 Read a block corresponding to
 .Fa vp
 and
@@ -206,9 +195,7 @@ If the buffer is not found (i.e. the block is not cached in memory),
 .Fn bread
 allocates a buffer with enough pages for
 .Fa size
-and reads the specified disk block into it using
-credential
-.Fa cred .
+and reads the specified disk block into it.
 .Pp
 The buffer returned by
 .Fn bread
@@ -225,7 +212,8 @@ it should be unbusied using one of variants of
 Otherwise, it should be unbusied using
 .Fn brelse .
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.It Fn breadn "vp" "blkno" "size" "rablks" "rasizes" "nrablks" "cred" "bpp"
+.It Fn breadn "vp" "blkno" "size" "rablks" "rasizes" "nrablks" "flags" \
+"bpp"
 Get a buffer as
 .Fn bread .
 In addition,
@@ -234,13 +222,6 @@ will start read-ahead of blocks specified by
 .Fa rablks ,
 .Fa rasizes ,
 .Fa nrablks .
-.\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.It Fn breada "vp" "blkno" "size" "rablkno" "rabsize" "cred" "bpp"
-Same as
-.Fn breadn
-with single block read-ahead.
-This function is for compatibility with old filesystem code and
-shouldn't be used by new ones.
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 .It Fn bwrite "bp"
 Write a block.
@@ -272,7 +253,7 @@ Unlike
 .Fn bdwrite
 won't start any I/O.
 It only marks the buffer as dirty
-.Pq Dv B_DELWRI
+.Pq Dv BO_DELWRI
 and unbusy it.
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 .It Fn getblk "vp" "blkno" "size" "slpflag" "slptimeo"
@@ -323,29 +304,11 @@ if needed; this routine will not start a write.
 If the buffer grows, it is the callers responsibility to fill out
 the buffer's additional contents.
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.It Fn brelse "bp"
+.It Fn brelse "bp" "set"
 Unbusy a buffer and release it to the free lists.
-.\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.It Fn biodone "bp"
-Mark I/O complete on a buffer.
-If a callback has been requested by
-.Dv B_CALL ,
-do so.
-Otherwise, wakeup waiters.
-.\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.It Fn biowait "bp"
-Wait for operations on the buffer to complete.
-When they do, extract and return the I/O's error value.
 .El
 .\" ------------------------------------------------------------
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing the buffer cache subsystem
-can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The buffer cache subsystem is implemented within the file
 .Pa sys/kern/vfs_bio.c .
 .Sh SEE ALSO
@@ -366,17 +329,3 @@ The buffer cache subsystem is implemented within the file
 .%I "Addison Wesley"
 .%D 1996
 .Re
-.\" ------------------------------------------------------------
-.Sh BUGS
-In the current implementation,
-.Fn bread
-and its variants
-don't use a specified credential.
-.Pp
-Because
-.Fn biodone
-and
-.Fn biowait
-do not really belong to
-.Nm ,
-they shouldn't be documented here.

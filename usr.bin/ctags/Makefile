@@ -1,16 +1,12 @@
-#	$NetBSD: Makefile,v 1.9 2006/05/12 01:18:25 mrg Exp $
+#	$NetBSD: Makefile,v 1.13 2012/08/10 12:10:27 joerg Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 PROG=	ctags
 CPPFLAGS+=-I${.CURDIR}
 SRCS=	C.c ctags.c fortran.c lisp.c print.c tree.c yacc.c
 
-WARNS=	3
-
-.include <bsd.prog.mk>
-
 .if !defined(HOSTPROGNAME)
-.if ${HAVE_GCC} == 4
 COPTS.ctags.c+=	-Wno-pointer-sign
 .endif
-.endif
+
+.include <bsd.prog.mk>

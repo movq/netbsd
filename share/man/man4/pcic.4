@@ -1,4 +1,4 @@
-.\" $NetBSD: pcic.4,v 1.4 2001/09/22 15:58:13 wiz Exp $
+.\" $NetBSD: pcic.4,v 1.7 2012/03/13 19:25:41 njoly Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,9 +72,12 @@ devices in the kernel config file to accommodate these cards.
 .Xr pcmcia 4 ,
 .Xr tcic 4
 .Pp
-.Pa http://www.intel.com/
-.br
-.Pa http://www.cirrus.com/
+.Bl -item -compact
+.It
+.Lk http://www.intel.com/ "Intel Corporation"
+.It
+.Lk http://www.cirrus.com/ "Cirrus Logic"
+.El
 .Sh HISTORY
 The
 .Nm

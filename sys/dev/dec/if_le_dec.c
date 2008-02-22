@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_dec.c,v 1.18 2007/10/19 11:59:40 ad Exp $	*/
+/*	$NetBSD: if_le_dec.c,v 1.21 2017/06/22 16:46:53 flxd Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -73,10 +73,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_dec.c,v 1.18 2007/10/19 11:59:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_dec.c,v 1.21 2017/06/22 16:46:53 flxd Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_dec.c,v 1.18 2007/10/19 11:59:40 ad Exp $");
 #include <sys/bus.h>
 
 /* access LANCE registers */
-void le_dec_writereg(volatile u_short *regptr, u_short val);
+void le_dec_writereg(volatile uint16_t *regptr, uint16_t val);
 #define	LERDWR(cntl, src, dst)	{ (dst) = (src); tc_mb(); }
 #define	LEWREG(src, dst)	le_dec_writereg(&(dst), (src))
 
@@ -121,13 +120,11 @@ void le_dec_writereg(volatile u_short *regptr, u_short val);
 #define hide		static
 #endif
 
-hide void le_dec_wrcsr(struct lance_softc *, u_int16_t, u_int16_t);
-hide u_int16_t le_dec_rdcsr(struct lance_softc *, u_int16_t);
+hide void le_dec_wrcsr(struct lance_softc *, uint16_t, uint16_t);
+hide uint16_t le_dec_rdcsr(struct lance_softc *, uint16_t);
 
 void
-dec_le_common_attach(sc, eap)
-	struct am7990_softc *sc;
-	u_char *eap;
+dec_le_common_attach(struct am7990_softc *sc, uint8_t *eap)
 {
 	int i;
 
@@ -151,9 +148,7 @@ dec_le_common_attach(sc, eap)
 }
 
 hide void
-le_dec_wrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+le_dec_wrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
 
@@ -161,13 +156,11 @@ le_dec_wrcsr(sc, port, val)
 	LERDWR(port, val, ler1->ler1_rdp);
 }
 
-hide u_int16_t
-le_dec_rdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+hide uint16_t
+le_dec_rdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct lereg1 *ler1 = ((struct le_softc *)sc)->sc_r1;
-	u_int16_t val;
+	uint16_t val;
 
 	LEWREG(port, ler1->ler1_rap);
 	LERDWR(0, ler1->ler1_rdp, val);
@@ -180,11 +173,9 @@ le_dec_rdcsr(sc, port)
  * pokey sometimes.
  */
 void
-le_dec_writereg(regptr, val)
-	register volatile u_short *regptr;
-	register u_short val;
+le_dec_writereg(volatile uint16_t *regptr, uint16_t val)
 {
-	register int i = 0;
+	int i = 0;
 
 	while (*regptr != val) {
 		*regptr = val;
@@ -203,7 +194,7 @@ le_dec_writereg(regptr, val)
  * by am7990.c, because of the LE_NEED_BUF_* macros defined above.
  * Unfortunately, CPU addressing of these buffers is done in one of
  * 3 ways:
- * - contiguous (for the 3max and turbochannel option card)
+ * - contiguous (for the 3max and TURBOchannel option card)
  * - gap2, which means shorts (2 bytes) interspersed with short (2 byte)
  *   spaces (for the pmax, vax 3400, and ioasic LANCE descriptors)
  * - gap16, which means 16bytes interspersed with 16byte spaces

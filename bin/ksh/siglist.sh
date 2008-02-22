@@ -1,11 +1,14 @@
 #!/bin/sh
-#	$NetBSD: siglist.sh,v 1.6 2006/11/14 20:27:10 christos Exp $
+#	$NetBSD: siglist.sh,v 1.12 2016/03/17 13:59:02 christos Exp $
 #
 # Script to generate a sorted, complete list of signals, suitable
 # for inclusion in trap.c as array initializer.
 #
 
 set -e
+
+: ${AWK:=awk}
+: ${SED:=sed}
 
 in=tmpi$$.c
 out=tmpo$$.c
@@ -19,13 +22,15 @@ CPP="${1-cc -E}"
 (trap $trapsigs;
  echo '#include "sh.h"';
  echo '	{ QwErTy SIGNALS , "DUMMY" , "hook for number of signals" },';
- sed -e '/^[	 ]*#/d' -e 's/^[	 ]*\([^ 	][^ 	]*\)[	 ][	 ]*\(.*[^ 	]\)[ 	]*$/#ifdef SIG\1\
+ ${SED} -e '/^[	 ]*#/d' -e 's/^[	 ]*\([^ 	][^ 	]*\)[	 ][	 ]*\(.*[^ 	]\)[ 	]*$/#ifdef SIG\1\
 	{ QwErTy .signal = SIG\1 , .name = "\1", .mess = "\2" },\
 #endif/') > $in
-$CPP $in  > $out
-sed -n 's/{ QwErTy/{/p' < $out | awk '{print NR, $0}' | sort -k5n -k1n |
-    sed 's/^[0-9]* //' |
-    awk 'BEGIN { last=0; nsigs=0; }
+# work around for gcc 5
+$CPP $in | grep -v '^#' | tr -d '\n' | ${SED} 's/},/},\
+/g' > $out
+${SED} -n 's/{ QwErTy/{/p' < $out | ${AWK} '{print NR, $0}' | sort -k 5n -k 1n |
+    ${SED} 's/^[0-9]* //' |
+    ${AWK} 'BEGIN { last=0; nsigs=0; }
 	{
 	    if ($4 ~ /^[0-9][0-9]*$/ && $5 == ",") {
 		n = $4;

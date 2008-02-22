@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.88 2007/12/05 12:03:09 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.105 2014/04/20 04:12:54 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -86,55 +80,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * This software was developed by the Computer Systems Engineering group
- * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
- * contributed to Berkeley.
- *
- * All advertising materials mentioning features or use of this software
- * must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Lawrence Berkeley Laboratory.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: autoconf.c 1.36 92/12/20$
- *
- *	@(#)autoconf.c	8.2 (Berkeley) 1/12/94
- */
-
-/*
  * Setup the system to run on the current machine.
  *
  * Configure() is called at boot time.  Available
@@ -143,18 +88,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.88 2007/12/05 12:03:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.105 2014/04/20 04:12:54 tsutsui Exp $");
 
-#include "hil.h"
 #include "dvbox.h"
 #include "gbox.h"
 #include "hyper.h"
 #include "rbox.h"
 #include "topcat.h"
+#include "tvrx.h"
+#include "gendiofb.h"
+#include "sti_sgc.h"
 #include "com_dio.h"
 #include "com_frodo.h"
 #include "dcm.h"
-#include "ite.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -172,6 +118,10 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.88 2007/12/05 12:03:09 tsutsui Exp $"
 #include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
+
+#include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplayvar.h>
+#include <dev/rasops/rasops.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -191,10 +141,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.88 2007/12/05 12:03:09 tsutsui Exp $"
 #include <hp300/dev/intioreg.h>
 #include <hp300/dev/dmavar.h>
 #include <hp300/dev/frodoreg.h>
-#include <hp300/dev/grfreg.h>
-#include <hp300/dev/hilreg.h>
-#include <hp300/dev/hilioctl.h>
-#include <hp300/dev/hilvar.h>
 
 #include <hp300/dev/hpibvar.h>
 
@@ -205,20 +151,21 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.88 2007/12/05 12:03:09 tsutsui Exp $"
 #include <hp300/dev/com_frodovar.h>
 #endif
 
+#if NSTI_SGC > 0
+#include <hp300/dev/sgcvar.h>
+#include <hp300/dev/sti_sgcvar.h>
+#endif
+
+#include <hp300/dev/diofbreg.h>
+#include <hp300/dev/diofbvar.h>
+
 /* should go away with a cleanup */
 extern int dcmcnattach(bus_space_tag_t, bus_addr_t, int);
-extern int dvboxcnattach(bus_space_tag_t, bus_addr_t, int);
-extern int gboxcnattach(bus_space_tag_t, bus_addr_t, int);
-extern int rboxcnattach(bus_space_tag_t, bus_addr_t, int);
-extern int hypercnattach(bus_space_tag_t, bus_addr_t, int);
-extern int topcatcnattach(bus_space_tag_t, bus_addr_t, int);
 extern int dnkbdcnattach(bus_space_tag_t, bus_addr_t);
 
 static int	dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
 static int	dio_scode_probe(int,
 		    int (*func)(bus_space_tag_t, bus_addr_t, int));
-
-extern	void *internalhpib;
 
 /* How we were booted. */
 u_int	bootdev;
@@ -268,7 +215,7 @@ int extio_ex_malloc_safe;
 struct dev_data {
 	LIST_ENTRY(dev_data)	dd_list;  /* dev_data_list */
 	LIST_ENTRY(dev_data)	dd_clist; /* ctlr list */
-	struct device		*dd_dev;  /* device described by this entry */
+	device_t		dd_dev;  /* device described by this entry */
 	int			dd_scode; /* select code of device */
 	int			dd_slave; /* ...or slave */
 	int			dd_punit; /* and punit... */
@@ -282,19 +229,18 @@ static void	findbootdev(void);
 static void	findbootdev_slave(ddlist_t *, int, int, int);
 static void	setbootdev(void);
 
-static struct dev_data *dev_data_lookup(struct device *);
+static struct dev_data *dev_data_lookup(device_t);
 static void	dev_data_insert(struct dev_data *, ddlist_t *);
 
-static int	mainbusmatch(struct device *, struct cfdata *, void *);
-static void	mainbusattach(struct device *, struct device *, void *);
-static int	mainbussearch(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	mainbusmatch(device_t, cfdata_t, void *);
+static void	mainbusattach(device_t, device_t, void *);
+static int	mainbussearch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbusmatch, mainbusattach, NULL, NULL);
 
 static int
-mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
+mainbusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int mainbus_matched = 0;
 
@@ -307,18 +253,17 @@ mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-mainbusattach(struct device *parent, struct device *self, void *aux)
+mainbusattach(device_t parent, device_t self, void *aux)
 {
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Search for and attach children. */
 	config_search_ia(mainbussearch, self, "mainbus", NULL);
 }
 
 static int
-mainbussearch(struct device *parent, struct cfdata *cf, const int *ldesc,
-    void *aux)
+mainbussearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -343,13 +288,14 @@ cpu_configure(void)
 	/* Kick off autoconfiguration. */
 	(void)splhigh();
 
+	/* Initialize the interrupt handlers. */
+	intr_init();
+
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
 	/* Configuration is finished, turn on interrupts. */
 	(void)spl0();
-
-	intr_printlevels();
 }
 
 /**********************************************************************
@@ -360,7 +306,6 @@ void
 cpu_rootconf(void)
 {
 	struct dev_data *dd;
-	struct device *dv;
 	struct vfsops *vops;
 
 	/*
@@ -380,32 +325,32 @@ cpu_rootconf(void)
 			    B_PARTITION(bootdev));
 			bootdev = 0;		/* invalidate bootdev */
 		} else {
-			printf("boot device: %s\n", booted_device->dv_xname);
+			printf("boot device: %s\n", device_xname(booted_device));
 		}
 	}
-
-	dv = booted_device;
 
 	/*
 	 * If wild carded root device and wired down NFS root file system,
 	 * pick the network interface device to use.
 	 */
 	if (rootspec == NULL) {
-		vops = vfs_getopsbyname("nfs");
-		if (vops != NULL && vops->vfs_mountroot == mountroot) {
+		vops = vfs_getopsbyname(MOUNT_NFS);
+		if (vops != NULL && vops->vfs_mountroot != NULL &&
+		    strcmp(rootfstype, MOUNT_NFS) == 0) {
 			for (dd = LIST_FIRST(&dev_data_list);
 			    dd != NULL; dd = LIST_NEXT(dd, dd_list)) {
 				if (device_class(dd->dd_dev) == DV_IFNET) {
 					/* Got it! */
-					dv = dd->dd_dev;
+					booted_device = dd->dd_dev;
 					break;
 				}
 			}
 			if (dd == NULL) {
 				printf("no network interface for NFS root");
-				dv = NULL;
 			}
 		}
+		if (vops != NULL)
+			vfs_delref(vops);
 	}
 
 	/*
@@ -420,7 +365,7 @@ cpu_rootconf(void)
 	if (booted_device != NULL && device_class(booted_device) == DV_TAPE)
 		boothowto |= RB_ASKNAME;
 
-	setroot(dv, booted_partition);
+	rootconf();
 
 	/*
 	 * Set bootdev based on what we found as the root.
@@ -435,7 +380,7 @@ cpu_rootconf(void)
  * used to attach it.  This is used to find the boot device.
  */
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	struct dev_data *dd;
 	static int seen_netdevice = 0;
@@ -576,7 +521,7 @@ findbootdev(void)
 		    (type == 2 && !device_is_a(booted_device, "rd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
-			    booted_device->dv_xname, type);
+			    device_xname(booted_device), type);
 			booted_device = NULL;
 		}
 		goto out;
@@ -597,7 +542,7 @@ findbootdev(void)
 		if ((type == 4 && !device_is_a(booted_device, "sd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
-			    booted_device->dv_xname, type);
+			    device_xname(booted_device), type);
 			booted_device = NULL;
 		}
 		goto out;
@@ -667,7 +612,7 @@ setbootdev(void)
 	 *	4 == sd
 	 *	6 == le
 	 *
-	 * Allare bdevsw major numbers, except for le, which
+	 * All are bdevsw major numbers, except for le, which
 	 * is just special.
 	 *
 	 * We can't mount root on a tape, so we ignore those.
@@ -742,7 +687,7 @@ setbootdev(void)
  * Return the dev_data corresponding to the given device.
  */
 static struct dev_data *
-dev_data_lookup(struct device *dev)
+dev_data_lookup(device_t dev)
 {
 	struct dev_data *dd;
 
@@ -764,7 +709,7 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
 
 #ifdef DIAGNOSTIC
 	if (dd->dd_scode < 0 || dd->dd_scode > 255) {
-		printf("bogus select code for %s\n", dd->dd_dev->dv_xname);
+		printf("bogus select code for %s\n", device_xname(dd->dd_dev));
 		panic("dev_data_insert");
 	}
 #endif
@@ -802,6 +747,11 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
  * Code to find and initialize the console
  **********************************************************************/
 
+int conscode;
+void *conaddr;
+
+static bool cninit_deferred;
+
 void
 hp300_cninit(void)
 {
@@ -816,7 +766,8 @@ hp300_cninit(void)
 	 * Look for serial consoles first.
 	 */
 #if NCOM_FRODO > 0
-	if (!com_frodo_cnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(1), -1))
+	if (!com_frodo_cnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(1),
+	    CONSCODE_INTERNAL))
 		return;
 #endif
 #if NCOM_DIO > 0
@@ -828,25 +779,24 @@ hp300_cninit(void)
 		return;
 #endif
 
-#if NITE > 0
 #ifndef CONSCODE
 	/*
 	 * Look for internal framebuffers.
 	 */
 #if NDVBOX > 0
-	if (!dvboxcnattach(bst, FB_BASE,-1))
+	if (!dvboxcnattach(bst, FB_BASE, CONSCODE_INTERNAL))
 		goto find_kbd;
 #endif
 #if NGBOX > 0
-	if (!gboxcnattach(bst, FB_BASE,-1))
+	if (!gboxcnattach(bst, FB_BASE, CONSCODE_INTERNAL))
 		goto find_kbd;
 #endif
 #if NRBOX > 0
-	if (!rboxcnattach(bst, FB_BASE,-1))
+	if (!rboxcnattach(bst, FB_BASE, CONSCODE_INTERNAL))
 		goto find_kbd;
 #endif
 #if NTOPCAT > 0
-	if (!topcatcnattach(bst, FB_BASE,-1))
+	if (!topcatcnattach(bst, FB_BASE, CONSCODE_INTERNAL))
 		goto find_kbd;
 #endif
 #endif	/* CONSCODE */
@@ -874,17 +824,45 @@ hp300_cninit(void)
 	if (!dio_scan(topcatcnattach))
 		goto find_kbd;
 #endif
+#if NTVRX > 0
+	if (!dio_scan(tvrxcnattach))
+		goto find_kbd;
+#endif
+#if NGENDIOFB > 0
+	if (!dio_scan(gendiofbcnattach))
+		goto find_kbd;
+#endif
+#if NSTI_SGC > 0
+	if (machineid == HP_400 ||
+	    machineid == HP_425 ||
+	    machineid == HP_433) {
+		struct bus_space_tag sgc_tag;
+		bus_space_tag_t sgc_bst;
 
+		sgc_bst = &sgc_tag;
+		memset(sgc_bst, 0, sizeof(struct bus_space_tag));
+		sgc_bst->bustype = HP300_BUS_SPACE_SGC;
+		if (sti_sgc_cnprobe(sgc_bst, sgc_slottopa(0), 0)) {
+			cninit_deferred = true;
+			goto find_kbd;
+		}
+	}
+#endif
+
+#if (NDVBOX + NGBOX + NRBOX + NTOPCAT + NDVBOX + NGBOX + NHYPER + NRBOX + \
+     NTOPCAT + NTVRX + NGENDIOFB + NSTI_SGC) > 0
 find_kbd:
+#endif
 
 #if NDNKBD > 0
 	dnkbdcnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(0))
 #endif
 
-#if NHIL > 0
+#if NHILKBD > 0
+	/* not yet */
 	hilkbdcnattach(bst, HIL_BASE);
 #endif
-#endif	/* NITE */
+;
 }
 
 static int
@@ -931,6 +909,29 @@ dio_scode_probe(int scode, int (*func)(bus_space_tag_t, bus_addr_t, int))
 	return (*func)(bst, (bus_addr_t)pa, scode);
 }
 
+void
+hp300_cninit_deferred(void)
+{
+
+	if (!cninit_deferred)
+		return;
+
+#if NSTI_SGC > 0
+	if (machineid == HP_400 ||
+	    machineid == HP_425 ||
+	    machineid == HP_433) {
+		struct bus_space_tag sgc_tag;
+		bus_space_tag_t sgc_bst;
+
+		sgc_bst = &sgc_tag;
+		memset(sgc_bst, 0, sizeof(struct bus_space_tag));
+		sgc_bst->bustype = HP300_BUS_SPACE_SGC;
+		if (sti_sgc_cnprobe(sgc_bst, sgc_slottopa(0), 0))
+			sti_sgc_cnattach(sgc_bst, sgc_slottopa(0), 0);
+	}
+#endif
+}
+
 
 /**********************************************************************
  * Mapping functions
@@ -945,7 +946,7 @@ iomap_init(void)
 
 	/* extiobase is initialized by pmap_bootstrap(). */
 	extio_ex = extent_create("extio", (u_long) extiobase,
-	    (u_long) extiobase + (ptoa(EIOMAPSIZE) - 1), M_DEVBUF,
+	    (u_long) extiobase + (ptoa(EIOMAPSIZE) - 1),
 	    (void *) extio_ex_storage, sizeof(extio_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 }

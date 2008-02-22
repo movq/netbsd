@@ -1,4 +1,4 @@
-/* $NetBSD: softfloat.c,v 1.5 2007/11/08 21:31:04 martin Exp $ */
+/* $NetBSD: softfloat.c,v 1.14 2016/03/29 18:42:29 martin Exp $ */
 
 /*
  * This version hacked for use with gcc -msoft-float by bjh21.
@@ -46,7 +46,7 @@ this code that are retained.
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: softfloat.c,v 1.5 2007/11/08 21:31:04 martin Exp $");
+__RCSID("$NetBSD: softfloat.c,v 1.14 2016/03/29 18:42:29 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #ifdef SOFTFLOAT_FOR_GCC
@@ -73,8 +73,14 @@ Floating-point rounding mode, extended double-precision rounding precision,
 and exception flags.
 -------------------------------------------------------------------------------
 */
+#ifndef set_float_rounding_mode
 fp_rnd float_rounding_mode = float_round_nearest_even;
 fp_except float_exception_flags = 0;
+#endif
+#ifndef set_float_exception_inexact_flag
+#define	set_float_exception_inexact_flag() \
+	((void)(float_exception_flags |= float_flag_inexact))
+#endif
 #ifdef FLOATX80
 int8 floatx80_rounding_precision = 80;
 #endif
@@ -137,16 +143,16 @@ static int32 roundAndPackInt32( flag zSign, bits64 absZ )
             }
         }
     }
-    roundBits = absZ & 0x7F;
+    roundBits = (int8)(absZ & 0x7F);
     absZ = ( absZ + roundIncrement )>>7;
     absZ &= ~ ( ( ( roundBits ^ 0x40 ) == 0 ) & roundNearestEven );
-    z = absZ;
+    z = (int32)absZ;
     if ( zSign ) z = - z;
     if ( ( absZ>>32 ) || ( z && ( ( z < 0 ) ^ zSign ) ) ) {
         float_raise( float_flag_invalid );
         return zSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
-    if ( roundBits ) float_exception_flags |= float_flag_inexact;
+    if ( roundBits ) set_float_exception_inexact_flag();
     return z;
 
 }
@@ -200,7 +206,7 @@ static int64 roundAndPackInt64( flag zSign, bits64 absZ0, bits64 absZ1 )
               zSign ? (sbits64) LIT64( 0x8000000000000000 )
             : LIT64( 0x7FFFFFFFFFFFFFFF );
     }
-    if ( absZ1 ) float_exception_flags |= float_flag_inexact;
+    if ( absZ1 ) set_float_exception_inexact_flag();
     return z;
 
 }
@@ -340,14 +346,14 @@ static float32 roundAndPackFloat32( flag zSign, int16 zExp, bits32 zSig )
             isTiny =
                    ( float_detect_tininess == float_tininess_before_rounding )
                 || ( zExp < -1 )
-                || ( zSig + roundIncrement < 0x80000000 );
+                || ( zSig + roundIncrement < 0x80000000U );
             shift32RightJamming( zSig, - zExp, &zSig );
             zExp = 0;
             roundBits = zSig & 0x7F;
             if ( isTiny && roundBits ) float_raise( float_flag_underflow );
         }
     }
-    if ( roundBits ) float_exception_flags |= float_flag_inexact;
+    if ( roundBits ) set_float_exception_inexact_flag();
     zSig = ( zSig + roundIncrement )>>7;
     zSig &= ~ ( ( ( roundBits ^ 0x40 ) == 0 ) & roundNearestEven );
     if ( zSig == 0 ) zExp = 0;
@@ -395,7 +401,7 @@ Returns the exponent bits of the double-precision floating-point value `a'.
 INLINE int16 extractFloat64Exp( float64 a )
 {
 
-    return ( FLOAT64_DEMANGLE(a)>>52 ) & 0x7FF;
+    return (int16)((FLOAT64_DEMANGLE(a) >> 52) & 0x7FF);
 
 }
 
@@ -407,7 +413,7 @@ Returns the sign bit of the double-precision floating-point value `a'.
 INLINE flag extractFloat64Sign( float64 a )
 {
 
-    return FLOAT64_DEMANGLE(a)>>63;
+    return (flag)(FLOAT64_DEMANGLE(a) >> 63);
 
 }
 
@@ -497,7 +503,7 @@ static float64 roundAndPackFloat64( flag zSign, int16 zExp, bits64 zSig )
             }
         }
     }
-    roundBits = zSig & 0x3FF;
+    roundBits = (int16)(zSig & 0x3FF);
     if ( 0x7FD <= (bits16) zExp ) {
         if (    ( 0x7FD < zExp )
              || (    ( zExp == 0x7FD )
@@ -512,14 +518,14 @@ static float64 roundAndPackFloat64( flag zSign, int16 zExp, bits64 zSig )
             isTiny =
                    ( float_detect_tininess == float_tininess_before_rounding )
                 || ( zExp < -1 )
-                || ( zSig + roundIncrement < LIT64( 0x8000000000000000 ) );
+                || ( zSig + roundIncrement < (bits64)LIT64( 0x8000000000000000 ) );
             shift64RightJamming( zSig, - zExp, &zSig );
             zExp = 0;
-            roundBits = zSig & 0x3FF;
+            roundBits = (int16)(zSig & 0x3FF);
             if ( isTiny && roundBits ) float_raise( float_flag_underflow );
         }
     }
-    if ( roundBits ) float_exception_flags |= float_flag_inexact;
+    if ( roundBits ) set_float_exception_inexact_flag();
     zSig = ( zSig + roundIncrement )>>10;
     zSig &= ~ ( ( ( roundBits ^ 0x200 ) == 0 ) & roundNearestEven );
     if ( zSig == 0 ) zExp = 0;
@@ -655,7 +661,7 @@ static floatx80
 {
     int8 roundingMode;
     flag roundNearestEven, increment, isTiny;
-    int64 roundIncrement, roundMask, roundBits;
+    uint64 roundIncrement, roundMask, roundBits;
 
     roundingMode = float_rounding_mode;
     roundNearestEven = ( roundingMode == float_round_nearest_even );
@@ -702,7 +708,7 @@ static floatx80
             zExp = 0;
             roundBits = zSig0 & roundMask;
             if ( isTiny && roundBits ) float_raise( float_flag_underflow );
-            if ( roundBits ) float_exception_flags |= float_flag_inexact;
+            if ( roundBits ) set_float_exception_inexact_flag();
             zSig0 += roundIncrement;
             if ( (sbits64) zSig0 < 0 ) zExp = 1;
             roundIncrement = roundMask + 1;
@@ -713,7 +719,7 @@ static floatx80
             return packFloatx80( zSign, zExp, zSig0 );
         }
     }
-    if ( roundBits ) float_exception_flags |= float_flag_inexact;
+    if ( roundBits ) set_float_exception_inexact_flag();
     zSig0 += roundIncrement;
     if ( zSig0 < roundIncrement ) {
         ++zExp;
@@ -768,7 +774,7 @@ static floatx80
             shift64ExtraRightJamming( zSig0, zSig1, 1 - zExp, &zSig0, &zSig1 );
             zExp = 0;
             if ( isTiny && zSig1 ) float_raise( float_flag_underflow );
-            if ( zSig1 ) float_exception_flags |= float_flag_inexact;
+            if ( zSig1 ) set_float_exception_inexact_flag();
             if ( roundNearestEven ) {
                 increment = ( (sbits64) zSig1 < 0 );
             }
@@ -789,7 +795,7 @@ static floatx80
             return packFloatx80( zSign, zExp, zSig0 );
         }
     }
-    if ( zSig1 ) float_exception_flags |= float_flag_inexact;
+    if ( zSig1 ) set_float_exception_inexact_flag();
     if ( increment ) {
         ++zSig0;
         if ( zSig0 == 0 ) {
@@ -876,7 +882,7 @@ Returns the exponent bits of the quadruple-precision floating-point value
 INLINE int32 extractFloat128Exp( float128 a )
 {
 
-    return ( a.high>>48 ) & 0x7FFF;
+    return (int32)((a.high >> 48) & 0x7FFF);
 
 }
 
@@ -888,7 +894,7 @@ Returns the sign bit of the quadruple-precision floating-point value `a'.
 INLINE flag extractFloat128Sign( float128 a )
 {
 
-    return a.high>>63;
+    return (flag)(a.high >> 63);
 
 }
 
@@ -1059,7 +1065,7 @@ static float128
             }
         }
     }
-    if ( zSig2 ) float_exception_flags |= float_flag_inexact;
+    if ( zSig2 ) set_float_exception_inexact_flag();
     if ( increment ) {
         add128( zSig0, zSig1, 0, 1, &zSig0, &zSig1 );
         zSig1 &= ~ ( ( zSig2 + zSig2 == 0 ) & roundNearestEven );
@@ -1124,9 +1130,18 @@ float32 int32_to_float32( int32 a )
     if ( a == 0 ) return 0;
     if ( a == (sbits32) 0x80000000 ) return packFloat32( 1, 0x9E, 0 );
     zSign = ( a < 0 );
-    return normalizeRoundAndPackFloat32( zSign, 0x9C, zSign ? - a : a );
+    return normalizeRoundAndPackFloat32(zSign, 0x9C, (uint32)(zSign ? - a : a));
 
 }
+
+float32 uint32_to_float32( uint32 a )
+{
+    if ( a == 0 ) return 0;
+    if ( a & (bits32) 0x80000000 )
+	return normalizeRoundAndPackFloat32( 0, 0x9D, a >> 1 );
+    return normalizeRoundAndPackFloat32( 0, 0x9C, a );
+}
+
 
 /*
 -------------------------------------------------------------------------------
@@ -1148,6 +1163,17 @@ float64 int32_to_float64( int32 a )
     shiftCount = countLeadingZeros32( absA ) + 21;
     zSig = absA;
     return packFloat64( zSign, 0x432 - shiftCount, zSig<<shiftCount );
+
+}
+
+float64 uint32_to_float64( uint32 a )
+{
+    int8 shiftCount;
+    bits64 zSig = a;
+
+    if ( a == 0 ) return 0;
+    shiftCount = countLeadingZeros32( a ) + 21;
+    return packFloat64( 0, 0x432 - shiftCount, zSig<<shiftCount );
 
 }
 
@@ -1177,6 +1203,17 @@ floatx80 int32_to_floatx80( int32 a )
 
 }
 
+floatx80 uint32_to_floatx80( uint32 a )
+{
+    int8 shiftCount;
+    bits64 zSig = a;
+
+    if ( a == 0 ) return packFloatx80( 0, 0, 0 );
+    shiftCount = countLeadingZeros32( a ) + 32;
+    return packFloatx80( 0, 0x403E - shiftCount, zSig<<shiftCount );
+
+}
+
 #endif
 
 #ifdef FLOAT128
@@ -1201,6 +1238,17 @@ float128 int32_to_float128( int32 a )
     shiftCount = countLeadingZeros32( absA ) + 17;
     zSig0 = absA;
     return packFloat128( zSign, 0x402E - shiftCount, zSig0<<shiftCount, 0 );
+
+}
+
+float128 uint32_to_float128( uint32 a )
+{
+    int8 shiftCount;
+    bits64 zSig0 = a;
+
+    if ( a == 0 ) return packFloat128( 0, 0, 0, 0 );
+    shiftCount = countLeadingZeros32( a ) + 17;
+    return packFloat128( 0, 0x402E - shiftCount, zSig0<<shiftCount, 0 );
 
 }
 
@@ -1389,13 +1437,13 @@ int32 float32_to_int32_round_to_zero( float32 a )
         return (sbits32) 0x80000000;
     }
     else if ( aExp <= 0x7E ) {
-        if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp | aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig = ( aSig | 0x00800000 )<<8;
     z = aSig>>( - shiftCount );
     if ( (bits32) ( aSig<<( shiftCount & 31 ) ) ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     if ( aSign ) z = - z;
     return z;
@@ -1473,14 +1521,14 @@ int64 float32_to_int64_round_to_zero( float32 a )
         return (sbits64) LIT64( 0x8000000000000000 );
     }
     else if ( aExp <= 0x7E ) {
-        if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp | aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig64 = aSig | 0x00800000;
     aSig64 <<= 40;
     z = aSig64>>( - shiftCount );
     if ( (bits64) ( aSig64<<( shiftCount & 63 ) ) ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     if ( aSign ) z = - z;
     return z;
@@ -1612,7 +1660,7 @@ float32 float32_round_to_int( float32 a )
     }
     if ( aExp <= 0x7E ) {
         if ( (bits32) ( a<<1 ) == 0 ) return a;
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
         aSign = extractFloat32Sign( a );
         switch ( float_rounding_mode ) {
          case float_round_nearest_even:
@@ -1644,7 +1692,7 @@ float32 float32_round_to_int( float32 a )
         }
     }
     z &= ~ roundBitsMask;
-    if ( z != a ) float_exception_flags |= float_flag_inexact;
+    if ( z != a ) set_float_exception_inexact_flag();
     return z;
 
 }
@@ -1894,7 +1942,7 @@ float32 float32_mul( float32 a, float32 b )
     aSig = ( aSig | 0x00800000 )<<7;
     bSig = ( bSig | 0x00800000 )<<8;
     shift64RightJamming( ( (bits64) aSig ) * bSig, 32, &zSig64 );
-    zSig = zSig64;
+    zSig = (bits32)zSig64;
     if ( 0 <= (sbits32) ( zSig<<1 ) ) {
         zSig <<= 1;
         --zExp;
@@ -1958,7 +2006,7 @@ float32 float32_div( float32 a, float32 b )
         aSig >>= 1;
         ++zExp;
     }
-    zSig = ( ( (bits64) aSig )<<32 ) / bSig;
+    zSig = (bits32)((((bits64) aSig) << 32) / bSig);
     if ( ( zSig & 0x3F ) == 0 ) {
         zSig |= ( (bits64) bSig * zSig != ( (bits64) aSig )<<32 );
     }
@@ -2330,14 +2378,14 @@ int32 float64_to_int32_round_to_zero( float64 a )
         goto invalid;
     }
     else if ( aExp < 0x3FF ) {
-        if ( aExp || aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp || aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig |= LIT64( 0x0010000000000000 );
     shiftCount = 0x433 - aExp;
     savedASig = aSig;
     aSig >>= shiftCount;
-    z = aSig;
+    z = (int32)aSig;
     if ( aSign ) z = - z;
     if ( ( z < 0 ) ^ aSign ) {
  invalid:
@@ -2345,7 +2393,7 @@ int32 float64_to_int32_round_to_zero( float64 a )
         return aSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
     if ( ( aSig<<shiftCount ) != savedASig ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 
@@ -2435,12 +2483,12 @@ int64 float64_to_int64_round_to_zero( float64 a )
     }
     else {
         if ( aExp < 0x3FE ) {
-            if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
+            if ( aExp | aSig ) set_float_exception_inexact_flag();
             return 0;
         }
         z = aSig>>( - shiftCount );
         if ( (bits64) ( aSig<<( shiftCount & 63 ) ) ) {
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
         }
     }
     if ( aSign ) z = - z;
@@ -2472,7 +2520,7 @@ float32 float64_to_float32( float64 a )
         return packFloat32( aSign, 0xFF, 0 );
     }
     shift64RightJamming( aSig, 22, &aSig );
-    zSig = aSig;
+    zSig = (bits32)aSig;
     if ( aExp || zSig ) {
         zSig |= 0x40000000;
         aExp -= 0x381;
@@ -2577,7 +2625,7 @@ float64 float64_round_to_int( float64 a )
     }
     if ( aExp < 0x3FF ) {
         if ( (bits64) ( a<<1 ) == 0 ) return a;
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
         aSign = extractFloat64Sign( a );
         switch ( float_rounding_mode ) {
          case float_round_nearest_even:
@@ -2610,7 +2658,7 @@ float64 float64_round_to_int( float64 a )
         }
     }
     z &= ~ roundBitsMask;
-    if ( z != a ) float_exception_flags |= float_flag_inexact;
+    if ( z != a ) set_float_exception_inexact_flag();
     return z;
 
 }
@@ -3291,7 +3339,7 @@ int32 floatx80_to_int32_round_to_zero( floatx80 a )
         goto invalid;
     }
     else if ( aExp < 0x3FFF ) {
-        if ( aExp || aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp || aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     shiftCount = 0x403E - aExp;
@@ -3305,7 +3353,7 @@ int32 floatx80_to_int32_round_to_zero( floatx80 a )
         return aSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
     if ( ( aSig<<shiftCount ) != savedASig ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 
@@ -3385,12 +3433,12 @@ int64 floatx80_to_int64_round_to_zero( floatx80 a )
         return (sbits64) LIT64( 0x8000000000000000 );
     }
     else if ( aExp < 0x3FFF ) {
-        if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp | aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     z = aSig>>( - shiftCount );
     if ( (bits64) ( aSig<<( shiftCount & 63 ) ) ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     if ( aSign ) z = - z;
     return z;
@@ -3512,7 +3560,7 @@ floatx80 floatx80_round_to_int( floatx80 a )
              && ( (bits64) ( extractFloatx80Frac( a )<<1 ) == 0 ) ) {
             return a;
         }
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
         aSign = extractFloatx80Sign( a );
         switch ( float_rounding_mode ) {
          case float_round_nearest_even:
@@ -3555,7 +3603,7 @@ floatx80 floatx80_round_to_int( floatx80 a )
         ++z.high;
         z.low = LIT64( 0x8000000000000000 );
     }
-    if ( z.low != a.low ) float_exception_flags |= float_flag_inexact;
+    if ( z.low != a.low ) set_float_exception_inexact_flag();
     return z;
 
 }
@@ -3890,7 +3938,7 @@ according to the IEC/IEEE Standard for Binary Floating-Point Arithmetic.
 */
 floatx80 floatx80_rem( floatx80 a, floatx80 b )
 {
-    flag aSign, bSign, zSign;
+    flag aSign, zSign;
     int32 aExp, bExp, expDiff;
     bits64 aSig0, aSig1, bSig;
     bits64 q, term0, term1, alternateASig0, alternateASig1;
@@ -3901,7 +3949,7 @@ floatx80 floatx80_rem( floatx80 a, floatx80 b )
     aSign = extractFloatx80Sign( a );
     bSig = extractFloatx80Frac( b );
     bExp = extractFloatx80Exp( b );
-    bSign = extractFloatx80Sign( b );
+
     if ( aExp == 0x7FFF ) {
         if (    (bits64) ( aSig0<<1 )
              || ( ( bExp == 0x7FFF ) && (bits64) ( bSig<<1 ) ) ) {
@@ -4313,14 +4361,14 @@ int32 float128_to_int32_round_to_zero( float128 a )
         goto invalid;
     }
     else if ( aExp < 0x3FFF ) {
-        if ( aExp || aSig0 ) float_exception_flags |= float_flag_inexact;
+        if ( aExp || aSig0 ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig0 |= LIT64( 0x0001000000000000 );
     shiftCount = 0x402F - aExp;
     savedASig = aSig0;
     aSig0 >>= shiftCount;
-    z = aSig0;
+    z = (int32)aSig0;
     if ( aSign ) z = - z;
     if ( ( z < 0 ) ^ aSign ) {
  invalid:
@@ -4328,7 +4376,7 @@ int32 float128_to_int32_round_to_zero( float128 a )
         return aSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
     if ( ( aSig0<<shiftCount ) != savedASig ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 
@@ -4407,7 +4455,7 @@ int64 float128_to_int64_round_to_zero( float128 a )
             aSig0 &= LIT64( 0x0000FFFFFFFFFFFF );
             if (    ( a.high == LIT64( 0xC03E000000000000 ) )
                  && ( aSig1 < LIT64( 0x0002000000000000 ) ) ) {
-                if ( aSig1 ) float_exception_flags |= float_flag_inexact;
+                if ( aSig1 ) set_float_exception_inexact_flag();
             }
             else {
                 float_raise( float_flag_invalid );
@@ -4419,20 +4467,20 @@ int64 float128_to_int64_round_to_zero( float128 a )
         }
         z = ( aSig0<<shiftCount ) | ( aSig1>>( ( - shiftCount ) & 63 ) );
         if ( (bits64) ( aSig1<<shiftCount ) ) {
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
         }
     }
     else {
         if ( aExp < 0x3FFF ) {
             if ( aExp | aSig0 | aSig1 ) {
-                float_exception_flags |= float_flag_inexact;
+                set_float_exception_inexact_flag();
             }
             return 0;
         }
         z = aSig0>>( - shiftCount );
         if (    aSig1
              || ( shiftCount && (bits64) ( aSig0<<( shiftCount & 63 ) ) ) ) {
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
         }
     }
     if ( aSign ) z = - z;
@@ -4440,6 +4488,8 @@ int64 float128_to_int64_round_to_zero( float128 a )
 
 }
 
+#if (defined(SOFTFLOATSPARC64_FOR_GCC) || defined(SOFTFLOAT_FOR_GCC)) \
+    && defined(SOFTFLOAT_NEED_FIXUNS)
 /*
  * just like above - but do not care for overflow of signed results
  */
@@ -4461,7 +4511,7 @@ uint64 float128_to_uint64_round_to_zero( float128 a )
             aSig0 &= LIT64( 0x0000FFFFFFFFFFFF );
             if (    ( a.high == LIT64( 0xC03E000000000000 ) )
                  && ( aSig1 < LIT64( 0x0002000000000000 ) ) ) {
-                if ( aSig1 ) float_exception_flags |= float_flag_inexact;
+                if ( aSig1 ) set_float_exception_inexact_flag();
             }
             else {
                 float_raise( float_flag_invalid );
@@ -4470,25 +4520,26 @@ uint64 float128_to_uint64_round_to_zero( float128 a )
         }
         z = ( aSig0<<shiftCount ) | ( aSig1>>( ( - shiftCount ) & 63 ) );
         if ( (bits64) ( aSig1<<shiftCount ) ) {
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
         }
     }
     else {
         if ( aExp < 0x3FFF ) {
             if ( aExp | aSig0 | aSig1 ) {
-                float_exception_flags |= float_flag_inexact;
+                set_float_exception_inexact_flag();
             }
             return 0;
         }
         z = aSig0>>( - shiftCount );
         if (aSig1 || ( shiftCount && (bits64) ( aSig0<<( shiftCount & 63 ) ) ) ) {
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
         }
     }
     if ( aSign ) z = - z;
     return z;
 
 }
+#endif /* (SOFTFLOATSPARC64_FOR_GCC || SOFTFLOAT_FOR_GCC) && SOFTFLOAT_NEED_FIXUNS */
 
 /*
 -------------------------------------------------------------------------------
@@ -4517,7 +4568,7 @@ float32 float128_to_float32( float128 a )
     }
     aSig0 |= ( aSig1 != 0 );
     shift64RightJamming( aSig0, 18, &aSig0 );
-    zSig = aSig0;
+    zSig = (bits32)aSig0;
     if ( aExp || zSig ) {
         zSig |= 0x40000000;
         aExp -= 0x3F81;
@@ -4654,7 +4705,7 @@ float128 float128_round_to_int( float128 a )
     else {
         if ( aExp < 0x3FFF ) {
             if ( ( ( (bits64) ( a.high<<1 ) ) | a.low ) == 0 ) return a;
-            float_exception_flags |= float_flag_inexact;
+            set_float_exception_inexact_flag();
             aSign = extractFloat128Sign( a );
             switch ( float_rounding_mode ) {
              case float_round_nearest_even:
@@ -4700,7 +4751,7 @@ float128 float128_round_to_int( float128 a )
         z.high &= ~ roundBitsMask;
     }
     if ( ( z.low != a.low ) || ( z.high != a.high ) ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 
@@ -5073,7 +5124,7 @@ according to the IEC/IEEE Standard for Binary Floating-Point Arithmetic.
 */
 float128 float128_rem( float128 a, float128 b )
 {
-    flag aSign, bSign, zSign;
+    flag aSign, zSign;
     int32 aExp, bExp, expDiff;
     bits64 aSig0, aSig1, bSig0, bSig1, q, term0, term1, term2;
     bits64 allZero, alternateASig0, alternateASig1, sigMean1;
@@ -5087,7 +5138,6 @@ float128 float128_rem( float128 a, float128 b )
     bSig1 = extractFloat128Frac1( b );
     bSig0 = extractFloat128Frac0( b );
     bExp = extractFloat128Exp( b );
-    bSign = extractFloat128Sign( b );
     if ( aExp == 0x7FFF ) {
         if (    ( aSig0 | aSig1 )
              || ( ( bExp == 0x7FFF ) && ( bSig0 | bSig1 ) ) ) {
@@ -5211,9 +5261,9 @@ float128 float128_sqrt( float128 a )
         if ( ( aSig0 | aSig1 ) == 0 ) return packFloat128( 0, 0, 0, 0 );
         normalizeFloat128Subnormal( aSig0, aSig1, &aExp, &aSig0, &aSig1 );
     }
-    zExp = ( ( aExp - 0x3FFF )>>1 ) + 0x3FFE;
+    zExp = (int32) ( (aExp - 0x3FFF) >> 1) + 0x3FFE;
     aSig0 |= LIT64( 0x0001000000000000 );
-    zSig0 = estimateSqrt32( aExp, aSig0>>17 );
+    zSig0 = estimateSqrt32((int16)aExp, (bits32)(aSig0>>17));
     shortShift128Left( aSig0, aSig1, 13 - ( aExp & 1 ), &aSig0, &aSig1 );
     zSig0 = estimateDiv128To64( aSig0, aSig1, zSig0<<32 ) + ( zSig0<<30 );
     doubleZSig0 = zSig0<<1;
@@ -5491,16 +5541,16 @@ uint32 float64_to_uint32_round_to_zero( float64 a )
         return 0xffffffff;
     }
     else if ( aExp < 0x3FF ) {
-        if ( aExp || aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp || aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig |= LIT64( 0x0010000000000000 );
     shiftCount = 0x433 - aExp;
     savedASig = aSig;
     aSig >>= shiftCount;
-    z = aSig;
+    z = (uint32)aSig;
     if ( ( aSig<<shiftCount ) != savedASig ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 
@@ -5537,13 +5587,13 @@ uint32 float32_to_uint32_round_to_zero( float32 a )
         return 0xFFFFFFFF;
     }
     else if ( aExp <= 0x7E ) {
-        if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
+        if ( aExp | aSig ) set_float_exception_inexact_flag();
         return 0;
     }
     aSig = ( aSig | 0x800000 )<<8;
     z = aSig>>( - shiftCount );
     if ( aSig<<( shiftCount & 31 ) ) {
-        float_exception_flags |= float_flag_inexact;
+        set_float_exception_inexact_flag();
     }
     return z;
 

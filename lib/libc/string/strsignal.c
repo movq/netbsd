@@ -1,4 +1,4 @@
-/*	$NetBSD: strsignal.c,v 1.13 2005/11/29 03:12:00 christos Exp $	*/
+/*	$NetBSD: strsignal.c,v 1.15 2012/06/25 22:32:46 abs Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -34,12 +34,12 @@
 #if 0
 static char *sccsid = "@(#)strerror.c	5.6 (Berkeley) 5/4/91";
 #else
-__RCSID("$NetBSD: strsignal.c,v 1.13 2005/11/29 03:12:00 christos Exp $");
+__RCSID("$NetBSD: strsignal.c,v 1.15 2012/06/25 22:32:46 abs Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
-#include <unistd.h>
+#include <string.h>
 #include <limits.h>
 #include "extern.h"
 
@@ -48,8 +48,7 @@ __weak_alias(strsignal,_strsignal)
 #endif
 
 __aconst char *
-strsignal(sig)
-	int sig;
+strsignal(int sig)
 {
 	static char buf[NL_TEXTMAX];
 

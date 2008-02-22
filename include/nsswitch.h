@@ -1,4 +1,4 @@
-/*	$NetBSD: nsswitch.h,v 1.19 2006/10/15 16:10:38 christos Exp $	*/
+/*	$NetBSD: nsswitch.h,v 1.23 2016/01/23 01:26:14 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,15 +32,8 @@
 #ifndef _NSSWITCH_H
 #define _NSSWITCH_H	1
 
-/*
- * Don't use va_list in prototypes.   va_list is typedef'd in two places
- * (<machine/varargs.h> and <machine/stdarg.h>), so if we include one of
- * them here we may collide with the utility's includes.  It's unreasonable
- * for utilities to have to include one of them to include nsswitch.h, so
- * we get _BSD_VA_LIST_ from <machine/ansi.h> and use it.
- */
-#include <machine/ansi.h>
 #include <sys/types.h>
+#include <stdarg.h>
 
 #define	NSS_MODULE_INTERFACE_VERSION	0
 
@@ -115,7 +101,7 @@
 /*
  * ns_dtab `callback' function signature.
  */
-typedef	int (*nss_method)(void *, void *, _BSD_VA_LIST_);
+typedef	int (*nss_method)(void *, void *, va_list);
 
 /*
  * ns_dtab - `nsswitch dispatch table'
@@ -189,8 +175,8 @@ typedef struct {
  * nss_module_unregister_fn - module un-registration function
  *	called at module unload
  */
-typedef	void (*nss_module_unregister_fn)(ns_mtab *, u_int);
-typedef	ns_mtab *(*nss_module_register_fn)(const char *, u_int *,
+typedef	void (*nss_module_unregister_fn)(ns_mtab *, unsigned int);
+typedef	ns_mtab *(*nss_module_register_fn)(const char *, unsigned int *,
 					   nss_module_unregister_fn *);
 
 #ifdef _NS_PRIVATE
@@ -207,7 +193,7 @@ typedef	ns_mtab *(*nss_module_register_fn)(const char *, u_int *,
 typedef struct {
 	const char	*name;		/* name of database */
 	ns_src		*srclist;	/* list of sources */
-	u_int		 srclistsize;	/* size of srclist */
+	unsigned int	 srclistsize;	/* size of srclist */
 } ns_dbt;
 
 /*
@@ -217,7 +203,7 @@ typedef struct {
 	const char	*name;		/* module name */
 	void		*handle;	/* handle from dlopen() */
 	ns_mtab		*mtab;		/* method table */
-	u_int		 mtabsize;	/* size of mtab */
+	unsigned int	 mtabsize;	/* size of mtab */
 					/* called to unload module */
 	nss_module_unregister_fn unregister;
 } ns_mod;

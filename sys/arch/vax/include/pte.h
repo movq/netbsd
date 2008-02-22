@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.21 2005/12/24 22:45:40 perry Exp $	  */
+/*	$NetBSD: pte.h,v 1.24 2017/05/22 17:12:11 ragge Exp $	  */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -76,24 +71,50 @@ extern pt_entry_t *Sysmap;
  */
 #endif
 
-#ifdef __ELF__
-#define VAX_SYSMAP	"Sysmap"
-#else
-#define VAX_SYSMAP	"_Sysmap"
-#endif
-
 #ifdef __GNUC__
-#define kvtopte(va) ({ \
-	struct pte *r; \
-	__asm("extzv $9,$21,%1,%0;moval *" VAX_SYSMAP "[%0],%0" : "=r"(r) : "g"(va)); \
-	r; \
-})
-#define kvtophys(va) ({ \
-	paddr_t r; \
-	__asm("extzv $9,$21,%1,%0;ashl $9,*" VAX_SYSMAP "[%0],%0;insv %1,$0,$9,%0" \
-	    : "=&r"(r) : "g"(va) : "cc"); \
-	r; \
-})
+#define	kvtopte(va)	kvtopte0((vaddr_t) (va))
+static inline struct pte *
+kvtopte0(vaddr_t va)
+{
+	struct pte *pt;
+#ifdef _RUMPKERNEL
+	__asm(
+		"extzv $9,$21,%1,%0\n\t"
+		"moval %2[%0],%0\n\t"
+	     : "=r"(pt)
+	     : "g"(va), "o"(*Sysmap));
+#else
+	__asm(
+		"extzv $9,$21,%1,%0\n\t"
+		"moval *Sysmap[%0],%0\n\t"
+	     : "=r"(pt)
+	     : "g"(va));
+#endif
+	return pt;
+}
+
+#define	kvtophys(va)	kvtophys0((vaddr_t) (va))
+static inline paddr_t
+kvtophys0(vaddr_t va)
+{
+	paddr_t pa;
+#ifdef _RUMPKERNEL
+	__asm(
+		"extzv $9,$21,%1,%0\n\t"
+		"ashl $9,%2[%0],%0\n\t"
+		"insv %1,$0,$9,%0\n\t"
+	    : "=&r"(pa)
+	    : "g"(va), "o"(*Sysmap) : "cc");
+#else
+	__asm(
+		"extzv $9,$21,%1,%0\n\t"
+		"ashl $9,*Sysmap[%0],%0\n\t"
+		"insv %1,$0,$9,%0\n\t"
+	    : "=&r"(pa)
+	    : "g"(va) : "cc");
+#endif
+	return pa;
+}
 #else /* __GNUC__ */
 #define kvtophys(va) \
 	(((kvtopte(va))->pg_pfn << VAX_PGSHIFT) | ((paddr_t)(va) & VAX_PGOFSET))

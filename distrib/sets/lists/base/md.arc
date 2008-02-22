@@ -1,4 +1,4 @@
-# $NetBSD: md.arc,v 1.9 2005/05/22 03:45:30 lukem Exp $
+# $NetBSD: md.arc,v 1.13 2014/08/06 12:15:01 martin Exp $
 ./usr/mdec/boot					base-sysutil-bin
 ./usr/mdec/mbr					base-obsolete		obsolete
 ./usr/mdec/msdos5mb.gz				base-obsolete		obsolete

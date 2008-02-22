@@ -1,4 +1,4 @@
-/*	$NetBSD: keyword.c,v 1.52 2008/02/10 17:47:59 christos Exp $	*/
+/*	$NetBSD: keyword.c,v 1.56 2018/04/11 18:52:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)keyword.c	8.5 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: keyword.c,v 1.52 2008/02/10 17:47:59 christos Exp $");
+__RCSID("$NetBSD: keyword.c,v 1.56 2018/04/11 18:52:05 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -126,13 +126,14 @@ VAR var[] = {
 	VAR4("emul", "EMUL", LJUST, emul),
 	VAR6("etime", "ELAPSED", 0, elapsed, POFF(p_ustart_sec), TIMEVAL),
 	UID("euid", "EUID", p_uid),
-	VAR4("euser", "EUSER", LJUST, uname),
+	VAR4("euser", "EUSER", LJUST, usrname),
 	PVAR("f", "F", 0, p_flag, INT, "x"),
 	VAR3("flags", "f", ALIAS),
 	GID("gid", "GID", p_gid),
 	VAR4("group", "GROUP", LJUST, gname),
 	VAR4("groupnames", "GROUPNAMES", LJUST, groupnames),
 	VAR4("groups", "GROUPS", LJUST, groups),
+	/* holdcnt: unused, left for compat. */
 	LVAR("holdcnt", "HOLDCNT", 0, l_holdcnt, INT, "d"),
 	VAR3("ignored", "sigignore", ALIAS),
 	PUVAR("inblk", "INBLK", 0, p_uru_inblock, UINT64, PRIu64),
@@ -148,6 +149,7 @@ VAR var[] = {
 	VAR3("logname", "login", ALIAS),
 	VAR6("lstart", "STARTED", LJUST, lstarted, POFF(p_ustart_sec), UINT32),
 	VAR4("lstate", "STAT", LJUST|LWP, lstate),
+	VAR6("ltime", "LTIME", LWP, lcputime, 0, CPUTIME),
 	PUVAR("majflt", "MAJFLT", 0, p_uru_majflt, UINT64, PRIu64),
 	PUVAR("minflt", "MINFLT", 0, p_uru_minflt, UINT64, PRIu64),
 	PUVAR("msgrcv", "MSGRCV", 0, p_uru_msgrcv, UINT64, PRIu64),
@@ -158,6 +160,7 @@ VAR var[] = {
 	PVAR("nlwp", "NLWP", 0, p_nlwps, UINT64, PRId64),
 	VAR3("nsignals", "nsigs", ALIAS),
 	PUVAR("nsigs", "NSIGS", 0, p_uru_nsignals, UINT64, PRIu64),
+	/* nswap: unused, left for compat. */
 	PUVAR("nswap", "NSWAP", 0, p_uru_nswap, UINT64, PRIu64),
 	PUVAR("nvcsw", "NVCSW", 0, p_uru_nvcsw, UINT64, PRIu64),
 /*XXX*/	LVAR("nwchan", "WCHAN", 0, l_wchan, KPTR, PRIx64),
@@ -210,7 +213,7 @@ VAR var[] = {
 	VAR4("ucomm", "UCOMM", LJUST, ucomm),
 	UID("uid", "UID", p_uid),
 	LVAR("upr", "UPR", 0, l_usrpri, UCHAR, "u"),
-	VAR4("user", "USER", LJUST, uname),
+	VAR4("user", "USER", LJUST, usrname),
 	VAR3("usrpri", "upr", ALIAS),
 	VAR6("utime", "UTIME", 0, putimeval, POFF(p_uutime_sec), TIMEVAL),
 	VAR3("vsize", "vsz", ALIAS),
@@ -305,7 +308,7 @@ parsevarlist(const char *pp, struct varlist *listptr, struct varent **pos)
 		if ((v = findvar(cp)) == NULL)
 			continue;
 		if ((vent = malloc(sizeof(struct varent))) == NULL)
-			err(1, NULL);
+			err(EXIT_FAILURE, NULL);
 		vent->var = v;
 		if (pos && *pos)
 		    SIMPLEQ_INSERT_AFTER(listptr, *pos, vent, next);
@@ -317,7 +320,7 @@ parsevarlist(const char *pp, struct varlist *listptr, struct varent **pos)
 	}
  	free(sp);
 	if (SIMPLEQ_EMPTY(listptr))
-		errx(1, "no valid keywords");
+		errx(EXIT_FAILURE, "no valid keywords");
 }
 
 void
@@ -386,9 +389,9 @@ findvar(const char *p)
 		char *newheader;
 
 		if ((newvar = malloc(sizeof(struct var))) == NULL)
-			err(1, NULL);
+			err(EXIT_FAILURE, NULL);
 		if ((newheader = strdup(hp)) == NULL)
-			err(1, NULL);
+			err(EXIT_FAILURE, NULL);
 		memcpy(newvar, v, sizeof(struct var));
 		newvar->header = newheader;
 

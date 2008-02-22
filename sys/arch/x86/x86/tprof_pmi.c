@@ -1,7 +1,7 @@
-/*	$NetBSD: tprof_pmi.c,v 1.2 2008/01/04 15:44:58 yamt Exp $	*/
+/*	$NetBSD: tprof_pmi.c,v 1.14 2017/05/23 08:54:39 nonaka Exp $	*/
 
 /*-
- * Copyright (c)2008 YAMAMOTO Takashi,
+ * Copyright (c)2008,2009 YAMAMOTO Takashi,
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,21 +27,27 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tprof_pmi.c,v 1.2 2008/01/04 15:44:58 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tprof_pmi.c,v 1.14 2017/05/23 08:54:39 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/module.h>
 
 #include <sys/cpu.h>
 #include <sys/xcall.h>
 
 #include <dev/tprof/tprof.h>
 
+#include <uvm/uvm.h>		/* VM_MIN_KERNEL_ADDRESS */
+
 #include <x86/tprof.h>
-#include <machine/db_machdep.h>	/* PC_REGS */
-#include <machine/cpuvar.h>	/* cpu_vendor */
+#include <x86/nmi.h>
+
+#include <machine/cpufunc.h>
 #include <machine/cputypes.h>	/* CPUVENDER_* */
+#include <machine/cpuvar.h>	/* cpu_vendor */
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
 
@@ -99,6 +105,9 @@ static uint64_t counter_val = 5000000;
 static uint64_t counter_reset_val;
 static uint32_t tprof_pmi_lapic_saved[MAXCPUS];
 
+static nmi_handler_t *tprof_pmi_nmi_handle;
+static tprof_backend_cookie_t *tprof_cookie;
+
 static void
 tprof_pmi_start_cpu(void *arg1, void *arg2)
 {
@@ -107,29 +116,30 @@ tprof_pmi_start_cpu(void *arg1, void *arg2)
 	uint64_t cccr;
 	uint64_t escr;
 
-	if (ci->ci_smtid >= 2) {
-		printf("%s: ignoring %s smtid=%u",
-		    __func__, device_xname(ci->ci_dev), ci->ci_smtid);
+	if (ci->ci_smt_id >= 2) {
+		printf("%s: ignoring %s smt id=%u",
+		    __func__, device_xname(ci->ci_dev),
+		    (u_int)ci->ci_smt_id);
 		return;
 	}
-	msr = &msrs[ci->ci_smtid];
+	msr = &msrs[ci->ci_smt_id];
 	escr = __SHIFTIN(escr_event_mask, ESCR_EVENT_MASK) |
 	    __SHIFTIN(escr_event_select, ESCR_EVENT_SELECT);
-	cccr = CCCR_ENABLE | __SHIFTIN(cccr_escr_select, __BITS(13, 15)) |
+	cccr = CCCR_ENABLE | __SHIFTIN(cccr_escr_select, CCCR_ESCR_SELECT) |
 	    CCCR_MUST_BE_SET;
-	if (ci->ci_smtid == 0) {
-		escr |= ESCR_T0_OS;
+	if (ci->ci_smt_id == 0) {
+		escr |= ESCR_T0_OS | ESCR_T0_USR;
 		cccr |= CCCR_OVF_PMI_T0;
 	} else {
-		escr |= ESCR_T1_OS;
+		escr |= ESCR_T1_OS | ESCR_T0_USR;
 		cccr |= CCCR_OVF_PMI_T1;
 	}
 
 	wrmsr(msr->msr_counter, counter_reset_val);
 	wrmsr(msr->msr_escr, escr);
 	wrmsr(msr->msr_cccr, cccr);
-	tprof_pmi_lapic_saved[cpu_index(ci)] = i82489_readreg(LAPIC_PCINT);
-	i82489_writereg(LAPIC_PCINT, LAPIC_DLMODE_NMI);
+	tprof_pmi_lapic_saved[cpu_index(ci)] = lapic_readreg(LAPIC_PCINT);
+	lapic_writereg(LAPIC_PCINT, LAPIC_DLMODE_NMI);
 }
 
 static void
@@ -138,22 +148,68 @@ tprof_pmi_stop_cpu(void *arg1, void *arg2)
 	struct cpu_info * const ci = curcpu();
 	const struct msrs *msr;
 
-	if (ci->ci_smtid >= 2) {
-		printf("%s: ignoring %s smtid=%u",
-		    __func__, device_xname(ci->ci_dev), ci->ci_smtid);
+	if (ci->ci_smt_id >= 2) {
+		printf("%s: ignoring %s smt id=%u",
+		    __func__, device_xname(ci->ci_dev),
+		    (u_int)ci->ci_smt_id);
 		return;
 	}
-	msr = &msrs[ci->ci_smtid];
+	msr = &msrs[ci->ci_smt_id];
 
 	wrmsr(msr->msr_escr, 0);
 	wrmsr(msr->msr_cccr, 0);
-	i82489_writereg(LAPIC_PCINT, tprof_pmi_lapic_saved[cpu_index(ci)]);
+	lapic_writereg(LAPIC_PCINT, tprof_pmi_lapic_saved[cpu_index(ci)]);
 }
 
-uint64_t
-tprof_backend_estimate_freq(void)
+static int
+tprof_pmi_nmi(const struct trapframe *tf, void *dummy)
 {
-	uint64_t cpufreq = curcpu()->ci_tsc_freq;
+	struct cpu_info * const ci = curcpu();
+	const struct msrs *msr;
+	uint32_t pcint;
+	uint64_t cccr;
+	tprof_frame_info_t tfi;
+
+	KASSERT(dummy == NULL);
+
+	if (ci->ci_smt_id >= 2) {
+		/* not ours */
+		return 0;
+	}
+	msr = &msrs[ci->ci_smt_id];
+
+	/* check if it's for us */
+	cccr = rdmsr(msr->msr_cccr);
+	if ((cccr & CCCR_OVF) == 0) {
+		/* not ours */
+		return 0;
+	}
+
+	/* record a sample */
+#if defined(__x86_64__)
+	tfi.tfi_pc = tf->tf_rip;
+#else /* defined(__x86_64__) */
+	tfi.tfi_pc = tf->tf_eip;
+#endif /* defined(__x86_64__) */
+	tfi.tfi_inkernel = tfi.tfi_pc >= VM_MIN_KERNEL_ADDRESS;
+	tprof_sample(tprof_cookie, &tfi);
+
+	/* reset counter */
+	wrmsr(msr->msr_counter, counter_reset_val);
+	wrmsr(msr->msr_cccr, cccr & ~CCCR_OVF);
+
+	/* unmask PMI */
+	pcint = lapic_readreg(LAPIC_PCINT);
+	KASSERT((pcint & LAPIC_LVT_MASKED) != 0);
+	lapic_writereg(LAPIC_PCINT, pcint & ~LAPIC_LVT_MASKED);
+
+	return 1;
+}
+
+static uint64_t
+tprof_pmi_estimate_freq(void)
+{
+	uint64_t cpufreq = curcpu()->ci_data.cpu_cc_freq;
 	uint64_t freq = 10000;
 
 	counter_val = cpufreq / freq;
@@ -164,65 +220,66 @@ tprof_backend_estimate_freq(void)
 	return freq;
 }
 
-int
-tprof_backend_start(void)
+static int
+tprof_pmi_start(tprof_backend_cookie_t *cookie)
 {
 	struct cpu_info * const ci = curcpu();
 	uint64_t xc;
 
 	if (!(cpu_vendor == CPUVENDOR_INTEL &&
-	    CPUID2FAMILY(ci->ci_signature) == 15)) {
+	    CPUID_TO_BASEFAMILY(ci->ci_signature) == 15)) {
 		return ENOTSUP;
 	}
+
+	KASSERT(tprof_pmi_nmi_handle == NULL);
+	tprof_pmi_nmi_handle = nmi_establish(tprof_pmi_nmi, NULL);
 
 	counter_reset_val = - counter_val + 1;
 	xc = xc_broadcast(0, tprof_pmi_start_cpu, NULL, NULL);
 	xc_wait(xc);
 
+	KASSERT(tprof_cookie == NULL);
+	tprof_cookie = cookie;
+
 	return 0;
 }
 
-void
-tprof_backend_stop(void)
+static void
+tprof_pmi_stop(tprof_backend_cookie_t *cookie)
 {
 	uint64_t xc;
 
 	xc = xc_broadcast(0, tprof_pmi_stop_cpu, NULL, NULL);
 	xc_wait(xc);
+
+	KASSERT(tprof_pmi_nmi_handle != NULL);
+	KASSERT(tprof_cookie == cookie);
+	nmi_disestablish(tprof_pmi_nmi_handle);
+	tprof_pmi_nmi_handle = NULL;
+	tprof_cookie = NULL;
 }
 
-int
-tprof_pmi_nmi(const struct trapframe *tf)
+static const tprof_backend_ops_t tprof_pmi_ops = {
+	.tbo_estimate_freq = tprof_pmi_estimate_freq,
+	.tbo_start = tprof_pmi_start,
+	.tbo_stop = tprof_pmi_stop,
+};
+
+MODULE(MODULE_CLASS_DRIVER, tprof_pmi, "tprof");
+
+static int
+tprof_pmi_modcmd(modcmd_t cmd, void *arg)
 {
-	struct cpu_info * const ci = curcpu();
-	const struct msrs *msr;
-	uint32_t pcint;
-	uint64_t cccr;
 
-	if (ci->ci_smtid >= 2) {
-		/* not ours */
-		return 0;
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return tprof_backend_register("tprof_pmi", &tprof_pmi_ops,
+		    TPROF_BACKEND_VERSION);
+
+	case MODULE_CMD_FINI:
+		return tprof_backend_unregister("tprof_pmi");
+
+	default:
+		return ENOTTY;
 	}
-	msr = &msrs[ci->ci_smtid];
-
-	/* check if it's for us */
-	cccr = rdmsr(msr->msr_cccr);
-	if ((cccr & CCCR_OVF) == 0) {
-		/* not ours */
-		return 0;
-	}
-
-	/* record a sample */
-	tprof_sample(tf);
-
-	/* reset counter */
-	wrmsr(msr->msr_counter, counter_reset_val);
-	wrmsr(msr->msr_cccr, cccr & ~CCCR_OVF);
-
-	/* unmask PMI */
-	pcint = i82489_readreg(LAPIC_PCINT);
-	KASSERT((pcint & LAPIC_LVT_MASKED) != 0);
-	i82489_writereg(LAPIC_PCINT, pcint & ~LAPIC_LVT_MASKED);
-
-	return 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ed.h,v 1.33 2005/06/26 19:10:49 christos Exp $	*/
+/*	$NetBSD: ed.h,v 1.37 2014/03/25 17:23:37 joerg Exp $	*/
 
 /* ed.h: type and constant definitions for the ed editor. */
 /*
@@ -115,7 +115,7 @@ if (--mutex == 0) { \
 	errno = 0 ; \
 	if (((i = strtol(p, &p, 10)) == LONG_MIN || i == LONG_MAX) && \
 	    errno == ERANGE) { \
-		sprintf(errmsg, "number out of range"); \
+		seterrmsg("number out of range"); \
 	    	i = 0; \
 		return ERR; \
 	} \
@@ -131,14 +131,14 @@ if ((i) > (n)) { \
 	if ((b) != NULL) { \
 		if ((ts = (char *) realloc((b), ti += max((i), MINBUFSZ))) == NULL) { \
 			fprintf(stderr, "%s\n", strerror(errno)); \
-			sprintf(errmsg, "out of memory"); \
+			seterrmsg("out of memory"); \
 			SPL0(); \
 			return err; \
 		} \
 	} else { \
 		if ((ts = (char *) malloc(ti += max((i), MINBUFSZ))) == NULL) { \
 			fprintf(stderr, "%s\n", strerror(errno)); \
-			sprintf(errmsg, "out of memory"); \
+			seterrmsg("out of memory"); \
 			SPL0(); \
 			return err; \
 		} \
@@ -156,7 +156,7 @@ if ((i) > (n)) { \
 	SPL1(); \
 	if ((ts = (char *) realloc((b), ti += max((i), MINBUFSZ))) == NULL) { \
 		fprintf(stderr, "%s\n", strerror(errno)); \
-		sprintf(errmsg, "out of memory"); \
+		seterrmsg("out of memory"); \
 		SPL0(); \
 		return err; \
 	} \
@@ -194,20 +194,16 @@ void add_line_node(line_t *);
 int append_lines(long);
 int apply_subst_template(char *, regmatch_t *, int, int);
 int build_active_list(int);
-int cbc_decode(char *, FILE *);
-int cbc_encode(char *, int, FILE *);
 int check_addr_range(long, long);
 void clear_active_list(void);
 void clear_undo_stack(void);
 int close_sbuf(void);
 int copy_lines(long);
 int delete_lines(long, long);
-void des_error(const char *);
 int display_lines(long, long, int);
 line_t *dup_line_node(line_t *);
 int exec_command(void);
 long exec_global(int, int);
-void expand_des_key(char *, char *);
 int extract_addr_range(void);
 char *extract_pattern(int);
 int extract_subst_tail(int *, long *);
@@ -227,11 +223,10 @@ char *get_sbuf_line(line_t *);
 int get_shell_command(void);
 int get_stream_line(FILE *);
 int get_tty_line(void);
-void handle_hup(int);
-void handle_int(int);
+__dead void handle_hup(int);
+__dead void handle_int(int);
 void handle_winch(int);
 int has_trailing_escape(char *, char *);
-int hex_to_binary(int, int);
 void init_buffers(void);
 void init_des_cipher(void);
 int is_legal_filename(char *);
@@ -248,12 +243,11 @@ int put_des_char(int, FILE *);
 char *put_sbuf_line(char *);
 int put_stream_line(FILE *, char *, int);
 int put_tty_line(char *, int, long, int);
-void quit(int);
+__dead void quit(int);
 long read_file(char *, long);
 long read_stream(FILE *, long);
 int search_and_replace(pattern_t *, int, int);
 int set_active_node(line_t *);
-void set_des_key(char *);
 void signal_hup(int);
 void signal_int(int);
 char *strip_escapes(const char *);
@@ -263,6 +257,7 @@ void unmark_line_node(line_t *);
 void unset_active_nodes(line_t *, line_t *);
 long write_file(const char *, const char *, long, long);
 long write_stream(FILE *, long, long);
+void seterrmsg(const char *, ...) __printflike(1, 2);
 
 /* global buffers */
 extern char stdinbuf[];
@@ -290,7 +285,7 @@ extern int ere;
 extern int des;
 extern int newline_added;	/* io.c */
 extern int patlock;
-extern char errmsg[];		/* re.c */
+extern char errmsg[];	/* re.c */
 extern long u_current_addr;	/* undo.c */
 extern long u_addr_last;	/* undo.c */
 #if defined(sun) && !defined(__SVR4)

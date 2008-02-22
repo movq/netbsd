@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_exec.c,v 1.22 2007/12/04 18:40:25 dsl Exp $	 */
+/*	$NetBSD: svr4_32_exec.c,v 1.29 2018/05/06 13:40:51 kamil Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.22 2007/12/04 18:40:25 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.29 2018/05/06 13:40:51 kamil Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -48,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_exec.c,v 1.22 2007/12/04 18:40:25 dsl Exp $"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/exec.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -69,43 +63,40 @@ void syscall(void);
 
 struct uvm_object *emul_svr4_32_object;
 
-const struct emul emul_svr4_32 = {
-	"svr4_32",
-	"/emul/svr4_32",
+struct emul emul_svr4_32 = {
+	.e_name =		"svr4_32",
+	.e_path =		"/emul/svr4_32",
 #ifndef __HAVE_MINIMAL_EMUL
-	0,
-	native_to_svr4_errno,
-	SVR4_32_SYS_syscall,
-	SVR4_32_SYS_NSYSENT,
+	.e_flags =		0,
+	.e_errno =		native_to_svr4_errno,
+	.e_nosys =		SVR4_32_SYS_syscall,
+	.e_nsysent =		SVR4_32_SYS_NSYSENT,
 #endif
-	svr4_32_sysent,
+	.e_sysent =		svr4_32_sysent,
 #ifdef SYSCALL_DEBUG
-	svr4_32_syscallnames,
+	.e_syscallnames =	svr4_32_syscallnames,
 #else
-	NULL,
+	.e_syscallnames =	NULL,
 #endif
-	svr4_32_sendsig,
-	trapsignal,
-	NULL,
-	svr4_32_sigcode,
-	svr4_32_esigcode,
-	&emul_svr4_32_object,
-	svr4_32_setregs,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	.e_sendsig =		svr4_32_sendsig,
+	.e_trapsignal =		trapsignal,
+	.e_sigcode =		svr4_32_sigcode,
+	.e_esigcode =		svr4_32_esigcode,
+	.e_sigobject =		&emul_svr4_32_object,
+	.e_setregs =		svr4_32_setregs,
+	.e_proc_exec =		NULL,
+	.e_proc_fork =		NULL,
+	.e_proc_exit =		NULL,
+	.e_lwp_fork =		NULL,
+	.e_lwp_exit =		NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	svr4_32_syscall_intern,
+	.e_syscall_intern =	svr4_32_syscall_intern,
 #else
-	syscall,
+	.e_syscall_intern =	syscall,
 #endif
-	NULL,
-	NULL,
-
-	svr4_32_vm_default_addr,
-	NULL,
-	0,
-	NULL,
+	.e_sysctlovly =		NULL,
+	.e_vm_default_addr =	svr4_32_vm_default_addr,
+	.e_usertrap =		NULL,
+	.e_ucsize =		0,
+	.e_startlwp =		NULL
 };

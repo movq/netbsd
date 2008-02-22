@@ -1,4 +1,4 @@
-/*	$NetBSD: layer.h,v 1.13 2008/01/30 09:50:23 ad Exp $	*/
+/*	$NetBSD: layer.h,v 1.17 2017/04/11 07:51:37 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -78,27 +78,15 @@ struct layer_args {
 
 #ifdef _KERNEL
 
-struct layer_node;
-
-LIST_HEAD(layer_node_hashhead, layer_node);
-
 struct layer_mount {
-	struct mount		*layerm_vfs;
 	struct vnode		*layerm_rootvp;	/* Ref to root layer_node */
 	u_int			layerm_flags;	/* mount point layer flags */
 	u_int			layerm_size;	/* size of fs's struct node */
-	enum vtype		layerm_tag;	/* vtag of our vnodes */
+	enum vtagtype		layerm_tag;	/* vtag of our vnodes */
 	int				/* bypass routine for this mount */
 				(*layerm_bypass)(void *);
-	int			(*layerm_alloc)	/* alloc a new layer node */
-				(struct mount *, struct vnode *,
-						struct vnode **);
 	int			(**layerm_vnodeop_p)	/* ops for our nodes */
 				(void *);
-	struct layer_node_hashhead	/* head of hash list for layer_nodes */
-				*layerm_node_hashtbl;
-	u_long			layerm_node_hash; /* hash mask for hash chain */
-	kmutex_t		layerm_hashlock; /* interlock for hash chain. */
 };
 
 #define	LAYERFS_MFLAGS		0x00000fff	/* reserved layer mount flags */
@@ -108,7 +96,6 @@ struct layer_mount {
  * A cache of vnode references
  */
 struct layer_node {
-	LIST_ENTRY(layer_node)	layer_hash;	/* Hash list */
 	struct vnode	        *layer_lowervp;	/* VREFed once */
 	struct vnode		*layer_vnode;	/* Back pointer */
 	unsigned int		layer_flags;	/* locking, etc. */
@@ -116,33 +103,6 @@ struct layer_node {
 
 #define	LAYERFS_RESFLAGS	0x00000fff	/* flags reserved for layerfs */
 #define	LAYERFS_REMOVED 	0x00000001	/* Did a remove on this node */
-
-/*
- * The following macros handle upperfs-specific locking. They are needed
- * when the lowerfs does not export a struct lock for locking use by the
- * upper layers. These macros are inteded for adjusting the upperfs
- * struct lock to reflect changes in the underlying vnode's lock state.
- */
-#define	LAYERFS_UPPERLOCK(v, f, r)	do { \
-	if ((v)->v_vnlock == NULL) \
-		r = vlockmgr(&(v)->v_lock, (f)); \
-	else \
-		r = 0; \
-	} while (0)
-
-#define	LAYERFS_UPPERUNLOCK(v, f, r)	do { \
-	if ((v)->v_vnlock == NULL) \
-	    r = vlockmgr(&(v)->v_lock, (f) | LK_RELEASE); \
-	else \
-		r = 0; \
-	} while (0)
-
-#define	LAYERFS_UPPERISLOCKED(v, r)	do { \
-	if ((v)->v_vnlock == NULL) \
-		r = vlockstatus(&(v)->v_lock); \
-	else \
-		r = -1; \
-	} while (0)
 
 #define	LAYERFS_DO_BYPASS(vp, ap)	\
 	(*MOUNTTOLAYERMOUNT((vp)->v_mount)->layerm_bypass)((ap))

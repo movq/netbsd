@@ -1,4 +1,4 @@
-/*	$NetBSD: audioio.h,v 1.32 2007/06/11 13:05:47 joerg Exp $	*/
+/*	$NetBSD: audioio.h,v 1.37 2017/03/21 07:04:29 nat Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -132,6 +132,7 @@ typedef struct audio_offset {
 #define AUDIO_ENCODING_MPEG_L2_STREAM	15
 #define AUDIO_ENCODING_MPEG_L2_PACKETS	16
 #define AUDIO_ENCODING_MPEG_L2_SYSTEM	17
+#define AUDIO_ENCODING_AC3		18
 
 typedef struct audio_encoding {
 	int	index;
@@ -156,6 +157,7 @@ typedef struct audio_encoding {
 #define	AUDIO_SPEAKER		0x01	/* built-in speaker */
 #define	AUDIO_HEADPHONE		0x02	/* headphone jack */
 #define	AUDIO_LINE_OUT		0x04	/* line out	 */
+#define	VC_OUT			0x08	/* virt chan out */
 
 /*
  * Input ports
@@ -164,6 +166,7 @@ typedef struct audio_encoding {
 #define	AUDIO_LINE_IN		0x02	/* line in	 */
 #define	AUDIO_CD		0x04	/* on-board CD inputs */
 #define	AUDIO_INTERNAL_CD_IN	AUDIO_CD	/* internal CDROM */
+#define	VC_IN			0x08	/* virt chan in */
 
 /*
  * Audio device operations
@@ -185,7 +188,11 @@ typedef struct audio_encoding {
 #define  AUDIO_PROP_FULLDUPLEX	0x01
 #define  AUDIO_PROP_MMAP	0x02
 #define  AUDIO_PROP_INDEPENDENT	0x04
+#define  AUDIO_PROP_PLAYBACK	0x10
+#define  AUDIO_PROP_CAPTURE	0x20
 #define AUDIO_GETBUFINFO	_IOR('A', 35, struct audio_info)
+#define AUDIO_SETCHAN	_IOW('A', 36, int)
+#define AUDIO_GETCHAN	_IOR('A', 37, int)
 
 /*
  * Mixer device
@@ -323,6 +330,7 @@ typedef struct mixer_ctrl {
 #define AudioEmpeg_l2_stream	"mpeg_l2_stream"
 #define AudioEmpeg_l2_packets	"mpeg_l2_packets"
 #define AudioEmpeg_l2_system	"mpeg_l2_system"
+#define AudioEac3		"ac3"
 
 #define AudioCinputs	"inputs"
 #define AudioCoutputs	"outputs"
@@ -330,5 +338,6 @@ typedef struct mixer_ctrl {
 #define AudioCmonitor	"monitor"
 #define AudioCequalization	"equalization"
 #define AudioCmodem	"modem"
+#define AudioCvirtchan	"vchan"
 
 #endif /* !_SYS_AUDIOIO_H_ */

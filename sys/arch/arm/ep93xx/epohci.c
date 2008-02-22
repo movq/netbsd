@@ -1,4 +1,4 @@
-/*	$NetBSD: epohci.c,v 1.2 2005/12/11 12:16:45 christos Exp $ */
+/*	$NetBSD: epohci.c,v 1.9 2018/04/09 16:21:09 jakllsch Exp $ */
 
 /*-
  * Copyright (c) 2004 Jesse Off
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epohci.c,v 1.2 2005/12/11 12:16:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epohci.c,v 1.9 2018/04/09 16:21:09 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: epohci.c,v 1.2 2005/12/11 12:16:45 christos Exp $");
 #include <sys/mbuf.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -61,9 +61,9 @@ __KERNEL_RCSID(0, "$NetBSD: epohci.c,v 1.2 2005/12/11 12:16:45 christos Exp $");
 #include <arm/ep93xx/ep93xxvar.h>
 #include <arm/ep93xx/epsocvar.h>
 
-int epohci_match(struct device *, struct cfdata *, void *);
-void epohci_attach(struct device *, struct device *, void *);
-void epohci_callback(struct device *);
+int epohci_match(device_t, cfdata_t, void *);
+void epohci_attach(device_t, device_t, void *);
+void epohci_callback(device_t);
 
 struct epohci_softc {
 	struct ohci_softc sc;
@@ -71,31 +71,34 @@ struct epohci_softc {
 	int	sc_intr;
 };
 
-CFATTACH_DECL(epohci, sizeof(struct epohci_softc),
+CFATTACH_DECL_NEW(epohci, sizeof(struct epohci_softc),
     epohci_match, epohci_attach, NULL, NULL);
 
 int
-epohci_match(struct device *parent, struct cfdata *match, void *aux)
+epohci_match(device_t parent, cfdata_t match, void *aux)
 {
 	/* EP93xx builtin OHCI module */
 
-	return (1);
+	return 1;
 }
 
 void
-epohci_attach(struct device *parent, struct device *self, void *aux)
+epohci_attach(device_t parent, device_t self, void *aux)
 {
-	struct epohci_softc *sc = (struct epohci_softc *)self;
+	struct epohci_softc *sc = device_private(self);
 	struct epsoc_attach_args *sa = aux;
-	u_int32_t i;
+	uint32_t i;
 	bus_space_handle_t syscon_ioh;
 
+	sc->sc.sc_dev = self;
+	sc->sc.sc_bus.ub_hcpriv = sc;
+
 	sc->sc.iot = sa->sa_iot;
-	sc->sc.sc_bus.dmatag = sa->sa_dmat;
+	sc->sc.sc_bus.ub_dmatag = sa->sa_dmat;
 	sc->sc_intr = sa->sa_intr;
 
 	/* Map I/O space */
-	if (bus_space_map(sc->sc.iot, sa->sa_addr, sa->sa_size, 
+	if (bus_space_map(sc->sc.iot, sa->sa_addr, sa->sa_size,
 	    0, &sc->sc.ioh)) {
 		printf(": cannot map mem space\n");
 		return;
@@ -117,7 +120,7 @@ epohci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 
 	do {
-		i = bus_space_read_4(sc->sc.iot, syscon_ioh, 
+		i = bus_space_read_4(sc->sc.iot, syscon_ioh,
 			EP93XX_SYSCON_PwrSts);
 	} while ((i & 0x100) == 0);
 	bus_space_unmap(sc->sc.iot, syscon_ioh, EP93XX_APB_SYSCON_SIZE);
@@ -129,31 +132,26 @@ epohci_attach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-epohci_callback(self)
-        struct device *self;
+epohci_callback(device_t self)
 {
-	struct epohci_softc *sc = (struct epohci_softc *)self;
-	usbd_status r;
+	struct epohci_softc *sc = device_private(self);
 
 	/* Disable interrupts, so we don't get any spurious ones. */
 	bus_space_write_4(sc->sc.iot, sc->sc.ioh, OHCI_INTERRUPT_DISABLE,
 			  OHCI_ALL_INTRS);
 
-	strlcpy(sc->sc.sc_vendor, "Cirrus Logic", sizeof sc->sc.sc_vendor);
-
-	sc->sc_ih = ep93xx_intr_establish(sc->sc_intr, IPL_USB, 
+	sc->sc_ih = ep93xx_intr_establish(sc->sc_intr, IPL_USB,
 		ohci_intr, sc);
-	r = ohci_init(&sc->sc);
+	int err = ohci_init(&sc->sc);
 
-	if (r != USBD_NORMAL_COMPLETION) {
-		printf("%s: init failed, error=%d\n", sc->sc.sc_bus.bdev.dv_xname, r);
+	if (err) {
+		printf("%s: init failed, error=%d\n", device_xname(self), err);
 
 		ep93xx_intr_disestablish(sc->sc_ih);
 		return;
 	}
 
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found((void *) sc, &sc->sc.sc_bus,
-	    usbctlprint);
+	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
 
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: it8368.c,v 1.21 2005/12/24 23:24:00 perry Exp $ */
+/*	$NetBSD: it8368.c,v 1.24 2012/10/27 17:17:52 chs Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: it8368.c,v 1.21 2005/12/24 23:24:00 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: it8368.c,v 1.24 2012/10/27 17:17:52 chs Exp $");
 
 #undef WINCE_DEFAULT_SETTING /* for debug */
 #undef IT8368DEBUG 
@@ -67,8 +60,8 @@ int	it8368debug = 1;
 #define DPRINTFN(n, arg)
 #endif
 
-int it8368e_match(struct device *, struct cfdata *, void *);
-void it8368e_attach(struct device *, struct device *, void *);
+int it8368e_match(device_t, cfdata_t, void *);
+void it8368e_attach(device_t, device_t, void *);
 int it8368_print(void *, const char *);
 
 #define IT8368_LASTSTATE_PRESENT	0x0002
@@ -76,8 +69,8 @@ int it8368_print(void *, const char *);
 #define IT8368_LASTSTATE_EMPTY		0x0000
 
 struct it8368e_softc {
-	struct device	sc_dev;
-	struct device	*sc_pcmcia;
+	device_t	sc_dev;
+	device_t	sc_pcmcia;
 	tx_chipset_tag_t sc_tc;
 
 	/* Register space */
@@ -150,7 +143,7 @@ static struct pcmcia_chip_functions it8368_functions = {
 	it8368_chip_socket_disable
 };
 
-CFATTACH_DECL(it8368e, sizeof(struct it8368e_softc),
+CFATTACH_DECL_NEW(it8368e, sizeof(struct it8368e_softc),
     it8368e_match, it8368e_attach, NULL, NULL);
 
 /*
@@ -208,7 +201,7 @@ it8368e_id_check(void *aux)
 #endif /* IT8368E_DESTRUCTIVE_CHECK */
 
 int
-it8368e_match(struct device *parent, struct cfdata *cf, void *aux)
+it8368e_match(device_t parent, cfdata_t cf, void *aux)
 {
 #ifdef IT8368E_DESTRUCTIVE_CHECK
 	return (it8368e_id_check(aux));
@@ -218,15 +211,16 @@ it8368e_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-it8368e_attach(struct device *parent, struct device *self, void *aux)
+it8368e_attach(device_t parent, device_t self, void *aux)
 {
 	struct cs_attach_args *ca = aux;
-	struct it8368e_softc *sc = (void*)self;
+	struct it8368e_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 	bus_space_tag_t csregt;
 	bus_space_handle_t csregh;
 	u_int16_t reg;
 
+	sc->sc_dev = self;
 	sc->sc_tc = tc = ca->ca_tc;
 	sc->sc_csregt = csregt = ca->ca_csreg.cstag;
 	
@@ -282,10 +276,10 @@ it8368e_attach(struct device *parent, struct device *self, void *aux)
 	if (IT8368_CTRL_FIXATTRIO & 
 	    it8368_reg_read(csregt, csregh, IT8368_CTRL_REG)) {
 		sc->sc_fixattr = 1;
-		printf("%s: fix attr mode\n", sc->sc_dev.dv_xname);
+		printf("%s: fix attr mode\n", device_xname(sc->sc_dev));
 	} else {
 		sc->sc_fixattr = 0;
-		printf("%s: legacy attr mode\n", sc->sc_dev.dv_xname);
+		printf("%s: legacy attr mode\n", device_xname(sc->sc_dev));
 	}
 
 	sc->sc_csmemt = sc->sc_csiot;
@@ -386,9 +380,7 @@ it8368_attach_socket(struct it8368e_softc *sc)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)&it8368_functions;
 	paa.pch = (pcmcia_chipset_handle_t)sc;
-	paa.iobase = 0;
-	paa.iosize = sc->sc_csiosize;
-	
+
 	if ((sc->sc_pcmcia = config_found_ia((void*)sc, "pcmciabus", &paa,
 					     it8368_print))) {
 		it8368_init_socket(sc);
@@ -415,7 +407,7 @@ it8368_init_socket(struct it8368e_softc *sc)
 	    IST_EDGE, IPL_BIO, it8368_intr, sc);
 	if (sc->sc_ih == NULL) {
 		printf("%s: can't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 

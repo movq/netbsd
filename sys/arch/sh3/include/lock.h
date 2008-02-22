@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.14 2007/10/17 19:57:07 garbled Exp $	*/
+/*	$NetBSD: lock.h,v 1.17 2017/09/17 00:01:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,13 +46,13 @@ static __inline void __cpu_simple_unlock(__cpu_simple_lock_t *)
 	__attribute__((__unused__));
 
 static __inline int
-__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_LOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
 	return *__ptr == __SIMPLELOCK_LOCKED;
 }
 
 static __inline int
-__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_UNLOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
 	return *__ptr == __SIMPLELOCK_UNLOCKED;
 }
@@ -88,11 +81,11 @@ __cpu_simple_lock(__cpu_simple_lock_t *alp)
 {
 
 	 __asm volatile(
-		"1:	tas.b	%0	\n"
+		"1:	tas.b	@%0	\n"
 		"	bf	1b	\n"
-		: "=m" (*alp)
-		: /* no inputs */
-		: "cc");
+		: /* no outputs */
+		: "r" (alp)
+		: "cc", "memory");
 }
 
 static __inline int
@@ -101,11 +94,11 @@ __cpu_simple_lock_try(__cpu_simple_lock_t *alp)
 	int __rv;
 
 	__asm volatile(
-		"	tas.b	%0	\n"
-		"	movt	%1	\n"
-		: "=m" (*alp), "=r" (__rv)
-		: /* no inputs */
-		: "cc");
+		"	tas.b	@%1	\n"
+		"	movt	%0	\n"
+		: "=r" (__rv)
+		: "r" (alp)
+		: "cc", "memory");
 
 	return (__rv);
 }

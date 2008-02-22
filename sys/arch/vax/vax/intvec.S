@@ -1,4 +1,4 @@
-/*	$NetBSD: intvec.S,v 1.15 2008/02/20 16:37:52 matt Exp $   */
+/*	$NetBSD: intvec.S,v 1.22 2017/05/22 16:46:15 ragge Exp $   */
 
 /*
  * Copyright (c) 1994, 1997 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -105,9 +100,9 @@ _C_LABEL(rpb):
 	NOVEC;			 	# Unused, 38
 	NOVEC;			 	# Unused, 3C
 	INTVEC(syscall, KSTACK)		# main syscall trap, chmk, 40
-	INTVEC(resopflt, KSTACK)	# chme, 44
-	INTVEC(resopflt, KSTACK)	# chms, 48
-	INTVEC(resopflt, KSTACK)	# chmu, 4C
+	INTVEC(chmx, KSTACK)		# chme, 44
+	INTVEC(chmx, KSTACK)		# chms, 48
+	INTVEC(chmx, KSTACK)		# chmu, 4C
 	NOVEC;				# System Backplane Exception/BIerror, 50
 	INTVEC(cmrerr, ISTACK)		# Corrected Memory Read, 54
 	NOVEC;				# System Backplane Alert/RXCD, 58
@@ -128,7 +123,7 @@ _C_LABEL(rpb):
 	NOVEC;				# Unused, 94
 	NOVEC;				# Unused, 98
 	NOVEC;				# Unused, 9C
-	INTVEC(softclock, KSTACK);	# Software clock interupt, A0 (IPL 08)
+	INTVEC(softclock, KSTACK);	# Software clock interrupt, A0 (IPL 08)
 	NOVEC;				# Unused, A4 (IPL 09)
 	NOVEC;				# Unused, A8 (IPL 10)
 	INTVEC(softbio, KSTACK);	# Software bio interrupt, AC (IPL 11)
@@ -224,6 +219,14 @@ SCBENTRY(privinflt)	# Privileged/unimplemented instruction
 	TRAPCALL(resadflt, T_RESADFLT)
 
 /*
+ * default handler for CHME and CHMS
+ */
+SCBENTRY(chmx)
+	clrl	(%sp)			# CHM code already on stack
+	pushl	$T_RESOPFLT
+	jbr	Xtrap
+
+/*
  * Translation fault, used only when simulating page reference bit.
  * Therefore it is done a fast revalidation of the page if it is
  * referenced. Trouble here is the hardware bug on KA650 CPUs that
@@ -263,11 +266,19 @@ TRAPCALL(breakp, T_BPTFLT)
 TRAPARGC(arithflt, T_ARITHFLT)
 
 SCBENTRY(syscall)			# Main system call
+#if 1
+	cmpl	(%sp), $SYS__lwp_getprivate
+	bneq	1f
+	mfpr	$PR_SSP, %r0		# get curlwp
+	movl	L_PRIVATE(%r0), %r0	# get l_private
+	addl2	$4, %sp			# eat the code
+	rei
+1:
+#endif
 	pushl	$T_SYSCALL
 	pushr	$0xfff
 	mfpr	$PR_USP, -(%sp)
-	mfpr    $PR_SSP, %r0
-	movl	CI_CURLWP(%r0), %r0
+	mfpr    $PR_SSP, %r0		/* SSP contains curlwp */
 	movl	L_PROC(%r0), %r0
 	pushl	%ap
 	pushl	%fp
@@ -298,7 +309,6 @@ TRAPCALL(astintr, T_ASTFLT)
 TRAPCALL(ddbtrap, T_KDBTRAP)
 
 SCBENTRY(hardclock)
-	mtpr	$0xc1,$PR_ICCS		# Reset interrupt flag
 #ifdef DDB
 	tstl	0x80000100		# rpb wait element
 	beql	1f			# set, jmp to debugger
@@ -307,9 +317,20 @@ SCBENTRY(hardclock)
 	jbr	Xtrap
 #endif
 1:	pushr	$0x3f
+	mfpr    $PR_ICCS,%r0
+	tstl    %r0
+	bgeq    2f
+	incl    _C_LABEL(clock_misscnt)+EV_COUNT
+	adwc    $0,_C_LABEL(clock_misscnt)+EV_COUNT+4
+2:      mtpr	$0x800000c1,$PR_ICCS		# Reset interrupt flag
 	incl	_C_LABEL(clock_intrcnt)+EV_COUNT	# count the number of clock interrupts
 	adwc	$0,_C_LABEL(clock_intrcnt)+EV_COUNT+4
-	incl	_C_LABEL(uvmexp)+UVME_INTRS
+
+	mfpr    $PR_SSP, %r0		/* SSP contains curlwp */
+	movl	L_CPU(%r0), %r0		/* get current CPU */
+	incl    CI_NINTR(%r0)
+	adwc    $0,(CI_NINTR+4)(%r0)
+	
 #if VAX46 || VAXANY
 	cmpl	_C_LABEL(vax_boardtype),$VAX_BTYP_46
 	bneq	1f

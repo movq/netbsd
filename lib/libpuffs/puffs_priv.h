@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_priv.h,v 1.39 2008/01/28 18:35:50 pooka Exp $	*/
+/*	$NetBSD: puffs_priv.h,v 1.45 2012/04/18 00:57:22 manu Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2008 Antti Kantee.  All Rights Reserved.
@@ -31,19 +31,13 @@
 #include <sys/types.h>
 #include <fs/puffs/puffs_msgif.h>
 
+#include <pthread.h>
 #include <puffs.h>
 #include <ucontext.h>
-
-#ifdef PUFFS_WITH_THREADS
-#include <pthread.h>
 
 extern pthread_mutex_t pu_lock;
 #define PU_LOCK() pthread_mutex_lock(&pu_lock)
 #define PU_UNLOCK() pthread_mutex_unlock(&pu_lock)
-#else
-#define PU_LOCK()
-#define PU_UNLOCK()
-#endif
 
 #define PU_CMAP(pu, c) (pu->pu_cmap ? pu->pu_cmap(pu,c) : (struct puffs_node*)c)
 
@@ -104,18 +98,23 @@ struct puffs_usermount {
 	uint32_t		pu_flags;
 	int			pu_cc_stackshift;
 
-	struct puffs_cc		*pu_cc_main;
+	ucontext_t		pu_mainctx;
 #define PUFFS_CCMAXSTORE 32
 	int			pu_cc_nstored;
 
 	int			pu_kq;
 	int			pu_state;
-#define PU_STATEMASK	0xff
-#define PU_INLOOP	0x100
-#define PU_ASYNCFD	0x200
-#define PU_HASKQ	0x400
-#define PU_PUFFSDAEMON	0x800
+#define PU_STATEMASK	0x00ff
+#define PU_INLOOP	0x0100
+#define PU_ASYNCFD	0x0200
+#define PU_HASKQ	0x0400
+#define PU_PUFFSDAEMON	0x0800
+#define PU_MAINRESTORE	0x1000
+#define PU_DONEXIT	0x2000
 #define PU_SETSTATE(pu, s) (pu->pu_state = (s) | (pu->pu_state & ~PU_STATEMASK))
+#define PU_SETSFLAG(pu, s) (pu->pu_state |= (s))
+#define PU_CLRSFLAG(pu, s) \
+    (pu->pu_state = ((pu->pu_state & ~(s)) | (pu->pu_state & PU_STATEMASK)))
 	int			pu_dpipe[2];
 
 	struct puffs_node	*pu_pn_root;
@@ -145,7 +144,7 @@ struct puffs_usermount {
 	LIST_HEAD(, puffs_fctrl_io) pu_ios;
 	LIST_HEAD(, puffs_fctrl_io) pu_ios_rmlist;
 	struct kevent		*pu_evs;
-	size_t			pu_nfds;
+	size_t			pu_nevs;
 
 	puffs_ml_loop_fn	pu_ml_lfn;
 	struct timespec		pu_ml_timeout;
@@ -200,6 +199,9 @@ struct puffs_newinfo {
 	enum vtype	*pni_vtype;
 	voff_t		*pni_size;
 	dev_t		*pni_rdev;
+	struct vattr	*pni_va;
+	struct timespec	*pni_va_ttl;
+	struct timespec	*pni_cn_ttl;
 };
 
 #define PUFFS_MAKEKCRED(to, from)					\
@@ -239,6 +241,9 @@ void	puffs__cc_cont(struct puffs_cc *);
 void	puffs__cc_destroy(struct puffs_cc *, int);
 void	puffs__cc_setcaller(struct puffs_cc *, pid_t, lwpid_t);
 void	puffs__goto(struct puffs_cc *);
+int	puffs__cc_savemain(struct puffs_usermount *);
+int	puffs__cc_restoremain(struct puffs_usermount *);
+void	puffs__cc_exit(struct puffs_usermount *);
 
 int	puffs__fsframe_read(struct puffs_usermount *, struct puffs_framebuf *,
 			    int, int *);

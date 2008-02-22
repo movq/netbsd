@@ -1,4 +1,4 @@
-/*	$NetBSD: i8259.c,v 1.12 2007/10/17 19:58:16 garbled Exp $	*/
+/*	$NetBSD: i8259.c,v 1.17 2018/02/17 18:51:53 maxv Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -70,14 +70,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i8259.c,v 1.12 2007/10/17 19:58:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i8259.c,v 1.17 2018/02/17 18:51:53 maxv Exp $");
 
 #include <sys/param.h> 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 
 #include <dev/isa/isareg.h>
@@ -108,9 +107,7 @@ unsigned i8259_imen;
  * Perhaps this should be made into a real device.
  */
 struct pic i8259_pic = {
-	.pic_dev = {
-		.dv_xname = "pic0",
-	},
+	.pic_name = "pic0",
 	.pic_type = PIC_I8259,
 	.pic_vecbase = 0,
 	.pic_apicid = 0,
@@ -119,8 +116,8 @@ struct pic i8259_pic = {
 	.pic_hwunmask = i8259_hwunmask,
 	.pic_addroute = i8259_setup,
 	.pic_delroute = i8259_setup,
-	.pic_level_stubs = i8259_stubs,
-	.pic_edge_stubs = i8259_stubs,
+	.pic_level_stubs = legacy_stubs,
+	.pic_edge_stubs = legacy_stubs,
 };
 
 void
@@ -193,7 +190,7 @@ static void
 i8259_hwmask(struct pic *pic, int pin)
 {
 	unsigned port;
-	u_int8_t byte;
+	uint8_t byte;
 
 	i8259_imen |= (1 << pin);
 #ifdef PIC_MASKDELAY
@@ -213,7 +210,7 @@ static void
 i8259_hwunmask(struct pic *pic, int pin)
 {
 	unsigned port;
-	u_int8_t byte;
+	uint8_t byte;
 
 	x86_disable_intr();	/* XXX */
 	i8259_imen &= ~(1 << pin);
@@ -236,9 +233,11 @@ i8259_reinit_irqs(void)
 {
 	int irqs, irq;
 	struct cpu_info *ci = &cpu_info_primary;
+	const size_t array_len = MIN(__arraycount(ci->ci_isources),
+				     NUM_LEGACY_IRQS);
 
 	irqs = 0;
-	for (irq = 0; irq < NUM_LEGACY_IRQS; irq++)
+	for (irq = 0; irq < array_len; irq++)
 		if (ci->ci_isources[irq] != NULL)
 			irqs |= 1 << irq;
 	if (irqs >= 0x100) /* any IRQs >= 8 in use */

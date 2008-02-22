@@ -1,4 +1,4 @@
-/*	$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $	*/
+/*	$NetBSD: fputs.c,v 1.16 2018/02/04 01:13:45 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fputs.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $");
+__RCSID("$NetBSD: fputs.c,v 1.16 2018/02/04 01:13:45 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,22 +53,19 @@ __RCSID("$NetBSD: fputs.c,v 1.14 2005/06/22 19:45:22 christos Exp $");
  * Write the given string to the given file.
  */
 int
-fputs(s, fp)
-	const char *s;
-	FILE *fp;
+fputs(const char *s, FILE *fp)
 {
 	struct __suio uio;
 	struct __siov iov;
+	const void *vs = s;
 	int r;
 
-	_DIAGASSERT(s != NULL);
-	_DIAGASSERT(fp != NULL);
-
-	if (s == NULL)
+	/* This avoids -Werror=nonnull-compare. */
+	if (vs == NULL)
 		s = "(null)";
 
 	iov.iov_base = __UNCONST(s);
-	iov.iov_len = uio.uio_resid = strlen(s);
+	uio.uio_resid = iov.iov_len = strlen(s);
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
 	FLOCKFILE(fp);

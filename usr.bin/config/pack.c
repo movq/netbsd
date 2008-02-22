@@ -1,4 +1,4 @@
-/*	$NetBSD: pack.c,v 1.5 2007/01/13 23:47:36 christos Exp $	*/
+/*	$NetBSD: pack.c,v 1.10 2015/09/12 19:11:13 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -43,6 +43,9 @@
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
 #endif
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: pack.c,v 1.10 2015/09/12 19:11:13 joerg Exp $");
 
 #include <sys/param.h>
 #include <stdlib.h>
@@ -116,7 +119,7 @@ pack(void)
 	 */
 	locspace = 0;
 	TAILQ_FOREACH(i, &alldevi, i_next) {
-		if (!i->i_active == DEVI_ACTIVE || i->i_collapsed)
+		if (i->i_active != DEVI_ACTIVE || i->i_collapsed)
 			continue;
 		if ((p = i->i_pspec) == NULL)
 			continue;
@@ -132,12 +135,12 @@ pack(void)
 /*
  * Pack device instances together wherever possible.
  */
-void
+static void
 packdevi(void)
 {
 	struct devi *firststar, *i, **ip, *l, *p;
 	struct devbase *d;
-	int j, m, n;
+	u_short j, m, n;
 
 	/*
 	 * Sort all the cloning units to after the non-cloning units,
@@ -187,7 +190,8 @@ packdevi(void)
 		for (i = d->d_ihead; i != NULL; i = i->i_bsame) {
 			m = n;
 			for (l = i; l != NULL; l = l->i_alias) {
-				if (l->i_active != DEVI_ACTIVE)
+				if (l->i_active != DEVI_ACTIVE
+				    || i->i_pseudoroot)
 					continue;
 				l->i_locoff = -1;
 				/* try to find an equivalent for l */
@@ -288,9 +292,9 @@ findvec(const void *ptr, int hash, int len, vec_cmp_func cmp, int nextplace)
 static int
 samelocs(const void *ptr, int off, int len)
 {
-	const char **p, **q;
+	const char * const *p, * const *q;
 
-	for (p = &locators.vec[off], q = (const char **)ptr; --len >= 0;)
+	for (p = &locators.vec[off], q = (const char * const *)ptr; --len >= 0;)
 		if (*p++ != *q++)
 			return (0);	/* different */
 	return (1);			/* same */
@@ -323,10 +327,10 @@ loclencmp(const void *a, const void *b)
 	const struct pspec *p1, *p2;
 	int l1, l2;
 
-	p1 = (*(const struct devi **)a)->i_pspec;
+	p1 = (*(const struct devi * const *)a)->i_pspec;
 	l1 = p1 != NULL ? p1->p_iattr->a_loclen : 0;
 
-	p2 = (*(const struct devi **)b)->i_pspec;
+	p2 = (*(const struct devi * const *)b)->i_pspec;
 	l2 = p2 != NULL ? p2->p_iattr->a_loclen : 0;
 
 	return (l2 - l1);

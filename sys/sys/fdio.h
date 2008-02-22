@@ -1,4 +1,4 @@
-/*	$NetBSD: fdio.h,v 1.3 1998/09/13 14:46:24 christos Exp $	*/
+/*	$NetBSD: fdio.h,v 1.6 2016/01/23 01:26:14 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,7 @@ enum fdformat_result {
 #define FDFORMAT_VERSION 19961120
 
 struct fdformat_cmd {
-	u_int formatcmd_version;	/* FDFORMAT_VERSION */
+	unsigned int formatcmd_version;	/* FDFORMAT_VERSION */
 	int head;		/* IN */
 	int cylinder;		/* IN */
 };
@@ -61,20 +54,20 @@ struct fdformat_cmd {
 struct fdformat_parms {
 /* list of items taken from i386 formatting glop (NEC 765);
    should be made the union of support needed for other devices. */
-    u_int fdformat_version;	/* rev this when needed; write drivers to
+    unsigned int fdformat_version;/* rev this when needed; write drivers to
 				   allow forward compatibility, please,
 				   and add elements to the end of the
 				   structure */
-    u_int nbps;				/* number of bytes per sector */
-    u_int ncyl;				/* number of cylinders */
-    u_int nspt;				/* sectors per track */
-    u_int ntrk;				/* number of heads/tracks per cyl */
-    u_int stepspercyl;			/* steps per cylinder */
-    u_int gaplen;			/* formatting gap length */
-    u_int fillbyte;			/* formatting fill byte */
-    u_int xfer_rate;			/* in bits per second; driver
+    unsigned int nbps;			/* number of bytes per sector */
+    unsigned int ncyl;			/* number of cylinders */
+    unsigned int nspt;			/* sectors per track */
+    unsigned int ntrk;			/* number of heads/tracks per cyl */
+    unsigned int stepspercyl;		/* steps per cylinder */
+    unsigned int gaplen;		/* formatting gap length */
+    unsigned int fillbyte;		/* formatting fill byte */
+    unsigned int xfer_rate;		/* in bits per second; driver
 					   must convert */
-    u_int interleave;			/* interleave factor */
+    unsigned int interleave;		/* interleave factor */
 };
 
 

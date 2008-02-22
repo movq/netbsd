@@ -1,4 +1,4 @@
-/*	$NetBSD: xen.h,v 1.28 2008/02/19 19:50:53 bouyer Exp $	*/
+/*	$NetBSD: xen.h,v 1.37 2016/07/07 06:55:40 msaitoh Exp $	*/
 
 /*
  *
@@ -27,7 +27,10 @@
 
 #ifndef _XEN_H
 #define _XEN_H
+
+#ifdef _KERNEL_OPT
 #include "opt_xen.h"
+#endif
 
 
 #ifndef _LOCORE
@@ -44,12 +47,14 @@ union xen_cmdline_parseinfo {
 	char			xcp_bootdev[16]; /* sizeof(dv_xname) */
 	struct xen_netinfo	xcp_netinfo;
 	char			xcp_console[16];
+	char			xcp_pcidevs[64];
 };
 
 #define	XEN_PARSE_BOOTDEV	0
 #define	XEN_PARSE_NETINFO	1
 #define	XEN_PARSE_CONSOLE	2
 #define	XEN_PARSE_BOOTFLAGS	3
+#define	XEN_PARSE_PCIBACK	4
 
 void	xen_parse_cmdline(int, union xen_cmdline_parseinfo *);
 
@@ -67,9 +72,14 @@ void	xenevt_notify(void);
 
 void	idle_block(void);
 
+/* xen_machdep.c */
+void	sysctl_xen_suspend_setup(void);
+
 #if defined(XENDEBUG) || 1 /* XXX */
+#include <sys/stdarg.h>
+
 void printk(const char *, ...);
-void vprintk(const char *, _BSD_VA_LIST_);
+void vprintk(const char *, va_list);
 #endif
 
 #endif
@@ -101,7 +111,6 @@ void vprintk(const char *, _BSD_VA_LIST_);
  * a bit more...
  */
 
-#ifdef XEN3
 #ifndef FLAT_RING1_CS
 #define FLAT_RING1_CS 0xe019    /* GDT index 259 */
 #define FLAT_RING1_DS 0xe021    /* GDT index 260 */
@@ -110,14 +119,6 @@ void vprintk(const char *, _BSD_VA_LIST_);
 #define FLAT_RING3_DS 0xe033    /* GDT index 262 */
 #define FLAT_RING3_SS 0xe033    /* GDT index 262 */
 #endif
-#else /* XEN3 */
-#ifndef FLAT_RING1_CS
-#define FLAT_RING1_CS		0x0819
-#define FLAT_RING1_DS		0x0821
-#define FLAT_RING3_CS		0x082b
-#define FLAT_RING3_DS		0x0833
-#endif
-#endif /* XEN3 */
 
 #define __KERNEL_CS        FLAT_RING1_CS
 #define __KERNEL_DS        FLAT_RING1_DS
@@ -129,6 +130,8 @@ void vprintk(const char *, _BSD_VA_LIST_);
 void trap_init(void);
 void xpq_flush_cache(void);
 
+#define xendomain_is_dom0()		(xen_start_info.flags & SIF_INITDOMAIN)
+#define xendomain_is_privileged()	(xen_start_info.flags & SIF_PRIVILEGED)
 
 /*
  * STI/CLI equivalents. These basically set and clear the virtual
@@ -139,33 +142,33 @@ void xpq_flush_cache(void);
 
 #define __save_flags(x)							\
 do {									\
-	(x) = HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask;	\
+	(x) = curcpu()->ci_vcpu->evtchn_upcall_mask;			\
 } while (0)
 
 #define __restore_flags(x)						\
 do {									\
-	volatile shared_info_t *_shared = HYPERVISOR_shared_info;	\
+	volatile struct vcpu_info *_vci = curcpu()->ci_vcpu;		\
 	__insn_barrier();						\
-	if ((_shared->vcpu_info[0].evtchn_upcall_mask = (x)) == 0) {	\
-		x86_lfence();					\
-		if (__predict_false(_shared->vcpu_info[0].evtchn_upcall_pending)) \
+	if ((_vci->evtchn_upcall_mask = (x)) == 0) {			\
+		x86_lfence();						\
+		if (__predict_false(_vci->evtchn_upcall_pending))	\
 			hypervisor_force_callback();			\
 	}								\
 } while (0)
 
 #define __cli()								\
 do {									\
-	HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask = 1;	\
-	x86_lfence();						\
+	curcpu()->ci_vcpu->evtchn_upcall_mask = 1;			\
+	x86_lfence();							\
 } while (0)
 
 #define __sti()								\
 do {									\
-	volatile shared_info_t *_shared = HYPERVISOR_shared_info;	\
+	volatile struct vcpu_info *_vci = curcpu()->ci_vcpu;		\
 	__insn_barrier();						\
-	_shared->vcpu_info[0].evtchn_upcall_mask = 0;			\
+	_vci->evtchn_upcall_mask = 0;					\
 	x86_lfence(); /* unmask then check (avoid races) */		\
-	if (__predict_false(_shared->vcpu_info[0].evtchn_upcall_pending)) \
+	if (__predict_false(_vci->evtchn_upcall_pending))		\
 		hypervisor_force_callback();				\
 } while (0)
 
@@ -185,7 +188,6 @@ do {									\
  */
 #define __LOCK_PREFIX "lock; "
 
-#ifdef XEN3
 #define XATOMIC_T u_long
 #ifdef __x86_64__
 #define LONG_SHIFT 6
@@ -194,11 +196,6 @@ do {									\
 #define LONG_SHIFT 5
 #define LONG_MASK 31
 #endif /* __x86_64__ */
-#else /* XEN3 */
-#define XATOMIC_T uint32_t
-#define LONG_SHIFT 5
-#define LONG_MASK 31
-#endif /* XEN3 */
 
 #define xen_ffs __builtin_ffsl
 
@@ -237,9 +234,9 @@ xen_atomic_cmpxchg16(volatile uint16_t *ptr, uint16_t  val, uint16_t newval)
 static __inline void
 xen_atomic_setbits_l (volatile XATOMIC_T *ptr, unsigned long bits) {  
 #ifdef __x86_64__
-	__asm volatile("lock ; orq %1,%0" :  "=m" (*ptr) : "ir" (bits)); 
+	__asm volatile("lock ; orq %1,%0" :  "=m" (*ptr) : "ir" (bits));
 #else
-	__asm volatile("lock ; orl %1,%0" :  "=m" (*ptr) : "ir" (bits)); 
+	__asm volatile("lock ; orl %1,%0" :  "=m" (*ptr) : "ir" (bits));
 #endif
 }
      
@@ -347,6 +344,18 @@ xen_atomic_clear_bit(volatile void *ptr, unsigned long bitno)
 #undef XATOMIC_T
 
 void	wbinvd(void);
+
+#include <xen/xen-public/features.h>
+#include <sys/systm.h>
+
+extern bool xen_feature_tables[];
+void xen_init_features(void);
+static __inline bool
+xen_feature(int f)
+{
+	KASSERT(f < XENFEAT_NR_SUBMAPS * 32);
+	return xen_feature_tables[f];
+}
 
 #endif /* !__ASSEMBLY__ */
 

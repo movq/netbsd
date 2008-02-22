@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $	*/
+/*	$NetBSD: main.c,v 1.73 2015/08/24 17:37:10 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $");
+__RCSID("$NetBSD: main.c,v 1.73 2015/08/24 17:37:10 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,12 +47,10 @@ __RCSID("$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $");
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/mount.h>
+#include <sys/sysctl.h>
 
-#include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
-
-#include <protocols/dumprestore.h>
 
 #include <ctype.h>
 #include <err.h>
@@ -65,6 +63,7 @@ __RCSID("$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $");
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "dump.h"
 #include "pathnames.h"
@@ -81,11 +80,10 @@ long	dev_bsize = 1;		/* recalculated below */
 long	blocksperfile;		/* output blocks per file */
 const char *host;		/* remote host (if any) */
 int	readcache = -1;		/* read cache size (in readblksize blks) */
-int	readblksize = 32 * 1024; /* read block size */
+int	readblksize = -1;	/* read block size */
 char    default_time_string[] = "%T %Z"; /* default timestamp string */
 char    *time_string = default_time_string; /* timestamp string */
 
-int	main(int, char *[]);
 static long numarg(const char *, long, long);
 static void obsolete(int *, char **[]);
 static void usage(void);
@@ -108,6 +106,7 @@ main(int argc, char *argv[])
 	char *mountpoint;
 	int just_estimate = 0;
 	char labelstr[LBLSIZE];
+	char buf[MAXPATHLEN], rbuf[MAXPATHLEN];
 	char *new_time_format;
 	char *snap_backup = NULL;
 
@@ -134,7 +133,7 @@ main(int argc, char *argv[])
 
 	obsolete(&argc, &argv);
 	while ((ch = getopt(argc, argv,
-	    "0123456789aB:b:cd:eFf:h:k:l:L:nr:s:StT:uWwx:X")) != -1)
+	    "0123456789aB:b:cd:eFf:h:ik:l:L:nr:s:StT:uWwx:X")) != -1)
 		switch (ch) {
 		/* dump level */
 		case '0': case '1': case '2': case '3': case '4':
@@ -179,6 +178,11 @@ main(int argc, char *argv[])
 
 		case 'h':
 			honorlevel = numarg("honor level", 0L, 10L);
+			break;
+
+		case 'i':	/* "true incremental" regardless level */
+			level = 'i';
+			trueinc = 1;
 			break;
 
 		case 'k':
@@ -277,19 +281,20 @@ main(int argc, char *argv[])
 	dirc = 0;
 	for (i = 0; i < argc; i++) {
 		struct stat sb;
+		int error;
 
-		if (lstat(argv[i], &sb) == -1)
-			quit("Cannot stat %s: %s\n", argv[i], strerror(errno));
-		if (Fflag || S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)) {
+		error = lstat(argv[i], &sb);
+		if (Fflag || (!error && (S_ISCHR(sb.st_mode) || S_ISBLK(sb.st_mode)))) {
+			if (error)
+				quit("Cannot stat %s: %s\n", argv[i], strerror(errno));
 			disk = argv[i];
  multicheck:
 			if (dirc != 0)
-				quit(
-	"Can't dump a disk or image at the same time as a file list\n");
+				quit("Can't dump a disk or image at the same time as a file list\n");
 			break;
 		}
 		if ((dt = fstabsearch(argv[i])) != NULL) {
-			disk = dt->fs_spec;
+			disk = argv[i];
 			mountpoint = xstrdup(dt->fs_file);
 			goto multicheck;
 		}
@@ -397,11 +402,20 @@ main(int argc, char *argv[])
 	mountpoint = NULL;
 	mntinfo = mntinfosearch(disk);
 	if ((dt = fstabsearch(disk)) != NULL) {
-		disk = rawname(dt->fs_spec);
+		if (getfsspecname(buf, sizeof(buf), dt->fs_spec) == NULL)
+			quit("%s (%s)", buf, strerror(errno));
+		if (getdiskrawname(rbuf, sizeof(rbuf), buf) == NULL)
+			quit("Can't get disk raw name for `%s' (%s)",
+			    buf, strerror(errno));
+		disk = rbuf;
 		mountpoint = dt->fs_file;
 		msg("Found %s on %s in %s\n", disk, mountpoint, _PATH_FSTAB);
 	} else if (mntinfo != NULL) {
-		disk = rawname(mntinfo->f_mntfromname);
+		if (getdiskrawname(rbuf, sizeof(rbuf), mntinfo->f_mntfromname)
+		    == NULL)
+			quit("Can't get disk raw name for `%s' (%s)",
+			    mntinfo->f_mntfromname, strerror(errno));
+		disk = rbuf;
 		mountpoint = mntinfo->f_mntonname;
 		msg("Found %s on %s in mount table\n", disk, mountpoint);
 	}
@@ -465,7 +479,8 @@ main(int argc, char *argv[])
 
 	needswap = fs_read_sblock(sblock_buf);
 
-	spcl.c_level = iswap32(level - '0');
+	/* true incremental is always a level 10 dump */
+	spcl.c_level = trueinc? iswap32(10): iswap32(level - '0');
 	spcl.c_type = iswap32(TS_TAPE);
 	spcl.c_date = iswap32(spcl.c_date);
 	spcl.c_ddate = iswap32(spcl.c_ddate);
@@ -626,10 +641,10 @@ main(int argc, char *argv[])
 	for (i = 0; i < ntrec; i++)
 		writeheader(maxino - 1);
 	if (pipeout)
-		msg("%d tape blocks\n",iswap32(spcl.c_tapea));
+		msg("%lld tape blocks\n",(long long)iswap64(spcl.c_tapea));
 	else
-		msg("%d tape blocks on %d volume%s\n",
-		    iswap32(spcl.c_tapea), iswap32(spcl.c_volume),
+		msg("%lld tape blocks on %d volume%s\n",
+		    (long long)iswap64(spcl.c_tapea), iswap32(spcl.c_volume),
 		    (iswap32(spcl.c_volume) == 1) ? "" : "s");
 	tnow = do_stats();
 	date = iswap32(spcl.c_date);
@@ -655,9 +670,9 @@ usage(void)
 	const char *prog = getprogname();
 
 	(void)fprintf(stderr,
-"usage: %s [-0123456789aceFnStuX] [-B records] [-b blocksize]\n"
+"usage: %s [-0123456789aceFinStuX] [-B records] [-b blocksize]\n"
 "            [-d density] [-f file] [-h level] [-k read-blocksize]\n"
-"            [-L label] [-l timeout] [-r read-cache] [-s feet]\n"
+"            [-L label] [-l timeout] [-r cachesize] [-s feet]\n"
 "            [-T date] [-x snap-backup] files-to-dump\n"
 "       %s [-W | -w]\n", prog, prog);
 	exit(X_STARTUP);
@@ -707,20 +722,6 @@ sig(int signo)
 		(void)kill(0, SIGSEGV);
 		/* NOTREACHED */
 	}
-}
-
-char *
-rawname(char *cp)
-{
-	static char rawbuf[MAXPATHLEN];
-	char *dp = strrchr(cp, '/');
-
-	if (dp == NULL)
-		return (NULL);
-	*dp = '\0';
-	(void)snprintf(rawbuf, sizeof rawbuf, "%s/r%s", cp, dp + 1);
-	*dp = '/';
-	return (rawbuf);
 }
 
 /*

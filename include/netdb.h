@@ -1,6 +1,8 @@
-/*	$NetBSD: netdb.h,v 1.59 2007/05/10 17:45:50 christos Exp $	*/
+/*	$NetBSD: netdb.h,v 1.69 2013/08/19 07:18:42 christos Exp $	*/
 
 /*
+ * ++Copyright++ 1980, 1983, 1988, 1993
+ * -
  * Copyright (c) 1980, 1983, 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -82,16 +84,15 @@
 
 /*
  *      @(#)netdb.h	8.1 (Berkeley) 6/2/93
- *	Id: netdb.h,v 1.15.18.6 2006/10/02 01:23:09 marka Exp
+ *	Id: netdb.h,v 1.22 2008/02/28 05:34:17 marka Exp
  */
 
 #ifndef _NETDB_H_
 #define	_NETDB_H_
 
-#include <machine/ansi.h>
+#include <sys/cdefs.h>
 #include <machine/endian_machdep.h>
 #include <sys/ansi.h>
-#include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <inttypes.h>
 /*
@@ -123,6 +124,9 @@ typedef _BSD_SIZE_T_	size_t;
 #ifndef _PATH_SERVICES
 #define	_PATH_SERVICES	"/etc/services"
 #endif
+#ifndef _PATH_SERVICES_CDB
+#define	_PATH_SERVICES_CDB "/var/db/services.cdb"
+#endif
 #ifndef _PATH_SERVICES_DB
 #define	_PATH_SERVICES_DB "/var/db/services.db"
 #endif
@@ -130,6 +134,10 @@ typedef _BSD_SIZE_T_	size_t;
 
 __BEGIN_DECLS
 extern int h_errno;
+extern int * __h_errno(void);
+#ifdef _REENTRANT
+#define	h_errno (*__h_errno())
+#endif
 __END_DECLS
 
 /*%
@@ -258,9 +266,18 @@ struct addrinfo {
 #define	AI_CANONNAME	0x00000002 /* fill ai_canonname */
 #define	AI_NUMERICHOST	0x00000004 /* prevent host name resolution */
 #define	AI_NUMERICSERV	0x00000008 /* prevent service name resolution */
+#define	AI_ADDRCONFIG	0x00000400 /* only if any address is assigned */
 /* valid flags for addrinfo (not a standard def, apps should not use it) */
+#ifdef _NETBSD_SOURCE
+#define	AI_SRV		0x00000800 /* do _srv lookups */
 #define	AI_MASK	\
-    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV)
+    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | \
+    AI_ADDRCONFIG | AI_SRV)
+#else
+#define	AI_MASK	\
+    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | \
+    AI_ADDRCONFIG)
+#endif
 #endif
 
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
@@ -281,6 +298,7 @@ struct addrinfo {
 #define	NI_NAMEREQD	0x00000004
 #define	NI_NUMERICSERV	0x00000008
 #define	NI_DGRAM	0x00000010
+#define	NI_WITHSCOPEID	0x00000020
 #define	NI_NUMERICSCOPE	0x00000040
 
 /*%
@@ -302,7 +320,7 @@ void		endservent(void);
 void		freehostent(struct hostent *);
 #endif
 #endif
-struct hostent	*gethostbyaddr(const char *, socklen_t, int);
+struct hostent	*gethostbyaddr(const void *, socklen_t, int);
 struct hostent	*gethostbyname(const char *);
 #if defined(_NETBSD_SOURCE)
 struct hostent	*gethostbyname2(const char *, int);
@@ -327,19 +345,19 @@ void		sethostent(int);
 #endif
 void		setnetent(int);
 void		setprotoent(int);
+void		setservent(int);
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
     defined(_NETBSD_SOURCE)
-void		setservent(int);
 int		getaddrinfo(const char * __restrict, const char * __restrict,
 				 const struct addrinfo * __restrict,
 				 struct addrinfo ** __restrict);
 int		getnameinfo(const struct sockaddr * __restrict, socklen_t,
 				 char * __restrict, socklen_t,
 				 char * __restrict, socklen_t, int);
+struct addrinfo *allocaddrinfo(socklen_t);
 void		freeaddrinfo(struct addrinfo *);
 const char	*gai_strerror(int);
 #endif
-void		setservent(int);
 __END_DECLS
 
 #endif /* !_NETDB_H_ */

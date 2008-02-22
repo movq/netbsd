@@ -1,4 +1,4 @@
-/* $NetBSD: sgmap_common.c,v 1.23 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: sgmap_common.c,v 1.26 2012/01/27 18:52:48 para Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.23 2007/03/04 05:59:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.26 2012/01/27 18:52:48 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.23 2007/03/04 05:59:11 christos E
 #include <uvm/uvm_extern.h>
 
 #define	_ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <alpha/common/sgmapvar.h>
 
@@ -114,7 +107,7 @@ alpha_sgmap_init(bus_dma_tag_t t, struct alpha_sgmap *sgmap, const char *name,
 	 * space.
 	 */
 	sgmap->aps_ex = extent_create(name, sgvabase, sgvasize - 1,
-	    M_DMAMAP, NULL, 0, EX_NOWAIT|EX_NOCOALESCE);
+	    NULL, 0, EX_NOWAIT|EX_NOCOALESCE);
 	if (sgmap->aps_ex == NULL) {
 		printf("unable to create extent map for sgmap `%s'\n",
 		    name);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: tunefs.8,v 1.36 2004/12/20 10:28:47 hubertf Exp $
+.\"	$NetBSD: tunefs.8,v 1.44 2014/08/09 10:41:05 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)tunefs.8	8.3 (Berkeley) 5/3/95
 .\"
-.Dd April 26, 2004
+.Dd August 9, 2014
 .Dt TUNEFS 8
 .Os
 .Sh NAME
@@ -41,11 +41,11 @@
 .Op Fl e Ar maxbpg
 .Op Fl g Ar avgfilesize
 .Op Fl h Ar avgfpdir
+.Op Fl l Ar logsize
 .Op Fl m Ar minfree
-.Bk -words
-.\" .Op Fl n Ar soft_dependency_enabling
 .Op Fl o Ar optimize_preference
-.Ek
+.Op Fl q Ar quota
+.Op Fl S Ar sectorsize
 .Ar special | Ar filesys
 .Sh DESCRIPTION
 .Nm
@@ -97,6 +97,18 @@ this parameter should be set higher.
 This specifies the expected average file size.
 .It Fl h Ar avgfpdir
 This specifies the expected number of files per directory.
+.It Fl l Ar logsize
+This value specifies the size of the in-filesystem journaling log file.
+The default journaling log file size is described in
+.Xr wapbl 4 .
+Specifying a size of zero will cause the in-filesystem journaling log file
+to be removed the next time the filesystem is mounted.
+The size of an existing in-filesystem journaling log file can not be changed
+directly.
+You need to first set the log file size to zero, then mount the
+filesystem without logging enabled (which will remove the log without
+creating a new one), unmount, set the size to the new value and finally
+re-mount with logging enabled.
 .It Fl m Ar minfree
 This value specifies the percentage of space held back
 from normal users; the minimum free space threshold.
@@ -108,25 +120,6 @@ threshold.
 Note that if the value is raised above the current usage level,
 users will be unable to allocate files until enough files have
 been deleted to get under the higher threshold.
-.\"
-.\" comment out -n, since softdeps are now a mount option
-.ig
-.It Fl n Ar soft_dependency_enabling
-The soft dependency code allows most file system I/O to be done
-asynchronously by reordering dependent writes to ensure that the
-on-disk metadata is self-consistent even when updates are deferred.
-Additionally, metadata updates are aggregated, reducing the total
-number of writes performed.
-Use of this facility does not require any changes to the file system,
-so it can be enabled or disabled any time that the file system is unmounted.
-This experimental facility is turned off by default.
-It is turned on by using
-.Fl n
-enable;
-it is turned off by using
-.Fl n
-disable.
-..
 .It Fl o Ar optimize_preference
 The file system can either try to minimize the time spent
 allocating blocks, or it can attempt to minimize the space
@@ -143,8 +136,42 @@ can be specified as either
 .Li space
 or
 .Li time .
+.It Fl q Ar quota
+enable or disable a quota.
+.Ar quota
+can be one of
+.Li user ,
+.Li group ,
+.Li nouser
+or
+.Li nogroup
+to enable or disable the specified quota type.
+Multiple
+.Fl q
+can be used to enable/disable all types at once.
+.Pp
+After enabling a quota,
+.Xr fsck_ffs 8
+has to be run to compute the correct quota values.
+.It Fl S Ar sectorsize
+changes the fsbtodb value in the superblock to reflect a particular
+physical sector size.
+This value is ignored by the
+.Nx
+kernel but needed by tools like
+.Xr fsck_ffs  8
+to access disk blocks correctly.
+The minimum value is
+.Dv DEV_BSIZE
+(512).
+.Pp
+Changing the fsbtodb value becomes necessary when a filesystem image
+is created for one sector size and then transferred to a device with
+a different sector size and should be applied also to the alternate
+superblocks.
 .El
 .Sh SEE ALSO
+.Xr wapbl 4 ,
 .Xr fs 5 ,
 .Xr dumpfs 8 ,
 .Xr fsck_ffs 8 ,

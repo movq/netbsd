@@ -1,4 +1,4 @@
-/*	$NetBSD: inttypes.h,v 1.4 2005/04/18 19:47:51 kleink Exp $	*/
+/*	$NetBSD: inttypes.h,v 1.11 2015/01/16 18:35:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,11 @@
 #define _INTTYPES_H_
 
 #include <sys/cdefs.h>
+#include <sys/featuretest.h>
 #include <sys/inttypes.h>
 #include <machine/ansi.h>
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -57,6 +51,45 @@ intmax_t	wcstoimax(const wchar_t * __restrict,
 		    wchar_t ** __restrict, int);
 uintmax_t	wcstoumax(const wchar_t * __restrict,
 		    wchar_t ** __restrict, int);
+
+intmax_t	imaxabs(intmax_t);
+
+typedef struct {
+	intmax_t quot;
+	intmax_t rem;
+} imaxdiv_t;
+
+imaxdiv_t	imaxdiv(intmax_t, intmax_t);
+
+#if (_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
+intmax_t	strtoimax_l(const char * __restrict,
+		    char ** __restrict, int, locale_t);
+uintmax_t	strtoumax_l(const char * __restrict,
+		    char ** __restrict, int, locale_t);
+intmax_t	wcstoimax_l(const wchar_t * __restrict,
+		    wchar_t ** __restrict, int, locale_t);
+uintmax_t	wcstoumax_l(const wchar_t * __restrict,
+		    wchar_t ** __restrict, int, locale_t);
+#endif
+
+
+#if defined(_NETBSD_SOURCE)
+intmax_t	strtoi(const char * __restrict, char ** __restrict, int,
+	               intmax_t, intmax_t, int *);
+uintmax_t	strtou(const char * __restrict, char ** __restrict, int,
+	               uintmax_t, uintmax_t, int *);
+
+/* i18n variations */
+intmax_t	strtoi_l(const char * __restrict, char ** __restrict, int,
+	                 intmax_t, intmax_t, int *, locale_t);
+uintmax_t	strtou_l(const char * __restrict, char ** __restrict, int,
+	                 uintmax_t, uintmax_t, int *, locale_t);
+#endif /* defined(_NETBSD_SOURCE) */
+
 __END_DECLS
 
 #endif /* !_INTTYPES_H_ */

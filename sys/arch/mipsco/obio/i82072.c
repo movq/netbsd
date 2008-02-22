@@ -1,4 +1,4 @@
-/*	$NetBSD: i82072.c,v 1.9 2005/12/11 12:18:13 christos Exp $	*/
+/*	$NetBSD: i82072.c,v 1.15 2014/07/25 08:10:34 dholland Exp $	*/
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82072.c,v 1.9 2005/12/11 12:18:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82072.c,v 1.15 2014/07/25 08:10:34 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,12 +49,29 @@ dev_type_open(fdopen);
 dev_type_strategy(fdstrategy);
 
 const struct bdevsw fd_bdevsw = {
-	fdopen, nullclose, fdstrategy, noioctl, nodump, nosize, D_DISK
+	.d_open = fdopen,
+	.d_close = nullclose,
+	.d_strategy = fdstrategy,
+	.d_ioctl = noioctl,
+	.d_dump = nodump,
+	.d_psize = nosize,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
 const struct cdevsw fd_cdevsw = {
-	fdopen, nullclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
+	.d_open = fdopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
 #define	I82072_STATUS	0x000003
@@ -69,32 +79,32 @@ const struct cdevsw fd_cdevsw = {
 #define	I82072_TC	0x800003
 
 struct	fd_softc {
-        struct  device dev; 
+        device_t dev; 
         struct  evcnt  fd_intrcnt;
 	bus_space_tag_t	fd_bst;
 	bus_space_handle_t fd_bsh;
         int     unit;
 };
 
-static int	fd_match (struct device *, struct cfdata *, void *);
-static void	fd_attach (struct device *, struct device *, void *);
+static int	fd_match (device_t, cfdata_t, void *);
+static void	fd_attach (device_t, device_t, void *);
 static void     fd_reset (struct fd_softc *);
 
-CFATTACH_DECL(fd, sizeof(struct fd_softc),
+CFATTACH_DECL_NEW(fd, sizeof(struct fd_softc),
     fd_match, fd_attach, NULL, NULL);
 
 static int	fd_intr (void *);
 
 int
-fd_match(struct device *parent, struct cfdata *cf, void *aux)
+fd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return 1;
 }
 
 void
-fd_attach(struct device *parent, struct device *self, void *aux)
+fd_attach(device_t parent, device_t self, void *aux)
 {
-        struct fd_softc *sc = (void *)self;
+        struct fd_softc *sc = device_private(self);
 	struct confargs *ca = aux;
 
 	sc->fd_bst = ca->ca_bustag;
@@ -102,11 +112,11 @@ fd_attach(struct device *parent, struct device *self, void *aux)
 			  0x1000000,	
 			  BUS_SPACE_MAP_LINEAR,
 			  &sc->fd_bsh) != 0) {
-		printf("%s: cannot map registers\n", self->dv_xname);
+		printf("%s: cannot map registers\n", device_xname(self));
 		return;
 	}
 	evcnt_attach_dynamic(&sc->fd_intrcnt, EVCNT_TYPE_INTR, NULL,
-			     self->dv_xname, "intr");
+			     device_xname(self), "intr");
 
 	bus_intr_establish(sc->fd_bst, SYS_INTR_FDC, 0, 0, fd_intr, sc);
 
@@ -137,8 +147,7 @@ fdstrategy(struct buf *bp)
 }
 
 static int
-fd_intr(arg)
-	void *arg;
+fd_intr(void *arg)
 {
 	struct fd_softc *sc = arg;
 

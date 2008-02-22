@@ -1,3 +1,2 @@
-# $NetBSD: md.cats,v 1.3 2004/01/11 10:24:58 lukem Exp $
+# $NetBSD: md.cats,v 1.8 2014/08/06 12:15:01 martin Exp $
 ./dev/pms0					base-obsolete		obsolete
-./usr/bin/fdformat				base-util-bin

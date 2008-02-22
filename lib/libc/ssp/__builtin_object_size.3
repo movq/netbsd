@@ -1,4 +1,4 @@
-.\"	$NetBSD: __builtin_object_size.3,v 1.1 2007/05/30 01:17:31 tls Exp $
+.\"	$NetBSD: __builtin_object_size.3,v 1.11 2017/07/03 21:32:49 wiz Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,13 +28,13 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd May 23, 2007
-.Dt __BUILTIN_OBJEXT_SIZE 3
+.Dd July 18, 2012
+.Dt __BUILTIN_OBJECT_SIZE 3
 .Os
 .Sh NAME
 .Nm __builtin_object_size
 .Nd return the size of the given object
-.Sh LIBRARY
+.Sh SYNOPSIS
 .Ft size_t
 .Fn __builtin_object_size "void *ptr" "int type"
 .Sh DESCRIPTION
@@ -57,8 +50,8 @@ effects.
 If the size of the object is not known or it has side effects the
 .Fn __builtin_object_size
 function returns:
-.Bl -tag -width (size_t)-1
-.It Dv (size_t)-1
+.Bl -tag -width (size_t)\-1 -offset indent
+.It Dv (size_t)\-1
 for
 .Fa type
 .Dv 0
@@ -85,8 +78,24 @@ and the minimum size when
 .Dv & 2 != 0 .
 .Sh SEE ALSO
 .Xr gcc 1 ,
-.Xr ssp 3 .
+.Xr __builtin_return_address 3 ,
+.Xr attribute 3 ,
+.Xr ssp 3
 .Sh HISTORY
 The
 .Fn __builtin_object_size
-appeared in gcc 4.1.
+appeared in
+.Tn GCC 4.1 .
+.Sh CAVEATS
+This is a non-standard, compiler-specific extension.
+.Pp
+Note that currently the object size calculation pass is only done at -O1
+or above, meaning that this function always returns \-1 when the optimizer
+is off.
+.Pp
+There are some discussions about always doing the object size pass, but
+the issue is that without the optimization pass data sizes are not going
+to be correct.
+.Pp
+For that reason currently code fortification (size-checked replacement
+functions) is disabled when optimization is off.

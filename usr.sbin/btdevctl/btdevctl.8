@@ -1,4 +1,4 @@
-.\" $NetBSD: btdevctl.8,v 1.5 2007/12/02 20:59:29 wiz Exp $
+.\" $NetBSD: btdevctl.8,v 1.12 2015/06/12 09:43:05 plunky Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -51,10 +51,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" $Id: btdevctl.8,v 1.5 2007/12/02 20:59:29 wiz Exp $
-.\" $FreeBSD: src/usr.sbin/bluetooth/bthidcontrol/bthidcontrol.8,v 1.3 2005/01/18 20:02:30 ru Exp $
-.\"
-.Dd April 10, 2007
+.Dd December 26, 2012
 .Dt BTDEVCTL 8
 .Os
 .Sh NAME
@@ -74,7 +71,7 @@ The
 utility is used to configure bluetooth devices in the system.
 Normally,
 .Nm
-will perform  an SDP query to the remote device as needed, and
+will perform an SDP query to the remote device as needed, and
 cache the results in the
 .Pa /var/db/btdevctl.plist
 file for later use.
@@ -104,7 +101,7 @@ May be given as BDADDR or device name.
 Connection link mode.
 The following modes are supported:
 .Pp
-.Bl -tag -compact
+.Bl -tag -width encrypt -compact
 .It none
 clear previously set mode.
 .It auth
@@ -123,6 +120,8 @@ will set
 by default, or
 .Sq encrypt
 for keyboard devices.
+If the device cannot handle authentication, then the mode will need
+to be cleared manually.
 .It Fl q
 Ignore any cached data and perform a SDP query for the given
 .Ar service .
@@ -144,26 +143,29 @@ Be verbose.
 .Pp
 For device configurations to persist across boots, add entries to the
 .Pa /etc/bluetooth/btdevctl.conf
-file and
-set the
+file and ensure the
 .Xr rc.conf 5
 variable
-.Sy btdevctl
-to YES.
-.Sh EXIT STATUS
-.Ex -std
+.Sy bluetooth
+is set to YES.
 .Sh FILES
 .Bl -tag -compact
 .It Pa /etc/bluetooth/btdevctl.conf
 .It Pa /dev/bthub
 .It Pa /var/db/btdevctl.plist
 .El
+.Sh EXIT STATUS
+.Ex -std
 .Sh SEE ALSO
 .Xr btpin 1 ,
 .Xr bthidev 4 ,
 .Xr bthub 4 ,
 .Xr btsco 4 ,
 .Xr rc.conf 5
+.Pp
+See the Bluetooth chapter of
+.Qq The NetBSD Guide
+for detailed examples of configuring keyboards, mice, and audio headsets.
 .Sh HISTORY
 Parts of the
 .Nm
@@ -174,4 +176,4 @@ program.
 .Sh AUTHORS
 .An Iain Hibbert
 for Itronix, Inc.
-.An Maksim Yevmenkin Aq m_evmenkin@yahoo.com
+.An Maksim Yevmenkin Aq Mt m_evmenkin@yahoo.com

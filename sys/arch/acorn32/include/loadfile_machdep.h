@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.3 2006/01/25 18:28:25 christos Exp $	*/
+/*	$NetBSD: loadfile_machdep.h,v 1.6 2014/08/06 21:57:48 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,9 +44,14 @@
 #define READ(f, b, c)		boot32_read((f), (void *)LOADADDR(b), (c))
 #define	BCOPY(s, d, c)		boot32_memcpy((void *)LOADADDR(d), (s), (c))
 #define	BZERO(d, c)		boot32_memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			(void)(printf a, \
-				    printf((errno ? ": %s\n" : "\n"), \
-				    strerror(errno)))
+#define	WARN(a)			do { \
+					(void)printf a; \
+					if (errno) \
+						(void)printf(": %s\n", \
+						             strerror(errno)); \
+					else \
+						(void)printf("\n"); \
+				} while(/* CONSTCOND */0)
 #define	PROGRESS(a)		(void) printf a
 #define	ALLOC(a)		alloc(a)
 #define	DEALLOC(a, b)		dealloc(a, b)
@@ -76,9 +74,9 @@ extern void *boot32_memset(void *, int, size_t);
 #define	DEALLOC(a, b)		free(a)
 #define	OKMAGIC(a)		((a) == OMAGIC)
 
-ssize_t vread __P((int, u_long, u_long *, size_t));
-void vcopy __P((u_long, u_long, u_long *, size_t));
-void vzero __P((u_long, u_long *, size_t));
+ssize_t vread(int, u_long, u_long *, size_t);
+void vcopy(u_long, u_long, u_long *, size_t);
+void vzero(u_long, u_long *, size_t);
 
 #endif
 #endif

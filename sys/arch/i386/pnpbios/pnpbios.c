@@ -1,4 +1,4 @@
-/* $NetBSD: pnpbios.c,v 1.61 2007/10/17 19:54:58 garbled Exp $ */
+/* $NetBSD: pnpbios.c,v 1.73 2017/02/26 10:49:25 maya Exp $ */
 
 /*
  * Copyright (c) 2000 Jason R. Thorpe.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pnpbios.c,v 1.61 2007/10/17 19:54:58 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pnpbios.c,v 1.73 2017/02/26 10:49:25 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,7 +88,7 @@ int	pnpbiosdebug = 1;
 #endif
 
 struct pnpbios_softc {
-	struct device		sc_dev;
+	device_t	sc_dev;
 	isa_chipset_tag_t	sc_ic;
 	lwp_t		*sc_evthread;
 	int		sc_version;
@@ -124,12 +124,10 @@ static int	pnpbios_sendmessage(int);
 #endif
 
 /* configuration stuff */
-static void *	pnpbios_mapit(u_long, u_long, int);
+static void *	pnpbios_mapit(paddr_t, u_long, vm_prot_t);
 static void *	pnpbios_find(void);
-static int	pnpbios_match(struct device *,
-			    struct cfdata *, void *);
-static void	pnpbios_attach(struct device *,
-			    struct device *, void *);
+static int	pnpbios_match(device_t, cfdata_t, void *);
+static void	pnpbios_attach(device_t, device_t, void *);
 static void	pnpbios_printres(struct pnpresources *);
 static int	pnpbios_print(void *aux, const char *);
 static void	pnpbios_id_to_string(uint32_t, char *);
@@ -159,7 +157,7 @@ static int pnp_debugdump(struct pnpresources *, const void *, size_t);
 /*
  * small ressource types (beginning with 1)
  */
-static struct{
+static const struct{
 	int (*handler)(struct pnpresources *, const void *, size_t);
 	int minlen, maxlen;
 } smallrescs[] = {
@@ -181,7 +179,7 @@ static struct{
 };
 
 
-CFATTACH_DECL(pnpbios, sizeof(struct pnpbios_softc),
+CFATTACH_DECL_NEW(pnpbios, sizeof(struct pnpbios_softc),
     pnpbios_match, pnpbios_attach, NULL, NULL);
 
 /*
@@ -244,8 +242,7 @@ pnpbios_probe(void)
 }
 
 static int
-pnpbios_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	/* There can be only one! */
@@ -256,9 +253,9 @@ pnpbios_match(struct device *parent, struct cfdata *match,
 }
 
 static void *
-pnpbios_mapit(u_long addr, u_long len, int prot)
+pnpbios_mapit(paddr_t addr, u_long len, vm_prot_t prot)
 {
-	u_long startpa, pa, endpa;
+	paddr_t startpa, pa, endpa;
 	vaddr_t startva, va;
 
 	pa = startpa = x86_trunc_page(addr);
@@ -269,16 +266,16 @@ pnpbios_mapit(u_long addr, u_long len, int prot)
 	if (!startva)
 		return (0);
 	for (; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE)
-		pmap_kenter_pa(va, pa, prot);
+		pmap_kenter_pa(va, pa, prot, 0);
 	pmap_update(pmap_kernel());
 
-	return ((void *)(startva + (addr - startpa)));
+	return ((void *)(startva + (vaddr_t)(addr - startpa)));
 }
 
 static void
-pnpbios_attach(struct device *parent, struct device *self, void *aux)
+pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct pnpbios_softc *sc = (struct pnpbios_softc *)self;
+	struct pnpbios_softc *sc = device_private(self);
 	struct pnpbios_attach_args *paa = aux;
 	char *p;
 	unsigned int codepbase, datapbase, evaddrp;
@@ -292,6 +289,7 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 	aprint_naive("\n");
 
 	pnpbios_softc = sc;
+	sc->sc_dev = self;
 	sc->sc_ic = paa->paa_ic;
 
 	p = pnpbios_find();
@@ -309,7 +307,7 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 		aprint_normal(": code %x, data %x, entry %x, control %x,"
 			      " eventp %x\n%s",
 		    codepbase, datapbase, pnpbios_entry, sc->sc_control,
-		    (unsigned int)evaddrp, self->dv_xname);
+		    (unsigned int)evaddrp, device_xname(self));
 	}
 
 #ifdef PNPBIOSEVENTS
@@ -319,8 +317,8 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_evaddr = pnpbios_mapit(evaddrp, PAGE_SIZE,
 			VM_PROT_READ | VM_PROT_WRITE);
 		if (!sc->sc_evaddr)
-			aprint_error("%s: couldn't map event flag 0x%08x\n",
-			    sc->sc_dev.dv_xname, evaddrp);
+			aprint_error_dev(self, "couldn't map event flag 0x%08x\n",
+			    evaddrp);
 	}
 #endif
 
@@ -334,14 +332,14 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 	}
 	pnpbios_scratchbuf = malloc(PNPBIOS_BUFSIZE, M_DEVBUF, M_NOWAIT);
 
-	setsegment(&gdt[GPNPBIOSCODE_SEL].sd, codeva, 0xffff,
+	setsegment(&gdtstore[GPNPBIOSCODE_SEL].sd, codeva, 0xffff,
 		   SDT_MEMERA, SEL_KPL, 0, 0);
-	setsegment(&gdt[GPNPBIOSDATA_SEL].sd, datava, 0xffff,
+	setsegment(&gdtstore[GPNPBIOSDATA_SEL].sd, datava, 0xffff,
 		   SDT_MEMRWA, SEL_KPL, 0, 0);
-	setsegment(&gdt[GPNPBIOSSCRATCH_SEL].sd,
+	setsegment(&gdtstore[GPNPBIOSSCRATCH_SEL].sd,
 		   pnpbios_scratchbuf, PNPBIOS_BUFSIZE - 1,
 		   SDT_MEMRWA, SEL_KPL, 0, 0);
-	setsegment(&gdt[GPNPBIOSTRAMP_SEL].sd,
+	setsegment(&gdtstore[GPNPBIOSTRAMP_SEL].sd,
 		   pnpbiostramp, epnpbiostramp - pnpbiostramp - 1,
 		   SDT_MEMERA, SEL_KPL, 1, 0);
 
@@ -354,7 +352,7 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal(": nodes %d, max len %d\n", num, size);
 
 #ifdef PNPBIOSEVENTS
-	EDPRINTF(("%s: event flag vaddr 0x%08x\n", sc->sc_dev.dv_xname,
+	EDPRINTF(("%s: event flag vaddr 0x%08x\n", device_xname(self),
 	    (int)sc->sc_evaddr));
 
 	/* Set initial dock status. */
@@ -371,10 +369,10 @@ pnpbios_attach(struct device *parent, struct device *self, void *aux)
 	if (evtype != PNP_IC_CONTROL_EVENT_NONE) {
 		if (evtype != PNP_IC_CONTROL_EVENT_POLL || sc->sc_evaddr) {
 			sc->sc_threadrun = 1;
-			config_pending_incr();
+			config_pending_incr(sc->sc_dev);
 			if (kthread_create(PRI_NONE, 0, NULL,
 			    pnpbios_event_thread, sc, &sc->sc_evthread,
-			    "%s", sc->sc_dev.dv_xname))
+			    "%s", device_xname(self)))
 			    	panic("pnpbios: create event thread");
 		}
 	}
@@ -390,15 +388,14 @@ pnpbios_enumerate(struct pnpbios_softc *sc)
 
 	res = pnpbios_getnumnodes(&num, &size);
 	if (res) {
-		aprint_error("%s: pnpbios_getnumnodes: error %d\n",
-		    sc->sc_dev.dv_xname, res);
+		aprint_error_dev(sc->sc_dev, "pnpbios_getnumnodes: error %d\n",
+		    res);
 		return;
 	}
 
 	buf = malloc(size, M_DEVBUF, M_NOWAIT);
 	if (buf == NULL) {
-		aprint_error("%s: unable to allocate node buffer\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to allocate node buffer\n");
 		return;
 	}
 
@@ -422,43 +419,40 @@ pnpbios_enumerate(struct pnpbios_softc *sc)
 	idx = 0;
 	for (i = 0; i < num && idx != 0xff; i++) {
 		DPRINTF(("%s: getting info for index %d\n",
-		    sc->sc_dev.dv_xname, idx));
+		    device_xname(sc->sc_dev), idx));
 
 		dynidx = idx;
 
 		res = pnpbios_getnode(PNP_CF_DEVCONF_STATIC, &idx, buf, size);
 		if (res) {
-			aprint_error("%s: index %d error %d "
-			    "getting static configuration\n",
-			    sc->sc_dev.dv_xname, idx, res);
+			aprint_error_dev(sc->sc_dev, "index %d error %d "
+			    "getting static configuration\n", idx, res);
 			continue;
 		}
 		dn = (struct pnpdevnode *)buf;
 		if (!pnpbios_attachnode(sc, dn->dn_handle, buf, dn->dn_size, 1)) {
 			DPRINTF(("%s handle %d: no match from static config\n",
-			    sc->sc_dev.dv_xname, dn->dn_handle));
+			    device_xname(sc->sc_dev), dn->dn_handle));
 			continue;
 		}
 
 		res = pnpbios_getnode(PNP_CF_DEVCONF_DYNAMIC, &dynidx, buf, size);
 		if (res) {
-			aprint_error("%s: index %d error %d "
-			    "getting dynamic configuration\n",
-			    sc->sc_dev.dv_xname, dynidx, res);
+			aprint_error_dev(sc->sc_dev, "index %d error %d "
+			    "getting dynamic configuration\n", dynidx, res);
 			continue;
 		}
 		dn = (struct pnpdevnode *)buf;
 		if (!pnpbios_attachnode(sc, dn->dn_handle, buf, dn->dn_size, 0)) {
 			DPRINTF(("%s handle %d: no match from dynamic config\n",
-			    sc->sc_dev.dv_xname, dn->dn_handle));
+			    device_xname(sc->sc_dev), dn->dn_handle));
 			continue;
 		}
 	}
 	if (i != num)
-		aprint_error("%s: got only %d nodes\n",
-		    sc->sc_dev.dv_xname, i);
+		aprint_error_dev(sc->sc_dev, "got only %d nodes\n", i);
 	if (idx != 0xff)
-		aprint_error("%s: last index %d\n", sc->sc_dev.dv_xname, idx);
+		aprint_error_dev(sc->sc_dev, "last index %d\n", idx);
 
 	free(buf, M_DEVBUF);
 }
@@ -475,16 +469,16 @@ pnpbios_update_dock_status(struct pnpbios_softc *sc)
 	if (res == PNP_RC_SYSTEM_NOT_DOCKED) {
 		sc->sc_docked = 0;
 		if (odocked != sc->sc_docked)
-			printf("%s: not docked\n", sc->sc_dev.dv_xname);
+			printf("%s: not docked\n", device_xname(sc->sc_dev));
 	} else if (res) {
 		EDPRINTF(("%s: dockinfo failed 0x%02x\n",
-		    sc->sc_dev.dv_xname, res));
+		    device_xname(sc->sc_dev), res));
 	} else {
 		sc->sc_docked = 1;
 		if (odocked != sc->sc_docked) {
 			char idstr[8];
 			pnpbios_id_to_string(di.di_id, idstr);
-			printf("%s: dock id %s", sc->sc_dev.dv_xname, idstr);
+			printf("%s: dock id %s", device_xname(sc->sc_dev), idstr);
 			if (pnpbiosverbose) {
 				if (di.di_serial != -1)
 					printf(", serial number %d",
@@ -765,10 +759,10 @@ pnpbios_print(void *aux, const char *pnp)
 }
 
 void
-pnpbios_print_devres(struct device *dev, struct pnpbiosdev_attach_args *aa)
+pnpbios_print_devres(device_t dev, struct pnpbiosdev_attach_args *aa)
 {
 
-	aprint_normal("%s: ", dev->dv_xname);
+	aprint_normal_dev(dev, "");
 	pnpbios_printres(aa->resc);
 	aprint_normal("\n");
 }
@@ -782,10 +776,10 @@ pnpbios_attachchild(struct pnpbios_softc *sc,
 	locs[PNPBIOSCF_INDEX] = aa->idx;
 
 	if (matchonly)
-		return (config_search_loc(config_stdsubmatch, (struct device *)sc,
+		return (config_search_loc(config_stdsubmatch, sc->sc_dev,
 					 "pnpbios", locs, aa) != NULL);
 	else 
-		return (config_found_sm_loc((struct device *)sc, "pnpbios",
+		return (config_found_sm_loc(sc->sc_dev, "pnpbios",
 			locs, aa, pnpbios_print, config_stdsubmatch)
 				!= NULL);
 }
@@ -835,9 +829,9 @@ pnpbios_attachnode(struct pnpbios_softc *sc, int idx, const uint8_t *buf,
 	}
 
 	if (p != buf + len) {
-		aprint_error("%s: length mismatch in node %d:"
+		aprint_error_dev(sc->sc_dev, "length mismatch in node %d:"
 			     " used %d of %d Bytes\n",
-		       sc->sc_dev.dv_xname, idx, p - buf, len);
+		       idx, p - buf, len);
 		if (p > buf + len) {
 			/* XXX shouldn't happen - pnp_scan should catch it */
 			goto dump;
@@ -856,7 +850,7 @@ pnpbios_attachnode(struct pnpbios_softc *sc, int idx, const uint8_t *buf,
 				compatid = compatid->next;
 			}
 			aprint_normal(" at %s index %d disabled\n",
-			    sc->sc_dev.dv_xname, idx);
+			    device_xname(sc->sc_dev), idx);
 		}
 		return 0;
 	}
@@ -893,7 +887,7 @@ pnpbios_attachnode(struct pnpbios_softc *sc, int idx, const uint8_t *buf,
 		aprint_normal(" (");
 		pnpbios_printres(&r);
 		aprint_normal(") at %s index %d ignored\n",
-			      sc->sc_dev.dv_xname, idx);
+			      device_xname(sc->sc_dev), idx);
 	}
 
 	return 0;
@@ -1080,7 +1074,7 @@ pnp_scan(const uint8_t **bufp, size_t maxlen,
 				DPRINTF(("\ttag startdep flags %02x\n",
 				    len ? res->r_pri : ISAPNP_DEP_ACCEPTABLE));
 
-				if (r->dependant_link) {
+				if (r->dependent_link) {
 					aprint_normal("second dep?\n");
 					return (-1);
 				}
@@ -1098,11 +1092,11 @@ pnp_scan(const uint8_t **bufp, size_t maxlen,
 						       new, 1);
 					if (rv < 0) {
 						aprint_normal("error in"
-						    " dependant function\n");
+						    " dependent function\n");
 						free(new, M_DEVBUF);
 						return (-1);
 					}
-					last->dependant_link = new;
+					last->dependent_link = new;
 					last = new;
 				} while (rv > 0);
 				continue;
@@ -1284,8 +1278,8 @@ pnpbios_io_map(pnpbios_tag_t pbt, struct pnpresources *resc,
 	while (idx--)
 		io = SIMPLEQ_NEXT(io, next);
 
-	*tagp = X86_BUS_SPACE_IO;
-	return (bus_space_map(X86_BUS_SPACE_IO, io->minbase, io->len,
+	*tagp = x86_bus_space_io;
+	return (bus_space_map(x86_bus_space_io, io->minbase, io->len,
 			       0, hdlp));
 }
 
@@ -1319,7 +1313,7 @@ pnpbios_getiobase(pnpbios_tag_t pbt, struct pnpresources *resc,
 		io = SIMPLEQ_NEXT(io, next);
 
 	if (tagp)
-		*tagp = X86_BUS_SPACE_IO;
+		*tagp = x86_bus_space_io;
 	if (basep)
 		*basep = io->minbase;
 	return (0);
@@ -1418,7 +1412,7 @@ pnpbios_event_thread(void *arg)
 		EDPRINTF(("pnpbios: os active returns 0x%02x\n", rv));
 	}
 
-	config_pending_decr();
+	config_pending_decr(sc->sc_dev);
 
 	goto start;
 	while (sc->sc_threadrun) {
@@ -1441,7 +1435,7 @@ start:
 #ifdef DIAGNOSTIC
 			if (rv != PNP_RC_EVENTS_NOT_PENDING)
 				printf("%s: getevent failed: %d\n",
-				    sc->sc_dev.dv_xname, rv);
+				    device_xname(sc->sc_dev), rv);
 #endif
 			continue;
 		}
@@ -1480,7 +1474,7 @@ start:
 				/* getdockinfo failed! */
 				printf("%s: dock changed event, but unable "
 				    "to get dock info; event ignored\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			}
 			break;
 		    }
@@ -1493,17 +1487,17 @@ start:
 		case PNP_EID_UNKNOWN_SYSTEM_EVENT:
 #ifdef DIAGNOSTIC
 			printf("%s: \"unknown system event\"\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 #endif
 			break;
 		default:
 #ifdef DIAGNOSTIC
 			if (event & PNP_EID_OEM_DEFINED_BIT)
 				printf("%s: vendor defined event 0x%04x\n",
-				    sc->sc_dev.dv_xname, event);
+				    device_xname(sc->sc_dev), event);
 			else
 				printf("%s: unknown event 0x%04x\n",
-				    sc->sc_dev.dv_xname, event);
+				    device_xname(sc->sc_dev), event);
 #endif
 			break;
 		}

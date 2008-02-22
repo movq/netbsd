@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.12 2008/02/12 18:22:39 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.31 2014/06/28 09:16:18 rtr Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -43,24 +43,29 @@
 #include <lib/libkern/libkern.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/bootcfg.h>
 
 #include <libi386.h>
+#include <bootmenu.h>
+#include <bootmod.h>
 #include "pxeboot.h"
+#include "vbe.h"
 
 extern struct x86_boot_params boot_params;
 
 int errno;
 int debug;
 
-extern char	bootprog_name[], bootprog_rev[], bootprog_date[],
-		bootprog_maker[];
+extern char	bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 int	main(void);
 
-void	command_help __P((char *));
-void	command_quit __P((char *));
-void	command_boot __P((char *));
+void	command_help(char *);
+void	command_quit(char *);
+void	command_boot(char *);
 void	command_consdev(char *);
+void	command_modules(char *);
+void	command_multiboot(char *);
 
 const struct bootblk_command commands[] = {
 	{ "help",	command_help },
@@ -68,13 +73,33 @@ const struct bootblk_command commands[] = {
 	{ "quit",	command_quit },
 	{ "boot",	command_boot },
 	{ "consdev",	command_consdev },
+	{ "modules",    command_modules },
+	{ "multiboot",  command_multiboot },
+	{ "load",	module_add },
+	{ "vesa",	command_vesa },
+	{ "userconf",	userconf_add },
 	{ NULL,		NULL },
 };
+
+static void
+clearit(void)
+{
+
+	if (bootcfg_info.clear)
+		clear_pc_screen();
+}
+
+static void
+alldone(void)
+{
+	pxe_fini();
+	clearit();
+}
 
 static int 
 bootit(const char *filename, int howto)
 {
-	if (exec_netbsd(filename, 0, howto) < 0)
+	if (exec_netbsd(filename, 0, howto, 0, alldone) < 0)
 		printf("boot: %s\n", strerror(errno));
 	else
 		printf("boot returned\n");
@@ -87,19 +112,21 @@ print_banner(void)
 	int base = getbasemem();
 	int ext = getextmem();
 
+	clearit();
 	printf("\n"
-	       ">> %s, Revision %s\n"
-	       ">> (%s, %s)\n"
+	       ">> NetBSD/x86 PXE boot, Revision %s (from NetBSD %s)\n"
 	       ">> Memory: %d/%d k\n",
-	       bootprog_name, bootprog_rev,
-	       bootprog_maker, bootprog_date,
+	       bootprog_rev, bootprog_kernrev,
 	       base, ext);
 }
 
 int
 main(void)
 {
+	extern char twiddle_toggle;
         char c;
+
+	twiddle_toggle = 1;	/* no twiddling until we're ready */
 
 #ifdef SUPPORT_SERIAL
 	initio(SUPPORT_SERIAL);
@@ -107,16 +134,49 @@ main(void)
 	initio(CONSDEV_PC);
 #endif
 	gateA20();
+	boot_modules_enabled = !(boot_params.bp_flags
+				 & X86_BP_FLAGS_NOMODULES);
 
+#ifndef SMALL
+	if (!(boot_params.bp_flags & X86_BP_FLAGS_NOBOOTCONF)) {
+		parsebootconf(BOOTCFG_FILENAME);
+	} else {
+		bootcfg_info.timeout = boot_params.bp_timeout;
+	}
+
+	/*
+	 * If console set in boot.cfg, switch to it.
+	 * This will print the banner, so we don't need to explicitly do it
+	 */
+	if (bootcfg_info.consdev)
+		command_consdev(bootcfg_info.consdev);
+	else 
+		print_banner();
+
+	/* Display the menu, if applicable */
+	twiddle_toggle = 0;
+	if (bootcfg_info.nummenu > 0) {
+		/* Does not return */
+		doboottypemenu();
+	}
+#else
+	twiddle_toggle = 0;
 	print_banner();
+#endif
 
 	printf("Press return to boot now, any other key for boot menu\n");
-	printf("Starting in ");
+	printf("booting netbsd - starting in ");
 
+#ifdef SMALL
 	c = awaitkey(boot_params.bp_timeout, 1);
-	if ((c != '\r') && (c != '\n') && (c != '\0')) {
+#else
+	c = awaitkey((bootcfg_info.timeout < 0) ? 0 : bootcfg_info.timeout, 1);
+#endif
+	if ((c != '\r') && (c != '\n') && (c != '\0') &&
+	    ((boot_params.bp_flags & X86_BP_FLAGS_PASSWORD) == 0
+	     || check_password((char *)boot_params.bp_password))) {
 		printf("type \"?\" or \"help\" for help.\n");
-		bootmenu();	/* does not return */
+		bootmenu(); /* does not return */
 	}
 
 	/*
@@ -136,9 +196,14 @@ void
 command_help(char *arg)
 {
 	printf("commands are:\n"
-	       "boot [filename] [-adsqv]\n"
+	       "boot [filename] [-acdsqv]\n"
 	       "     (ex. \"netbsd.old -s\"\n"
 	       "consdev {pc|com[0123]|com[0123]kbd|auto}\n"
+	       "vesa {modenum|on|off|enabled|disabled|list}\n"
+	       "multiboot [filename] [<args>]\n"
+	       "modules {on|off|enabled|disabled}\n"
+	       "load {path_to_module}\n"
+	       "userconf {command}\n"
 	       "help|?\n"
 	       "quit\n");
 }
@@ -153,7 +218,6 @@ command_quit(char *arg)
 	reboot();
 	/* Note: we shouldn't get to this point! */
 	panic("Could not reboot!");
-	exit(0);
 }
 
 void
@@ -195,4 +259,29 @@ command_consdev(char *arg)
 		}
 	}
 	printf("invalid console device.\n");
+}
+void
+command_modules(char *arg)
+{
+	if (strcmp(arg, "enabled") == 0 ||
+			strcmp(arg, "on") == 0)
+		boot_modules_enabled = true;
+	else if (strcmp(arg, "disabled") == 0 ||
+			strcmp(arg, "off") == 0)
+		boot_modules_enabled = false;
+	else
+		printf("invalid flag, must be 'enabled' or 'disabled'.\n");
+}
+
+void
+command_multiboot(char *arg)
+{
+	char *filename;
+
+	filename = arg;
+	if (exec_multiboot(filename, gettrailer(arg)) < 0)
+		printf("multiboot: %s: %s\n", filename,
+		  strerror(errno));
+	else
+		printf("boot returned\n");
 }

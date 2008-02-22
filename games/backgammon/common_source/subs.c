@@ -1,4 +1,4 @@
-/*	$NetBSD: subs.c,v 1.16 2007/12/15 19:44:39 perry Exp $	*/
+/*	$NetBSD: subs.c,v 1.20 2013/09/13 20:46:50 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,31 +34,18 @@
 #if 0
 static char sccsid[] = "@(#)subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: subs.c,v 1.16 2007/12/15 19:44:39 perry Exp $");
+__RCSID("$NetBSD: subs.c,v 1.20 2013/09/13 20:46:50 joerg Exp $");
 #endif
 #endif /* not lint */
 
 #include "back.h"
 
 int     buffnum;
-char    outbuff[BUFSIZ];
+static char outbuff[BUFSIZ];
 
 static const char plred[] = "Player is red, computer is white.";
 static const char plwhite[] = "Player is white, computer is red.";
 static const char nocomp[] = "(No computer play.)";
-
-const char   *const descr[] = {
-	"Usage:  backgammon [-] [n r w b pr pw pb t3a]\n",
-	"\t-\tgets this list\n\tn\tdon't ask for rules or instructions",
-	"\tr\tplayer is red (implies n)\n\tw\tplayer is white (implies n)",
-	"\tb\ttwo players, red and white (implies n)",
-	"\tpr\tprint the board before red's turn",
-	"\tpw\tprint the board before white's turn",
-	"\tpb\tprint the board before both player's turn",
-	"\tterm\tterminal is a term",
-	"\tsfile\trecover saved game from file",
-	0
-};
 
 void
 errexit(const char *s)
@@ -153,17 +140,17 @@ writel(const char *l)
 }
 
 void
-proll(void)
+proll(struct move *mm)
 {
-	if (d0)
-		swap;
+	if (mm->d0)
+		mswap(mm);
 	if (cturn == 1)
 		writel("Red's roll:  ");
 	else
 		writel("White's roll:  ");
-	writec(D0 + '0');
+	writec(mm->D0 + '0');
 	writec('\040');
-	writec(D1 + '0');
+	writec(mm->D1 + '0');
 	if (tflag)
 		cline();
 }
@@ -227,7 +214,7 @@ gwrite(void)
 }
 
 int
-quit(void)
+quit(struct move *mm)
 {
 
 	if (tflag) {
@@ -240,7 +227,7 @@ quit(void)
 		if (rfl) {
 			writel("Would you like to save this game?");
 			if (yorn(0))
-				save(0);
+				save(mm, 0);
 		}
 		cturn = 0;
 		return (1);
@@ -305,7 +292,7 @@ nexturn(void)
 }
 
 void
-getarg(char ***arg)
+getarg(struct move *mm, char ***arg)
 {
 	char  **s;
 
@@ -381,13 +368,13 @@ getarg(char ***arg)
 				writel("No save file named\n");
 				getout(0);
 			} else
-				recover(s[0]);
+				recover(mm, s[0]);
 			break;
 		}
 		s++;
 	}
 	if (s[0] != 0)
-		recover(s[0]);
+		recover(mm, s[0]);
 }
 
 void
@@ -448,7 +435,7 @@ getout(int dummy __unused)
 }
 
 void
-roll(void)
+roll(struct move *mm)
 {
 	char    c;
 	int     row;
@@ -467,13 +454,13 @@ roll(void)
 		if (c != '\n') {
 			while (c < '1' || c > '6')
 				c = readc();
-			D0 = c - '0';
+			mm->D0 = c - '0';
 			writec(' ');
 			writec(c);
 			c = readc();
 			while (c < '1' || c > '6')
 				c = readc();
-			D1 = c - '0';
+			mm->D1 = c - '0';
 			writec(' ');
 			writec(c);
 			if (tflag) {
@@ -491,7 +478,7 @@ roll(void)
 		} else
 			writec('\n');
 	}
-	D0 = rnum(6) + 1;
-	D1 = rnum(6) + 1;
-	d0 = 0;
+	mm->D0 = rnum(6) + 1;
+	mm->D1 = rnum(6) + 1;
+	mm->d0 = 0;
 }

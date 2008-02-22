@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.next68k,v 1.29 2008/02/14 00:09:36 joerg Exp $
+# $NetBSD: Makefile.next68k,v 1.31 2015/09/06 02:17:31 uebayasi Exp $
 
 # Makefile for NetBSD
 #
@@ -33,7 +33,7 @@ GENASSYM_CONF=	${NEXT68K}/next68k/genassym.cf
 ##
 CPPFLAGS+=	-Dnext68k
 CFLAGS+=	-msoft-float
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
@@ -46,7 +46,8 @@ KERN_AS=	obj
 # for the Motorola 68040 Floating Point Software Product
 .include "$S/arch/m68k/fpsp/Makefile.inc"
 
-MD_OBJS=	locore.o ${FPSP}
+MD_OBJS=	locore.o
+MD_LIBS=	${FPSP}
 MD_CFILES=
 MD_SFILES=	${NEXT68K}/next68k/locore.s
 

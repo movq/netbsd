@@ -1,4 +1,4 @@
-/*	$NetBSD: lockstat.h,v 1.7 2008/01/26 14:29:31 ad Exp $	*/
+/*	$NetBSD: lockstat.h,v 1.14 2016/01/24 01:01:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,7 @@
 #define _SYS_LOCKSTAT_H_
 
 #ifdef _KERNEL_OPT
+#include "opt_dtrace.h"
 #include <lockstat.h>
 #endif
 
@@ -59,7 +53,7 @@
 
 #define	IOC_LOCKSTAT_GVERSION	_IOR('L', 0, int)
 
-#define	LS_VERSION	4
+#define	LS_VERSION	5
 
 /*
  * Enable request.  We can limit tracing by the call site and by
@@ -118,12 +112,14 @@ typedef struct lsdisable {
 #define	LB_ADAPTIVE_MUTEX	0x00000100
 #define	LB_SPIN_MUTEX		0x00000200
 #define	LB_RWLOCK		0x00000300
-#define	LB___UNUSED		0x00000400
+#define	LB_NOPREEMPT		0x00000400
 #define	LB_KERNEL_LOCK		0x00000500
 #define	LB_MISC			0x00000600
 #define	LB_NLOCK		0x00000600
 #define	LB_LOCK_MASK		0x0000ff00
 #define	LB_LOCK_SHIFT		8
+
+#define	LB_DTRACE		0x00010000
 
 typedef struct lsbuf {
 	union {
@@ -185,8 +181,6 @@ do {									\
 
 void	lockstat_event(uintptr_t, uintptr_t, u_int, u_int, uint64_t);
 
-extern volatile u_int	lockstat_enabled;
-
 #else
 
 #define	LOCKSTAT_FLAG(name)					/* nothing */
@@ -200,6 +194,33 @@ extern volatile u_int	lockstat_enabled;
 #define	LOCKSTAT_STOP_TIMER(flag, void)				/* nothing */
 #define	LOCKSTAT_COUNT(name, int)				/* nothing */
 
+#endif
+
+#ifdef KDTRACE_HOOKS
+extern volatile u_int lockstat_dtrace_enabled;
+#define KDTRACE_LOCKSTAT_ENABLED lockstat_dtrace_enabled
+#define LS_COMPRESS(f) \
+    ((((f) & 0x3) | (((f) & 0x700) >> 6)) & (LS_NPROBES - 1))
+#define	LS_NPROBES	0x20	/* 5 bits */
+
+extern uint32_t	lockstat_probemap[];
+extern void	(*lockstat_probe_func)(uint32_t, uintptr_t, uintptr_t,
+    uintptr_t, uintptr_t, uintptr_t);
+
+void		lockstat_probe_stub(uint32_t, uintptr_t, uintptr_t,
+    uintptr_t, uintptr_t, uintptr_t);
+#else
+#define KDTRACE_LOCKSTAT_ENABLED 0
+#endif
+
+#if defined(_KERNEL) && NLOCKSTAT > 0
+extern volatile u_int	lockstat_enabled;
+extern volatile u_int	lockstat_dev_enabled;
+
+#define LOCKSTAT_ENABLED_UPDATE() do { \
+	lockstat_enabled = lockstat_dev_enabled | KDTRACE_LOCKSTAT_ENABLED; \
+	membar_producer(); \
+    } while (/*CONSTCOND*/0)
 #endif
 
 #endif	/* _SYS_LOCKSTAT_H_ */

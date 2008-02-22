@@ -1,4 +1,8 @@
-# $NetBSD: md.vax,v 1.33 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.vax,v 1.46 2018/02/03 21:27:45 mrg Exp $
+./usr/include/gcc-4.5/tgmath.h			comp-obsolete		obsolete
+./usr/include/gcc-4.8/tgmath.h			comp-c-include		obsolete
+./usr/include/gcc-5/tgmath.h			comp-c-include		gcccmds,gcc=5
+./usr/include/gcc-6/tgmath.h			comp-c-include		gcccmds,gcc=6
 ./usr/include/ieeefp.h				comp-obsolete		obsolete
 ./usr/include/vax				comp-c-include
 ./usr/include/vax/_G_config.h			comp-obsolete		obsolete
@@ -40,8 +44,8 @@
 ./usr/include/vax/macros.h			comp-c-include
 ./usr/include/vax/math.h			comp-c-include
 ./usr/include/vax/mcontext.h			comp-c-include
-./usr/include/vax/mutex.h			comp-c-include
 ./usr/include/vax/mtpr.h			comp-c-include
+./usr/include/vax/mutex.h			comp-c-include
 ./usr/include/vax/nexus.h			comp-c-include
 ./usr/include/vax/param.h			comp-c-include
 ./usr/include/vax/pcb.h				comp-c-include
@@ -64,11 +68,11 @@
 ./usr/include/vax/setjmp.h			comp-c-include
 ./usr/include/vax/sid.h				comp-c-include
 ./usr/include/vax/signal.h			comp-c-include
-./usr/include/vax/stdarg.h			comp-c-include
+./usr/include/vax/stdarg.h			comp-obsolete		obsolete
 ./usr/include/vax/trap.h			comp-c-include
 ./usr/include/vax/types.h			comp-c-include
 ./usr/include/vax/uvax.h			comp-c-include
-./usr/include/vax/varargs.h			comp-c-include
+./usr/include/vax/varargs.h			comp-obsolete		obsolete
 ./usr/include/vax/vaxfp.h			comp-c-include
 ./usr/include/vax/vmparam.h			comp-c-include
 ./usr/include/vax/vsbus.h			comp-c-include

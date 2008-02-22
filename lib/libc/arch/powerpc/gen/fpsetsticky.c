@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetsticky.c,v 1.9 2005/12/24 23:10:08 perry Exp $	*/
+/*	$NetBSD: fpsetsticky.c,v 1.11 2011/07/10 21:18:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetsticky.c,v 1.9 2005/12/24 23:10:08 perry Exp $");
+__RCSID("$NetBSD: fpsetsticky.c,v 1.11 2011/07/10 21:18:47 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -60,32 +53,35 @@ __weak_alias(fpsetsticky,_fpsetsticky)
 fp_except
 fpsetsticky(fp_except mask)
 {
-	uint64_t fpscr;
+	union {
+		double u_d;
+		uint64_t u_fpscr;
+	} ud;
 	fp_except old;
 
-	__asm volatile("mffs %0" : "=f"(fpscr));
-	old = ((uint32_t)fpscr & STICKYBITS) >> STICKYSHFT;
+	__asm volatile("mffs %0" : "=f"(ud.u_d));
+	old = ((uint32_t)ud.u_fpscr & STICKYBITS) >> STICKYSHFT;
 	/*
 	 * FPSCR_VX (aka FP_X_INV) is not a sticky bit but a summary of the
 	 * all the FPSCR_VX* sticky bits.  So when FP_X_INV is cleared then
 	 * clear all of those bits, likewise when it's set, set them all.
 	 */
 	if ((mask & FP_X_INV) == 0)
-		fpscr &= ~INVBITS;
+		ud.u_fpscr &= ~INVBITS;
 	else 
-		fpscr |= INVBITS;
-	fpscr &= ~STICKYBITS;
-	fpscr |= ((uint32_t)mask << STICKYSHFT) & STICKYBITS;
+		ud.u_fpscr |= INVBITS;
+	ud.u_fpscr &= ~STICKYBITS;
+	ud.u_fpscr |= ((uint32_t)mask << STICKYSHFT) & STICKYBITS;
 	/*
 	 * Make FPSCR_FX reflect the presence of a set sticky bit (or not).
 	 */
-	if (fpscr & (STICKYBITS|INVBITS))
-		fpscr |= FPSCR_FX;
+	if (ud.u_fpscr & (STICKYBITS|INVBITS))
+		ud.u_fpscr |= FPSCR_FX;
 	else
-		fpscr &= ~FPSCR_FX;
+		ud.u_fpscr &= ~FPSCR_FX;
 	/*
 	 * Write back the fpscr.
 	 */
-	__asm volatile("mtfsf 0xff,%0" :: "f"(fpscr));
+	__asm volatile("mtfsf 0xff,%0" :: "f"(ud.u_d));
 	return (old);
 }

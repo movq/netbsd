@@ -1,4 +1,4 @@
-/*	$NetBSD: resumecontext.S,v 1.5 2006/11/08 20:28:03 drochner Exp $	*/
+/*	$NetBSD: resumecontext.S,v 1.8 2014/05/23 02:34:19 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: resumecontext.S,v 1.5 2006/11/08 20:28:03 drochner Exp $")
+	RCSID("$NetBSD: resumecontext.S,v 1.8 2014/05/23 02:34:19 uebayasi Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 /*
@@ -55,7 +48,7 @@ NENTRY(_resumecontext)	/* profiling prologue would clobber TOS */
 	movl	%ecx,%esp
 	PIC_PROLOGUE
 	pushl	%ecx
-#ifdef PIC
+#ifdef __PIC__
 	call	PIC_PLT(_C_LABEL(_getcontext))
 #else
 	call	_C_LABEL(_getcontext)
@@ -69,7 +62,7 @@ NENTRY(_resumecontext)	/* profiling prologue would clobber TOS */
 	jnz	9f	/* watch out for local label use in PIC_* */
 
 	/* normal exit */
-#ifdef PIC
+#ifdef __PIC__
 	call	PIC_PLT(_C_LABEL(exit))
 #else
 	call	_C_LABEL(exit)
@@ -77,7 +70,7 @@ NENTRY(_resumecontext)	/* profiling prologue would clobber TOS */
 	/* NOTREACHED */
 
 9:
-#ifdef PIC
+#ifdef __PIC__
 	call	PIC_PLT(_C_LABEL(setcontext))
 #else
 	call	_C_LABEL(setcontext)
@@ -88,3 +81,4 @@ NENTRY(_resumecontext)	/* profiling prologue would clobber TOS */
 	pushl	$-1
 	pushl	%eax	/* unused return address */
 	SYSTRAP(exit)
+END(_resumecontext)

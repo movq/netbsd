@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.6 2005/12/11 12:17:33 christos Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.9 2014/03/29 19:28:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 Enami Tsugutomo.
@@ -31,11 +31,6 @@
  */
 
 /*
- * We want to control both device probe order.
- */
-#define	__PCI_BUS_DEVORDER
-
-/*
  * Types provided to machine-independent PCI code
  */
 typedef struct hpcmips_pci_chipset *pci_chipset_tag_t;
@@ -52,19 +47,20 @@ struct pci_attach_args;
  * NOT TO BE USED DIRECTLY BY MACHINE INDEPENDENT CODE.
  */
 struct hpcmips_pci_chipset {
-	struct device *pc_dev;
+	device_t pc_dev;
 
-	void (*pc_attach_hook)(struct device *, struct device *,
+	void (*pc_attach_hook)(device_t, device_t,
 	    struct pcibus_attach_args *);
 	int (*pc_bus_maxdevs)(pci_chipset_tag_t, int);
-	int (*pc_bus_devorder)(pci_chipset_tag_t, int, char *);
+	int (*pc_bus_devorder)(pci_chipset_tag_t, int, uint8_t *, int);
 	pcitag_t (*pc_make_tag)(pci_chipset_tag_t, int, int, int);
 	void (*pc_decompose_tag)(pci_chipset_tag_t, pcitag_t, int *, int *,
 	    int *);
 	pcireg_t (*pc_conf_read)(pci_chipset_tag_t, pcitag_t, int);
 	void (*pc_conf_write)(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
-	int (*pc_intr_map)(struct pci_attach_args *, pci_intr_handle_t *);
-	const char *(*pc_intr_string)(pci_chipset_tag_t, pci_intr_handle_t);
+	int (*pc_intr_map)(const struct pci_attach_args *, pci_intr_handle_t *);
+	const char *(*pc_intr_string)(pci_chipset_tag_t, pci_intr_handle_t,
+	    char *, size_t);
 	const struct evcnt *(*pc_intr_evcnt)(pci_chipset_tag_t,
 	    pci_intr_handle_t);
 	void *(*pc_intr_establish)(pci_chipset_tag_t, pci_intr_handle_t, int,
@@ -79,10 +75,6 @@ struct hpcmips_pci_chipset {
     (*(pba)->pba_pc->pc_attach_hook)((p), (s), (pba))
 #define	pci_bus_maxdevs(c, b)						\
     (*(c)->pc_bus_maxdevs)((c), (b))
-#ifdef __PCI_BUS_DEVORDER
-#define	pci_bus_devorder(c, b, d)					\
-    (*(c)->pc_bus_devorder)((c), (b), (d))
-#endif
 #define	pci_make_tag(c, b, d, f)					\
     (*(c)->pc_make_tag)((c), (b), (d), (f))
 #define	pci_decompose_tag(c, t, bp, dp, fp)				\
@@ -93,8 +85,8 @@ struct hpcmips_pci_chipset {
     (*(c)->pc_conf_write)((c), (t), (r), (v))
 #define	pci_intr_map(pa, ihp)						\
     (*(pa)->pa_pc->pc_intr_map)((pa), (ihp))
-#define	pci_intr_string(c, ih)						\
-    (*(c)->pc_intr_string)((c), (ih))
+#define	pci_intr_string(c, ih, buf, len)				\
+    (*(c)->pc_intr_string)((c), (ih), (buf), (len))
 #define	pci_intr_evcnt(c, ih)						\
     (*(c)->pc_intr_evcnt)((c), (ih))
 #define	pci_intr_establish(c, ih, l, h, a)				\

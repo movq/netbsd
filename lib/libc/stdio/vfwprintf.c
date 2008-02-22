@@ -1,4 +1,4 @@
-/*	$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $	*/
+/*	$NetBSD: vfwprintf.c,v 1.36 2017/07/11 19:36:38 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)vfprintf.c	8.1 (Berkeley) 6/4/93";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.27 2007/01/09 00:28:08 imp Exp $");
 #else
-__RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
+__RCSID("$NetBSD: vfwprintf.c,v 1.36 2017/07/11 19:36:38 perseant Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -64,6 +64,7 @@ __RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
 #include <wctype.h>
 
 #include "reentrant.h"
+#include "setlocale_local.h"
 #include "local.h"
 #include "extern.h"
 #include "fvwrite.h"
@@ -73,7 +74,7 @@ __RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
 #define CHAR_T		wchar_t
 #define STRLEN(a)	wcslen(a)
 #define MEMCHR(a, b, c)	wmemchr(a, b, c)
-#define SCONV(a, b)	__mbsconv(a, b)
+#define SCONV(a, b, loc)	__mbsconv(a, b, loc)
 #define STRCONST(a)	L ## a
 #define WDECL(a, b)	a ## w ## b
 #define END_OF_FILE	WEOF
@@ -83,11 +84,11 @@ __RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
 #define CHAR_T		char
 #define STRLEN(a)	strlen(a)
 #define MEMCHR(a, b, c)	memchr(a, b, c)
-#define SCONV(a, b)	__wcsconv(a, b)
+#define SCONV(a, b, loc)	__wcsconv(a, b, loc)
 #define STRCONST(a)	a
 #define WDECL(a, b)	a ## b
 #define END_OF_FILE	EOF
-#define MULTI		1
+#define MULTI		LONGINT
 #endif
 
 union arg {
@@ -98,6 +99,7 @@ union arg {
 	long long longlongarg;
 	unsigned long long ulonglongarg;
 	ptrdiff_t ptrdiffarg;
+	ssize_t ssizearg;
 	size_t	sizearg;
 	intmax_t intmaxarg;
 	uintmax_t uintmaxarg;
@@ -123,27 +125,31 @@ union arg {
  * Type ids for argument type table.
  */
 enum typeid {
-	T_UNUSED, TP_SHORT, T_INT, T_U_INT, TP_INT,
+	T_UNUSED = 0, TP_SHORT, T_INT, T_U_INT, TP_INT,
 	T_LONG, T_U_LONG, TP_LONG, T_LLONG, T_U_LLONG, TP_LLONG,
-	T_PTRDIFFT, TP_PTRDIFFT, T_SIZET, TP_SIZET,
+	T_PTRDIFFT, TP_PTRDIFFT, T_SSIZET, T_SIZET, TP_SIZET,
 	T_INTMAXT, T_UINTMAXT, TP_INTMAXT, TP_VOID, TP_CHAR, TP_SCHAR,
 	T_DOUBLE, T_LONG_DOUBLE, T_WINT, TP_WCHAR
 };
 
-static int	__sbprintf(FILE *, const CHAR_T *, va_list);
+#ifdef NARROW
+__printflike(3, 0)
+#endif
+static int	__sbprintf(FILE *, locale_t, const CHAR_T *, va_list);
+
 static CHAR_T	*__ujtoa(uintmax_t, CHAR_T *, int, int, const char *, int,
 		    char, const char *);
 static CHAR_T	*__ultoa(u_long, CHAR_T *, int, int, const char *, int,
 		    char, const char *);
 #ifndef NARROW
-static CHAR_T	*__mbsconv(char *, int);
-static wint_t	__xfputwc(CHAR_T, FILE *);
+static CHAR_T	*__mbsconv(char *, int, locale_t);
+static wint_t	__xfputwc(CHAR_T, FILE *, locale_t);
 #else
-static char	*__wcsconv(wchar_t *, int);
+static char	*__wcsconv(wchar_t *, int, locale_t);
 static int	__sprint(FILE *, struct __suio *);
 #endif
-static void	__find_arguments(const CHAR_T *, va_list, union arg **);
-static void	__grow_type_table(int, enum typeid **, int *);
+static int	__find_arguments(const CHAR_T *, va_list, union arg **);
+static int	__grow_type_table(size_t, enum typeid **, size_t *);
 
 /*
  * Helper function for `fprintf to unbuffered unix file': creates a
@@ -151,7 +157,7 @@ static void	__grow_type_table(int, enum typeid **, int *);
  * worries about ungetc buffers and so forth.
  */
 static int
-__sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
+__sbprintf(FILE *fp, locale_t loc, const CHAR_T *fmt, va_list ap)
 {
 	int ret;
 	FILE fake;
@@ -162,12 +168,14 @@ __sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
 	_DIAGASSERT(fmt != NULL);
 
 	_FILEEXT_SETUP(&fake, &fakeext);
+	memset(WCIO_GET(&fake), 0, sizeof(struct wchar_io_data));
 
 	/* copy the important variables */
 	fake._flags = fp->_flags & ~__SNBF;
 	fake._file = fp->_file;
 	fake._cookie = fp->_cookie;
 	fake._write = fp->_write;
+	fake._flush = fp->_flush;
 
 	/* set up the buffer */
 	fake._bf._base = fake._p = buf;
@@ -175,12 +183,12 @@ __sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
 	fake._lbfsize = 0;	/* not actually used, but Just In Case */
 
 	/* do the work, then copy any error status */
-	ret = WDECL(__vf,printf_unlocked)(&fake, fmt, ap);
+	ret = WDECL(__vf,printf_unlocked_l)(&fake, loc, fmt, ap);
 	if (ret >= 0 && fflush(&fake))
 		ret = END_OF_FILE;
 	if (fake._flags & __SERR)
 		fp->_flags |= __SERR;
-	return (ret);
+	return ret;
 }
 
 #ifndef NARROW
@@ -189,7 +197,7 @@ __sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
  * File must already be locked.
  */
 static wint_t
-__xfputwc(wchar_t wc, FILE *fp)
+__xfputwc(wchar_t wc, FILE *fp, locale_t loc)
 {
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -199,19 +207,19 @@ __xfputwc(wchar_t wc, FILE *fp)
 	size_t len;
 
 	if ((fp->_flags & __SSTR) == 0)
-		return (__fputwc_unlock(wc, fp));
+		return __fputwc_unlock(wc, fp);
 
 	mbs = initial;
-	if ((len = wcrtomb(buf, wc, &mbs)) == (size_t)-1) {
+	if ((len = wcrtomb_l(buf, wc, &mbs, loc)) == (size_t)-1) {
 		fp->_flags |= __SERR;
-		return (END_OF_FILE);
+		return END_OF_FILE;
 	}
 	uio.uio_iov = &iov;
 	uio.uio_resid = len;
 	uio.uio_iovcnt = 1;
 	iov.iov_base = buf;
 	iov.iov_len = len;
-	return (__sfvwrite(fp, &uio) != EOF ? (wint_t)wc : END_OF_FILE);
+	return __sfvwrite(fp, &uio) != EOF ? (wint_t)wc : END_OF_FILE;
 }
 #else
 /*
@@ -228,12 +236,12 @@ __sprint(FILE *fp, struct __suio *uio)
 
 	if (uio->uio_resid == 0) {
 		uio->uio_iovcnt = 0;
-		return (0);
+		return 0;
 	}
 	err = __sfvwrite(fp, uio);
 	uio->uio_resid = 0;
 	uio->uio_iovcnt = 0;
-	return (err);
+	return err;
 }
 #endif
 
@@ -252,7 +260,7 @@ __sprint(FILE *fp, struct __suio *uio)
  */
 static CHAR_T *
 __ultoa(u_long val, CHAR_T *endp, int base, int octzero, const char *xdigs,
-	int needgrp, char thousep, const char *grp)
+    int needgrp, char thousep, const char *grp)
 {
 	CHAR_T *cp = endp;
 	long sval;
@@ -266,7 +274,7 @@ __ultoa(u_long val, CHAR_T *endp, int base, int octzero, const char *xdigs,
 	case 10:
 		if (val < 10) {	/* many numbers are 1 digit */
 			*--cp = to_char(val);
-			return (cp);
+			return cp;
 		}
 		ndig = 0;
 		/*
@@ -288,8 +296,9 @@ __ultoa(u_long val, CHAR_T *endp, int base, int octzero, const char *xdigs,
 			 * If (*grp == CHAR_MAX) then no more grouping
 			 * should be performed.
 			 */
-			if (needgrp && ndig == *grp && *grp != CHAR_MAX
-					&& sval > 9) {
+			if (needgrp && ndig == *grp
+			    && (unsigned char)*grp != (unsigned char)CHAR_MAX
+			    && sval > 9) {
 				*--cp = thousep;
 				ndig = 0;
 				/*
@@ -323,13 +332,13 @@ __ultoa(u_long val, CHAR_T *endp, int base, int octzero, const char *xdigs,
 	default:			/* oops */
 		abort();
 	}
-	return (cp);
+	return cp;
 }
 
 /* Identical to __ultoa, but for intmax_t. */
 static CHAR_T *
 __ujtoa(uintmax_t val, CHAR_T *endp, int base, int octzero,
-	const char *xdigs, int needgrp, char thousep, const char *grp)
+    const char *xdigs, int needgrp, char thousep, const char *grp)
 {
 	CHAR_T *cp = endp;
 	intmax_t sval;
@@ -338,13 +347,13 @@ __ujtoa(uintmax_t val, CHAR_T *endp, int base, int octzero,
 	/* quick test for small values; __ultoa is typically much faster */
 	/* (perhaps instead we should run until small, then call __ultoa?) */
 	if (val <= ULONG_MAX)
-		return (__ultoa((u_long)val, endp, base, octzero, xdigs,
-		    needgrp, thousep, grp));
+		return __ultoa((u_long)val, endp, base, octzero, xdigs,
+		    needgrp, thousep, grp);
 	switch (base) {
 	case 10:
 		if (val < 10) {
 			*--cp = to_char(val % 10);
-			return (cp);
+			return cp;
 		}
 		ndig = 0;
 		if (val > INTMAX_MAX) {
@@ -360,8 +369,10 @@ __ujtoa(uintmax_t val, CHAR_T *endp, int base, int octzero,
 			 * If (*grp == CHAR_MAX) then no more grouping
 			 * should be performed.
 			 */
-			if (needgrp && *grp != CHAR_MAX && ndig == *grp
-					&& sval > 9) {
+			if (needgrp
+			    && (unsigned char)*grp != (unsigned char)CHAR_MAX
+			    && ndig == *grp
+			    && sval > 9) {
 				*--cp = thousep;
 				ndig = 0;
 				/*
@@ -395,7 +406,7 @@ __ujtoa(uintmax_t val, CHAR_T *endp, int base, int octzero,
 	default:
 		abort();
 	}
-	return (cp);
+	return cp;
 }
 
 #ifndef NARROW
@@ -406,7 +417,7 @@ __ujtoa(uintmax_t val, CHAR_T *endp, int base, int octzero,
  * that the multibyte char. string ends in a null character.
  */
 static wchar_t *
-__mbsconv(char *mbsarg, int prec)
+__mbsconv(char *mbsarg, int prec, locale_t loc)
 {
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -415,7 +426,7 @@ __mbsconv(char *mbsarg, int prec)
 	size_t insize, nchars, nconv;
 
 	if (mbsarg == NULL)
-		return (NULL);
+		return NULL;
 
 	/*
 	 * Supplied argument is a multibyte string; convert it to wide
@@ -430,7 +441,7 @@ __mbsconv(char *mbsarg, int prec)
 		insize = nchars = nconv = 0;
 		mbs = initial;
 		while (nchars != (size_t)prec) {
-			nconv = mbrlen(p, MB_CUR_MAX, &mbs);
+			nconv = mbrlen_l(p, MB_CUR_MAX_L(loc), &mbs, loc);
 			if (nconv == 0 || nconv == (size_t)-1 ||
 			    nconv == (size_t)-2)
 				break;
@@ -439,7 +450,7 @@ __mbsconv(char *mbsarg, int prec)
 			insize += nconv;
 		}
 		if (nconv == (size_t)-1 || nconv == (size_t)-2)
-			return (NULL);
+			return NULL;
 	} else
 		insize = strlen(mbsarg);
 
@@ -450,13 +461,13 @@ __mbsconv(char *mbsarg, int prec)
 	 */
 	convbuf = malloc((insize + 1) * sizeof(*convbuf));
 	if (convbuf == NULL)
-		return (NULL);
+		return NULL;
 	wcp = convbuf;
 	p = mbsarg;
 	mbs = initial;
 	nconv = 0;
 	while (insize != 0) {
-		nconv = mbrtowc(wcp, p, insize, &mbs);
+		nconv = mbrtowc_l(wcp, p, insize, &mbs, loc);
 		if (nconv == 0 || nconv == (size_t)-1 || nconv == (size_t)-2)
 			break;
 		wcp++;
@@ -465,21 +476,21 @@ __mbsconv(char *mbsarg, int prec)
 	}
 	if (nconv == (size_t)-1 || nconv == (size_t)-2) {
 		free(convbuf);
-		return (NULL);
+		return NULL;
 	}
 	*wcp = L'\0';
 
-	return (convbuf);
+	return convbuf;
 }
 #else
 /*
- * Convert a wide character string argument for the %ls format to a multibyte
+ * Convert a wide-character string argument for the %ls format to a multibyte
  * string representation. If not -1, prec specifies the maximum number of
- * bytes to output, and also means that we can't assume that the wide char.
+ * bytes to output, and also means that we can't assume that the wide-char.
  * string ends is null-terminated.
  */
 static char *
-__wcsconv(wchar_t *wcsarg, int prec)
+__wcsconv(wchar_t *wcsarg, int prec, locale_t loc)
 {
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -492,9 +503,9 @@ __wcsconv(wchar_t *wcsarg, int prec)
 	if (prec < 0) {
 		p = wcsarg;
 		mbs = initial;
-		nbytes = wcsrtombs(NULL, (const wchar_t **)&p, 0, &mbs);
+		nbytes = wcsrtombs_l(NULL, (void *)&p, 0, &mbs, loc);
 		if (nbytes == (size_t)-1)
-			return (NULL);
+			return NULL;
 	} else {
 		/*
 		 * Optimisation: if the output precision is small enough,
@@ -508,27 +519,27 @@ __wcsconv(wchar_t *wcsarg, int prec)
 			p = wcsarg;
 			mbs = initial;
 			for (;;) {
-				clen = wcrtomb(buf, *p++, &mbs);
+				clen = wcrtomb_l(buf, *p++, &mbs, loc);
 				if (clen == 0 || clen == (size_t)-1 ||
-				    nbytes + clen > prec)
+				    nbytes + clen > (size_t)prec)
 					break;
 				nbytes += clen;
 			}
 		}
 	}
 	if ((convbuf = malloc(nbytes + 1)) == NULL)
-		return (NULL);
+		return NULL;
 
 	/* Fill the output buffer. */
 	p = wcsarg;
 	mbs = initial;
-	if ((nbytes = wcsrtombs(convbuf, (const wchar_t **)&p,
-	    nbytes, &mbs)) == (size_t)-1) {
+	if ((nbytes = wcsrtombs_l(convbuf, (void *)&p,
+	    nbytes, &mbs, loc)) == (size_t)-1) {
 		free(convbuf);
-		return (NULL);
+		return NULL;
 	}
 	convbuf[nbytes] = '\0';
-	return (convbuf);
+	return convbuf;
 }
 #endif
 
@@ -541,9 +552,21 @@ WDECL(vf,printf)(FILE * __restrict fp, const CHAR_T * __restrict fmt0, va_list a
 	int ret;
 
 	FLOCKFILE(fp);
-	ret = WDECL(__vf,printf_unlocked)(fp, fmt0, ap);
+	ret = WDECL(__vf,printf_unlocked_l)(fp, _current_locale(), fmt0, ap);
 	FUNLOCKFILE(fp);
-	return (ret);
+	return ret;
+}
+
+int
+WDECL(vf,printf_l)(FILE * __restrict fp, locale_t loc, const CHAR_T * __restrict fmt0,
+    va_list ap)
+{
+	int ret;
+
+	FLOCKFILE(fp);
+	ret = WDECL(__vf,printf_unlocked_l)(fp, loc, fmt0, ap);
+	FUNLOCKFILE(fp);
+	return ret;
 }
 
 #ifndef NO_FLOATING_POINT
@@ -594,7 +617,7 @@ static char *cvt(double, int, int, char *, int *, int, int *);
  * Non-MT-safe version
  */
 int
-WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
+WDECL(__vf,printf_unlocked_l)(FILE *fp, locale_t loc, const CHAR_T *fmt0, va_list ap)
 {
 	CHAR_T *fmt;		/* format string */
 	int ch;			/* character from fmt */
@@ -689,7 +712,10 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 #ifndef NARROW
 #define	PRINT(ptr, len)	do {			\
 	for (n3 = 0; n3 < (len); n3++)		\
-		__xfputwc((ptr)[n3], fp);	\
+		if (__xfputwc((ptr)[n3], fp, loc) == END_OF_FILE) { \
+			fp->_flags |= __SERR;	\
+			goto error;		\
+		}				\
 } while (/*CONSTCOND*/0)
 #define FLUSH()
 #else
@@ -722,7 +748,9 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 	}					\
 } while (/*CONSTCOND*/0)
 #define	PRINTANDPAD(p, ep, len, with) do {	\
-	n2 = (ep) - (p);       			\
+	ptrdiff_t td = (ep) - (p);		\
+	_DIAGASSERT(__type_fit(int, td));	\
+	n2 = (int)td;       			\
 	if (n2 > (len))				\
 		n2 = (len);			\
 	if (n2 > 0)				\
@@ -756,7 +784,7 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 #define	INTMAX_SIZE	(INTMAXT|SIZET|PTRDIFFT|LLONGINT)
 #define SJARG() \
 	(flags&INTMAXT ? GETARG(intmax_t) : \
-	    flags&SIZET ? (intmax_t)GETARG(size_t) : \
+	    flags&SIZET ? (intmax_t)GETARG(ssize_t) : \
 	    flags&PTRDIFFT ? (intmax_t)GETARG(ptrdiff_t) : \
 	    (intmax_t)GETARG(long long))
 #define	UJARG() \
@@ -780,7 +808,8 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 		int hold = nextarg; \
 		if (argtable == NULL) { \
 			argtable = statargtable; \
-			__find_arguments (fmt0, orgap, &argtable); \
+			if (__find_arguments(fmt0, orgap, &argtable) == -1) \
+				goto oomem; \
 		} \
 		nextarg = n2; \
 		val = GETARG (int); \
@@ -795,25 +824,24 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 
 	_SET_ORIENTATION(fp, -1);
 
-	ndig = -1;	/* XXX gcc */
-
 	thousands_sep = '\0';
 	grouping = NULL;
 #ifndef NO_FLOATING_POINT
-	decimal_point = localeconv()->decimal_point;
+	decimal_point = localeconv_l(loc)->decimal_point;
 	expsize = 0;		/* XXXGCC -Wuninitialized [sh3,m68000] */
+	ndig = -1;	/* XXX gcc */
 #endif
 	convbuf = NULL;
 	/* sorry, f{w,}printf(read_only_file, L"") returns {W,}EOF, not 0 */
 	if (cantwrite(fp)) {
 		errno = EBADF;
-		return (END_OF_FILE);
+		return END_OF_FILE;
 	}
 
 	/* optimise fprintf(stderr) (and other unbuffered Unix files) */
 	if ((fp->_flags & (__SNBF|__SWR|__SRW)) == (__SNBF|__SWR) &&
-	    fp->_file >= 0)
-		return (__sbprintf(fp, fmt0, ap));
+	    __sfileno(fp) != -1)
+		return __sbprintf(fp, loc, fmt0, ap);
 
 	fmt = (CHAR_T *)__UNCONST(fmt0);
 	argtable = NULL;
@@ -834,7 +862,8 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 
 		for (cp = fmt; (ch = *fmt) != '\0' && ch != '%'; fmt++)
 			continue;
-		if ((n = fmt - cp) != 0) {
+		_DIAGASSERT(__type_fit(int, fmt - cp));
+		if ((n = (int)(fmt - cp)) != 0) {
 			if ((unsigned)ret + n > INT_MAX) {
 				ret = END_OF_FILE;
 				goto error;
@@ -852,9 +881,11 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 		prec = -1;
 		sign = '\0';
 		ox[1] = '\0';
+#ifndef NO_FLOATING_POINT
 		expchar = '\0';
 		lead = 0;
 		nseps = nrepeats = 0;
+#endif
 		ulval = 0;
 		ujval = 0;
 		xdigs = NULL;
@@ -892,9 +923,15 @@ reswitch:	switch (ch) {
 			sign = '+';
 			goto rflag;
 		case '\'':
-			flags |= GROUPING;
-			thousands_sep = *(localeconv()->thousands_sep);
-			grouping = localeconv()->grouping;
+			thousands_sep = *(localeconv_l(loc)->thousands_sep);
+			grouping = localeconv_l(loc)->grouping;
+			/* Use grouping if defined by locale */
+			if (thousands_sep && grouping && *grouping)
+				flags |= GROUPING;
+			else {
+				thousands_sep = '\0';
+				grouping = NULL;
+			}
 			goto rflag;
 		case '.':
 			if ((ch = *fmt++) == '*') {
@@ -926,8 +963,9 @@ reswitch:	switch (ch) {
 				nextarg = n;
 				if (argtable == NULL) {
 					argtable = statargtable;
-					__find_arguments (fmt0, orgap,
-					    &argtable);
+					if (__find_arguments(fmt0, orgap,
+					    &argtable) == -1)
+						goto oomem;
 				}
 				goto rflag;
 			}
@@ -975,8 +1013,8 @@ reswitch:	switch (ch) {
 				size_t mbseqlen;
 
 				mbs = initial;
-				mbseqlen = wcrtomb(buf,
-				    (wchar_t)GETARG(wint_t), &mbs);
+				mbseqlen = wcrtomb_l(buf,
+				    (wchar_t)GETARG(wint_t), &mbs, loc);
 				if (mbseqlen == (size_t)-1) {
 					fp->_flags |= __SERR;
 					goto error;
@@ -990,7 +1028,7 @@ reswitch:	switch (ch) {
 			if (flags & LONGINT)
 				*buf = (wchar_t)GETARG(wint_t);
 			else
-				*buf = (wchar_t)btowc(GETARG(int));
+				*buf = (wchar_t)btowc_l(GETARG(int), loc);
 			size = 1;
 #endif
 			result = buf;
@@ -1042,20 +1080,28 @@ reswitch:	switch (ch) {
 				    __hdtoa(fparg.dbl, xdigs, prec,
 				        &expt, &signflag, &dtoaend);
 			}
+			if (dtoaresult == NULL)
+				goto oomem;
 			
-			if (prec < 0)
-				prec = dtoaend - dtoaresult;
+			if (prec < 0) {
+				_DIAGASSERT(__type_fit(int,
+				    dtoaend - dtoaresult));
+				prec = (int)(dtoaend - dtoaresult);
+			}
 			if (expt == INT_MAX)
 				ox[1] = '\0';
-			ndig = dtoaend - dtoaresult;
+			_DIAGASSERT(__type_fit(int, dtoaend - dtoaresult));
+			ndig = (int)(dtoaend - dtoaresult);
 			if (convbuf != NULL)
 				free(convbuf);
 #ifndef NARROW
-			result = convbuf = __mbsconv(dtoaresult, -1);
+			result = convbuf = __mbsconv(dtoaresult, -1, loc);
 #else
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 			goto fp_common;
 		case 'e':
@@ -1091,15 +1137,20 @@ fp_begin:
 				if (expt == 9999)
 					expt = INT_MAX;
 			}
-			ndig = dtoaend - dtoaresult;
+			if (dtoaresult == NULL)
+				goto oomem;
+			_DIAGASSERT(__type_fit(int, dtoaend - dtoaresult));
+			ndig = (int)(dtoaend - dtoaresult);
 			if (convbuf != NULL)
 				free(convbuf);
 #ifndef NARROW
-			result = convbuf = __mbsconv(dtoaresult, -1);
+			result = convbuf = __mbsconv(dtoaresult, -1, loc);
 #else
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 fp_common:
 			if (signflag)
@@ -1113,6 +1164,7 @@ fp_common:
 					result = (ch >= 'a') ? STRCONST("inf") :
 					    STRCONST("INF");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 #else
@@ -1143,6 +1195,7 @@ fp_common:
 				else
 					result = STRCONST("inf");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 			if (isnan(_double)) {
@@ -1151,20 +1204,25 @@ fp_common:
 				else
 					result = STRCONST("nan");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 
 			flags |= FPT;
 			dtoaresult = cvt(_double, prec, flags, &softsign,
 			    &expt, ch, &ndig);
+			if (dtoaresult == NULL)
+				goto oomem;
 			if (convbuf != NULL)
 				free(convbuf);
 #ifndef NARROW
-			result = convbuf = __mbsconv(dtoaresult, -1);
+			result = convbuf = __mbsconv(dtoaresult, -1, loc);
 #else
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 			if (softsign)
 				sign = '-';
@@ -1207,7 +1265,8 @@ fp_common:
 					/* space for thousands' grouping */
 					nseps = nrepeats = 0;
 					lead = expt;
-					while (*grouping != CHAR_MAX) {
+					while ((unsigned char)*grouping
+					    != (unsigned char)CHAR_MAX) {
 						if (lead <= *grouping)
 							break;
 						lead -= *grouping;
@@ -1285,7 +1344,7 @@ fp_common:
 				if ((mc = GETARG(MCHAR_T *)) == NULL)
 					result = STRCONST("(null)");
 				else {
-					convbuf = SCONV(mc, prec);
+					convbuf = SCONV(mc, prec, loc);
 					if (convbuf == NULL) {
 						fp->_flags |= __SERR;
 						goto error;
@@ -1303,13 +1362,18 @@ fp_common:
 				CHAR_T *p = MEMCHR(result, 0, (size_t)prec);
 
 				if (p != NULL) {
-					size = p - result;
+					_DIAGASSERT(__type_fit(int,
+					    p - result));
+					size = (int)(p - result);
 					if (size > prec)
 						size = prec;
 				} else
 					size = prec;
-			} else
-				size = STRLEN(result);
+			} else {
+				size_t rlen = STRLEN(result);
+				_DIAGASSERT(__type_fit(int, rlen));
+				size = (int)rlen;
+			}
 			sign = '\0';
 			break;
 		case 'U':
@@ -1374,7 +1438,8 @@ number:			if ((dprec = prec) >= 0)
 					    flags & GROUPING, thousands_sep,
 					    grouping);
 			}
-			size = buf + BUF - result;
+			_DIAGASSERT(__type_fit(int, buf + BUF - result));
+			size = (int)(buf + BUF - result);
 			if (size > BUF)	/* should never happen */
 				abort();
 			break;
@@ -1510,8 +1575,12 @@ error:
 		ret = END_OF_FILE;
 	if ((argtable != NULL) && (argtable != statargtable))
 		free (argtable);
-	return (ret);
+	return ret;
 	/* NOTREACHED */
+oomem:
+	errno = ENOMEM;
+	ret = END_OF_FILE;
+	goto error;
 }
 
 /*
@@ -1520,44 +1589,73 @@ error:
  * initial argument table should be an array of STATIC_ARG_TBL_SIZE entries.
  * It will be replaces with a malloc-ed one if it overflows.
  */ 
-static void
-__find_arguments (const CHAR_T *fmt0, va_list ap, union arg **argtable)
+static int
+__find_arguments(const CHAR_T *fmt0, va_list ap, union arg **argtable)
 {
 	CHAR_T *fmt;		/* format string */
 	int ch;			/* character from fmt */
-	int n, n2;		/* handy integer (short term usage) */
+	size_t n, n2;		/* handy index (short term usage) */
 	CHAR_T *cp;		/* handy char pointer (short term usage) */
 	int flags;		/* flags as above */
 	enum typeid *typetable; /* table of types */
 	enum typeid stattypetable [STATIC_ARG_TBL_SIZE];
-	int tablesize;		/* current size of type table */
-	int tablemax;		/* largest used index in table */
-	int nextarg;		/* 1-based argument index */
+	size_t tablesize;	/* current size of type table */
+	size_t tablemax;	/* largest used index in table */
+	size_t nextarg;		/* 1-based argument index */
+	size_t nitems;		/* number of items we picked from the stack */
 
 	/*
 	 * Add an argument type to the table, expanding if necessary.
+	 * Check for overflow.
 	 */
 #define ADDTYPE(type) \
-	/*LINTED null effect*/ \
-	(void)((nextarg >= tablesize) ? \
-		__grow_type_table(nextarg, &typetable, &tablesize) : (void)0, \
-	(nextarg > tablemax) ? tablemax = nextarg : 0, \
-	typetable[nextarg++] = type)
+	do { \
+		if (nextarg > SIZE_MAX / sizeof(**argtable)) { \
+			if (typetable != stattypetable) \
+				free(typetable); \
+			return -1; \
+		} \
+		if (nextarg >= tablesize) \
+			if (__grow_type_table(nextarg, &typetable, \
+			    &tablesize) == -1) \
+				return -1; \
+		if (nextarg > tablemax) \
+			tablemax = nextarg; \
+		typetable[nextarg++] = type; \
+		nitems++; \
+	} while (/*CONSTCOND*/0)
 
 #define	ADDSARG() \
-	(void)((flags&INTMAXT) ? ADDTYPE(T_INTMAXT) : \
-		((flags&SIZET) ? ADDTYPE(T_SIZET) : \
-		((flags&PTRDIFFT) ? ADDTYPE(T_PTRDIFFT) : \
-		((flags&LLONGINT) ? ADDTYPE(T_LLONG) : \
-		((flags&LONGINT) ? ADDTYPE(T_LONG) : ADDTYPE(T_INT))))))
+	do { \
+		if (flags & INTMAXT)  \
+			ADDTYPE(T_INTMAXT); \
+		else if (flags & SIZET)  \
+			ADDTYPE(T_SSIZET); \
+		else if (flags & PTRDIFFT) \
+			ADDTYPE(T_PTRDIFFT); \
+		else if (flags & LLONGINT) \
+			ADDTYPE(T_LLONG); \
+		else if (flags & LONGINT) \
+			ADDTYPE(T_LONG); \
+		else \
+			ADDTYPE(T_INT); \
+	} while (/*CONSTCOND*/0)
 
 #define	ADDUARG() \
-	(void)((flags&INTMAXT) ? ADDTYPE(T_UINTMAXT) : \
-		((flags&SIZET) ? ADDTYPE(T_SIZET) : \
-		((flags&PTRDIFFT) ? ADDTYPE(T_PTRDIFFT) : \
-		((flags&LLONGINT) ? ADDTYPE(T_U_LLONG) : \
-		((flags&LONGINT) ? ADDTYPE(T_U_LONG) : ADDTYPE(T_U_INT))))))
-
+	do { \
+		if (flags & INTMAXT)  \
+			ADDTYPE(T_UINTMAXT); \
+		else if (flags & SIZET)  \
+			ADDTYPE(T_SIZET); \
+		else if (flags & PTRDIFFT) \
+			ADDTYPE(T_PTRDIFFT); \
+		else if (flags & LLONGINT) \
+			ADDTYPE(T_U_LLONG); \
+		else if (flags & LONGINT) \
+			ADDTYPE(T_U_LONG); \
+		else \
+			ADDTYPE(T_U_INT); \
+	} while (/*CONSTCOND*/0)
 	/*
 	 * Add * arguments to the type array.
 	 */
@@ -1569,21 +1667,21 @@ __find_arguments (const CHAR_T *fmt0, va_list ap, union arg **argtable)
 		cp++; \
 	} \
 	if (*cp == '$') { \
-		int hold = nextarg; \
+		size_t hold = nextarg; \
 		nextarg = n2; \
-		ADDTYPE (T_INT); \
+		ADDTYPE(T_INT); \
 		nextarg = hold; \
 		fmt = ++cp; \
 	} else { \
-		ADDTYPE (T_INT); \
+		ADDTYPE(T_INT); \
 	}
 	fmt = (CHAR_T *)__UNCONST(fmt0);
+	memset(stattypetable, 0, sizeof(stattypetable));
 	typetable = stattypetable;
 	tablesize = STATIC_ARG_TBL_SIZE;
 	tablemax = 0; 
 	nextarg = 1;
-	for (n = 0; n < STATIC_ARG_TBL_SIZE; n++)
-		typetable[n] = T_UNUSED;
+	nitems = 1;
 
 	/*
 	 * Scan the format for conversions (`%' character).
@@ -1745,11 +1843,30 @@ reswitch:	switch (ch) {
 	}
 done:
 	/*
+	 * nitems contains the number of arguments we picked from the stack.
+	 * If tablemax is larger, this means that some positional argument,
+	 * tried to pick an argument the number of arguments possibly supplied.
+	 * Since positional arguments are typically used to swap the order of
+	 * the printf arguments and not to pick random arguments from strange
+	 * positions in the stack, we assume that if the positional argument
+	 * is trying to pick beyond the end of arguments, then this is wrong.
+	 * Alternatively we could find a way to figure out when va_arg() runs
+	 * out, but how to do that?
+	 */
+	if (nitems < tablemax) {
+		if (typetable != stattypetable)
+			free(typetable);
+		return -1;
+	}
+	/*
 	 * Build the argument table.
 	 */
 	if (tablemax >= STATIC_ARG_TBL_SIZE) {
-		*argtable = (union arg *)
-		    malloc (sizeof (union arg) * (tablemax + 1));
+		*argtable = malloc(sizeof(**argtable) * (tablemax + 1));
+		if (*argtable == NULL) {
+			free(typetable);
+			return -1;
+		}
 	}
 
 	(*argtable) [0].intarg = 0;
@@ -1797,6 +1914,9 @@ done:
 		    case TP_PTRDIFFT:
 			(*argtable) [n].pptrdiffarg = va_arg (ap, ptrdiff_t *);
 			break;
+		    case T_SSIZET:
+			(*argtable) [n].ssizearg = va_arg (ap, ssize_t);
+			break;
 		    case T_SIZET:
 			(*argtable) [n].sizearg = va_arg (ap, size_t);
 			break;
@@ -1837,37 +1957,40 @@ done:
 		}
 	}
 
-	if ((typetable != NULL) && (typetable != stattypetable))
+	if (typetable != stattypetable)
 		free (typetable);
+	return 0;
 }
 
 /*
  * Increase the size of the type table.
  */
-static void
-__grow_type_table (int nextarg, enum typeid **typetable, int *tablesize)
+static int
+__grow_type_table (size_t nextarg, enum typeid **typetable, size_t *tablesize)
 {
 	enum typeid *const oldtable = *typetable;
-	const int oldsize = *tablesize;
+	const size_t oldsize = *tablesize;
 	enum typeid *newtable;
-	int n, newsize = oldsize * 2;
+	size_t newsize = oldsize * 2;
 
 	if (newsize < nextarg + 1)
 		newsize = nextarg + 1;
 	if (oldsize == STATIC_ARG_TBL_SIZE) {
-		if ((newtable = malloc(newsize * sizeof(enum typeid))) == NULL)
-			abort();			/* XXX handle better */
-		memcpy(newtable, oldtable, oldsize * sizeof(enum typeid));
+		if ((newtable = malloc(newsize * sizeof(*newtable))) == NULL)
+			return -1;
+		memcpy(newtable, oldtable, oldsize * sizeof(*newtable));
 	} else {
-		newtable = realloc(oldtable, newsize * sizeof(enum typeid));
-		if (newtable == NULL)
-			abort();			/* XXX handle better */
+		newtable = realloc(oldtable, newsize * sizeof(*newtable));
+		if (newtable == NULL) {
+			free(oldtable);
+			return -1;
+		}
 	}
-	for (n = oldsize; n < newsize; n++)
-		newtable[n] = T_UNUSED;
+	memset(&newtable[oldsize], 0, (newsize - oldsize) * sizeof(*newtable));
 
 	*typetable = newtable;
 	*tablesize = newsize;
+	return 0;
 }
 
 
@@ -1898,6 +2021,8 @@ cvt(double value, int ndigits, int flags, char *sign, int *decpt, int ch,
 	}
 
 	digits = __dtoa(value, mode, ndigits, decpt, &dsgn, &rve);
+	if (digits == NULL)
+		return NULL;
 	if (dsgn) {
 		value = -value;
 		*sign = '-';
@@ -1953,6 +2078,7 @@ exponent(CHAR_T *p0, int expo, int fmtch)
 			*p++ = '0';
 		*p++ = to_char(expo);
 	}
-	return (p - p0);
+	_DIAGASSERT(__type_fit(int, p - p0));
+	return (int)(p - p0);
 }
 #endif /* !NO_FLOATING_POINT */

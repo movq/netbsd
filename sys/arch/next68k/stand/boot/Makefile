@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2005/12/11 12:18:29 christos Exp $
+#	$NetBSD: Makefile,v 1.29 2017/04/08 19:53:22 christos Exp $
 
 NOMAN=	# defined
 
@@ -25,25 +25,28 @@ RELOC=	4380000
 # XXX make defs arch-indep.
 INCLUDES+=	-I${.OBJDIR} -I${S}/arch -I${S} -I${S}/lib/libsa 
 DEFS+=		-D_STANDALONE -DMC68040 -DSUPPORT_BOOTP -DSUPPORT_DHCP  -DDEBUG -DSD_DEBUG -DSCSI_DEBUG # -DEN_DEBUG   -DNETIF_DEBUG  
-SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DINSECURE # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
+SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DSA_EXEC_ANYOWNER # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
 WARNS=1
 CFLAGS+=	 -ffreestanding -nostdinc ${INCLUDES} ${DEFS}
+CFLAGS+=	-Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
+AFLAGS+=	${INCLUDES}
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
+LIBCRTI=
 LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
 PROG=	boot
-SRCS=   boot.c machdep.c conf.c devopen.c rtc.c sd.c scsi.c en.c vers.c build.c
+SRCS=   boot.c machdep.c conf.c devopen.c rtc.c sd.c scsi.c en.c build.c
 
 # @@@ dev_net.c should really be in libsa, but it doesn't
 # declare ip_convertaddr correctly, so I put it here _temporarily_.
 .PATH: ${S}/lib/libsa
 SRCS+=	dev_net.c
 
-CLEANFILES+= srt0.o boot.elf boot.raw machine ${MACHINE_ARCH} limits.h
-CLEANFILES+= vers.c build.c build	# generated dynamically
+CLEANFILES+= srt0.o boot.elf boot.raw limits.h
+CLEANFILES+= build.c build	# generated dynamically
 
 BINDIR=	/usr/mdec
 #LIBS=	${SALIB} ${KERNLIB} ${ZLIB}
@@ -63,10 +66,12 @@ function x(v) { printf "\\0\\%o\\%o\\%o", (v / 65536) % 256, (v / 256) % 256, v 
 }'
 
 ${PROG}: srt0.o ${OBJS} ${LIBS}
+	${_MKTARGET_LINK}
 	${LD} -N -Ttext ${RELOC} -e start srt0.o ${OBJS} ${LIBS} -o $@.elf
 	${SIZE} $@.elf
 	${OBJCOPY} -O binary $@.elf $@.raw
-	(${SIZE} $@.elf | tail +2 | awk ${AWKPROG} | xargs printf ; cat $@.raw) > $@
+	(${SIZE} $@.elf | tail +2 | ${TOOL_AWK} ${AWKPROG} | \
+		xargs printf ; cat $@.raw) > $@
 
 # startup
 
@@ -77,8 +82,7 @@ srt0.o: ${.CURDIR}/srt0.s
 build.c:
 	${HOST_SH} ${.CURDIR}/newvers.sh
 
-vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -MD ${.CURDIR}/version "next68k"
+.include "${S}/conf/newvers_stand.mk"
 
 #installboot: ${.CURDIR}/installboot.sh
 #	@rm -f installboot
@@ -86,12 +90,5 @@ vers.c: version
 
 # utilities
 
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	rm -f machine
-	ln -s ${S}/arch/${MACHINE}/include machine
-	rm -f ${MACHINE_ARCH}
-	ln -s ${S}/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
-.endif
-
 .include <bsd.prog.mk>
+.include <bsd.klinks.mk>

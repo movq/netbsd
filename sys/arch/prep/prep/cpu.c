@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.14 2007/10/17 19:56:53 garbled Exp $	*/
+/*	$NetBSD: cpu.c,v 1.18 2011/07/01 20:52:02 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.14 2007/10/17 19:56:53 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2011/07/01 20:52:02 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/platform.h>
 
@@ -57,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.14 2007/10/17 19:56:53 garbled Exp $");
 extern void openpic_set_priority(int, int);
 #endif
 
-int cpumatch(struct device *, struct cfdata *, void *);
-void cpuattach(struct device *, struct device *, void *);
+int cpumatch(device_t, cfdata_t, void *);
+void cpuattach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
+cpumatch(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -80,7 +73,7 @@ cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 void
-cpuattach(struct device *parent, struct device *self, void *aux)
+cpuattach(device_t parent, device_t self, void *aux)
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -112,7 +105,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 	/* ba cpu_spinup_trampoline */
 	*(u_int *)EXC_RST = 0x48000002 | (u_int)cpu_spinup_trampoline;
 	__syncicache((void *)EXC_RST, 0x100);
-	h->running = -1;
+	h->hatch_running = -1;
 
 	/* Start secondary CPU. */
 	openpic_write(OPENPIC_PROC_INIT, (1 << 1));
@@ -128,14 +121,14 @@ md_presync_timebase(volatile struct cpu_hatch_data *h)
 	tb = mftb();
 	tb += 100000;  /* 3ms @ 33MHz */
 
-	h->tbu = tb >> 32;
-	h->tbl = tb & 0xffffffff;
+	h->hatch_tbu = tb >> 32;
+	h->hatch_tbl = tb & 0xffffffff;
 
 	while (tb > mftb())
 		;
 
 	__asm volatile ("sync; isync");
-	h->running = 0;
+	h->hatch_running = 0;
 
 	delay(500000);
 }
@@ -149,10 +142,10 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 void
 md_sync_timebase(volatile struct cpu_hatch_data *h)
 {
-	u_int tbu = h->tbu;
-	u_int tbl = h->tbl;
+	u_int tbu = h->hatch_tbu;
+	u_int tbl = h->hatch_tbl;
 
-	while (h->running == -1)
+	while (h->hatch_running == -1)
 		;
 
 	__asm volatile ("sync; isync");

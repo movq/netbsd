@@ -1,4 +1,4 @@
-/*	$NetBSD: readdir.c,v 1.23 2006/05/17 20:36:50 christos Exp $	*/
+/*	$NetBSD: readdir.c,v 1.26 2012/06/25 22:32:43 abs Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)readdir.c	8.3 (Berkeley) 9/29/94";
 #else
-__RCSID("$NetBSD: readdir.c,v 1.23 2006/05/17 20:36:50 christos Exp $");
+__RCSID("$NetBSD: readdir.c,v 1.26 2012/06/25 22:32:43 abs Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,10 +54,9 @@ __RCSID("$NetBSD: readdir.c,v 1.23 2006/05/17 20:36:50 christos Exp $");
  * get next entry in a directory.
  */
 struct dirent *
-_readdir_unlocked(DIR *dirp)
+_readdir_unlocked(DIR *dirp, int skipdeleted)
 {
 	struct dirent *dp;
-
 
 	for (;;) {
 		if (dirp->dd_loc >= dirp->dd_size) {
@@ -80,7 +79,7 @@ _readdir_unlocked(DIR *dirp)
 		if (dp->d_reclen > dirp->dd_len + 1 - dirp->dd_loc)
 			return (NULL);
 		dirp->dd_loc += dp->d_reclen;
-		if (dp->d_ino == 0)
+		if (dp->d_ino == 0 && skipdeleted)
 			continue;
 		if (dp->d_type == DT_WHT && (dirp->dd_flags & DTF_HIDEW))
 			continue;
@@ -89,28 +88,24 @@ _readdir_unlocked(DIR *dirp)
 }
 
 struct dirent *
-readdir(dirp)
-	DIR *dirp;
+readdir(DIR *dirp)
 {
 	struct dirent	*dp;
 
 #ifdef _REENTRANT
 	if (__isthreaded) {
 		mutex_lock((mutex_t *)dirp->dd_lock);
-		dp = _readdir_unlocked(dirp);
+		dp = _readdir_unlocked(dirp, 1);
 		mutex_unlock((mutex_t *)dirp->dd_lock);
 	}
 	else
 #endif
-		dp = _readdir_unlocked(dirp);
+		dp = _readdir_unlocked(dirp, 1);
 	return (dp);
 }
 
 int
-readdir_r(dirp, entry, result)
-	DIR *dirp;
-	struct dirent *entry;
-	struct dirent **result;
+readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
 {
 	struct dirent *dp;
 	int saved_errno;
@@ -120,13 +115,13 @@ readdir_r(dirp, entry, result)
 #ifdef _REENTRANT
 	if (__isthreaded) {
 		mutex_lock((mutex_t *)dirp->dd_lock);
-		if ((dp = _readdir_unlocked(dirp)) != NULL)
+		if ((dp = _readdir_unlocked(dirp, 1)) != NULL)
 			memcpy(entry, dp, (size_t)_DIRENT_SIZE(dp));
 		mutex_unlock((mutex_t *)dirp->dd_lock);
 	}
 	else 
 #endif
-		if ((dp = _readdir_unlocked(dirp)) != NULL)
+		if ((dp = _readdir_unlocked(dirp, 1)) != NULL)
 			memcpy(entry, dp, (size_t)_DIRENT_SIZE(dp));
 
 	if (errno != 0) {

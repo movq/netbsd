@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.60 2007/12/03 15:33:52 ad Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.67 2014/10/18 08:33:25 snj Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 
@@ -62,7 +62,7 @@
 #ifdef __NetBSD__
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.60 2007/12/03 15:33:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.67 2014/10/18 08:33:25 snj Exp $");
 
 #include "opt_adb.h"
 
@@ -391,7 +391,7 @@ adb_cuda_tickle(void)
 void
 adb_intr_cuda(void *arg)
 {
-	volatile int i, ending;
+	volatile int i __unused, ending;
 	volatile unsigned int s;
 	struct adbCommand packet;
 
@@ -1238,7 +1238,7 @@ void
 adb_intr_IIsi(void *arg)
 {
 	struct adbCommand packet;
-	int i, ending;
+	int ending;
 	unsigned int s;
 
 	s = splhigh();		/* can't be too careful - might be called */
@@ -1351,7 +1351,7 @@ switch_start:
 		break;
 
 	case ADB_ACTION_OUT:
-		i = ADB_SR();	/* reset SR-intr in IFR */
+		(void)ADB_SR();	/* reset SR-intr in IFR */
 		ADB_SET_SR_OUTPUT();	/* set shift register for OUT */
 
 		ADB_SET_STATE_ACKOFF();	/* finish ACK */
@@ -1603,7 +1603,7 @@ send_adb_iop(int cmd, u_char * buffer, void *compRout, void *data)
  *
  * If in->unsol is 1, then this packet was unsolicited and
  * so we look up the device in the ADB device table to determine
- * what it's default service routine is.
+ * what its default service routine is.
  *
  * If in->ack_only is 1, then we really only need to call
  * the completion routine, so don't do any other stuff.
@@ -1693,6 +1693,8 @@ adb_pass_up(struct adbCommand *in)
  	 * the caller sent us.
  	 */
 	if (in->unsol) {
+		if (in->ack_only) panic("invalid ack-only pkg");
+
 		adbInbound[adbInTail].compRout = (void *)block.dbServiceRtPtr;
 		adbInbound[adbInTail].compData = (void *)block.dbDataAreaAddr;
 		adbInbound[adbInTail].saveBuf = (void *)adbInbound[adbInTail].data;
@@ -1814,6 +1816,7 @@ adb_soft_intr(void)
 				movem.l(a7)+, d0/a2/a1/a0
 			}
 #endif
+
 		}
 
 		s = splhigh();
@@ -2039,7 +2042,6 @@ void
 adb_hw_setup_IIsi(u_char *buffer)
 {
 	int i;
-	int dummy;
 	int s;
 	long my_time;
 	int endofframe;
@@ -2065,7 +2067,7 @@ adb_hw_setup_IIsi(u_char *buffer)
 			 */
 			my_time = ADB_DELAY * 5;
 			while ((ADB_SR_INTR_IS_OFF) && (my_time-- > 0))
-				dummy = via_reg(VIA1, vBufB);
+				(void)via_reg(VIA1, vBufB);
 
 			buffer[i++] = ADB_SR();	/* reset interrupt flag by
 						 * reading vSR */
@@ -2736,8 +2738,9 @@ adb_read_date_time(unsigned long *curtime)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for result */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		*curtime = (long)(*(long *)(output + 1));
 		return 0;
@@ -2754,8 +2757,9 @@ adb_read_date_time(unsigned long *curtime)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for result */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		*curtime = (long)(*(long *)(output + 1));
 		return 0;
@@ -2795,8 +2799,9 @@ adb_set_date_time(unsigned long curtime)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2816,8 +2821,9 @@ adb_set_date_time(unsigned long curtime)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2895,8 +2901,9 @@ adb_prog_switch_enable(void)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 
@@ -2930,8 +2937,9 @@ adb_prog_switch_disable(void)
 		if (result != 0)	/* exit if not sent */
 			return -1;
 
-		while (0 == flag)	/* wait for send to finish */
-			;
+		adb_spin(&flag);	/* wait for result */
+		if (flag == 0)		/* exit it timeout */
+			return -1;
 
 		return 0;
 

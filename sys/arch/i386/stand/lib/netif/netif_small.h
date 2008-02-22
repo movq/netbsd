@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_small.h,v 1.3 2003/03/13 16:02:39 drochner Exp $	*/
+/*	$NetBSD: netif_small.h,v 1.5 2009/10/21 23:12:09 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 4. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,5 +31,5 @@
 /* minimal netif - for boot ROMs we don't have to select between
  several interfaces, and we have to save space */
 
-int netif_open __P((void));
-void netif_close __P((int));
+int netif_open(void);
+void netif_close(int);

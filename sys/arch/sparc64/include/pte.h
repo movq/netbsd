@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.19 2008/02/22 10:55:00 martin Exp $ */
+/*	$NetBSD: pte.h,v 1.28 2016/11/04 05:41:01 macallan Exp $ */
 
 /*
  * Copyright (c) 1996-1999 Eduardo Horvath
@@ -41,15 +41,17 @@
  *
  *	struct sun4u_tte {
  *		uint64	tag_g:1,	(global flag)
- *			tag_ctxt:15,	(context for mapping)
+ *			tag_reserved:2,	(reserved for future use)
+ *			tag_ctxt:13,	(context for mapping)
  *			tag_unassigned:6,
  *			tag_va:42;	(virtual address bits<64:22>)
  *		uint64	data_v:1,	(valid bit)
  *			data_size:2,	(page size [8K*8**<SIZE>])
  *			data_nfo:1,	(no-fault only)
  *			data_ie:1,	(invert endianness [inefficient])
- *			data_soft2:2,	(reserved for S/W)
- *			data_pa:36,	(physical address)
+ *			data_soft2:9,	(reserved for S/W)
+ *			data_reserved:7,(reserved for future use)
+ *			data_pa:30,	(physical address)
  *			data_soft:6,	(reserved for S/W)
  *			data_lock:1,	(lock into TLB)
  *			data_cacheable:2,	(cacheability control)
@@ -91,23 +93,25 @@
 #if 0
 /* We don't use bitfeilds anyway. */
 struct sun4u_tag_fields {
-	uint64_t	tag_g:1,	/* global flag */
-		tag_ctxt:15,	/* context for mapping */
+	uint64_t tag_g:1,	/* global flag */
+		tag_reserved:2,	/* reserved for future use */
+		tag_ctxt:13,	/* context for mapping */
 		tag_unassigned:6,
 		tag_va:42;	/* virtual address bits<64:22> */
 };
 union sun4u_tag { struct sun4u_tag_fields f; int64_t tag; };
 struct sun4u_data_fields {
-	uint64_t	data_v:1,	/* valid bit */
+	uint64_t data_v:1,	/* valid bit */
 		data_size:2,	/* page size [8K*8**<SIZE>] */
 		data_nfo:1,	/* no-fault only */
 		data_ie:1,	/* invert endianness [inefficient] */
-		data_soft2:2,	/* reserved for S/W */
-		data_pa:36,	/* physical address */
-		data_accessed:1,/* S/W accessed bit */
+		data_soft2:9,	/* reserved for S/W */
+		data_reserved:7,/* reserved for future use */
+		data_pa:30,	/* physical address */
+		data_tsblock:1,	/* S/W TSB locked entry */
 		data_modified:1,/* S/W modified bit */
 		data_realw:1,	/* S/W real writable bit (to manage modified) */
-		data_tsblock:1,	/* S/W TSB locked entry */
+		data_accessed:1,/* S/W accessed bit */
 		data_exec:1,	/* S/W Executable */
 		data_onlyexec:1,/* S/W Executable only */
 		data_lock:1,	/* lock into TLB */
@@ -130,24 +134,6 @@ struct sun4u_tte {
 #endif
 typedef struct sun4u_tte pte_t;
 
-/* Assembly routines to flush TLB mappings */
-void sp_tlb_flush_pte(vaddr_t, int);
-void sp_tlb_flush_ctx(int);
-void sp_tlb_flush_all(void);
-
-#if defined(MULTIPROCESSOR)
-void smp_tlb_flush_pte(vaddr_t, int);
-void smp_tlb_flush_ctx(int);
-void smp_tlb_flush_all(void);
-#define	tlb_flush_pte(va,ctx)	smp_tlb_flush_pte(va, ctx)
-#define	tlb_flush_ctx(ctx)	smp_tlb_flush_ctx(ctx)
-#define	tlb_flush_all()		smp_tlb_flush_all()
-#else
-#define	tlb_flush_pte(va,ctx)	sp_tlb_flush_pte(va, ctx)
-#define	tlb_flush_ctx(ctx)	sp_tlb_flush_ctx(ctx)
-#define	tlb_flush_all()		sp_tlb_flush_all()
-#endif
-
 #endif /* _LOCORE */
 
 /* TSB tag masks */
@@ -166,41 +152,41 @@ void smp_tlb_flush_all(void);
 #define	PGSZ_512K		2
 #define	PGSZ_4M			3
 
-#define	PGSZ_SHIFT		61
-#define	TLB_SZ(s)		(((uint64_t)(s))<<PGSZ_SHIFT)
+#define	SUN4U_PGSZ_SHIFT	61
+#define	SUN4U_TLB_SZ(s)		(((uint64_t)(s))<<SUN4U_PGSZ_SHIFT)
 
 /* TLB data masks */
-#define TLB_V			0x8000000000000000LL
-#define TLB_8K			TLB_SZ(PGSZ_8K)
-#define TLB_64K			TLB_SZ(PGSZ_64K)
-#define TLB_512K		TLB_SZ(PGSZ_512K)
-#define TLB_4M			TLB_SZ(PGSZ_4M)
-#define TLB_SZ_MASK		0x6000000000000000LL
-#define TLB_NFO			0x1000000000000000LL
-#define TLB_IE			0x0800000000000000LL
-#define TLB_SOFT2_MASK		0x07fe000000000000LL
-#define TLB_DIAG_MASK		0x0001fe0000000000LL
-#define TLB_PA_MASK		0x000001ffffffe000LL
-#define TLB_SOFT_MASK		0x0000000000001f80LL
+#define SUN4U_TLB_V		0x8000000000000000LL
+#define SUN4U_TLB_8K		SUN4U_TLB_SZ(PGSZ_8K)
+#define SUN4U_TLB_64K		SUN4U_TLB_SZ(PGSZ_64K)
+#define SUN4U_TLB_512K		SUN4U_TLB_SZ(PGSZ_512K)
+#define SUN4U_TLB_4M		SUN4U_TLB_SZ(PGSZ_4M)
+#define SUN4U_TLB_SZ_MASK	0x6000000000000000LL
+#define SUN4U_TLB_NFO		0x1000000000000000LL
+#define SUN4U_TLB_IE		0x0800000000000000LL
+#define SUN4U_TLB_SOFT2_MASK	0x07fc000000000000LL
+#define SUN4U_TLB_RESERVED_MASK	0x0003f80000000000LL
+#define SUN4U_TLB_PA_MASK	0x000007ffffffe000LL
+#define SUN4U_TLB_SOFT_MASK	0x0000000000001f80LL
 /* S/W bits */
 /* Access & TSB locked bits are swapped so I can set access w/one insn */
-/* #define TLB_ACCESS		0x0000000000001000LL */
-#define TLB_ACCESS		0x0000000000000200LL
-#define TLB_MODIFY		0x0000000000000800LL
-#define TLB_REAL_W		0x0000000000000400LL
-/* #define TLB_TSB_LOCK		0x0000000000000200LL */
-#define TLB_TSB_LOCK		0x0000000000001000LL
-#define TLB_EXEC		0x0000000000000100LL
-#define TLB_EXEC_ONLY		0x0000000000000080LL
+/* #define SUN4U_TLB_ACCESS	0x0000000000001000LL */
+#define SUN4U_TLB_ACCESS	0x0000000000000200LL
+#define SUN4U_TLB_MODIFY	0x0000000000000800LL
+#define SUN4U_TLB_REAL_W	0x0000000000000400LL
+/* #define SUN4U_TLB_TSB_LOCK	0x0000000000000200LL */
+#define SUN4U_TLB_TSB_LOCK	0x0000000000001000LL
+#define SUN4U_TLB_EXEC		0x0000000000000100LL
+#define SUN4U_TLB_EXEC_ONLY	0x0000000000000080LL
 /* H/W bits */
-#define TLB_L			0x0000000000000040LL
-#define TLB_CACHE_MASK		0x0000000000000030LL
-#define TLB_CP			0x0000000000000020LL
-#define TLB_CV			0x0000000000000010LL
-#define TLB_E			0x0000000000000008LL
-#define TLB_P			0x0000000000000004LL
-#define TLB_W			0x0000000000000002LL
-#define TLB_G			0x0000000000000001LL
+#define SUN4U_TLB_L		0x0000000000000040LL
+#define SUN4U_TLB_CACHE_MASK	0x0000000000000030LL
+#define SUN4U_TLB_CP		0x0000000000000020LL
+#define SUN4U_TLB_CV		0x0000000000000010LL
+#define SUN4U_TLB_E		0x0000000000000008LL
+#define SUN4U_TLB_P		0x0000000000000004LL
+#define SUN4U_TLB_W		0x0000000000000002LL
+#define SUN4U_TLB_G		0x0000000000000001LL
 
 /* Use a bit in the SOFT2 area to indicate a locked mapping. */
 #define	TLB_WIRED		0x0010000000000000LL
@@ -210,23 +196,23 @@ void smp_tlb_flush_all(void);
  * be duplicates of the above w/o the "long long"
  */
 /* S/W bits */
-/* #define TTE_ACCESS		0x0000000000001000 */
-#define TTE_ACCESS		0x0000000000000200
-#define TTE_MODIFY		0x0000000000000800
-#define TTE_REAL_W		0x0000000000000400
-/* #define TTE_TSB_LOCK		0x0000000000000200 */
-#define TTE_TSB_LOCK		0x0000000000001000
-#define TTE_EXEC		0x0000000000000100
-#define TTE_EXEC_ONLY		0x0000000000000080
+/* #define SUN4U_TTE_ACCESS	0x0000000000001000 */
+#define SUN4U_TTE_ACCESS	0x0000000000000200
+#define SUN4U_TTE_MODIFY	0x0000000000000800
+#define SUN4U_TTE_REAL_W	0x0000000000000400
+/* #define SUN4U_TTE_TSB_LOCK	0x0000000000000200 */
+#define SUN4U_TTE_TSB_LOCK	0x0000000000001000
+#define SUN4U_TTE_EXEC		0x0000000000000100
+#define SUN4U_TTE_EXEC_ONLY	0x0000000000000080
 /* H/W bits */
-#define TTE_L			0x0000000000000040
-#define TTE_CACHE_MASK		0x0000000000000030
-#define TTE_CP			0x0000000000000020
-#define TTE_CV			0x0000000000000010
-#define TTE_E			0x0000000000000008
-#define TTE_P			0x0000000000000004
-#define TTE_W			0x0000000000000002
-#define TTE_G			0x0000000000000001
+#define SUN4U_TTE_L		0x0000000000000040
+#define SUN4U_TTE_CACHE_MASK	0x0000000000000030
+#define SUN4U_TTE_CP		0x0000000000000020
+#define SUN4U_TTE_CV		0x0000000000000010
+#define SUN4U_TTE_E		0x0000000000000008
+#define SUN4U_TTE_P		0x0000000000000004
+#define SUN4U_TTE_W		0x0000000000000002
+#define SUN4U_TTE_G		0x0000000000000001
 
 #define TTE_DATA_BITS	"\177\20" \
         "b\77V\0" "f\75\2SIZE\0" "b\77V\0" "f\75\2SIZE\0" \
@@ -236,10 +222,68 @@ void smp_tlb_flush_all(void);
         "b\6L\0"        "b\5CP\0"       "b\4CV\0" \
         "b\3E\0"        "b\2P\0"        "b\1W\0"        "b\0G\0"
 
-#define TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie) \
-(((valid)?TLB_V:0LL)|TLB_SZ(sz)|(((uint64_t)(pa))&TLB_PA_MASK)|\
-((cache)?((aliased)?TLB_CP:TLB_CACHE_MASK):TLB_E)|\
-((priv)?TLB_P:0LL)|((write)?TLB_W:0LL)|((g)?TLB_G:0LL)|((ie)?TLB_IE:0LL))
+#define SUN4V_PGSZ_SHIFT	0
+#define	SUN4V_TLB_SZ(s)		(((uint64_t)(s))<<SUN4V_PGSZ_SHIFT)
+
+/* TLB data masks */
+#define SUN4V_TLB_V		0x8000000000000000LL
+#define SUN4V_TLB_8K		SUN4V_TLB_SZ(PGSZ_8K)
+#define SUN4V_TLB_64K		SUN4V_TLB_SZ(PGSZ_64K)
+#define SUN4V_TLB_512K		SUN4V_TLB_SZ(PGSZ_512K)
+#define SUN4V_TLB_4M		SUN4V_TLB_SZ(PGSZ_4M)
+#define SUN4V_TLB_SZ_MASK	0x000000000000000fLL
+#define SUN4V_TLB_NFO		0x4000000000000000LL
+#define SUN4V_TLB_IE		0x0000000000001000LL
+#define SUN4V_TLB_SOFT2_MASK	0x3f00000000000000LL
+#define SUN4V_TLB_PA_MASK	0x00ffffffffffe000LL
+#define SUN4V_TLB_SOFT_MASK	0x0000000000000030LL
+/* S/W bits */
+#define SUN4V_TLB_ACCESS	0x0000000000000010LL
+#define SUN4V_TLB_MODIFY	0x0000000000000020LL
+#define SUN4V_TLB_REAL_W	0x2000000000000000LL
+#define SUN4V_TLB_TSB_LOCK	0x1000000000000000LL
+#define SUN4V_TLB_EXEC		SUN4V_TLB_X
+#define SUN4V_TLB_EXEC_ONLY	0x0200000000000000LL
+/* H/W bits */
+#define SUN4V_TLB_CACHE_MASK	0x0000000000000600LL
+#define SUN4V_TLB_CP		0x0000000000000400LL
+#define SUN4V_TLB_CV		0x0000000000000200LL
+#define SUN4V_TLB_E		0x0000000000000800LL
+#define SUN4V_TLB_P		0x0000000000000100LL
+#define SUN4V_TLB_X		0x0000000000000080LL
+#define SUN4V_TLB_W		0x0000000000000040LL
+#define SUN4V_TLB_G		0x0000000000000000LL
+
+#define SUN4U_TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie,wc) \
+(((valid)?SUN4U_TLB_V:0LL)|SUN4U_TLB_SZ(sz)|(((uint64_t)(pa))&SUN4U_TLB_PA_MASK)|\
+((cache)?((aliased)?SUN4U_TLB_CP:SUN4U_TLB_CACHE_MASK):((wc)?0LL:SUN4U_TLB_E))|\
+((priv)?SUN4U_TLB_P:0LL)|((write)?SUN4U_TLB_W:0LL)|((g)?SUN4U_TLB_G:0LL)|((ie)?SUN4U_TLB_IE:0LL))
+
+#define SUN4V_TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie,wc) \
+(((valid)?SUN4V_TLB_V:0LL)|SUN4V_TLB_SZ(sz)|\
+(((u_int64_t)(pa))&SUN4V_TLB_PA_MASK)|\
+((cache)?((aliased)?SUN4V_TLB_CP:SUN4V_TLB_CACHE_MASK):((wc)?0LL:SUN4V_TLB_E))|\
+((priv)?SUN4V_TLB_P:0LL)|((write)?SUN4V_TLB_W:0LL)|((g)?SUN4V_TLB_G:0LL)|\
+((ie)?SUN4V_TLB_IE:0LL))
+
+#define TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie,wc) \
+(CPU_ISSUN4V ? SUN4V_TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie,wc) : \
+               SUN4U_TSB_DATA(g,sz,pa,priv,write,cache,aliased,valid,ie,wc))
+
+#define TLB_EXEC      (CPU_ISSUN4V ? SUN4V_TLB_EXEC      : SUN4U_TLB_EXEC)
+#define TLB_V         (CPU_ISSUN4V ? SUN4V_TLB_V         : SUN4U_TLB_V)
+#define TLB_PA_MASK   (CPU_ISSUN4V ? SUN4V_TLB_PA_MASK   : SUN4U_TLB_PA_MASK)
+#define TLB_CP        (CPU_ISSUN4V ? SUN4V_TLB_CP        : SUN4U_TLB_CP)
+#define TLB_P         (CPU_ISSUN4V ? SUN4V_TLB_P         : SUN4U_TLB_P)
+#define TLB_W         (CPU_ISSUN4V ? SUN4V_TLB_W         : SUN4U_TLB_W)
+#define TLB_ACCESS    (CPU_ISSUN4V ? SUN4V_TLB_ACCESS    : SUN4U_TLB_ACCESS)
+#define TLB_MODIFY    (CPU_ISSUN4V ? SUN4V_TLB_MODIFY    : SUN4U_TLB_MODIFY)
+#define TLB_REAL_W    (CPU_ISSUN4V ? SUN4V_TLB_REAL_W    : SUN4U_TLB_REAL_W)
+#define TLB_TSB_LOCK  (CPU_ISSUN4V ? SUN4V_TLB_TSB_LOCK  : SUN4U_TLB_TSB_LOCK)
+#define TLB_EXEC_ONLY (CPU_ISSUN4V ? SUN4V_TLB_EXEC_ONLY : SUN4U_TLB_EXEC_ONLY)
+#define TLB_L         (CPU_ISSUN4V ? 0                   : SUN4U_TLB_L)
+#define TLB_CV        (CPU_ISSUN4V ? SUN4V_TLB_CV        : SUN4U_TLB_CV)
+#define TLB_IE        (CPU_ISSUN4V ? SUN4V_TLB_IE        : SUN4U_TLB_IE)
 
 #define MMU_CACHE_VIRT	0x3
 #define MMU_CACHE_PHYS	0x2

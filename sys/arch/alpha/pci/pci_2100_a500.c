@@ -1,4 +1,4 @@
-/* $NetBSD: pci_2100_a500.c,v 1.8 2007/12/03 15:33:06 ad Exp $ */
+/* $NetBSD: pci_2100_a500.c,v 1.12 2014/03/21 16:39:29 christos Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_2100_a500.c,v 1.8 2007/12/03 15:33:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_2100_a500.c,v 1.12 2014/03/21 16:39:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -67,20 +60,20 @@ static bus_space_handle_t pic_elcr_ioh;
 
 static const int pic_slave_to_master[4] = { 1, 3, 4, 5 };
 
-int	dec_2100_a500_pic_intr_map(struct pci_attach_args *,
+int	dec_2100_a500_pic_intr_map(const struct pci_attach_args *,
 	    pci_intr_handle_t *);
 
-int	dec_2100_a500_icic_intr_map(struct pci_attach_args *,
+int	dec_2100_a500_icic_intr_map(const struct pci_attach_args *,
 	    pci_intr_handle_t *);
 
-const char *dec_2100_a500_intr_string(void *, pci_intr_handle_t);
+const char *dec_2100_a500_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *dec_2100_a500_intr_evcnt(void *, pci_intr_handle_t);
 void	*dec_2100_a500_intr_establish(void *, pci_intr_handle_t,
 	    int, int (*)(void *), void *);
 void	dec_2100_a500_intr_disestablish(void *, void *);
 
 int	dec_2100_a500_eisa_intr_map(void *, u_int, eisa_intr_handle_t *);
-const char *dec_2100_a500_eisa_intr_string(void *, int);
+const char *dec_2100_a500_eisa_intr_string(void *, int, char *, size_t);
 const struct evcnt *dec_2100_a500_eisa_intr_evcnt(void *, int);
 void	*dec_2100_a500_eisa_intr_establish(void *, int, int, int,
 	    int (*)(void *), void *);
@@ -205,7 +198,9 @@ pci_2100_a500_pickintr(struct ttwoga_config *tcp)
 	/* Not supported on T2. */
 	pc->pc_pciide_compat_intr_establish = NULL;
 
-	tcp->tc_intrtab = alpha_shared_intr_alloc(SABLE_MAX_IRQ, 8);
+#define PCI_2100_IRQ_STR	8
+	tcp->tc_intrtab = alpha_shared_intr_alloc(SABLE_MAX_IRQ,
+	    PCI_2100_IRQ_STR);
 	for (i = 0; i < SABLE_MAX_IRQ; i++) {
 		alpha_shared_intr_set_dfltsharetype(tcp->tc_intrtab,
 		    i, tcp->tc_hose == 0 ?
@@ -214,7 +209,7 @@ pci_2100_a500_pickintr(struct ttwoga_config *tcp)
 		    i, PCI_STRAY_MAX);
 
 		cp = alpha_shared_intr_string(tcp->tc_intrtab, i);
-		sprintf(cp, "irq %d", T2_IRQ_IS_EISA(i) ?
+		snprintf(cp, PCI_2100_IRQ_STR, "irq %d", T2_IRQ_IS_EISA(i) ?
 		    i - T2_IRQ_EISA_START : i);
 		evcnt_attach_dynamic(alpha_shared_intr_evcnt(
 		    tcp->tc_intrtab, i), EVCNT_TYPE_INTR, NULL,
@@ -274,7 +269,7 @@ pci_2100_a500_isa_pickintr(pci_chipset_tag_t pc, isa_chipset_tag_t ic)
  *****************************************************************************/
 
 int
-dec_2100_a500_pic_intr_map(struct pci_attach_args *pa,
+dec_2100_a500_pic_intr_map(const struct pci_attach_args *pa,
     pci_intr_handle_t *ihp)
 {
 	/*
@@ -375,7 +370,8 @@ dec_2100_a500_pic_intr_map(struct pci_attach_args *pa,
 }
 
 int
-dec_2100_a500_icic_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+dec_2100_a500_icic_intr_map(const struct pci_attach_args *pa,
+    pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -420,15 +416,13 @@ dec_2100_a500_icic_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-dec_2100_a500_intr_string(void *v, pci_intr_handle_t ih)
+dec_2100_a500_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[15];		/* 11 + 2 + NULL + sanity */
-
 	if (ih >= SABLE_MAX_IRQ)
-		panic("dec_2100_a500_intr_string: bogus T2 IRQ 0x%lx", ih);
+		panic("%s: bogus T2 IRQ 0x%lx", __func__, ih);
 
-	sprintf(irqstr, "T2 irq %ld", ih);
-	return (irqstr);
+	snprintf(buf, len, "T2 irq %ld", ih);
+	return buf;
 }
 
 const struct evcnt *
@@ -437,7 +431,7 @@ dec_2100_a500_intr_evcnt(void *v, pci_intr_handle_t ih)
 	struct ttwoga_config *tcp = v;
 
 	if (ih >= SABLE_MAX_IRQ)
-		panic("dec_2100_a500_intr_evcnt: bogus T2 IRQ 0x%lx", ih);
+		panic("%s: bogus T2 IRQ 0x%lx", __func__, ih);
 
 	return (alpha_shared_intr_evcnt(tcp->tc_intrtab, ih));
 }
@@ -523,17 +517,14 @@ dec_2100_a500_eisa_intr_map(void *v, u_int eirq, eisa_intr_handle_t *ihp)
 }
 
 const char *
-dec_2100_a500_eisa_intr_string(void *v, int eirq)
+dec_2100_a500_eisa_intr_string(void *v, int eirq, char *buf, size_t len)
 {
-	static char irqstr[32];
-
 	if (eirq > 15 || eirq == 13)
-		panic("dec_2100_a500_eisa_intr_string: bogus EISA IRQ 0x%x",
-		    eirq);
+		panic("%s: bogus EISA IRQ 0x%x", __func__, eirq);
 
-	sprintf(irqstr, "eisa irq %d (T2 irq %d)", eirq,
+	snprintf(buf, len, "eisa irq %d (T2 irq %d)", eirq,
 	    eirq + T2_IRQ_EISA_START);
-	return (irqstr);
+	return buf;
 }
 
 const struct evcnt *
@@ -542,8 +533,7 @@ dec_2100_a500_eisa_intr_evcnt(void *v, int eirq)
 	struct ttwoga_config *tcp = v;
 
 	if (eirq > 15 || eirq == 13)
-		panic("dec_2100_a500_eisa_intr_evcnt: bogus EISA IRQ 0x%x",
-		    eirq);
+		panic("%s: bogus EISA IRQ 0x%x", __func__, eirq);
 
 	return (alpha_shared_intr_evcnt(tcp->tc_intrtab,
 	    eirq + T2_IRQ_EISA_START));
@@ -670,7 +660,7 @@ void
 dec_2100_a500_pic_enable_intr(struct ttwoga_config *tcp, int irq, int onoff)
 {
 	int pic;
-	u_int8_t bit, mask;
+	uint8_t bit, mask;
 
 	pic = irq >> 3;
 	bit = 1 << (irq & 0x7);
@@ -686,7 +676,7 @@ dec_2100_a500_pic_enable_intr(struct ttwoga_config *tcp, int irq, int onoff)
 void
 dec_2100_a500_icic_enable_intr(struct ttwoga_config *tcp, int irq, int onoff)
 {
-	u_int64_t bit, mask;
+	uint64_t bit, mask;
 
 	bit = 1UL << irq;
 
@@ -745,7 +735,7 @@ void
 dec_2100_a500_pic_setlevel(struct ttwoga_config *tcp, int eirq, int level)
 {
 	int elcr;
-	u_int8_t bit, mask;
+	uint8_t bit, mask;
 
 	switch (eirq) {		/* EISA IRQ */
 	case 3:
@@ -790,7 +780,7 @@ dec_2100_a500_pic_setlevel(struct ttwoga_config *tcp, int eirq, int level)
 void
 dec_2100_a500_icic_setlevel(struct ttwoga_config *tcp, int eirq, int level)
 {
-	u_int64_t bit, mask;
+	uint64_t bit, mask;
 
 	switch (eirq) {
 	case 3:

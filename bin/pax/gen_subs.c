@@ -1,4 +1,4 @@
-/*	$NetBSD: gen_subs.c,v 1.33 2006/02/11 10:43:18 dsl Exp $	*/
+/*	$NetBSD: gen_subs.c,v 1.36 2012/08/09 08:09:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)gen_subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: gen_subs.c,v 1.33 2006/02/11 10:43:18 dsl Exp $");
+__RCSID("$NetBSD: gen_subs.c,v 1.36 2012/08/09 08:09:21 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,6 +83,25 @@ __RCSID("$NetBSD: gen_subs.c,v 1.33 2006/02/11 10:43:18 dsl Exp $");
 #define UT_GRPSIZE	6
 
 /*
+ * convert time to string
+ */
+static void
+formattime(char *buf, size_t buflen, time_t when)
+{
+	int error;
+	struct tm tm;
+	(void)localtime_r(&when, &tm);
+
+	if (when + SIXMONTHS <= time(NULL))
+		error = strftime(buf, buflen, OLDFRMT, &tm);
+	else
+		error = strftime(buf, buflen, CURFRMT, &tm);
+
+	if (error == 0)
+		buf[0] = '\0';
+}
+
+/*
  * ls_list()
  *	list the members of an archive in ls format
  */
@@ -93,7 +112,7 @@ ls_list(ARCHD *arcn, time_t now, FILE *fp)
 	struct stat *sbp;
 	char f_mode[MODELEN];
 	char f_date[DATELEN];
-	const char *timefrmt, *user, *group;
+	const char *user, *group;
 
 	/*
 	 * if not verbose, just print the file name
@@ -113,16 +132,10 @@ ls_list(ARCHD *arcn, time_t now, FILE *fp)
 	/*
 	 * time format based on age compared to the time pax was started.
 	 */
-	if ((sbp->st_mtime + SIXMONTHS) <= now)
-		timefrmt = OLDFRMT;
-	else
-		timefrmt = CURFRMT;
-
+	formattime(f_date, sizeof(f_date), arcn->sb.st_mtime);
 	/*
 	 * print file mode, link count, uid, gid and time
 	 */
-	if (strftime(f_date,DATELEN,timefrmt,localtime(&(sbp->st_mtime))) == 0)
-		f_date[0] = '\0';
 	user = user_from_uid(sbp->st_uid, 0);
 	group = group_from_gid(sbp->st_gid, 0);
 	(void)fprintf(fp, "%s%2lu %-*s %-*s ", f_mode,
@@ -162,19 +175,8 @@ ls_tty(ARCHD *arcn)
 {
 	char f_date[DATELEN];
 	char f_mode[MODELEN];
-	const char *timefrmt;
 
-	if ((arcn->sb.st_mtime + SIXMONTHS) <= time((time_t *)NULL))
-		timefrmt = OLDFRMT;
-	else
-		timefrmt = CURFRMT;
-
-	/*
-	 * convert time to string, and print
-	 */
-	if (strftime(f_date, DATELEN, timefrmt,
-	    localtime(&(arcn->sb.st_mtime))) == 0)
-		f_date[0] = '\0';
+	formattime(f_date, sizeof(f_date), arcn->sb.st_mtime);
 	strmode(arcn->sb.st_mode, f_mode);
 	tty_prnt("%s%s %s\n", f_mode, f_date, arcn->name);
 	return;
@@ -200,20 +202,20 @@ safe_print(const char *str, FILE *fp)
 }
 
 /*
- * asc_ul()
- *	convert hex/octal character string into a u_long. We do not have to
+ * asc_u32()
+ *	convert hex/octal character string into a uint32_t. We do not have to
  *	check for overflow! (the headers in all supported formats are not large
  *	enough to create an overflow).
  *	NOTE: strings passed to us are NOT TERMINATED.
  * Return:
- *	unsigned long value
+ *	uint32_t value
  */
 
-u_long
-asc_ul(char *str, int len, int base)
+uint32_t
+asc_u32(char *str, int len, int base)
 {
 	char *stop;
-	u_long tval = 0;
+	uint32_t tval = 0;
 
 	stop = str + len;
 
@@ -246,17 +248,24 @@ asc_ul(char *str, int len, int base)
 }
 
 /*
- * ul_asc()
- *	convert an unsigned long into an hex/oct ascii string. pads with LEADING
+ * u32_asc()
+ *	convert an uintmax_t into an hex/oct ascii string. pads with LEADING
  *	ascii 0's to fill string completely
  *	NOTE: the string created is NOT TERMINATED.
  */
 
 int
-ul_asc(u_long val, char *str, int len, int base)
+u32_asc(uintmax_t val, char *str, int len, int base)
 {
 	char *pt;
-	u_long digit;
+	uint32_t digit;
+	uintmax_t p;
+
+	p = val & TOP_HALF;
+	if (p && p != TOP_HALF)
+		return -1;
+
+	val &= BOTTOM_HALF;
 
 	/*
 	 * WARNING str is not '\0' terminated by this routine
@@ -280,7 +289,7 @@ ul_asc(u_long val, char *str, int len, int base)
 	} else {
 		while (pt >= str) {
 			*pt-- = '0' + (char)(val & 0x7);
-			if ((val = (val >> 3)) == (u_long)0)
+			if ((val = (val >> 3)) == 0)
 				break;
 		}
 	}
@@ -290,27 +299,26 @@ ul_asc(u_long val, char *str, int len, int base)
 	 */
 	while (pt >= str)
 		*pt-- = '0';
-	if (val != (u_long)0)
+	if (val != 0)
 		return -1;
 	return 0;
 }
 
-#if !defined(NET2_STAT) && !defined(_LP64)
 /*
- * asc_ull()
- *	convert hex/octal character string into a unsigned long long. We do
+ * asc_umax()
+ *	convert hex/octal character string into a uintmax. We do
  *	not have to to check for overflow! (the headers in all supported
  *	formats are not large enough to create an overflow).
  *	NOTE: strings passed to us are NOT TERMINATED.
  * Return:
- *	unsigned long long value
+ *	uintmax_t value
  */
 
-unsigned long long
-asc_ull(char *str, int len, int base)
+uintmax_t
+asc_umax(char *str, int len, int base)
 {
 	char *stop;
-	unsigned long long tval = 0;
+	uintmax_t tval = 0;
 
 	stop = str + len;
 
@@ -343,17 +351,17 @@ asc_ull(char *str, int len, int base)
 }
 
 /*
- * ull_asc()
- *	convert an unsigned long long into a hex/oct ascii string. pads with
+ * umax_asc()
+ *	convert an uintmax_t into a hex/oct ascii string. pads with
  *	LEADING ascii 0's to fill string completely
  *	NOTE: the string created is NOT TERMINATED.
  */
 
 int
-ull_asc(unsigned long long val, char *str, int len, int base)
+umax_asc(uintmax_t val, char *str, int len, int base)
 {
 	char *pt;
-	unsigned long long digit;
+	uintmax_t digit;
 
 	/*
 	 * WARNING str is not '\0' terminated by this routine
@@ -371,13 +379,13 @@ ull_asc(unsigned long long val, char *str, int len, int base)
 				*pt-- = '0' + (char)digit;
 			else
 				*pt-- = 'a' + (char)(digit - 10);
-			if ((val = (val >> 4)) == (unsigned long long)0)
+			if ((val = (val >> 4)) == 0)
 				break;
 		}
 	} else {
 		while (pt >= str) {
 			*pt-- = '0' + (char)(val & 0x7);
-			if ((val = (val >> 3)) == (unsigned long long)0)
+			if ((val = (val >> 3)) == 0)
 				break;
 		}
 	}
@@ -387,11 +395,10 @@ ull_asc(unsigned long long val, char *str, int len, int base)
 	 */
 	while (pt >= str)
 		*pt-- = '0';
-	if (val != (unsigned long long)0)
+	if (val != 0)
 		return -1;
 	return 0;
 }
-#endif
 
 int
 check_Aflag(void)

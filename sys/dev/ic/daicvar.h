@@ -1,4 +1,4 @@
-/* $NetBSD: daicvar.h,v 1.9 2005/12/11 12:21:26 christos Exp $ */
+/* $NetBSD: daicvar.h,v 1.12 2012/10/27 17:18:20 chs Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,9 +89,9 @@ struct daic_unit {
 };
 
 /* superclass of all softc structs for attachments, you should
- * always be able to cast an attachments struct device *self to this. */
+ * always be able to cast an attachments device_t self to this. */
 struct daic_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;		/* bus identifier */
 	bus_space_handle_t sc_ioh;	/* mem handle */
 	int sc_cardtype;		/* variant of card */
@@ -120,7 +113,7 @@ struct daic_softc {
  * functions exported from MI part
  */
 extern int daic_probe(bus_space_tag_t bus, bus_space_handle_t io);
-extern void daic_attach(struct device *self, struct daic_softc *sc);
+extern void daic_attach(device_t self, struct daic_softc *sc);
 extern int daic_intr(struct daic_softc *);
 
 #endif

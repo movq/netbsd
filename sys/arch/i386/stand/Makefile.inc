@@ -1,10 +1,16 @@
-#	$NetBSD: Makefile.inc,v 1.5 2006/05/12 16:45:12 dogcow Exp $
+#	$NetBSD: Makefile.inc,v 1.15 2018/06/02 14:30:06 christos Exp $
+
+NOSANITIZER=
+NOPIE=
+NOMAN=
 
 .include <bsd.own.mk>
 
 BINDIR=	/usr/mdec
 
-.if ${HAVE_GCC} == 4
-CFLAGS+=	-Wno-pointer-sign
-.endif
-
+OPT_SIZE.gcc=	-Os -ffreestanding -fomit-frame-pointer -fno-unwind-tables \
+		-fno-asynchronous-unwind-tables -fno-exceptions -mno-sse
+OPT_SIZE.clang=	-Oz -ffreestanding -fomit-frame-pointer -DNDEBUG \
+		-fno-stack-protector -mno-sse \
+		-mstack-alignment=4 \
+		-fno-unwind-tables

@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.4 2007/12/15 00:39:17 perry Exp $	*/
+/*	$NetBSD: lance.c,v 1.6 2013/01/13 14:24:24 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@ bool lance_put(void *, size_t);
 
 void lance_setup(void);
 bool lance_set_initblock(struct leinit *);
-bool lacne_do_initialize(void);
+bool lance_do_initialize(void);
 
 bool lance_test(void);
 bool lance_internal_loopback_test(bool);
@@ -90,7 +83,7 @@ lance_init(void)
 	if (!lance_set_initblock(&lance_mem.leinit))
 		return false;
 
-	if (!lacne_do_initialize())
+	if (!lance_do_initialize())
 		return false;
 
 	*LANCE_RDP = LE_C0_STRT;
@@ -287,7 +280,7 @@ lance_set_initblock(struct leinit *leinit)
 }
 
 bool
-lacne_do_initialize(void)
+lance_do_initialize(void)
 {
 
 	/* Initialze LANCE */
@@ -387,7 +380,7 @@ lance_internal_loopback_test(bool crc)
 	if (!lance_set_initblock(&lance_mem.leinit))
 		return false;
 
-	if (!lacne_do_initialize())
+	if (!lance_do_initialize())
 		return false;
 
 	/* Transmit Start */

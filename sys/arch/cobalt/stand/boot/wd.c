@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.8 2007/10/17 19:54:09 garbled Exp $	*/
+/*	$NetBSD: wd.c,v 1.17 2015/01/02 19:42:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,13 +29,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stdint.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include <machine/param.h>
-#include <machine/stdarg.h>
 #include <dev/raidframe/raidframevar.h>		/* For RF_PROTECTED_SECTORS */
 
 #include "boot.h"
@@ -60,25 +54,53 @@ wd_get_params(struct wd_softc *wd)
 {
 	int error;
 	uint8_t buf[DEV_BSIZE];
+	struct ataparams *params = (struct ataparams *)buf;
 
 	if ((error = wdc_exec_identify(wd, buf)) != 0)
 		return error;
 
-	wd->sc_params = *(struct ataparams *)buf;
+	wd->sc_params = *params;
 
 	/* 48-bit LBA addressing */
-	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0) {
-		DPRINTF(("Drive supports LBA48.\n"));
-#if defined(_ENABLE_LBA48)
+	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0)
 		wd->sc_flags |= WDF_LBA48;
-#endif
-	}
 
 	/* Prior to ATA-4, LBA was optional. */
-	if ((wd->sc_params.atap_capabilities1 & WDC_CAP_LBA) != 0) {
-		DPRINTF(("Drive supports LBA.\n"));
+	if ((wd->sc_params.atap_capabilities1 & WDC_CAP_LBA) != 0)
 		wd->sc_flags |= WDF_LBA;
+	
+	if ((wd->sc_flags & WDF_LBA48) != 0) {
+		DPRINTF(("Drive supports LBA48.\n"));
+		wd->sc_capacity =
+		    ((uint64_t)wd->sc_params.atap_max_lba[3] << 48) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[2] << 32) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[1] << 16) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[0] <<  0);
+		DPRINTF(("atap_max_lba = (0x%x, 0x%x, 0x%x, 0x%x)\n",
+		    wd->sc_params.atap_max_lba[3],
+		    wd->sc_params.atap_max_lba[2],
+		    wd->sc_params.atap_max_lba[1],
+		    wd->sc_params.atap_max_lba[0]));
+		wd->sc_capacity28 =
+		    ((uint32_t)wd->sc_params.atap_capacity[1] << 16) |
+		    ((uint32_t)wd->sc_params.atap_capacity[0] <<  0);
+		DPRINTF(("atap_capacity = (0x%x, 0x%x)\n",
+		    wd->sc_params.atap_capacity[1],
+		    wd->sc_params.atap_capacity[0]));
+	} else if ((wd->sc_flags & WDF_LBA) != 0) {
+		DPRINTF(("Drive supports LBA.\n"));
+		wd->sc_capacity = wd->sc_capacity28 =
+		    ((uint32_t)wd->sc_params.atap_capacity[1] << 16) |
+		    ((uint32_t)wd->sc_params.atap_capacity[0] <<  0);
+	} else {
+		DPRINTF(("Drive doesn't support LBA; using CHS.\n"));
+		wd->sc_capacity = wd->sc_capacity28 =
+		    wd->sc_params.atap_cylinders *
+		    wd->sc_params.atap_heads *
+		    wd->sc_params.atap_sectors;
 	}
+	DPRINTF(("wd->sc_capacity = %" PRId64 ", wd->sc_capacity28 = %d.\n",
+	    wd->sc_capacity, wd->sc_capacity28));
 
 	return 0;
 }
@@ -99,9 +121,9 @@ wdgetdefaultlabel(struct wd_softc *wd, struct disklabel *lp)
 	lp->d_secpercyl = lp->d_ntracks * lp->d_nsectors;
 
 	if (strcmp(wd->sc_params.atap_model, "ST506") == 0)
-		lp->d_type = DTYPE_ST506;
+		lp->d_type = DKTYPE_ST506;
 	else
-		lp->d_type = DTYPE_ESDI;
+		lp->d_type = DKTYPE_ESDI;
 
 	strncpy(lp->d_typename, wd->sc_params.atap_model, 16);
 	strncpy(lp->d_packname, "fictitious", 16);
@@ -135,6 +157,7 @@ wdgetdisklabel(struct wd_softc *wd)
 	size_t rsize;
 	struct disklabel *lp;
 	uint8_t buf[DEV_BSIZE];
+	uint16_t magic;
 
 	wdgetdefaultlabel(wd, &wd->sc_label);
 
@@ -145,7 +168,8 @@ wdgetdisklabel(struct wd_softc *wd)
 	if (wdstrategy(wd, F_READ, MBR_BBSECTOR, DEV_BSIZE, buf, &rsize))
 		return EOFFSET;
 
-	if (*(uint16_t *)&buf[MBR_MAGIC_OFFSET] == MBR_MAGIC) {
+	memcpy(&magic, &buf[MBR_MAGIC_OFFSET], sizeof(magic));
+	if (magic == MBR_MAGIC) {
 		int i;
 		struct mbr_partition *mp;
 
@@ -179,7 +203,7 @@ wdgetdisklabel(struct wd_softc *wd)
 	}
 
 	DPRINTF(("label info: d_secsize %d, d_nsectors %d, d_ncylinders %d,"
-	    "d_ntracks %d, d_secpercyl %d\n",
+	    " d_ntracks %d, d_secpercyl %d\n",
 	    wd->sc_label.d_secsize,
 	    wd->sc_label.d_nsectors,
 	    wd->sc_label.d_ncylinders,
@@ -243,12 +267,13 @@ wdclose(struct open_file *f)
  * Read some data.
  */
 int
-wdstrategy(void *f, int rw, daddr_t dblk, size_t size, void *buf, size_t *rsize)
+wdstrategy(void *f, int rw, daddr_t dblk, size_t size, void *p, size_t *rsize)
 {
 	int i, nsect;
 	daddr_t blkno;
 	struct wd_softc *wd;
 	struct partition *pp;
+	uint8_t *buf;
 
 	if (size == 0)
 		return 0;
@@ -256,6 +281,7 @@ wdstrategy(void *f, int rw, daddr_t dblk, size_t size, void *buf, size_t *rsize)
 	if (rw != F_READ)
 		return EOPNOTSUPP;
 
+	buf = p;
 	wd = f;
 	pp = &wd->sc_label.d_partitions[wd->sc_part];
 

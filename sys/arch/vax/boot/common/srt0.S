@@ -1,4 +1,4 @@
-/*	$NetBSD: srt0.S,v 1.4 2002/12/02 20:23:32 ragge Exp $ */
+/*	$NetBSD: srt0.S,v 1.6 2018/03/19 15:37:56 ragge Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -54,7 +49,9 @@ ALTENTRY(start)
 	movl	$_C_LABEL(start), %r3 # get where we want to be
 	cmpl	%r1,%r3		# are we where we want to be?
 	beql	relocated	# already relocated, skip copy
-	movc3	%r0,(%r1),(%r3)	# copy
+1:	movb	(%r1)+,(%r3)+	# copy
+	sobgtr	%r0,1b
+
 	subl3	$_C_LABEL(edata), $_C_LABEL(end), %r2
 	movc5	$0,(%r3),$0,%r2,(%r3) # Zero bss
 

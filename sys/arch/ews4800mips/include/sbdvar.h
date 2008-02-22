@@ -1,4 +1,4 @@
-/*	$NetBSD: sbdvar.h,v 1.3 2007/03/04 05:59:47 christos Exp $	*/
+/*	$NetBSD: sbdvar.h,v 1.6 2011/02/20 07:55:21 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,7 +47,7 @@ struct sbd {
 	int cpu_clock;
 
 	/* mainbus node table */
-	const char **mainbusdevs;
+	const char * const *mainbusdevs;
 
 	/* System Board I/O device table */
 	const struct sbdiodevdesc *sbdiodevs;
@@ -75,7 +68,7 @@ struct sbd {
 	void (*intr_init)(void);
 	void *(*intr_establish)(int, int (*)(void *), void *);
 	void (*intr_disestablish)(void *);
-	void (*intr)(uint32_t, uint32_t, uint32_t, uint32_t);
+	void (*intr)(int, vaddr_t, uint32_t);
 
 	/* Interval timer helper routines */
 	void (*initclocks)(void);
@@ -95,14 +88,13 @@ void x ## _mem_init(void *, void *);					\
 void x ## _intr_init(void);						\
 void *x ## _intr_establish(int, int (*)(void *), void *);		\
 void x ## _intr_disestablish(void *);					\
-void x ## _intr(uint32_t, uint32_t, uint32_t, uint32_t);		\
+void x ## _intr(int, vaddr_t, uint32_t);				\
 void x ## _initclocks(void);						\
 void x ## _consinit(void);						\
 int x ## _ipl_bootdev(void);						\
 void x ## _reboot(void);						\
 void x ## _poweroff(void);						\
 void x ## _ether_addr(uint8_t *);					\
-extern const uint32_t x ## _sr_bits[]
 
 #define	_SBD_OPS_SET(m, x)	platform . x = m ## _ ## x
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: malloc.9,v 1.40 2007/07/30 22:48:47 alc Exp $
+.\"	$NetBSD: malloc.9,v 1.54 2017/07/03 21:28:48 wiz Exp $
 .\"
 .\" Copyright (c) 1996, 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,20 +27,15 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 29, 2007
+.Dd August 7, 2015
 .Dt MALLOC 9
 .Os
 .Sh NAME
 .Nm malloc ,
-.Nm MALLOC ,
 .Nm realloc ,
 .Nm free ,
-.Nm FREE ,
-.Nm malloc_roundup ,
 .Nm malloc_type_attach ,
 .Nm malloc_type_detach ,
-.Nm malloc_type_setlimit ,
-.Nm MALLOC_DEFINE_LIMIT ,
 .Nm MALLOC_DEFINE ,
 .Nm MALLOC_DECLARE
 .Nd general-purpose kernel memory allocator
@@ -55,36 +43,34 @@
 .In sys/malloc.h
 .Ft void *
 .Fn malloc "unsigned long size" "struct malloc_type *type" "int flags"
-.Fn MALLOC "space" "cast" "unsigned long size" "struct malloc_type *type" \
-    "int flags"
 .Ft void *
 .Fn realloc "void *addr" "unsigned long newsize" "struct malloc_type *type" \
     "int flags"
 .Ft void
 .Fn free "void *addr" "struct malloc_type *type"
-.Fn FREE "void *addr" "struct malloc_type *type"
-.Ft unsigned long
-.Fn malloc_roundup "unsigned long size"
 .Ft void
 .Fn malloc_type_attach "struct malloc_type *type"
 .Ft void
 .Fn malloc_type_detach "struct malloc_type *type"
-.Ft void
-.Fn malloc_type_setlimit "struct malloc_type *type" "unsigned long limit"
 .In sys/mallocvar.h
-.Fn MALLOC_DEFINE_LIMIT "type" "shortdesc" "longdesc" "limit"
-.Fn MALLOC_JUSTDEFINE_LIMIT "type" "shortdesc" "longdesc" "limit"
 .Fn MALLOC_DEFINE "type" "shortdesc" "longdesc"
 .Fn MALLOC_JUSTDEFINE "type" "shortdesc" "longdesc"
 .Fn MALLOC_DECLARE "type"
 .Sh DESCRIPTION
+.Bf -symbolic
+These interfaces are being obsoleted and their new use is discouraged.
+For new code, use
+.Xr kmem 9
+for variable-sized or one-time allocations and
+.Xr pool_cache 9
+for frequent fixed-size allocations instead.
+.Ef
+.Pp
 The
 .Fn malloc
 function allocates uninitialized memory in kernel address space for an
 object whose size is specified by
 .Fa size .
-.Fn malloc_roundup
-returns the actual size of the allocation unit for the given value.
 .Fn free
 releases memory at address
 .Fa addr
@@ -130,38 +116,6 @@ If the new size is 0, then
 .Fn realloc
 behaves exactly as
 .Fn free .
-.Pp
-The
-.Fn MALLOC
-macro variant is functionally equivalent to
-.Bd -literal -offset indent
-(space) = (cast)malloc((u_long)(size), type, flags)
-.Ed
-.Pp
-and the
-.Fn FREE
-macro variant is equivalent to
-.Bd -literal -offset indent
-free((void *)(addr), type)
-.Ed
-.Pp
-The
-.Fn MALLOC
-macro is intended to be used with a compile-time constant
-.Fa size
-so that the compiler can do constant folding.
-In the comparison to
-.Fn malloc
-and
-.Fn free
-functions, the
-.Fn MALLOC
-and
-.Fn FREE
-macros may be faster, at the cost of increased code size.
-There is no difference between the memory allocated with MALLOC and malloc.
-i.e., no matter which MALLOC or malloc is used to allocate the memory,
-either FREE or free can be used to free it.
 .Pp
 Unlike its standard C library counterpart
 .Pq Xr malloc 3 ,
@@ -228,7 +182,7 @@ In addition to some built-in generic types defined by the kernel
 memory allocator, subsystems may define their own types.
 .Pp
 The
-.Fn MALLOC_DEFINE_LIMIT
+.Fn MALLOC_DEFINE
 macro defines a malloc type named
 .Fa type
 with the short description
@@ -240,20 +194,9 @@ The
 argument, also a constant string, is intended as way to place a
 comment in the actual type definition, and is not currently stored
 in the type structure.
-The
-.Fa limit
-argument specifies the maximum amount of memory, in bytes, that this
-malloc type can consume.
-.Pp
-The
-.Fn MALLOC_DEFINE
-macro is equivalent to the
-.Fn MALLOC_DEFINE_LIMIT
-macro with a
-.Fa limit
-argument of 0.
-If kernel memory statistics are being gathered, the system will
-choose a reasonable default limit for the malloc type.
+If kernel memory statistics are being
+gathered, the system will choose a reasonable default limit for
+the malloc type.
 .Pp
 The
 .Fn MALLOC_DECLARE
@@ -262,12 +205,12 @@ code which needs to use the malloc type, providing the necessary
 extern declaration.
 .Pp
 Code which includes
-\*[Lt]sys/malloc.h\*[Gt]
+<sys/malloc.h>
 does not need to include
-\*[Lt]sys/mallocvar.h\*[Gt]
+<sys/mallocvar.h>
 to get these macro definitions.
 The
-\*[Lt]sys/mallocvar.h\*[Gt]
+<sys/mallocvar.h>
 header file is intended for other header files which need to use the
 .Fn MALLOC_DECLARE
 macro.
@@ -277,18 +220,6 @@ The
 function attaches the malloc type
 .Fa type
 to the kernel memory allocator.
-This is intended for use by LKMs; malloc types included in modules
-statically-linked into the kernel are automatically registered with
-the kernel memory allocator.
-However, it is possible to define malloc types without automatically
-registering them using
-.Fn MALLOC_JUSTDEFINE
-or
-.Fn MALLOC_JUSTDEFINE_LIMIT .
-Apart from not automatically registering to the kernel a boot time,
-these functions are equivalent to their counterparts.
-They can be used when a separate LKM codepath for initialization is
-not desired.
 .Pp
 The
 .Fn malloc_type_detach
@@ -296,15 +227,6 @@ function detaches the malloc type
 .Fa type
 previously attached with
 .Fn malloc_type_attach .
-.Pp
-The
-.Fn malloc_type_setlimit
-function sets the memory limit of the malloc type
-.Fa type
-to
-.Fa limit
-bytes.
-The type must already be registered with the kernel memory allocator.
 .Pp
 The following generic malloc types are currently defined:
 .Pp
@@ -327,67 +249,10 @@ Misc temporary data buffers.
 Other malloc types are defined by the corresponding subsystem; see the
 documentation for that subsystem for information its available malloc
 types.
-.Pp
-Statistics based on the
-.Fa type
-argument are maintained only if the kernel option
-.Dv KMEMSTATS
-is used when compiling the kernel
-.Po
-the default in current
-.Nx
-kernels
-.Pc
-and can be examined by using
-.Sq vmstat -m .
 .Sh RETURN VALUES
 .Fn malloc
 returns a kernel virtual address that is suitably aligned for storage of
 any type of object.
-.Sh DIAGNOSTICS
-A kernel compiled with the
-.Dv DIAGNOSTIC
-configuration option attempts to detect memory corruption caused by
-such things as writing outside the allocated area and imbalanced calls to the
-.Fn malloc
-and
-.Fn free
-functions.
-Failing consistency checks will cause a panic or a system console message:
-.Bl -bullet -offset indent -compact
-.Pp
-.It
-panic:
-.Dq malloc - bogus type
-.It
-panic:
-.Dq malloc: out of space in kmem_map
-.It
-panic:
-.Dq malloc: allocation too large
-.It
-panic:
-.Dq malloc: wrong bucket
-.It
-panic:
-.Dq malloc: lost data
-.It
-panic:
-.Dq free: unaligned addr
-.It
-panic:
-.Dq free: duplicated free
-.It
-panic:
-.Dq free: multiple frees
-.It
-panic:
-.Dq init: minbucket too small/struct freelist too big
-.It
-.Dq multiply freed item Aq addr
-.It
-.Dq Data modified on freelist: Aq data object description
-.El
 .Sh SEE ALSO
 .Xr vmstat 1 ,
 .Xr memoryallocators 9

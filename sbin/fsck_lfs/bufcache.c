@@ -1,4 +1,4 @@
-/* $NetBSD: bufcache.c,v 1.11 2007/10/08 21:39:49 ad Exp $ */
+/* $NetBSD: bufcache.c,v 1.20 2018/03/30 12:56:46 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -108,17 +101,19 @@ bufinit(int max)
 /* Widen the hash table. */
 void bufrehash(int max)
 {
-	int i, newhashmax, newhashmask;
+	int i, newhashmax;
 	struct ubuf *bp, *nbp;
 	struct bufhash_struct *np;
 
-	if (max < 0 || max < hashmax)
+	if (max < 0 || max <= hashmax)
 		return;
 
 	/* Round up to a power of two */
 	for (newhashmax = 1; newhashmax < max; newhashmax <<= 1)
 		;
-	newhashmask = newhashmax - 1;
+
+	/* update the mask right away so vl_hash() uses it */
+	hashmask = newhashmax - 1;
 
 	/* Allocate new empty hash table, if we can */
 	np = emalloc(newhashmax * sizeof(*bufhash));
@@ -141,7 +136,6 @@ void bufrehash(int max)
 	free(bufhash);
 	bufhash = np;
 	hashmax = newhashmax;
-	hashmask = newhashmask;
 }
 
 /* Print statistics of buffer cache usage */
@@ -161,7 +155,6 @@ bufstats(void)
 void
 buf_destroy(struct ubuf * bp)
 {
-	bp->b_flags |= B_NEEDCOMMIT;
 	LIST_REMOVE(bp, b_vnbufs);
 	LIST_REMOVE(bp, b_hash);
 	if (!(bp->b_flags & B_DONTFREE))
@@ -180,8 +173,6 @@ bremfree(struct ubuf * bp)
 	 * We only calculate the head of the freelist when removing
 	 * the last element of the list as that is the only time that
 	 * it is needed (e.g. to reset the tail pointer).
-	 *
-	 * NB: This makes an assumption about how tailq's are implemented.
 	 */
 	if (bp->b_flags & B_LOCKED) {
 		locked_queue_bytes -= bp->b_bcount;
@@ -189,7 +180,7 @@ bremfree(struct ubuf * bp)
 	}
 	if (TAILQ_NEXT(bp, b_freelist) == NULL) {
 		for (dp = bufqueues; dp < &bufqueues[BQUEUES]; dp++)
-			if (dp->tqh_last == &bp->b_freelist.tqe_next)
+			if (TAILQ_LAST(dp, bqueues) == bp)
 				break;
 		if (dp == &bufqueues[BQUEUES])
 			errx(1, "bremfree: lost tail");
@@ -200,7 +191,7 @@ bremfree(struct ubuf * bp)
 
 /* Return a buffer if it is in the cache, otherwise return NULL. */
 struct ubuf *
-incore(struct uvnode * vp, int lbn)
+incore(struct uvnode * vp, daddr_t lbn)
 {
 	struct ubuf *bp;
 	int hash, depth;
@@ -237,7 +228,6 @@ getblk(struct uvnode * vp, daddr_t lbn, int size)
 	 * the buffer, its contents are invalid; but shrinking is okay.
 	 */
 	if ((bp = incore(vp, lbn)) != NULL) {
-		assert(!(bp->b_flags & B_NEEDCOMMIT));
 		assert(!(bp->b_flags & B_BUSY));
 		bp->b_flags |= B_BUSY;
 		bremfree(bp);
@@ -315,7 +305,6 @@ brelse(struct ubuf * bp, int set)
 {
 	int age;
 
-	assert(!(bp->b_flags & B_NEEDCOMMIT));
 	assert(bp->b_flags & B_BUSY);
 
 	bp->b_flags |= set;
@@ -346,12 +335,10 @@ brelse(struct ubuf * bp, int set)
 
 /* Read the given block from disk, return it B_BUSY. */
 int
-bread(struct uvnode * vp, daddr_t lbn, int size, void * unused,
-    struct ubuf ** bpp)
+bread(struct uvnode * vp, daddr_t lbn, int size, int flags, struct ubuf ** bpp)
 {
 	struct ubuf *bp;
 	daddr_t daddr;
-	int error;
 
 	bp = getblk(vp, lbn, size);
 	*bpp = bp;
@@ -366,7 +353,7 @@ bread(struct uvnode * vp, daddr_t lbn, int size, void * unused,
 	 * and load it in.
 	 */
 	daddr = -1;
-	error = VOP_BMAP(vp, lbn, &daddr);
+	(void)VOP_BMAP(vp, lbn, &daddr);
 	bp->b_blkno = daddr;
 	if (daddr >= 0) {
 		bp->b_flags |= B_READ;

@@ -1,4 +1,4 @@
-/*	$NetBSD: midiplay.c,v 1.25 2006/07/01 11:05:42 he Exp $	*/
+/*	$NetBSD: midiplay.c,v 1.32 2018/05/03 05:14:55 wiz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: midiplay.c,v 1.25 2006/07/01 11:05:42 he Exp $");
+__RCSID("$NetBSD: midiplay.c,v 1.32 2018/05/03 05:14:55 wiz Exp $");
 #endif
 
 
@@ -46,6 +39,8 @@ __RCSID("$NetBSD: midiplay.c,v 1.25 2006/07/01 11:05:42 he Exp $");
 #include <stdlib.h>
 #include <fcntl.h>
 #include <err.h>
+#include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
@@ -79,45 +74,50 @@ struct track {
 #define META_SMPTE	0x54
 #define META_TIMESIGN	0x58
 
-char *metanames[] = { 
-	"", "Text", "Copyright", "Track", "Instrument", 
+static const char *metanames[] = {
+	"", "Text", "Copyright", "Track", "Instrument",
 	"Lyric", "Marker", "Cue",
 };
 
-static int midi_lengths[] = { 2,2,2,2,1,1,2,0 };
+static int midi_lengths[] = { 2, 2, 2, 2, 1, 1, 2, 0 };
 /* Number of bytes in a MIDI command */
 #define MIDI_LENGTH(d) (midi_lengths[((d) >> 4) & 7])
 
-void usage(void);
-void send_event(seq_event_t *);
-void dometa(u_int, u_char *, u_int);
-void midireset(void);
-void send_sysex(u_char *, u_int);
-u_long getvar(struct track *);
-u_long getlen(struct track *);
-void playfile(FILE *, char *);
-void playdata(u_char *, u_int, char *);
-int main(int argc, char **argv);
+#define SEQ_MK_SYSEX0(_dev,...) \
+SEQ_MK_EVENT(sysex, 0x94, .device=(_dev), .buffer={__VA_ARGS__})
 
-void Heapify(struct track *, int, int);
-void BuildHeap(struct track *, int);
-int ShrinkHeap(struct track *, int);
+
+static void usage(void);
+static void send_event(seq_event_t *);
+static void dometa(u_int, u_char *, u_int);
+#if 0
+static void midireset(void);
+#endif
+static void send_sysex(u_char *, u_int);
+static u_long getvar(struct track *);
+static u_long getlen(struct track *);
+static void playfile(FILE *, const char *);
+static void playdata(u_char *, u_int, const char *);
+
+static void Heapify(struct track *, int, int);
+static void BuildHeap(struct track *, int);
+static int ShrinkHeap(struct track *, int);
 
 /*
  * This sample plays at an apparent tempo of 120 bpm when the BASETEMPO is 150
  * bpm, because the quavers are 5 divisions (4 on 1 off) rather than 4 total.
  */
-#define P(c) 1,0x90,c,0x7f,4,0x80,c,0
-#define PL(c) 1,0x90,c,0x7f,8,0x80,c,0
+#define P(c) 1, 0x90, c, 0x7f, 4, 0x80, c, 0
+#define PL(c) 1, 0x90, c, 0x7f, 8, 0x80, c, 0
 #define C 0x3c
 #define D 0x3e
 #define E 0x40
 #define F 0x41
 
-u_char sample[] = { 
-	'M','T','h','d',  0,0,0,6,  0,1,  0,1,  0,8,
-	'M','T','r','k',  0,0,0,4+13*8,
-	P(C), P(C), P(C), P(E), P(D), P(D), P(D), 
+static u_char sample[] = {
+	'M', 'T', 'h', 'd',  0, 0, 0, 6,  0, 1,  0, 1,  0, 8,
+	'M', 'T', 'r', 'k',  0, 0, 0, 4+13*8,
+	P(C), P(C), P(C), P(E), P(D), P(D), P(D),
 	P(F), P(E), P(E), P(D), P(D), PL(C),
 	0, 0xff, 0x2f, 0
 };
@@ -127,6 +127,13 @@ u_char sample[] = {
 #undef D
 #undef E
 #undef F
+
+static u_char silence_sample[] = {
+	'M', 'T', 'h', 'd',  0, 0, 0, 6,  0, 1,  0, 1,  0, 8,
+	'M', 'T', 'r', 'k',  0, 0, 0, 8,
+	0, 0xb0, 0x78, 0x00, 
+	0, 0xff, 0x2f, 0
+};
 
 #define MARK_HEADER "MThd"
 #define MARK_TRACK "MTrk"
@@ -145,41 +152,41 @@ u_char sample[] = {
 #define GET32(p) (((p)[0] << 24) | ((p)[1] << 16) | ((p)[2] << 8) | (p)[3])
 #define GET32_LE(p) (((p)[3] << 24) | ((p)[2] << 16) | ((p)[1] << 8) | (p)[0])
 
-void
+static void __attribute__((__noreturn__))
 usage(void)
 {
-	printf("usage: %s [-d unit] [-f file] [-l] [-m] [-p pgm] [-q] "
-	       "[-t %%tempo] [-v] [-x] [file ...]\n",
+	fprintf(stderr, "usage: %s [-lmqsvx] [-d devno] [-f file] "
+		"[-p pgm] [-t tempo] [file ...]\n",
 		getprogname());
 	exit(1);
 }
 
-int showmeta = 0;
-int verbose = 0;
+static int showmeta = 0;
+static int verbose = 0;
 #define BASETEMPO 400000		/* us/beat(=24 clks or qn) (150 bpm) */
-u_int tempo_set = 0;
-u_int tempo_abs = 0;
-u_int ttempo = 100;
-int unit = 0;
-int play = 1;
-int fd = -1;
-int sameprogram = 0;
-int insysex = 0;
-int svsysex = 0; /* number of sysex bytes saved internally */
+static u_int tempo_set = 0;
+static u_int tempo_abs = 0;
+static u_int ttempo = 100;
+static int unit = 0;
+static int play = 1;
+static int fd = -1;
+static int sameprogram = 0;
+static int insysex = 0;
+static int svsysex = 0; /* number of sysex bytes saved internally */
 
-void
+static void
 send_event(seq_event_t *ev)
 {
 	/*
 	printf("%02x %02x %02x %02x %02x %02x %02x %02x\n",
-	       ev->arr[0], ev->arr[1], ev->arr[2], ev->arr[3], 
+	       ev->arr[0], ev->arr[1], ev->arr[2], ev->arr[3],
 	       ev->arr[4], ev->arr[5], ev->arr[6], ev->arr[7]);
 	*/
 	if (play)
 		write(fd, ev, sizeof *ev);
 }
 
-u_long
+static u_long
 getvar(struct track *tp)
 {
 	u_long r, c;
@@ -192,7 +199,7 @@ getvar(struct track *tp)
 	return r;
 }
 
-u_long
+static u_long
 getlen(struct track *tp)
 {
 	u_long len;
@@ -202,7 +209,7 @@ getlen(struct track *tp)
 	return len;
 }
 
-void
+static void
 dometa(u_int meta, u_char *p, u_int len)
 {
 	static char const * const keys[] = {
@@ -213,7 +220,7 @@ dometa(u_int meta, u_char *p, u_int len)
 	};
 	seq_event_t ev;
 	uint32_t usperbeat;
-	
+
 	switch (meta) {
 	case META_TEXT:
 	case META_COPYRIGHT:
@@ -275,25 +282,27 @@ dometa(u_int meta, u_char *p, u_int len)
 	}
 }
 
-void
+#if 0
+static void
 midireset(void)
 {
 	/* General MIDI reset sequence */
-	send_event(&SEQ_MK_SYSEX(unit,[0]=0x7e, 0x7f, 0x09, 0x01, 0xf7));
+	send_event(&SEQ_MK_SYSEX0(unit, 0x7e, 0x7f, 0x09, 0x01, 0xf7, 0xff));
 }
+#endif
 
 #define SYSEX_CHUNK 6
-void
+static void
 send_sysex(u_char *p, u_int l)
 {
 	seq_event_t event;
 	static u_char bf[6];
-	
-	if ( 0 == l ) {
+
+	if (0 == l) {
 		warnx("zero-length system-exclusive event");
 		return;
 	}
-	
+
 	/*
 	 * This block is needed only to handle the possibility that a sysex
 	 * message is broken into multiple events in a MIDI file that do not
@@ -305,19 +314,19 @@ send_sysex(u_char *p, u_int l)
 	 * full six (or an end byte). Note bf/saved/insysex should be per-
 	 * device, if we supported output to more than one device at a time.
 	 */
-	if ( svsysex > 0 ) {
-		if ( l > sizeof bf - svsysex ) {
+	if (svsysex > 0) {
+		if (l > sizeof bf - svsysex) {
 			memcpy(bf + svsysex, p, sizeof bf - svsysex);
 			l -= sizeof bf - svsysex;
 			p += sizeof bf - svsysex;
-			send_event(&SEQ_MK_SYSEX(unit,[0]=
-			    bf[0],bf[1],bf[2],bf[3],bf[4],bf[5]));
+			send_event(&SEQ_MK_SYSEX0(unit,
+			    bf[0], bf[1], bf[2], bf[3], bf[4], bf[5]));
 			svsysex = 0;
 		} else {
 			memcpy(bf + svsysex, p, l);
 			svsysex += l;
 			p += l;
-			if ( MIDI_SYSEX_END == bf[svsysex-1] ) {
+			if (MIDI_SYSEX_END == bf[svsysex-1]) {
 				event = SEQ_MK_SYSEX(unit);
 				memcpy(event.sysex.buffer, bf, svsysex);
 				send_event(&event);
@@ -327,25 +336,24 @@ send_sysex(u_char *p, u_int l)
 			return;
 		}
 	}
-	
+
 	/*
 	 * l > 0. May as well test now whether we will be left 'insysex'
 	 * after processing this event.
-	 */	
-	insysex = ( MIDI_SYSEX_END != p[l-1] );
-	
+	 */
+	insysex = (MIDI_SYSEX_END != p[l-1]);
+
 	/*
 	 * If not for multi-event sysexes and chunk-size weirdness, this
 	 * function could pretty much start here. :)
 	 */
-	while ( l >= SYSEX_CHUNK ) {
-		send_event(&SEQ_MK_SYSEX(unit,[0]=
-		    p[0],p[1],p[2],p[3],p[4],p[5]));
+	while (l >= SYSEX_CHUNK) {
+		send_event(&SEQ_MK_SYSEX0(unit, p[0], p[1], p[2], p[3], p[4], p[5]));
 		p += SYSEX_CHUNK;
 		l -= SYSEX_CHUNK;
 	}
-	if ( l > 0 ) {
-		if ( insysex ) {
+	if (l > 0) {
+		if (insysex) {
 			memcpy(bf, p, l);
 			svsysex = l;
 		} else { /* a <6 byte chunk is ok if it's REALLY the end */
@@ -356,13 +364,13 @@ send_sysex(u_char *p, u_int l)
 	}
 }
 
-void
-playfile(FILE *f, char *name)
+static void
+playfile(FILE *f, const char *name)
 {
 	u_char *buf, *nbuf;
 	u_int tot, n, size, nread;
 
-	/* 
+	/*
 	 * We need to read the whole file into memory for easy processing.
 	 * Using mmap() would be nice, but some file systems do not support
 	 * it, nor does reading from e.g. a pipe.  The latter also precludes
@@ -391,18 +399,28 @@ playfile(FILE *f, char *name)
 	free(buf);
 }
 
-void
-playdata(u_char *buf, u_int tot, char *name)
+static void
+playdata(u_char *buf, u_int tot, const char *name)
 {
 	int format, ntrks, divfmt, ticks, t;
 	u_int len, mlen, status, chan;
 	u_char *p, *end, byte, meta, *msg;
+	struct synth_info info;
 	struct track *tracks;
 	struct track *tp;
 
+	/* verify that the requested midi unit exists */
+	info.device = unit;
+	if (play && ioctl(fd, SEQUENCER_INFO, &info) < 0)
+		err(1, "ioctl(SEQUENCER_INFO) failed");
+
 	end = buf + tot;
-	if (verbose)
-		printf("Playing %s (%d bytes) ... \n", name, tot);
+	if (verbose) {
+		printf("Playing %s (%d bytes)", name, tot);
+		if (play)
+			printf(" on %s (unit %d)...", info.name, info.device);
+		puts("\n");
+	}
 
 	if (tot < MARK_LEN + 4) {
 		warnx("Not a MIDI file, too short");
@@ -413,7 +431,7 @@ playdata(u_char *buf, u_int tot, char *name)
 		u_char *eod;
 		/* Detected a RMID file, let's just check if it's
 		 * a MIDI file */
-		if (GET32_LE(buf + MARK_LEN) != tot - 8) {
+		if ((u_int)GET32_LE(buf + MARK_LEN) != tot - 8) {
 			warnx("Not a RMID file, bad header");
 			return;
 		}
@@ -480,7 +498,9 @@ playdata(u_char *buf, u_int tot, char *name)
 	 * in some cases by frobbing tempo and timebase more obscurely, but this
 	 * player is meant to be simple and clear.
 	 */
-	if ((divfmt & 0x80) == 0) {
+	if (!play)
+		/* do nothing */;
+	else if ((divfmt & 0x80) == 0) {
 		ticks |= divfmt << 8;
 		if (ioctl(fd, SEQUENCER_TMR_TIMEBASE, &(int){ticks}) < 0)
 			err(1, "SEQUENCER_TMR_TIMEBASE");
@@ -512,7 +532,7 @@ playdata(u_char *buf, u_int tot, char *name)
 	tracks = malloc(ntrks * sizeof(struct track));
 	if (tracks == NULL)
 		errx(1, "malloc() tracks failed");
-	for (t = 0; t < ntrks; ) {
+	for (t = 0; t < ntrks;) {
 		if (p >= end - MARK_LEN - SIZE_LEN) {
 			warnx("Cannot find track %d", t);
 			goto ret;
@@ -541,7 +561,7 @@ playdata(u_char *buf, u_int tot, char *name)
 			    .channel=t, .program=sameprogram-1));
 		}
 	}
-	/* 
+	/*
 	 * Play MIDI events by selecting the track with the lowest
 	 * delta.  Execute the event, update the delta and repeat.
 	 *
@@ -591,7 +611,7 @@ playdata(u_char *buf, u_int tot, char *name)
 			    if (mlen == 1)
 				printf("MIDI %02x (%d) %02x\n",
 				       tp->status, mlen, msg[0]);
-			    else   
+			    else
 				printf("MIDI %02x (%d) %02x %02x\n",
 				       tp->status, mlen, msg[0], msg[1]);
 			}
@@ -646,13 +666,13 @@ playdata(u_char *buf, u_int tot, char *name)
 					if (insysex) { /* CONTINUATION */
 						send_sysex(tp->start, mlen);
 					} else { /* ESCAPE */
-						for ( ; mlen > 0 ; -- mlen ) {
+						for (; mlen > 0 ; -- mlen) {
 							send_event(
 							    &SEQ_MK_EVENT(putc,
 							    SEQOLD_MIDIPUTC,
 							    .device=unit,
 							    .byte=*(tp->start++)
-							    ));
+							   ));
 						}
 					}
 					break;
@@ -673,11 +693,31 @@ playdata(u_char *buf, u_int tot, char *name)
 			tp->delta = getvar(tp);
 		Heapify(tracks, ntrks, 0);
 	}
-	if (ioctl(fd, SEQUENCER_SYNC, 0) < 0)
+	if (play && ioctl(fd, SEQUENCER_SYNC, 0) < 0)
 		err(1, "SEQUENCER_SYNC");
 
  ret:
 	free(tracks);
+}
+
+static int
+parse_unit(const char *sunit)
+{
+	const char *osunit = sunit;
+	long n;
+	char *ep;
+
+	if (strncmp(sunit, "midi", strlen("midi")) == 0)
+		sunit += strlen("midi");
+
+	errno = 0;
+	n = strtol(sunit, &ep, 10);
+	if (n < 0 || n > INT_MAX || *ep != '\0' ||
+	    (errno == ERANGE &&
+	    (n == LONG_MAX || n == LONG_MIN)))
+		errx(1, "bad midi unit -- %s", osunit);
+
+	return (int)n;
 }
 
 int
@@ -686,6 +726,7 @@ main(int argc, char **argv)
 	int ch;
 	int listdevs = 0;
 	int example = 0;
+	int silence = 0;
 	int nmidi;
 	const char *file = DEVMUSIC;
 	const char *sunit;
@@ -693,12 +734,12 @@ main(int argc, char **argv)
 	FILE *f;
 
 	if ((sunit = getenv("MIDIUNIT")))
-		unit = atoi(sunit);
+		unit = parse_unit(sunit);
 
-	while ((ch = getopt(argc, argv, "?d:f:lmp:qt:vx")) != -1) {
+	while ((ch = getopt(argc, argv, "?d:f:lmp:qst:vx")) != -1) {
 		switch(ch) {
 		case 'd':
-			unit = atoi(optarg);
+			unit = parse_unit(optarg);
 			break;
 		case 'f':
 			file = optarg;
@@ -714,6 +755,9 @@ main(int argc, char **argv)
 			break;
 		case 'q':
 			play = 0;
+			break;
+		case 's':
+			silence++;
 			break;
 		case 't':
 			ttempo = atoi(optarg);
@@ -731,7 +775,7 @@ main(int argc, char **argv)
 	}
 	argc -= optind;
 	argv += optind;
-    
+
 	if (!play)
 		goto output;
 
@@ -755,6 +799,10 @@ main(int argc, char **argv)
 	if (example)
 		while (example--)
 			playdata(sample, sizeof sample, "<Gubben Noa>");
+	else if (silence)
+		while (silence--)
+			playdata(silence_sample, sizeof silence_sample,
+				 "<Silence>");
 	else if (argc == 0)
 		playfile(stdin, "<stdin>");
 	else
@@ -785,29 +833,29 @@ main(int argc, char **argv)
  * at first; they just go away as they end.
  */
 
-#define PARENT(i) ((i-1)>>1)
-#define LEFT(i)   ((i<<1)+1)
-#define RIGHT(i)  ((i+1)<<1)
+#define PARENT(i) ((i - 1) >> 1)
+#define LEFT(i)   ((i << 1) + 1)
+#define RIGHT(i)  ((i + 1) << 1)
 #define DTIME(i)  (t[i].indirect->delta)
-#define SWAP(i,j) do { \
+#define SWAP(i, j) do { \
     struct track *_t = t[i].indirect; \
     t[i].indirect = t[j].indirect; \
     t[j].indirect = _t; \
-    } while ( /*CONSTCOND*/ 0 )
+} while (/*CONSTCOND*/ 0)
 
-void
+static void
 Heapify(struct track *t, int ntrks, int node)
 {
 	int lc, rc, mn;
-	
+
 	lc = LEFT(node);
 	rc = RIGHT(node);
-	
+
 	if (rc >= ntrks) {			/* no right child */
 		if (lc >= ntrks)		/* node is a leaf */
 			return;
 		if (DTIME(node) > DTIME(lc))
-			SWAP(node,lc);
+			SWAP(node, lc);
 		DTIME(lc) -= DTIME(node);
 		return;				/* no rc ==> lc is a leaf */
 	}
@@ -820,19 +868,19 @@ Heapify(struct track *t, int ntrks, int node)
 		DTIME(lc) -= DTIME(node);
 		return;
 	}
-	
-	SWAP(node,mn);
+
+	SWAP(node, mn);
 	DTIME(rc) -= DTIME(node);
 	DTIME(lc) -= DTIME(node);
 	Heapify(t, ntrks, mn); /* gcc groks tail recursion */
 }
 
-void
+static void
 BuildHeap(struct track *t, int ntrks)
 {
 	int node;
-	
-	for ( node = PARENT(ntrks-1); node --> 0; )
+
+	for (node = PARENT(ntrks - 1); node --> 0;)
 		Heapify(t, ntrks, node);
 }
 
@@ -841,13 +889,13 @@ BuildHeap(struct track *t, int ntrks)
  * rightmost bottom-level leaf to the root and decrement ntrks. It remains to
  * run Heapify, which the caller is expected to do. Returns the new ntrks.
  */
-int
+static int
 ShrinkHeap(struct track *t, int ntrks)
 {
 	int ancest;
-	
-	-- ntrks;
-	for ( ancest = PARENT(ntrks); ancest > 0; ancest = PARENT(ancest) )
+
+	--ntrks;
+	for (ancest = PARENT(ntrks); ancest > 0; ancest = PARENT(ancest))
 		DTIME(ntrks) += DTIME(ancest);
 	t[0].indirect = t[ntrks].indirect;
 	return ntrks;

@@ -1,4 +1,4 @@
-/*	$NetBSD: gapspci_pci.c,v 1.10 2007/03/12 14:03:47 tsutsui Exp $	*/
+/*	$NetBSD: gapspci_pci.c,v 1.17 2015/10/23 08:40:08 knakahara Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt.
@@ -38,15 +38,15 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: gapspci_pci.c,v 1.10 2007/03/12 14:03:47 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gapspci_pci.c,v 1.17 2015/10/23 08:40:08 knakahara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
 #include <machine/sysasicvar.h>
 
 #include <dev/pci/pcivar.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: gapspci_pci.c,v 1.10 2007/03/12 14:03:47 tsutsui Exp
 
 #include <dreamcast/dev/g2/gapspcivar.h>
 
-void		gaps_attach_hook(struct device *, struct device *,
+void		gaps_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		gaps_bus_maxdevs(void *, int);
 pcitag_t	gaps_make_tag(void *, int, int, int);
@@ -62,8 +62,9 @@ void		gaps_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t	gaps_conf_read(void *, pcitag_t, int);
 void		gaps_conf_write(void *, pcitag_t, int, pcireg_t);
 
-int		gaps_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char	*gaps_intr_string(void *, pci_intr_handle_t);
+int		gaps_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
+const char	*gaps_intr_string(void *, pci_intr_handle_t,
+		    char *buf, size_t len);
 void		*gaps_intr_establish(void *, pci_intr_handle_t,
 		    int, int (*)(void *), void *);
 void		gaps_intr_disestablish(void *, void *);
@@ -96,10 +97,9 @@ gaps_pci_init(struct gaps_softc *sc)
 #define	GAPS_PCITAG_MAGIC	0x022473
 
 void
-gaps_attach_hook(struct device *bus, struct device *pci,
-    struct pcibus_attach_args *pba)
+gaps_attach_hook(device_t parent, device_t pci, struct pcibus_attach_args *pba)
 {
-	struct gaps_softc *sc = (void *)bus;
+	struct gaps_softc *sc = device_private(parent);
 
 	/*
 	 * Now that we know there's a bus configured, go ahead and
@@ -162,6 +162,9 @@ gaps_conf_read(void *v, pcitag_t tag, int reg)
 	if (tag != GAPS_PCITAG_MAGIC)
 		return -1;
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return -1;
+
 	if (reg == (PCI_MAPREG_START + 4)) {
 		/*
 		 * We fake the BAR -- just return the physical address
@@ -181,6 +184,9 @@ gaps_conf_write(void *v, pcitag_t tag, int reg, pcireg_t val)
 	if (tag != GAPS_PCITAG_MAGIC)
 		return;
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return;
+
 	/* Disallow writing to the "BAR" ... it doesn't actually exist. */
 	if (reg == (PCI_MAPREG_START + 4) && val != 0x01000000)
 		return;
@@ -189,7 +195,7 @@ gaps_conf_write(void *v, pcitag_t tag, int reg, pcireg_t val)
 }
 
 int
-gaps_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+gaps_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 
 	*ihp = SYSASIC_EVENT_EXT;
@@ -197,10 +203,12 @@ gaps_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-gaps_intr_string(void *v, pci_intr_handle_t ih)
+gaps_intr_string(void *v, pci_intr_handle_t ih,
+    char *buf, size_t len)
 {
 
-	return sysasic_intr_string(IPL_NET);
+	strlcpy(buf, sysasic_intr_string(SYSASIC_IRL11), len);
+	return buf;
 }
 
 void *

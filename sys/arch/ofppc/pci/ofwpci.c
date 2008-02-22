@@ -1,4 +1,4 @@
-/* $NetBSD: ofwpci.c,v 1.6 2008/02/11 17:32:18 garbled Exp $ */
+/* $NetBSD: ofwpci.c,v 1.14 2017/01/11 18:19:29 christos Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.6 2008/02/11 17:32:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.14 2017/01/11 18:19:29 christos Exp $");
 
 #include "opt_pci.h"
 
@@ -57,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.6 2008/02/11 17:32:18 garbled Exp $");
 #include <machine/pio.h>
 
 struct ofwpci_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct genppc_pci_chipset sc_pc;
 	struct powerpc_bus_space sc_iot;
 	struct powerpc_bus_space sc_memt;
 };
 
-static void ofwpci_attach(struct device *, struct device *, void *);
-static int ofwpci_match(struct device *, struct cfdata *, void *);
+static void ofwpci_attach(device_t, device_t, void *);
+static int ofwpci_match(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(ofwpci, sizeof(struct ofwpci_softc),
+CFATTACH_DECL_NEW(ofwpci, sizeof(struct ofwpci_softc),
     ofwpci_match, ofwpci_attach, NULL, NULL);
 
 extern struct genppc_pci_chipset *genppc_pct;
@@ -90,6 +83,17 @@ ofwpci_get_chipset_tag(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
+	pc->pc_intr_type = genppc_pci_intr_type;
+	pc->pc_intr_alloc = genppc_pci_intr_alloc;
+	pc->pc_intr_release = genppc_pci_intr_release;
+	pc->pc_intx_alloc = genppc_pci_intx_alloc;
+
+	pc->pc_msi_v = (void *)pc;
+	genppc_pci_chipset_msi_init(pc);
+
+	pc->pc_msix_v = (void *)pc;
+	genppc_pci_chipset_msix_init(pc);
 
 	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_ofmethod_decompose_tag;
@@ -105,7 +109,7 @@ ofwpci_get_chipset_tag(pci_chipset_tag_t pc)
 }
 
 static int
-ofwpci_match(struct device *parent, struct cfdata *cf, void *aux)
+ofwpci_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char name[32];
@@ -122,15 +126,15 @@ ofwpci_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-ofwpci_attach(struct device *parent, struct device *self, void *aux)
+ofwpci_attach(device_t parent, device_t self, void *aux)
 {
-	struct ofwpci_softc *sc = (void *)self;
+	struct ofwpci_softc *sc = device_private(self);
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct confargs *ca = aux;
 	struct pcibus_attach_args pba;
 	struct genppc_pci_chipset_businfo *pbi;
 	int node = ca->ca_node;
-	int i, isprim = 0;
+	int i;
 	uint32_t busrange[2];
 	char buf[64];
 #ifdef PCI_NETBSD_CONFIGURE
@@ -138,6 +142,8 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	aprint_normal("\n");
+
+	sc->sc_dev = self;
 
 	/* PCI bus number */
 	if (OF_getprop(node, "bus-range", busrange, sizeof(busrange)) != 8)
@@ -156,10 +162,10 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 	    "ofwpci mem-space") != 0)
 		panic("Can't init ofwpci mem tag");
 
-	aprint_debug("io base=0x%x offset=0x%x limit=0x%x\n",
+	aprint_debug("io base=0x%"PRIxPTR" offset=0x%"PRIxPTR" limit=0x%"PRIxPTR"\n",
 	    sc->sc_iot.pbs_base, sc->sc_iot.pbs_offset, sc->sc_iot.pbs_limit);
 	
-	aprint_debug("mem base=0x%x offset=0x%x limit=0x%x\n",
+	aprint_debug("mem base=0x%"PRIxPTR" offset=0x%"PRIxPTR" limit=0x%"PRIxPTR"\n",
 	    sc->sc_memt.pbs_base, sc->sc_memt.pbs_offset,
 	    sc->sc_memt.pbs_limit);
 	
@@ -167,7 +173,6 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 	if (of_find_firstchild_byname(OF_finddevice("/"), "pci") == node) {
 		int isa_node;
 
-		isprim++;
 		/* yes we are, now do we have an ISA child? */
 		isa_node = of_find_firstchild_byname(node, "isa");
 		if (isa_node != -1) {
@@ -203,14 +208,13 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 	SIMPLEQ_INSERT_TAIL(&pc->pc_pbi, pbi, next);
 
 	genofw_setup_pciintr_map((void *)pc, pbi, pc->pc_node);
-
 #ifdef PCI_NETBSD_CONFIGURE
 	ioext  = extent_create("pciio",
 	    modeldata.pciiodata[device_unit(self)].start,
 	    modeldata.pciiodata[device_unit(self)].limit,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", sc->sc_memt.pbs_base,
-	    sc->sc_memt.pbs_limit-1, M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    sc->sc_memt.pbs_limit-1, NULL, 0, EX_NOWAIT);
 
 	if (pci_configure_bus(pc, ioext, memext, NULL, 0, CACHELINESIZE))
 		aprint_error("pci_configure_bus() failed\n");
@@ -218,7 +222,6 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 	extent_destroy(ioext);
 	extent_destroy(memext);
 #endif /* PCI_NETBSD_CONFIGURE */
-	
 	memset(&pba, 0, sizeof(pba));
 	pba.pba_memt = pc->pc_memt;
 	pba.pba_iot = pc->pc_iot;
@@ -227,7 +230,6 @@ ofwpci_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_bus = pc->pc_bus;
 	pba.pba_bridgetag = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
-
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

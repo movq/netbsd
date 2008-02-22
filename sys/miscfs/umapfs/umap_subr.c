@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_subr.c,v 1.25 2007/06/30 15:27:03 dsl Exp $	*/
+/*	$NetBSD: umap_subr.c,v 1.29 2014/11/09 18:08:07 maxv Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.25 2007/06/30 15:27:03 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.29 2014/11/09 18:08:07 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,7 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.25 2007/06/30 15:27:03 dsl Exp $");
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
@@ -92,10 +91,7 @@ int umap_node_alloc(struct mount *, struct vnode *,
  * find a user or group id in a map.
  */
 u_long
-umap_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
+umap_findid(u_long id, u_long map[][2], int nentries)
 {
 	int i;
 
@@ -116,10 +112,7 @@ umap_findid(id, map, nentries)
  * find a user or group id in a map, in reverse.
  */
 u_long
-umap_reverse_findid(id, map, nentries)
-	u_long id;
-	u_long map[][2];
-	int nentries;
+umap_reverse_findid(u_long id, u_long map[][2], int nentries)
 {
 	int i;
 
@@ -138,9 +131,7 @@ umap_reverse_findid(id, map, nentries)
 /* umap_mapids maps all of the ids in a credential, both user and group. */
 
 void
-umap_mapids(v_mount, credp)
-	struct mount *v_mount;
-	kauth_cred_t credp;
+umap_mapids(struct mount *v_mount, kauth_cred_t credp)
 {
 	int i, unentries, gnentries;
 	uid_t uid;
@@ -149,7 +140,7 @@ umap_mapids(v_mount, credp)
 	gid_t groups[NGROUPS];
 	uint16_t ngroups;
 
-	if (credp == NOCRED)
+	if (credp == NOCRED || credp == FSCRED)
 		return;
 
 	unentries =  MOUNTTOUMAPMOUNT(v_mount)->info_nentries;

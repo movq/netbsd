@@ -1,4 +1,4 @@
-/*	$NetBSD: pmppc_intr.h,v 1.2 2007/10/17 19:54:17 garbled Exp $	*/
+/*	$NetBSD: pmppc_intr.h,v 1.5 2011/06/22 05:08:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 
 #include <powerpc/intr.h>
 
-#ifndef _LOCORE
+#if !defined(_LOCORE) && !defined(_MODULE)
 
 struct pic_ops *setup_cpc700(void);
 
@@ -51,8 +44,8 @@ struct pic_ops *setup_cpc700(void);
 #define	ICU_LEN		32
 #define	ICU_MASK	0x1f000fc0
 
-#define	LEGAL_IRQ(x)	((x) >= 0 && (x) <= 31 && (ICU_MASK & (0x80000000 >> (x))))
+#define	LEGAL_HWIRQ_P(x) ((u_int)(x) < ICU_LEN && (ICU_MASK & (0x80000000 >> (x))))
 
-#endif /* !_LOCORE */
+#endif /* !_LOCORE && !_MODULE */
 
 #endif /* !_PMPPC_INTR_H_ */

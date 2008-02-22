@@ -1,4 +1,4 @@
-/*	$NetBSD: mknod.c,v 1.36 2007/07/07 20:11:07 dsl Exp $	*/
+/*	$NetBSD: mknod.c,v 1.42 2014/08/22 22:28:50 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,8 +35,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1998 The NetBSD Foundation, Inc.  All rights reserved.\n");
-__RCSID("$NetBSD: mknod.c,v 1.36 2007/07/07 20:11:07 dsl Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1998\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: mknod.c,v 1.42 2014/08/22 22:28:50 mlelstv Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -67,10 +61,9 @@ __RCSID("$NetBSD: mknod.c,v 1.36 2007/07/07 20:11:07 dsl Exp $");
 #include "pack_dev.h"
 
 static int gid_name(const char *, gid_t *);
-static portdev_t callPack(pack_t *, int, u_long *);
+static dev_t callPack(pack_t *, int, u_long *);
 
-	int	main(int, char *[]);
-static	void	usage(void);
+__dead static	void	usage(void);
 
 #ifdef KERN_DRIVERS
 static struct kinfo_drivers *kern_drivers;
@@ -88,7 +81,7 @@ main(int argc, char **argv)
 {
 	char	*name, *p;
 	mode_t	 mode;
-	portdev_t	 dev;
+	dev_t	 dev;
 	pack_t	*pack;
 	u_long	 numbers[MAXARGS];
 	int	 n, ch, fifo, hasformat;
@@ -230,7 +223,7 @@ main(int argc, char **argv)
 		if (*p == 0 && errno == 0)
 			continue;
 #ifdef KERN_DRIVERS
-		if (n == 0) {
+		if (argc == 2 && n == 0) {
 			major = major_from_name(argv[0], mode);
 			if (major != -1) {
 				numbers[0] = major;
@@ -282,7 +275,7 @@ main(int argc, char **argv)
 	}
 	if (rval < 0)
 		err(1, "%s", name);
-	if ((uid != -1 || gid != -1) && chown(name, uid, gid) == -1)
+	if ((uid != (uid_t)-1 || gid != (uid_t)-1) && chown(name, uid, gid) == -1)
 		/* XXX Should we unlink the files here? */
 		warn("%s: uid/gid not changed", name);
 
@@ -324,10 +317,10 @@ gid_name(const char *name, gid_t *gid)
 	return 0;
 }
 
-static portdev_t
+static dev_t
 callPack(pack_t *f, int n, u_long *numbers)
 {
-	portdev_t d;
+	dev_t d;
 	const char *error = NULL;
 
 	d = (*f)(n, numbers, &error);

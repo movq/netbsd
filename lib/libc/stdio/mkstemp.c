@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstemp.c,v 1.9 2005/02/09 21:35:47 kleink Exp $	*/
+/*	$NetBSD: mkstemp.c,v 1.12 2014/06/18 17:47:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -28,10 +28,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
+#include "gettemp.h"
 
 #if !HAVE_NBTOOL_CONFIG_H || !HAVE_MKSTEMP
 
@@ -40,38 +37,22 @@
 #if 0
 static char sccsid[] = "@(#)mktemp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mkstemp.c,v 1.9 2005/02/09 21:35:47 kleink Exp $");
+__RCSID("$NetBSD: mkstemp.c,v 1.12 2014/06/18 17:47:58 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
-
-#include "namespace.h"
-
-#if HAVE_NBTOOL_CONFIG_H
-#define	GETTEMP		gettemp
-#else
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include "reentrant.h"
-#include "local.h"
-#define	GETTEMP		__gettemp
-#endif
 
 #ifdef __weak_alias
 __weak_alias(mkstemp,_mkstemp)
 #endif
 
 int
-mkstemp(path)
-	char *path;
+mkstemp(char *path)
 {
 	int fd;
 
 	_DIAGASSERT(path != NULL);
 
-	return (GETTEMP(path, &fd, 0) ? fd : -1);
+	return GETTEMP(path, &fd, 0, 0, 0) ? fd : -1;
 }
 
 #endif /* !HAVE_NBTOOL_CONFIG_H || !HAVE_MKSTEMP */

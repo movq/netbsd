@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.31 2007/03/21 14:50:43 uwe Exp $	*/
+/*	$NetBSD: pmap.h,v 1.36 2016/09/03 09:07:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,20 +46,17 @@
 #define	PMAP_GROWKERNEL
 
 #define	__PMAP_PTP_N	512	/* # of page table page maps 2GB. */
-typedef struct pmap {
+struct pmap {
 	pt_entry_t **pm_ptp;
 	int pm_asid;
 	int pm_refcnt;
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
-} *pmap_t;
-extern struct pmap __pmap_kernel;
+};
 
 void pmap_bootstrap(void);
 void pmap_procwr(struct proc *, vaddr_t, size_t);
-#define	pmap_kernel()			(&__pmap_kernel)
 #define	pmap_update(pmap)		((void)0)
 #define	pmap_copy(dp,sp,d,l,s)		((void)0)
-#define	pmap_collect(pmap)		((void)0)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 
@@ -82,8 +72,8 @@ pmap_remove_all(struct pmap *pmap)
  * which have the virtually-indexed cache.
  */
 #ifdef SH4
-#define PMAP_PREFER(pa, va, sz, td)     pmap_prefer((pa), (va))
-void pmap_prefer(vaddr_t, vaddr_t *);
+#define PMAP_PREFER(pa, va, sz, td)     pmap_prefer((pa), (va), (td))
+void pmap_prefer(vaddr_t, vaddr_t *, int);
 #endif /* SH4 */
 
 #define	PMAP_MAP_POOLPAGE(pa)		SH3_PHYS_TO_P1SEG((pa))
@@ -93,4 +83,22 @@ void pmap_prefer(vaddr_t, vaddr_t *);
 pt_entry_t *__pmap_pte_lookup(pmap_t, vaddr_t);
 pt_entry_t *__pmap_kpte_lookup(vaddr_t);
 bool __pmap_pte_load(pmap_t, vaddr_t, int);
+
+/* pmap-specific data store in the vm_page structure. */
+#define	__HAVE_VM_PAGE_MD
+#define	PVH_REFERENCED		1
+#define	PVH_MODIFIED		2
+
+struct pv_entry;
+struct vm_page_md {
+	SLIST_HEAD(, pv_entry) pvh_head;
+	int pvh_flags;
+};
+
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	struct vm_page_md *pvh = &(pg)->mdpage;				\
+	SLIST_INIT(&pvh->pvh_head);					\
+	pvh->pvh_flags = 0;						\
+} while (/*CONSTCOND*/0)
 #endif /* !_SH3_PMAP_H_ */

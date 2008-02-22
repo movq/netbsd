@@ -1,4 +1,4 @@
-/*	$NetBSD: kmem.h,v 1.3 2007/12/24 16:45:16 ad Exp $	*/
+/*	$NetBSD: kmem.h,v 1.11 2018/01/09 01:53:55 christos Exp $	*/
 
 /*-
  * Copyright (c)2006 YAMAMOTO Takashi,
@@ -33,16 +33,26 @@
 
 typedef unsigned int km_flag_t;
 
-void *kmem_alloc(size_t, km_flag_t);
-void *kmem_zalloc(size_t, km_flag_t);
-void kmem_free(void *, size_t);
-void kmem_init(void);
-size_t kmem_roundup_size(size_t);
+void	kmem_init(void);
+size_t	kmem_roundup_size(size_t);
+
+void *	kmem_alloc(size_t, km_flag_t);
+void *	kmem_zalloc(size_t, km_flag_t);
+void	kmem_free(void *, size_t);
+
+void *	kmem_intr_alloc(size_t, km_flag_t);
+void *	kmem_intr_zalloc(size_t, km_flag_t);
+void	kmem_intr_free(void *, size_t);
+
+char *	kmem_asprintf(const char *, ...) __printflike(1, 2);
+
+char *	kmem_strdupsize(const char *, size_t *, km_flag_t);
+#define kmem_strdup(s, f)	kmem_strdupsize((s), NULL, (f))
+char *	kmem_strndup(const char *, size_t, km_flag_t);
+void	kmem_strfree(char *);
 
 /*
- * km_flag_t
- *
- * Values match [PR_WAITOK, PR_NOWAIT].
+ * km_flag_t values:
  */
 #define	KM_SLEEP	0x00000001	/* can sleep */
 #define	KM_NOSLEEP	0x00000002	/* don't sleep */

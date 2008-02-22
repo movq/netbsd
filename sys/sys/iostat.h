@@ -1,7 +1,7 @@
-/*	$NetBSD: iostat.h,v 1.8 2008/01/04 21:18:17 ad Exp $	*/
+/*	$NetBSD: iostat.h,v 1.11 2017/03/05 23:07:12 mlelstv Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 2004, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,6 +66,18 @@ struct io_sysctl {
 	u_int64_t	rbytes;
 	u_int64_t	wxfer;
 	u_int64_t	wbytes;
+	/*
+	 * New queue stats
+	 * accumulated wait time (iostat_wait .. iostat_busy)
+	 * accumulated wait sum (wait time * count)
+	 * accumulated busy sum (busy time * count)
+	 */
+	u_int32_t	wait_sec;
+	u_int32_t	wait_usec;
+	u_int32_t	waitsum_sec;
+	u_int32_t	waitsum_usec;
+	u_int32_t	busysum_sec;
+	u_int32_t	busysum_usec;
 };
 
 /*
@@ -85,6 +90,7 @@ struct io_stats {
 	void		*io_parent; /* pointer to what we are attached to */
 	int		io_type;   /* type of device the state belong to */
 	int		io_busy;	/* busy counter */
+	int		io_wait;	/* wait counter */
 	u_int64_t	io_rxfer;	/* total number of read transfers */
 	u_int64_t	io_wxfer;	/* total number of write transfers */
 	u_int64_t	io_seek;	/* total independent seek operations */
@@ -92,7 +98,12 @@ struct io_stats {
 	u_int64_t	io_wbytes;	/* total bytes written */
 	struct timeval	io_attachtime;	/* time disk was attached */
 	struct timeval	io_timestamp;	/* timestamp of last unbusy */
-	struct timeval	io_time;	/* total time spent busy */
+	struct timeval	io_busystamp;	/* timestamp of last busy */
+	struct timeval	io_waitstamp;	/* timestamp of last wait */
+	struct timeval	io_busysum;	/* accumulated wait * time */
+	struct timeval	io_waitsum;	/* accumulated busy * time */
+	struct timeval	io_busytime;	/* accumlated time busy */
+	struct timeval	io_waittime;	/* accumlated time waiting */
 	TAILQ_ENTRY(io_stats) io_link;
 };
 
@@ -103,8 +114,10 @@ TAILQ_HEAD(iostatlist_head, io_stats);	/* the iostatlist is a TAILQ */
 
 #ifdef _KERNEL
 void	iostat_init(void);
+void	iostat_wait(struct io_stats *);
 void	iostat_busy(struct io_stats *);
 void	iostat_unbusy(struct io_stats *, long, int);
+bool	iostat_isbusy(struct io_stats *);
 struct io_stats *iostat_find(const char *);
 struct io_stats *iostat_alloc(int32_t, void *, const char *);
 void	iostat_free(struct io_stats *);

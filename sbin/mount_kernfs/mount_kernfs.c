@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_kernfs.c,v 1.22 2007/07/16 17:09:42 pooka Exp $	*/
+/*	$NetBSD: mount_kernfs.c,v 1.25 2011/08/29 14:35:01 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -69,15 +69,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_kernfs.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mount_kernfs.c,v 1.22 2007/07/16 17:09:42 pooka Exp $");
+__RCSID("$NetBSD: mount_kernfs.c,v 1.25 2011/08/29 14:35:01 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -92,6 +92,8 @@ __RCSID("$NetBSD: mount_kernfs.c,v 1.22 2007/07/16 17:09:42 pooka Exp $");
 
 #include <mntopts.h>
 
+#include "mount_kernfs.h"
+
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
@@ -99,7 +101,7 @@ static const struct mntopt mopts[] = {
 };
 
 int	mount_kernfs(int argc, char **argv);
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
@@ -109,18 +111,18 @@ main(int argc, char **argv)
 }
 #endif
 
-int
-mount_kernfs(int argc, char *argv[])
+void
+mount_kernfs_parseargs(int argc, char *argv[], void *dummy, int *mntflags,
+	char *canon_dev, char *canon_dir)
 {
-	int ch, mntflags;
-	char canon_dir[MAXPATHLEN];
+	int ch;
 	mntoptparse_t mp;
 
-	mntflags = 0;
+	*mntflags = 0;
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch (ch) {
 		case 'o':
-			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, 0);
 			if (mp == NULL)
 				err(1, "getmntopts");
 			freemntopts(mp);
@@ -136,16 +138,26 @@ mount_kernfs(int argc, char *argv[])
 		usage();
 
 	/* not supported, fail silently */
-	if (mntflags & MNT_GETARGS)
+	if (*mntflags & MNT_GETARGS)
 		exit(0);
 
+	strlcpy(canon_dev, argv[0], MAXPATHLEN);
 	if (realpath(argv[1], canon_dir) == NULL)    /* Check mounton path */
 		err(1, "realpath %s", argv[1]);
 	if (strncmp(argv[1], canon_dir, MAXPATHLEN)) {
 		warnx("\"%s\" is a relative path.", argv[1]);
 		warnx("using \"%s\" instead.", canon_dir);
 	}
+}
 
+int
+mount_kernfs(int argc, char *argv[])
+{
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	int mntflags;
+
+	mount_kernfs_parseargs(argc, argv, NULL, &mntflags,
+	    canon_dev, canon_dir);
 	if (mount(MOUNT_KERNFS, canon_dir, mntflags, NULL, 0) == -1)
 		err(1, "kernfs on %s", argv[1]);
 	exit(0);

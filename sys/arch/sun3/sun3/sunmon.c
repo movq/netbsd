@@ -1,4 +1,4 @@
-/*	$NetBSD: sunmon.c,v 1.18 2006/10/01 03:53:27 tsutsui Exp $	*/
+/*	$NetBSD: sunmon.c,v 1.21 2014/10/18 08:33:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunmon.c,v 1.18 2006/10/01 03:53:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunmon.c,v 1.21 2014/10/18 08:33:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,12 +82,12 @@ _mode_kernel(void)
 /*
  * This function takes care of restoring enough of the
  * hardware state to allow the PROM to run normally.
- * The PROM needs: NMI enabled, it's own vector table.
+ * The PROM needs: NMI enabled, its own vector table.
  * In case of a temporary "drop into PROM", this will
  * also put our hardware state back into place after
  * the PROM "c" (continue) command is given.
  */
-void 
+void
 sunmon_abort(void)
 {
 	int s = splhigh();
@@ -125,7 +118,7 @@ sunmon_abort(void)
 	splx(s);
 }
 
-void 
+void
 sunmon_halt(void)
 {
 	(void) splhigh();
@@ -147,7 +140,7 @@ sunmon_halt(void)
 /*
  * Caller must pass a string that is in our data segment.
  */
-void 
+void
 sunmon_reboot(const char *bs)
 {
 
@@ -175,7 +168,7 @@ struct funcall_frame {
 	int fr_arg[1];
 };
 /*VARARGS0*/
-static void 
+static void
 tracedump(int x1)
 {
 	struct funcall_frame *fp = (struct funcall_frame *)(&x1 - 2);
@@ -201,7 +194,7 @@ tracedump(int x1)
  * commands and a printf hack.
  * [lifted from freed cmu mach3 sun3 port]
  */
-static void 
+static void
 v_handler(int addr, char *str)
 {
 
@@ -262,7 +255,7 @@ v_handler(int addr, char *str)
  * argv[1] = options	(i.e. "-ds" or NULL)
  * argv[2] = NULL
  */
-void 
+void
 sunmon_init(void)
 {
 	struct sunromvec *rvec;

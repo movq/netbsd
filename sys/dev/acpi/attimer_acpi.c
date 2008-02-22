@@ -1,4 +1,4 @@
-/* $NetBSD: attimer_acpi.c,v 1.9 2008/01/03 01:21:45 dyoung Exp $ */
+/* $NetBSD: attimer_acpi.c,v 1.14 2010/03/05 14:00:17 jruoho Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,28 +59,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: attimer_acpi.c,v 1.9 2008/01/03 01:21:45 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: attimer_acpi.c,v 1.14 2010/03/05 14:00:17 jruoho Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
 #include <sys/device.h>
-#include <sys/proc.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/ic/attimervar.h>
 
-static int	attimer_acpi_match(device_t, struct cfdata *, void *);
+static int	attimer_acpi_match(device_t, cfdata_t, void *);
 static void	attimer_acpi_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(attimer_acpi, sizeof(struct attimer_softc), attimer_acpi_match,
-    attimer_acpi_attach, attimer_detach, NULL);
+CFATTACH_DECL3_NEW(attimer_acpi, sizeof(struct attimer_softc),
+    attimer_acpi_match, attimer_acpi_attach, attimer_detach, NULL, NULL, NULL,
+    DVF_DETACH_SHUTDOWN);
 
 /*
  * Supported device IDs
@@ -102,7 +89,7 @@ static const char * const attimer_acpi_ids[] = {
  * attimer_acpi_match: autoconf(9) match routine
  */
 static int
-attimer_acpi_match(device_t parent, struct cfdata *match, void *aux)
+attimer_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -124,11 +111,10 @@ attimer_acpi_attach(device_t parent, device_t self, void *aux)
 	struct acpi_io *io;
 	ACPI_STATUS rv;
 
-	aprint_naive(": AT Timer\n");
-	aprint_normal(": AT Timer\n");
+	sc->sc_dev = self;
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -136,8 +122,8 @@ attimer_acpi_attach(device_t parent, device_t self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		aprint_error("%s: unable to find i/o register resource\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "unable to find i/o register resource\n");
 		goto out;
 	}
 
@@ -145,7 +131,7 @@ attimer_acpi_attach(device_t parent, device_t self, void *aux)
 	sc->sc_size = io->ar_length;
 	if (bus_space_map(sc->sc_iot, io->ar_base, sc->sc_size,
 		    0, &sc->sc_ioh) != 0) {
-		aprint_error("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		goto out;
 	}
 

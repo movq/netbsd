@@ -1,7 +1,7 @@
-.\" $NetBSD: drvctl.8,v 1.5 2008/02/16 02:00:37 dyoung Exp $
+.\" $NetBSD: drvctl.8,v 1.18 2016/09/11 02:59:11 sevan Exp $
 .\"
 .\" Copyright (c) 2004
-.\" 	Matthias Drochner.  All rights reserved.
+.\"	Matthias Drochner.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -24,7 +24,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd Feburary 15, 2008
+.Dd September 11, 2016
 .Dt DRVCTL 8
 .Os
 .Sh NAME
@@ -40,11 +40,14 @@
 .Fl d
 .Ar device
 .Nm
+.Op Fl nt
 .Fl l
-.Ar device
+.Op Ar device
 .Nm
+.Op Fl n
 .Fl p
 .Ar device
+.Op Ar property ...
 .Nm
 .Fl Q
 .Ar device
@@ -59,7 +62,7 @@ The
 .Nm
 program works with the
 .Xr drvctl 4
-pseudo-driver, and allows to rescan busses and to detach
+pseudo-driver to allow the rescan of busses and to detach
 drivers from devices.
 .Pp
 The following options are available:
@@ -70,6 +73,13 @@ attached to (and which defines the interpretation of
 the locator information).
 This will only be needed in rare cases where the bus
 has multiple attributes.
+If there are multiple attributes, and one is not specified,
+.Nm
+will return an Invalid argument.
+In such cases, the
+.Fl p
+option can be used to determine the available interface
+attributes.
 .It Fl d
 Detach the device driver from the device given by the
 .Ar device
@@ -78,11 +88,35 @@ argument.
 List the children of the device specified by the
 .Ar device
 argument.
+If
+.Ar device
+is not specified, list roots of the device tree instead.
+Output comes in two columns.
+The first column is
+.Ar device ,
+or
+.Dq root
+if
+.Ar device
+is not specified.
+The second column is the child.
+.It Fl n
+Suppress first column in
+.Fl l
+output.
+Suppress non-XML headers in
+.Fl p
+output.
 .It Fl p
-Get the properties for the device specified by the
+Get properties for the device specified by the
 .Ar device
 argument.
-The properties are displayed as an XML property list.
+If
+.Ar property
+is specified, the value of that property is printed, otherwise
+the properties are displayed as an XML property list.
+The property can be given as a path of dictionary keys and numeric
+array indexes separated by slashes.
 .It Fl Q
 Resume the ancestors of
 .Ar device ,
@@ -107,15 +141,33 @@ Suspend both the descendants of
 and
 .Ar device
 itself.
+.It Fl t
+Print a tree of devices in
+.Fl l
+output.
 .El
 .Sh FILES
 .Pa /dev/drvctl
+.Sh EXAMPLES
+To scan for IDE/SATA/eSATA disks on
+.Pa atabus1 ,
+which need to use the
+.Qq ata_hl
+attribute:
+.Bd -literal -offset indent
+# drvctl -r -a ata_hl atabus1
+.Ed
 .Sh SEE ALSO
 .Xr proplib 3 ,
-.\" .Xr drvctl 4 ,
+.Xr drvctl 4 ,
 .Xr autoconf 9
+.Sh HISTORY
+A
+.Nm
+utility appeard in
+.Nx 4.0 .
 .Sh BUGS
 Currently, there is no good way to get information about locator
 lengths and default values (which is present at kernel configuration
 time) out of a running kernel.
-Thus the locator handling is less intelligent as it could be.
+Thus the locator handling is less intelligent than it could be.

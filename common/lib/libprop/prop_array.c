@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_array.c,v 1.11 2007/08/30 12:23:54 joerg Exp $	*/
+/*	$NetBSD: prop_array.c,v 1.21 2012/07/27 09:10:59 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <prop/prop_array.h>
 #include "prop_object_impl.h"
+#include <prop/prop_array.h>
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <errno.h>
@@ -54,21 +47,28 @@ struct _prop_array {
 	uint32_t		pa_version;
 };
 
-#define	PA_F_IMMUTABLE		0x01	/* array is immutable */
+#define PA_F_IMMUTABLE		0x01	/* array is immutable */
 
 _PROP_POOL_INIT(_prop_array_pool, sizeof(struct _prop_array), "proparay")
 _PROP_MALLOC_DEFINE(M_PROP_ARRAY, "prop array",
 		    "property array container object")
 
-static int		_prop_array_free(prop_stack_t, prop_object_t *);
-static void		_prop_array_emergency_free(prop_object_t);
+static _prop_object_free_rv_t
+		_prop_array_free(prop_stack_t, prop_object_t *);
+static void	_prop_array_emergency_free(prop_object_t);
 static bool	_prop_array_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_array_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_array_equals(prop_object_t, prop_object_t,
 				   void **, void **,
 				   prop_object_t *, prop_object_t *);
 static void	_prop_array_equals_finish(prop_object_t, prop_object_t);
+static prop_object_iterator_t
+		_prop_array_iterator_locked(prop_array_t);
+static prop_object_t
+		_prop_array_iterator_next_object_locked(void *);
+static void	_prop_array_iterator_reset_locked(void *);
 
 static const struct _prop_object_type _prop_object_type_array = {
 	.pot_type		=	PROP_TYPE_ARRAY,
@@ -79,19 +79,19 @@ static const struct _prop_object_type _prop_object_type_array = {
 	.pot_equals_finish	=	_prop_array_equals_finish,
 };
 
-#define	prop_object_is_array(x) 	\
+#define prop_object_is_array(x)		\
 	((x) != NULL && (x)->pa_obj.po_type == &_prop_object_type_array)
 
-#define	prop_array_is_immutable(x) (((x)->pa_flags & PA_F_IMMUTABLE) != 0)
+#define prop_array_is_immutable(x) (((x)->pa_flags & PA_F_IMMUTABLE) != 0)
 
 struct _prop_array_iterator {
 	struct _prop_object_iterator pai_base;
 	unsigned int		pai_index;
 };
 
-#define	EXPAND_STEP		16
+#define EXPAND_STEP		16
 
-static int
+static _prop_object_free_rv_t
 _prop_array_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_array_t pa = *obj;
@@ -161,20 +161,20 @@ _prop_array_externalize(struct _prop_object_externalize_context *ctx,
 		_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
 		return (_prop_object_externalize_empty_tag(ctx, "array"));
 	}
-	
+
 	/* XXXJRT Hint "count" for the internalize step? */
 	if (_prop_object_externalize_start_tag(ctx, "array") == false ||
 	    _prop_object_externalize_append_char(ctx, '\n') == false)
 		goto out;
 
-	pi = prop_array_iterator(pa);
+	pi = _prop_array_iterator_locked(pa);
 	if (pi == NULL)
 		goto out;
-	
+
 	ctx->poec_depth++;
 	_PROP_ASSERT(ctx->poec_depth != 0);
 
-	while ((po = prop_object_iterator_next(pi)) != NULL) {
+	while ((po = _prop_array_iterator_next_object_locked(pi)) != NULL) {
 		if ((*po->po_type->pot_extern)(ctx, po) == false) {
 			prop_object_iterator_release(pi);
 			goto out;
@@ -192,14 +192,14 @@ _prop_array_externalize(struct _prop_object_externalize_context *ctx,
 		goto out;
 
 	rv = true;
-	
+
  out:
- 	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
+	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
 	return (rv);
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_array_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -207,7 +207,7 @@ _prop_array_equals(prop_object_t v1, prop_object_t v2,
 	prop_array_t array1 = v1;
 	prop_array_t array2 = v2;
 	uintptr_t idx;
-	bool rv = _PROP_OBJECT_EQUALS_FALSE;
+	_prop_object_equals_rv_t rv = _PROP_OBJECT_EQUALS_FALSE;
 
 	if (array1 == array2)
 		return (_PROP_OBJECT_EQUALS_TRUE);
@@ -229,14 +229,14 @@ _prop_array_equals(prop_object_t v1, prop_object_t v2,
 	if (array1->pa_count != array2->pa_count)
 		goto out;
 	if (idx == array1->pa_count) {
-		rv = true;
+		rv = _PROP_OBJECT_EQUALS_TRUE;
 		goto out;
 	}
 	_PROP_ASSERT(idx < array1->pa_count);
 
 	*stored_pointer1 = (void *)(idx + 1);
 	*stored_pointer2 = (void *)(idx + 1);
-	
+
 	*next_obj1 = array1->pa_array[idx];
 	*next_obj2 = array2->pa_array[idx];
 
@@ -268,7 +268,6 @@ _prop_array_alloc(unsigned int capacity)
 			return (NULL);
 	} else
 		array = NULL;
-	
 
 	pa = _PROP_POOL_GET(_prop_array_pool);
 	if (pa != NULL) {
@@ -314,7 +313,7 @@ _prop_array_expand(prop_array_t pa, unsigned int capacity)
 }
 
 static prop_object_t
-_prop_array_iterator_next_object(void *v)
+_prop_array_iterator_next_object_locked(void *v)
 {
 	struct _prop_array_iterator *pai = v;
 	prop_array_t pa = pai->pai_base.pi_obj;
@@ -322,37 +321,58 @@ _prop_array_iterator_next_object(void *v)
 
 	_PROP_ASSERT(prop_object_is_array(pa));
 
-	_PROP_RWLOCK_RDLOCK(pa->pa_rwlock);
-
 	if (pa->pa_version != pai->pai_base.pi_version)
 		goto out;	/* array changed during iteration */
-	
+
 	_PROP_ASSERT(pai->pai_index <= pa->pa_count);
 
 	if (pai->pai_index == pa->pa_count)
 		goto out;	/* we've iterated all objects */
-	
+
 	po = pa->pa_array[pai->pai_index];
 	pai->pai_index++;
 
  out:
+	return (po);
+}
+
+static prop_object_t
+_prop_array_iterator_next_object(void *v)
+{
+	struct _prop_array_iterator *pai = v;
+	prop_array_t pa _PROP_ARG_UNUSED = pai->pai_base.pi_obj;
+	prop_object_t po;
+
+	_PROP_ASSERT(prop_object_is_array(pa));
+
+	_PROP_RWLOCK_RDLOCK(pa->pa_rwlock);
+	po = _prop_array_iterator_next_object_locked(pai);
 	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
 	return (po);
 }
 
 static void
-_prop_array_iterator_reset(void *v)
+_prop_array_iterator_reset_locked(void *v)
 {
 	struct _prop_array_iterator *pai = v;
 	prop_array_t pa = pai->pai_base.pi_obj;
 
 	_PROP_ASSERT(prop_object_is_array(pa));
 
-	_PROP_RWLOCK_RDLOCK(pa->pa_rwlock);
-
 	pai->pai_index = 0;
 	pai->pai_base.pi_version = pa->pa_version;
+}
 
+static void
+_prop_array_iterator_reset(void *v)
+{
+	struct _prop_array_iterator *pai = v;
+	prop_array_t pa _PROP_ARG_UNUSED = pai->pai_base.pi_obj;
+
+	_PROP_ASSERT(prop_object_is_array(pa));
+
+	_PROP_RWLOCK_RDLOCK(pa->pa_rwlock);
+	_prop_array_iterator_reset_locked(pai);
 	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
 }
 
@@ -380,7 +400,7 @@ prop_array_create_with_capacity(unsigned int capacity)
 
 /*
  * prop_array_copy --
- *	Copy an array.  The new array has an initial capacity equal to
+ *	Copy an array.	The new array has an initial capacity equal to
  *	the number of objects stored in the original array.  The new
  *	array contains references to the original array's objects, not
  *	copies of those objects (i.e. a shallow copy).
@@ -423,7 +443,7 @@ prop_array_copy_mutable(prop_array_t opa)
 	pa = prop_array_copy(opa);
 	if (pa != NULL)
 		pa->pa_flags &= ~PA_F_IMMUTABLE;
-	
+
 	return (pa);
 }
 
@@ -489,13 +509,8 @@ prop_array_ensure_capacity(prop_array_t pa, unsigned int capacity)
 	return (rv);
 }
 
-/*
- * prop_array_iterator --
- *	Return an iterator for the array.  The array is retained by
- *	the iterator.
- */
-prop_object_iterator_t
-prop_array_iterator(prop_array_t pa)
+static prop_object_iterator_t
+_prop_array_iterator_locked(prop_array_t pa)
 {
 	struct _prop_array_iterator *pai;
 
@@ -509,9 +524,25 @@ prop_array_iterator(prop_array_t pa)
 	pai->pai_base.pi_reset = _prop_array_iterator_reset;
 	prop_object_retain(pa);
 	pai->pai_base.pi_obj = pa;
-	_prop_array_iterator_reset(pai);
+	_prop_array_iterator_reset_locked(pai);
 
 	return (&pai->pai_base);
+}
+
+/*
+ * prop_array_iterator --
+ *	Return an iterator for the array.  The array is retained by
+ *	the iterator.
+ */
+prop_object_iterator_t
+prop_array_iterator(prop_array_t pa)
+{
+	prop_object_iterator_t pi;
+
+	_PROP_RWLOCK_RDLOCK(pa->pa_rwlock);
+	pi = _prop_array_iterator_locked(pa);
+	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
+	return (pi);
 }
 
 /*
@@ -608,17 +639,17 @@ prop_array_set(prop_array_t pa, unsigned int idx, prop_object_t po)
 
 	if (prop_array_is_immutable(pa))
 		goto out;
-	
+
 	if (idx == pa->pa_count) {
 		rv = _prop_array_add(pa, po);
 		goto out;
 	}
-	
+
 	_PROP_ASSERT(idx < pa->pa_count);
 
 	opo = pa->pa_array[idx];
 	_PROP_ASSERT(opo != NULL);
-	
+
 	prop_object_retain(po);
 	pa->pa_array[idx] = po;
 	pa->pa_version++;
@@ -634,7 +665,7 @@ prop_array_set(prop_array_t pa, unsigned int idx, prop_object_t po)
 
 /*
  * prop_array_add --
- *	Add a refrerence to an object to the specified array, appending
+ *	Add a reference to an object to the specified array, appending
  *	to the end and growing the array's capacity, if necessary.
  */
 bool
@@ -655,7 +686,7 @@ prop_array_add(prop_array_t pa, prop_object_t po)
 /*
  * prop_array_remove --
  *	Remove the reference to an object from an array at the specified
- *	index.  The array will be compacted following the removal.
+ *	index.	The array will be compacted following the removal.
  */
 void
 prop_array_remove(prop_array_t pa, unsigned int idx)
@@ -684,7 +715,7 @@ prop_array_remove(prop_array_t pa, unsigned int idx)
 	pa->pa_version++;
 
 	_PROP_RWLOCK_UNLOCK(pa->pa_rwlock);
-	
+
 	prop_object_release(po);
 }
 
@@ -706,7 +737,7 @@ prop_array_equals(prop_array_t array1, prop_array_t array2)
  * prop_array_externalize --
  *	Externalize an array, return a NUL-terminated buffer
  *	containing the XML-style representation.  The buffer is allocated
- * 	with the M_TEMP memory type.
+ *	with the M_TEMP memory type.
  */
 char *
 prop_array_externalize(prop_array_t pa)
@@ -717,7 +748,7 @@ prop_array_externalize(prop_array_t pa)
 	ctx = _prop_object_externalize_context_alloc();
 	if (ctx == NULL)
 		return (NULL);
-	
+
 	if (_prop_object_externalize_header(ctx) == false ||
 	    (*pa->pa_obj.po_type->pot_extern)(ctx, pa) == false ||
 	    _prop_object_externalize_footer(ctx) == false) {
@@ -748,7 +779,7 @@ _prop_array_internalize(prop_stack_t stack, prop_object_t *obj,
 	/* We don't currently understand any attributes. */
 	if (ctx->poic_tagattr != NULL)
 		return (true);
-	
+
 	*obj = prop_array_create();
 	/*
 	 * We are done if the create failed or no child elements exist.

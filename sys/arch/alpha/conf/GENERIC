@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.322 2008/01/07 16:46:59 christos Exp $
+# $NetBSD: GENERIC,v 1.383 2018/06/07 13:36:28 thorpej Exp $
 #
 # This machine description file is used to generate the default NetBSD
 # kernel.
@@ -19,7 +19,7 @@ include 	"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"GENERIC-$Revision: 1.322 $"
+ident		"GENERIC-$Revision: 1.383 $"
 
 maxusers 32
 
@@ -48,15 +48,14 @@ options 	API_UP1000	# EV6:		Alpha Processor, Inc. UP1000
 options 	KTRACE			# System call tracing support
 options 	NTP			# kernel PLL for NTP
 
-# Enable experimental buffer queue strategy for better responsiveness under
-# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC		# Cheap kernel consistency checks
 #options 	DEBUG			# Expensive debugging checks/support
-#options 	KMEMSTATS		# Collect kmem usage statistics
 options 	DDB			# kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #makeoptions	DEBUG="-g"
@@ -80,43 +79,41 @@ file-system	NFS		# Sun NFS-compatible file system client
 file-system	NULLFS		# Null file system layer
 file-system	KERNFS		# Kernel variable file system (/kern)
 file-system	FDESC		# File descriptor file system (/dev/fd)
-file-system	PORTAL		# Portal file system
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	UMAPFS		# User-mapping file system layer
 file-system	PROCFS		# Process file system (/proc)
 file-system	UNION		# union file system
 file-system	CODA		# CODA distributed file system
 file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Sun NFS-compatible file system server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
 
 # Networking options
 #options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -133,27 +130,14 @@ options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	ALTQ_RIO	# RED with IN/OUT
 #options 	ALTQ_WFQ	# Weighted Fair Queueing
 
-# 4.3BSD compatibility.  Should be optional, but necessary for now.
-options 	COMPAT_43
-
 # Binary compatibility with previous versions of NetBSD.
-#options 	COMPAT_09
-options 	COMPAT_10
-options 	COMPAT_11
-options 	COMPAT_12
-options 	COMPAT_13
-options 	COMPAT_14
-options 	COMPAT_15
-options 	COMPAT_16
-options 	COMPAT_20
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
+include 	"conf/compat_netbsd10.config"
+
 # OSF/1 binary compatibility
 options 	COMPAT_OSF1
 
 # Linux binary compatibility
 options 	COMPAT_LINUX
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # System V-like message queues
 options 	SYSVMSG
@@ -165,10 +149,8 @@ options 	SYSVSEM
 options 	SYSVSHM
 
 # p1003.1b semaphore support
-options 	P1003_1B_SEMAPHORE
 
 # Loadable Kernel Modules
-options 	LKM
 
 # Disable kernel security.
 #options 	INSECURE
@@ -197,6 +179,7 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # realtime clock compatible to OSF/1
 #options 	CLOCK_COMPAT_OSF1
@@ -226,6 +209,8 @@ mcmem*	at	mcbus? mid ?
 #EV6 Tsunami Core Logic
 
 tsc*	at	mainbus0
+tsciic* 	at	tsc?
+iic* 	at	tsciic?
 
 # DECpc AXP150 (Jensen) internal bus support
 jensenio* at	mainbus0
@@ -260,6 +245,8 @@ sfb*	at	tc? slot ? offset ?
 #sfbp*	at	tc? slot ? offset ?
 px*	at	tc? slot ? offset ?
 pxg*	at	tc? slot ? offset ?
+tcu*	at	tc? slot ? offset ?
+slhci*	at	tcu?
 
 # TURBOchannel serial attachments
 zstty0	at	zsc0 channel ?			# serial port on B channels
@@ -313,6 +300,7 @@ adw*	at	pci? dev ? function ?		# AdvanSys Wide SCSI
 #options 	SCSI_ADW_TAGQ_DISABLE		# 	disable Tag Queuing
 ahc*	at	pci? dev ? function ?		# Adaptec [23]94x, aic78x0 SCSI
 autri*	at	pci? dev ? function ?		# Trident 4DWAVE based AC'97 Audio
+bge*	at	pci? dev ? function ?		# Broadcom 570x gigabit Ethernet
 bha*	at	pci? dev ? function ?		# BusLogic 9xx SCSI (untested)
 cac*	at	pci? dev ? function ?		# Compaq array controller (untested)
 cmpci*	at	pci? dev ? function ?		# C-Media CMI8338/8738 Audio
@@ -357,8 +345,12 @@ slide*  at	pci? dev ? function ?		# Symphony Labs IDE controllers
 viaide* at	pci? dev ? function ?		# VIA/AMD/Nvidia IDE controllers
 pcn*	at	pci? dev ? function ?		# AMD PCnet-PCI Ethernet
 pcscp*	at	pci? dev ? function ?		# AMD Am53c974 PCscsi-PCI
+pm2fb*	at	pci? dev ? function ?		# 3Dlabs Permedia 2 Graphics
+pm3fb*	at	pci? dev ? function ?		# 3Dlabs Permedia 3 Graphics
 ppb*	at	pci? dev ? function ?		# PCI-PCI Bridges
 puc*	at 	pci? dev ? function ?		# PCI "universal" comm. cards
+radeonfb* at	pci? dev ? function ?		# ATI/AMD Radeon Graphics
+options 	RADEONFB_DEPTH_32
 re*	at	pci? dev ? function ?		# Realtek 8169 Ethernet
 rtk*	at	pci? dev ? function ?		# Realtek 8129/8139 Ethernet
 sio*	at	pci? dev ? function ?		# Intel PCI-ISA Bridges
@@ -378,14 +370,27 @@ yds*	at	pci? dev ? function ?		# Yamaha DS-1 PCI Audio
 
 opl*	at	cmpci? flags 1
 opl*	at	eso?
+opl*	at	sb?
 #opl*	at	sv?
 opl*	at	yds?
 
 mpu*	at	cmpci?
 mpu*	at	eso?
+mpu*	at	sb?
 mpu*	at	yds?
 
+# I2O devices
+iop*	at pci? dev ? function ?	# I/O processor
+iopsp*	at iop? tid ?			# SCSI/FC-AL ports
+ld*	at iop? tid ?			# block devices
+# XXX dpti.c wants a processor type that is not assigned for x86-64
+#dpti*	at iop? tid 0			# DPT/Adaptec control interface
+
+# GPIO devices
+gpio*	at gpiobus?
+
 # MII/PHY support
+brgphy* at mii? phy ?			# Broadcom BCM5400-family PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
 icsphy*	at mii? phy ?			# Integrated Circuit Systems ICS189x
 inphy*	at mii? phy ?			# Intel 82555 PHYs
@@ -418,7 +423,7 @@ pckbd*	at	pckbc?				# PC keyboard (kbd port)
 pms*	at	pckbc?				# PS/2-style mouse (aux port)
 attimer* at	isa?				# AT Timer
 pcppi*	at	isa?				# PC prog. periph. interface
-spkr0	at	pcppi?				# IBM BASIC emulation
+spkr*	at	pcppi?				# IBM BASIC emulation
 isabeep0 at	pcppi?				# "keyboard" beep
 com*	at	isa? port 0x3f8 irq 4		# standard serial ports
 com*	at	isa? port 0x2f8 irq 3
@@ -529,6 +534,25 @@ fd*	at	fdc? drive ?
 ld*	at	cac? unit ?
 ld*	at	mlx? unit ?
 
+# Acer Labs M7101 SMBus controller
+alipm* 	at pci? dev ? function ?
+iic* 	at alipm?
+
+# AlphaServer DS20L i2c devices
+#lmenv* 	at iic? addr 0x2c
+#lmenv* 	at iic? addr 0x2d
+#lmenv* 	at iic? addr 0x2e
+#lmenv* 	at iic? addr 0x2f
+#spdmem* 	at iic? addr 0x50
+#spdmem* 	at iic? addr 0x51
+#spdmem* 	at iic? addr 0x52
+#spdmem* 	at iic? addr 0x53
+#spdmem* 	at iic? addr 0x54
+#spdmem* 	at iic? addr 0x55
+#spdmem* 	at iic? addr 0x56
+#spdmem* 	at iic? addr 0x57
+#seeprom* 	at iic0 addr 0x51 flags 0x2
+
 # PCMCIA USB controllers
 slhci*	at pcmcia? function ?			# ScanLogic SL811HS
 
@@ -567,6 +591,9 @@ ulpt*	at uhub? port ? configuration ? interface ?
 umodem*	at uhub? port ? configuration ?
 ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
 
@@ -603,7 +630,7 @@ ukyopon* at uhub? port ?
 ucom*	at ukyopon? portno ?
 
 # USB scanners
-uscanner* at uhub? port ?
+#uscanner* at uhub? port ?
 
 # Y@P firmware loader
 uyap* at uhub? port ?
@@ -631,6 +658,7 @@ btbc* at pcmcia? function ?		# AnyCom BlueCard LSE041/039/139
 
 # Bluetooth USB Controllers
 ubt* at uhub? port ?
+aubtfwl* at uhub? port ?
 
 # Bluetooth Device Hub
 bthub* at bcsp?
@@ -650,6 +678,10 @@ wsmouse* at btms? mux 0
 btkbd* at bthidev? reportid ?
 wskbd* at btkbd? console ? mux 1
 
+# Bluetooth Apple Magic Mouse
+btmagic* at bthub?
+wsmouse* at btmagic? mux 0
+
 # Bluetooth Audio support
 btsco* at bthub?
 
@@ -658,30 +690,31 @@ btsco* at bthub?
 audio*	at audiobus?
 midi*	at midibus?
 midi*	at pcppi?
+midi*	at sb?
+
+spkr*	at audio?		# PC speaker (synthesized)
 
 # Workstation Console attachments
-wsdisplay*	at	cfb?
-wsdisplay*	at	mfb?
-wsdisplay*	at	tfb?
-wsdisplay*	at	sfb?
-#wsdisplay*	at	sfbp?
-wsdisplay*	at	px?
-wsdisplay*	at	pxg?
-wsdisplay*	at	vga?
-wsdisplay*	at	tga?
+wsdisplay0	at	wsemuldisplaydev? console 1
+wsdisplay*	at	wsemuldisplaydev?
 wskbd*		at	lkkbd? console ?
 wsmouse*	at	vsms?
 wskbd*		at	pckbd?
 wsmouse*	at	pms?
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
 
 pseudo-device 	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 pseudo-device	bpfilter
 #pseudo-device	carp			# Common Address Redundancy Protocol
-pseudo-device	ccd		4
-pseudo-device	cgd		4	# cryptographic disk devices
-pseudo-device	raid		8	# RAIDframe disk driver
+pseudo-device	ccd		
+pseudo-device	cgd			# cryptographic disk devices
+pseudo-device	raid			# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -691,10 +724,10 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	ipfilter	1
-pseudo-device	loop		1
-pseudo-device	md		1
+pseudo-device	fss			# file system snapshot device
+pseudo-device	ipfilter
+pseudo-device	loop
+pseudo-device	md		
 pseudo-device	ppp		
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	pty			# pseudo-terminals
@@ -712,11 +745,10 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
-pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	sequencer		# MIDI sequencer
 #options 	RND_COM			# use "com" randomness too
 # a pseudo device needed for Coda	# also needs CODA (above)
-pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+pseudo-device	vcoda			# coda minicache <-> venus comm.
 # a pseudo device needed for SMBFS
 pseudo-device	nsmb			# experimental - SMB requester
 pseudo-device	clockctl		# user control of clock subsystem
@@ -728,25 +760,23 @@ pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	lockstat		# lock profiling
 pseudo-device	bcsp			# BlueCore Serial Protocol
 pseudo-device	btuart			# Bluetooth HCI UART (H4)
+pseudo-device	putter			# for puffs and pud
 
 #options	FILEASSOC		# fileassoc(9) - required for Veriexec
+					# and PAX_SEGVGUARD
 
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options 	VERIFIED_EXEC_FP_RMD160
 #options 	VERIFIED_EXEC_FP_SHA256
 #options 	VERIFIED_EXEC_FP_SHA384
 #options 	VERIFIED_EXEC_FP_SHA512
-#options 	VERIFIED_EXEC_FP_SHA1
-#options 	VERIFIED_EXEC_FP_MD5
 
 options PAX_MPROTECT=0			# PaX mprotect(2) restrictions
-#options PAX_SEGVGUARD=0			# PaX Segmentation fault guard
 options PAX_ASLR=0			# PaX Address Space Layout Randomization

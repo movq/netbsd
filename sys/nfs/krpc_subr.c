@@ -1,4 +1,4 @@
-/*	$NetBSD: krpc_subr.c,v 1.32 2007/03/04 06:03:36 christos Exp $	*/
+/*	$NetBSD: krpc_subr.c,v 1.42 2016/06/10 13:27:16 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon Ross, Adam Glass
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: krpc_subr.c,v 1.32 2007/03/04 06:03:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: krpc_subr.c,v 1.42 2016/06/10 13:27:16 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -124,18 +124,17 @@ struct rpc_reply {
 
 #define MIN_REPLY_HDR 16	/* xid, dir, astat, errno */
 
-static int krpccheck __P((struct mbuf*, void*));
+static int krpccheck(struct mbuf**, void*);
 
 /*
  * Call portmap to lookup a port number for a particular rpc program
  * Returns non-zero error on failure.
  */
 int
-krpc_portmap(sin,  prog, vers, proto, portp, l)
-	struct sockaddr_in *sin;		/* server address */
-	u_int prog, vers, proto;	/* host order */
-	u_int16_t *portp;	/* network order */
-	struct lwp *l;
+krpc_portmap(struct sockaddr_in *sin, u_int prog, u_int vers, u_int proto, u_int16_t *portp, struct lwp *l)
+	/* sin:		 server address */
+	/* prog, vers, proto:	 host order */
+	/* portp:	 network order */
 {
 	struct sdata {
 		u_int32_t prog;		/* call program */
@@ -184,17 +183,16 @@ krpc_portmap(sin,  prog, vers, proto, portp, l)
 	return 0;
 }
 
-static int krpccheck(m, context)
-struct mbuf *m;
-void *context;
+static int krpccheck(struct mbuf **mp, void *context)
 {
 	struct rpc_reply *reply;
+	struct mbuf *m = *mp;
 
 	/* Does the reply contain at least a header? */
 	if (m->m_pkthdr.len < MIN_REPLY_HDR)
 		return(-1);
 	if (m->m_len < sizeof(struct rpc_reply)) {
-		m = m_pullup(m, sizeof(struct rpc_reply));
+		m = *mp = m_pullup(m, sizeof(struct rpc_reply));
 		if (m == NULL)
 			return(-1);
 	}
@@ -216,16 +214,13 @@ void *context;
  * the address from whence the response came is saved there.
  */
 int
-krpc_call(sa, prog, vers, func, data, from_p, l)
-	struct sockaddr_in *sa;
-	u_int prog, vers, func;
-	struct mbuf **data;	/* input/output */
-	struct mbuf **from_p;	/* output */
-	struct lwp *l;
+krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func, struct mbuf **data, struct mbuf **from_p, struct lwp *l)
+	/* data:	 input/output */
+	/* from_p:	 output */
 {
 	struct socket *so;
-	struct sockaddr_in *sin;
-	struct mbuf *m, *nam, *mhead, *from;
+	struct sockaddr_in sin;
+	struct mbuf *m, *mhead, *from;
 	struct rpc_call *call;
 	struct rpc_reply *reply;
 	int error, len;
@@ -240,14 +235,14 @@ krpc_call(sa, prog, vers, func, data, from_p, l)
 		return (EAFNOSUPPORT);
 
 	/* Free at end if not null. */
-	nam = mhead = NULL;
+	mhead = NULL;
 	from = NULL;
 
 	/*
 	 * Create socket and set its receive timeout.
 	 */
-	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l)))
-		goto out;
+	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l, NULL)))
+		return error;
 
 	if ((error = nfs_boot_setrecvtimo(so)))
 		goto out;
@@ -279,10 +274,7 @@ krpc_call(sa, prog, vers, func, data, from_p, l)
 	/*
 	 * Setup socket address for the server.
 	 */
-	nam = m_get(M_WAIT, MT_SONAME);
-	sin = mtod(nam, struct sockaddr_in *);
-	memcpy((void *)sin, (void *)sa,
-		  (nam->m_len = sa->sin_len));
+	sin = *sa;
 
 	/*
 	 * Prepend RPC message header.
@@ -317,9 +309,9 @@ krpc_call(sa, prog, vers, func, data, from_p, l)
 		m = m->m_next;
 	}
 	mhead->m_pkthdr.len = len;
-	mhead->m_pkthdr.rcvif = NULL;
+	m_reset_rcvif(mhead);
 
-	error = nfs_boot_sendrecv(so, nam, 0, mhead, krpccheck, &m, &from,
+	error = nfs_boot_sendrecv(so, &sin, NULL, mhead, krpccheck, &m, &from,
 	    &xid, l);
 	if (error)
 		goto out;
@@ -388,7 +380,6 @@ krpc_call(sa, prog, vers, func, data, from_p, l)
 	}
 
  out:
-	if (nam) m_freem(nam);
 	if (mhead) m_freem(mhead);
 	if (from) m_freem(from);
 	soclose(so);
@@ -410,9 +401,7 @@ struct xdr_string {
 };
 
 struct mbuf *
-xdr_string_encode(str, len)
-	char *str;
-	int len;
+xdr_string_encode(char *str, int len)
 {
 	struct mbuf *m;
 	struct xdr_string *xs;
@@ -441,10 +430,8 @@ xdr_string_encode(str, len)
 }
 
 struct mbuf *
-xdr_string_decode(m, str, len_p)
-	struct mbuf *m;
-	char *str;
-	int *len_p;		/* bufsize - 1 */
+xdr_string_decode(struct mbuf *m, char *str, int *len_p)
+	/* len_p:		 bufsize - 1 */
 {
 	struct xdr_string *xs;
 	int mlen;	/* message length */
@@ -481,8 +468,8 @@ struct xdr_inaddr {
 };
 
 struct mbuf *
-xdr_inaddr_encode(ia)
-	struct in_addr *ia;		/* already in network order */
+xdr_inaddr_encode(struct in_addr *ia)
+	/* ia:		 already in network order */
 {
 	struct mbuf *m;
 	struct xdr_inaddr *xi;
@@ -504,9 +491,8 @@ xdr_inaddr_encode(ia)
 }
 
 struct mbuf *
-xdr_inaddr_decode(m, ia)
-	struct mbuf *m;
-	struct in_addr *ia;		/* already in network order */
+xdr_inaddr_decode(struct mbuf *m, struct in_addr *ia)
+	/* ia:		 already in network order */
 {
 	struct xdr_inaddr *xi;
 	u_int8_t *cp;

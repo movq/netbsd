@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vfsops.c,v 1.90 2008/02/21 14:10:57 ad Exp $	*/
+/*	$NetBSD: mfs_vfsops.c,v 1.113 2017/04/17 08:32:02 hannken Exp $	*/
 
 /*
  * Copyright (c) 1989, 1990, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.90 2008/02/21 14:10:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.113 2017/04/17 08:32:02 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -49,11 +49,11 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.90 2008/02/21 14:10:57 ad Exp $");
 #include <sys/mount.h>
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
+#include <sys/module.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
-#include <miscfs/syncfs/syncfs.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -66,14 +66,17 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vfsops.c,v 1.90 2008/02/21 14:10:57 ad Exp $");
 #include <ufs/mfs/mfsnode.h>
 #include <ufs/mfs/mfs_extern.h>
 
-void *	mfs_rootbase;	/* address of mini-root in kernel virtual memory */
-u_long	mfs_rootsize;	/* size of mini-root in bytes */
+MODULE(MODULE_CLASS_VFS, mfs, "ffs");
 
-static	int mfs_minor;	/* used for building internal dev_t */
+kmutex_t mfs_lock;	/* global lock */
+
+/* used for building internal dev_t, minor == 0 reserved for miniroot */
+static devminor_t mfs_minor = 1;
+static int mfs_initcnt;
 
 extern int (**mfs_vnodeop_p)(void *);
 
-MALLOC_JUSTDEFINE(M_MFSNODE, "MFS node", "MFS vnode private part");
+static struct sysctllog *mfs_sysctl_log;
 
 /*
  * mfs vfs operations.
@@ -87,53 +90,67 @@ const struct vnodeopv_desc * const mfs_vnodeopv_descs[] = {
 };
 
 struct vfsops mfs_vfsops = {
-	MOUNT_MFS,
-	sizeof (struct mfs_args),
-	mfs_mount,
-	mfs_start,
-	ffs_unmount,
-	ufs_root,
-	ufs_quotactl,
-	mfs_statvfs,
-	ffs_sync,
-	ffs_vget,
-	ffs_fhtovp,
-	ffs_vptofh,
-	mfs_init,
-	mfs_reinit,
-	mfs_done,
-	NULL,
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,	/* vfs_suspendctl */
-	genfs_renamelock_enter,
-	genfs_renamelock_exit,
-	mfs_vnodeopv_descs,
-	0,
-	{ NULL, NULL },
+	.vfs_name = MOUNT_MFS,
+	.vfs_min_mount_data = sizeof (struct mfs_args),
+	.vfs_mount = mfs_mount,
+	.vfs_start = mfs_start,
+	.vfs_unmount = ffs_unmount,
+	.vfs_root = ufs_root,
+	.vfs_quotactl = ufs_quotactl,
+	.vfs_statvfs = mfs_statvfs,
+	.vfs_sync = ffs_sync,
+	.vfs_vget = ufs_vget,
+	.vfs_loadvnode = ffs_loadvnode,
+	.vfs_newvnode = ffs_newvnode,
+	.vfs_fhtovp = ffs_fhtovp,
+	.vfs_vptofh = ffs_vptofh,
+	.vfs_init = mfs_init,
+	.vfs_reinit = mfs_reinit,
+	.vfs_done = mfs_done,
+	.vfs_snapshot = (void *)eopnotsupp,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_renamelock_enter = genfs_renamelock_enter,
+	.vfs_renamelock_exit = genfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = mfs_vnodeopv_descs
 };
-VFS_ATTACH(mfs_vfsops);
 
-SYSCTL_SETUP(sysctl_vfs_mfs_setup, "sysctl vfs.mfs subtree setup")
+static int
+mfs_modcmd(modcmd_t cmd, void *arg)
 {
+	int error;
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_ALIAS,
-		       CTLTYPE_NODE, "mfs",
-		       SYSCTL_DESCR("Memory based file system"),
-		       NULL, 1, NULL, 0,
-		       CTL_VFS, 3, CTL_EOL);
-	/*
-	 * XXX the "1" and the "3" above could be dynamic, thereby
-	 * eliminating one more instance of the "number to vfs"
-	 * mapping problem, but they are in order as taken from
-	 * sys/mount.h
-	 */
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&mfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&mfs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_ALIAS,
+			       CTLTYPE_NODE, "mfs",
+			       SYSCTL_DESCR("Memory based file system"),
+			       NULL, 1, NULL, 0,
+			       CTL_VFS, 3, CTL_EOL);
+		/*
+		 * XXX the "1" and the "3" above could be dynamic, thereby
+		 * eliminating one more instance of the "number to vfs"
+		 * mapping problem, but they are in order as taken from
+		 * sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&mfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&mfs_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
 }
 
 /*
@@ -143,29 +160,27 @@ void
 mfs_init(void)
 {
 
-	malloc_type_attach(M_MFSNODE);
-	/*
-	 * ffs_init() ensures to initialize necessary resources
-	 * only once.
-	 */
-	ffs_init();
+	if (mfs_initcnt++ == 0) {
+		mutex_init(&mfs_lock, MUTEX_DEFAULT, IPL_NONE);
+		ffs_init();
+	}
 }
 
 void
 mfs_reinit(void)
 {
+
 	ffs_reinit();
 }
 
 void
 mfs_done(void)
 {
-	/*
-	 * ffs_done() ensures to free necessary resources
-	 * only once, when it's no more needed.
-	 */
-	ffs_done();
-	malloc_type_detach(M_MFSNODE);
+
+	if (--mfs_initcnt == 0) {
+		ffs_done();
+		mutex_destroy(&mfs_lock);
+	}
 }
 
 /*
@@ -187,7 +202,7 @@ mfs_mountroot(void)
 		return (error);
 	}
 
-	mfsp = malloc(sizeof *mfsp, M_MFSNODE, M_WAITOK);
+	mfsp = kmem_alloc(sizeof(*mfsp), KM_SLEEP);
 	rootvp->v_data = mfsp;
 	rootvp->v_op = mfs_vnodeop_p;
 	rootvp->v_tag = VT_MFS;
@@ -196,45 +211,24 @@ mfs_mountroot(void)
 	mfsp->mfs_vnode = rootvp;
 	mfsp->mfs_proc = NULL;		/* indicate kernel space */
 	mfsp->mfs_shutdown = 0;
+	cv_init(&mfsp->mfs_cv, "mfs");
+	mfsp->mfs_refcnt = 1;
 	bufq_alloc(&mfsp->mfs_buflist, "fcfs", 0);
 	if ((error = ffs_mountfs(rootvp, mp, l)) != 0) {
-		vfs_unbusy(mp, false);
+		vfs_unbusy(mp);
 		bufq_free(mfsp->mfs_buflist);
-		vfs_destroy(mp);
-		free(mfsp, M_MFSNODE);
+		vfs_rele(mp);
+		kmem_free(mfsp, sizeof(*mfsp));
 		return (error);
 	}
-	mutex_enter(&mountlist_lock);
-	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
-	mutex_exit(&mountlist_lock);
+	mountlist_append(mp);
 	mp->mnt_vnodecovered = NULLVP;
 	ump = VFSTOUFS(mp);
 	fs = ump->um_fs;
 	(void) copystr(mp->mnt_stat.f_mntonname, fs->fs_fsmnt, MNAMELEN - 1, 0);
 	(void)ffs_statvfs(mp, &mp->mnt_stat);
-	vfs_unbusy(mp, false);
+	vfs_unbusy(mp);
 	return (0);
-}
-
-/*
- * This is called early in boot to set the base address and size
- * of the mini-root.
- */
-int
-mfs_initminiroot(void *base)
-{
-	struct fs *fs = (struct fs *)((char *)base + SBLOCK_UFS1);
-
-	/* check for valid super block */
-	if (fs->fs_magic != FS_UFS1_MAGIC || fs->fs_bsize > MAXBSIZE ||
-	    fs->fs_bsize < sizeof(struct fs))
-		return (0);
-	mountroot = mfs_mountroot;
-	mfs_rootbase = base;
-	mfs_rootsize = fs->fs_fsize * fs->fs_size;
-	rootdev = makedev(255, mfs_minor);
-	mfs_minor++;
-	return (mfs_rootsize);
 }
 
 /*
@@ -253,8 +247,11 @@ mfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	struct fs *fs;
 	struct mfsnode *mfsp;
 	struct proc *p;
+	devminor_t minor;
 	int flags, error = 0;
 
+	if (args == NULL)
+		return EINVAL;
 	if (*data_len < sizeof *args)
 		return EINVAL;
 
@@ -312,22 +309,28 @@ mfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			return EINVAL;
 		return (0);
 	}
-	error = getnewvnode(VT_MFS, (struct mount *)0, mfs_vnodeop_p, &devvp);
+	mutex_enter(&mfs_lock);
+	minor = mfs_minor++;
+	mutex_exit(&mfs_lock);
+	error = bdevvp(makedev(255, minor), &devvp);
 	if (error)
 		return (error);
-	devvp->v_vflag |= VV_MPSAFE;
-	devvp->v_type = VBLK;
-	spec_node_init(devvp, makedev(255, mfs_minor));
-	mfs_minor++;
-	mfsp = (struct mfsnode *)malloc(sizeof *mfsp, M_MFSNODE, M_WAITOK);
+	mfsp = kmem_alloc(sizeof(*mfsp), KM_SLEEP);
+	/*
+	 * Changing v_op and v_data here is safe as we are
+	 * the exclusive owner of this device node.
+	 */
+	KASSERT(devvp->v_op == spec_vnodeop_p);
+	KASSERT(devvp->v_data == NULL);
+	devvp->v_op = mfs_vnodeop_p;
 	devvp->v_data = mfsp;
 	mfsp->mfs_baseoff = args->base;
 	mfsp->mfs_size = args->size;
 	mfsp->mfs_vnode = devvp;
 	mfsp->mfs_proc = p;
 	mfsp->mfs_shutdown = 0;
-	mutex_init(&mfsp->mfs_lock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&mfsp->mfs_cv, "mfsidl");
+	mfsp->mfs_refcnt = 1;
 	bufq_alloc(&mfsp->mfs_buflist, "fcfs", 0);
 	if ((error = ffs_mountfs(devvp, mp, l)) != 0) {
 		mfsp->mfs_shutdown = 1;
@@ -359,22 +362,35 @@ mfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 int
 mfs_start(struct mount *mp, int flags)
 {
-	struct lwp *l = curlwp;
-	struct vnode *vp = VFSTOUFS(mp)->um_devvp;
-	struct mfsnode *mfsp = VTOMFS(vp);
+	struct vnode *vp;
+	struct mfsnode *mfsp;
 	struct proc *p;
 	struct buf *bp;
 	void *base;
-	int sleepreturn = 0;
+	int sleepreturn = 0, refcnt, error;
 	ksiginfoq_t kq;
 
+	/*
+	 * Ensure that file system is still mounted when getting mfsnode.
+	 * Add a reference to the mfsnode to prevent it disappearing in
+	 * this routine.
+	 */
+	if ((error = vfs_busy(mp)) != 0)
+		return error;
+	vp = VFSTOUFS(mp)->um_devvp;
+	mfsp = VTOMFS(vp);
+	mutex_enter(&mfs_lock);
+	mfsp->mfs_refcnt++;
+	mutex_exit(&mfs_lock);
+	vfs_unbusy(mp);
+
 	base = mfsp->mfs_baseoff;
-	mutex_enter(&mfsp->mfs_lock);
+	mutex_enter(&mfs_lock);
 	while (mfsp->mfs_shutdown != 1) {
-		while ((bp = BUFQ_GET(mfsp->mfs_buflist)) != NULL) {
-			mutex_exit(&mfsp->mfs_lock);
+		while ((bp = bufq_get(mfsp->mfs_buflist)) != NULL) {
+			mutex_exit(&mfs_lock);
 			mfs_doio(bp, base);
-			mutex_enter(&mfsp->mfs_lock);
+			mutex_enter(&mfs_lock);
 		}
 		/*
 		 * If a non-ignored signal is received, try to unmount.
@@ -384,32 +400,30 @@ mfs_start(struct mount *mp, int flags)
 		 * will always return EINTR/ERESTART.
 		 */
 		if (sleepreturn != 0) {
-			mutex_exit(&mfsp->mfs_lock);
-			/*
-			 * XXX Freeze syncer.  Must do this before locking
-			 * the mount point.  See dounmount() for details.
-			 */
-			mutex_enter(&syncer_mutex);
-			if (vfs_trybusy(mp, RW_WRITER, NULL) != 0)
-				mutex_exit(&syncer_mutex);
-			else if (dounmount(mp, 0, l) != 0) {
-				p = l->l_proc;
+			mutex_exit(&mfs_lock);
+			if (dounmount(mp, 0, curlwp) != 0) {
+				p = curproc;
 				ksiginfo_queue_init(&kq);
-				mutex_enter(&p->p_smutex);
+				mutex_enter(p->p_lock);
 				sigclearall(p, NULL, &kq);
-				mutex_exit(&p->p_smutex);
+				mutex_exit(p->p_lock);
 				ksiginfo_queue_drain(&kq);
 			}
 			sleepreturn = 0;
-			mutex_enter(&mfsp->mfs_lock);
+			mutex_enter(&mfs_lock);
 			continue;
 		}
 
-		sleepreturn = cv_wait_sig(&mfsp->mfs_cv, &mfsp->mfs_lock);
+		sleepreturn = cv_wait_sig(&mfsp->mfs_cv, &mfs_lock);
 	}
-	KASSERT(BUFQ_PEEK(mfsp->mfs_buflist) == NULL);
-	mutex_exit(&mfsp->mfs_lock);
-	bufq_free(mfsp->mfs_buflist);
+	KASSERT(bufq_peek(mfsp->mfs_buflist) == NULL);
+	refcnt = --mfsp->mfs_refcnt;
+	mutex_exit(&mfs_lock);
+	if (refcnt == 0) {
+		bufq_free(mfsp->mfs_buflist);
+		cv_destroy(&mfsp->mfs_cv);
+		kmem_free(mfsp, sizeof(*mfsp));
+	}
 	return (sleepreturn);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_cmpci.c,v 1.13 2007/10/19 12:00:53 ad Exp $	*/
+/*	$NetBSD: opl_cmpci.c,v 1.17 2012/04/09 10:18:17 plunky Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_cmpci.c,v 1.13 2007/10/19 12:00:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_cmpci.c,v 1.17 2012/04/09 10:18:17 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: opl_cmpci.c,v 1.13 2007/10/19 12:00:53 ad Exp $");
 #include <dev/pci/cmpcivar.h>
 
 static int
-opl_cmpci_match(struct device *parent, struct cfdata *match, void *aux)
+opl_cmpci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
-	struct cmpci_softc *ssc = (struct cmpci_softc *)parent;
+	struct cmpci_softc *ssc = device_private(parent);
 
 	if (aa->type != AUDIODEV_TYPE_OPL)
 		return (0);
@@ -75,18 +68,20 @@ opl_cmpci_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-opl_cmpci_attach(struct device *parent, struct device *self, void *aux)
+opl_cmpci_attach(device_t parent, device_t self, void *aux)
 {
-	struct cmpci_softc *ssc = (struct cmpci_softc *)parent;
-	struct opl_softc *sc = (struct opl_softc *)self;
+	struct cmpci_softc *ssc = device_private(parent);
+	struct opl_softc *sc = device_private(self);
 
+	sc->dev = self;
 	sc->ioh = ssc->sc_ioh;
 	sc->iot = ssc->sc_iot;
 	sc->offs = CMPCI_REG_FM_BASE;
+	sc->lock = &ssc->sc_intr_lock;
 	strcpy(sc->syn.name, "CMPCI ");
 
 	opl_attach(sc);
 }
 
-CFATTACH_DECL(opl_cmpci, sizeof (struct opl_softc),
+CFATTACH_DECL_NEW(opl_cmpci, sizeof (struct opl_softc),
     opl_cmpci_match, opl_cmpci_attach, NULL, NULL);

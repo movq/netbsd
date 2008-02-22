@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_utils.c,v 1.16 2013/12/14 18:04:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,13 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_utils.c	8.8 (Berkeley) 7/20/94";
-#else
-__RCSID("$NetBSD: bt_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: bt_utils.c,v 1.16 2013/12/14 18:04:56 christos Exp $");
 
 #include <sys/param.h>
 
@@ -80,7 +74,7 @@ __bt_ret(BTREE *t, EPG *e, DBT *key, DBT *rkey, DBT *data, DBT *rdata, int copy)
 	bl = GETBLEAF(e->page, e->index);
 
 	/*
-	 * We must copy big keys/data to make them contigous.  Otherwise,
+	 * We must copy big keys/data to make them contiguous.  Otherwise,
 	 * leave the page pinned and don't copy unless the user specified
 	 * concurrent access.
 	 */
@@ -94,8 +88,7 @@ __bt_ret(BTREE *t, EPG *e, DBT *key, DBT *rkey, DBT *data, DBT *rdata, int copy)
 		key->data = rkey->data;
 	} else if (copy || F_ISSET(t, B_DB_LOCK)) {
 		if (bl->ksize > rkey->size) {
-			p = (void *)(rkey->data == NULL ?
-			    malloc(bl->ksize) : realloc(rkey->data, bl->ksize));
+			p = realloc(rkey->data, bl->ksize);
 			if (p == NULL)
 				return (RET_ERROR);
 			rkey->data = p;
@@ -121,9 +114,7 @@ dataonly:
 	} else if (copy || F_ISSET(t, B_DB_LOCK)) {
 		/* Use +1 in case the first record retrieved is 0 length. */
 		if (bl->dsize + 1 > rdata->size) {
-			p = (void *)(rdata->data == NULL ?
-			    malloc(bl->dsize + 1) :
-			    realloc(rdata->data, bl->dsize + 1));
+			p = realloc(rdata->data, bl->dsize + 1);
 			if (p == NULL)
 				return (RET_ERROR);
 			rdata->data = p;
@@ -217,7 +208,7 @@ int
 __bt_defcmp(const DBT *a, const DBT *b)
 {
 	size_t len;
-	u_char *p1, *p2;
+	uint8_t *p1, *p2;
 
 	/*
 	 * XXX
@@ -245,7 +236,7 @@ __bt_defcmp(const DBT *a, const DBT *b)
 size_t
 __bt_defpfx(const DBT *a, const DBT *b)
 {
-	u_char *p1, *p2;
+	uint8_t *p1, *p2;
 	size_t cnt, len;
 
 	cnt = 1;

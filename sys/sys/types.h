@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.79 2008/01/21 00:27:24 rmind Exp $	*/
+/*	$NetBSD: types.h,v 1.98 2017/01/14 01:02:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -127,7 +127,7 @@ typedef	int64_t		longlong_t;	/* for XDR */
 typedef	uint64_t	u_longlong_t;	/* for XDR */
 
 typedef	int64_t		blkcnt_t;	/* fs block count */
-typedef	uint32_t	blksize_t;	/* fs optimal block size */
+typedef	int32_t		blksize_t;	/* fs optimal block size */
 
 #ifndef	fsblkcnt_t
 typedef	__fsblkcnt_t	fsblkcnt_t;	/* fs block count (statvfs) */
@@ -154,7 +154,7 @@ typedef	__daddr_t	daddr_t;	/* disk address */
 typedef	int64_t		daddr_t;	/* disk address */
 #endif
 
-typedef	uint32_t	dev_t;		/* device number */
+typedef	uint64_t	dev_t;		/* device number */
 typedef	uint32_t	fixpt_t;	/* fixed point number */
 
 #ifndef	gid_t
@@ -162,7 +162,6 @@ typedef	__gid_t		gid_t;		/* group id */
 #define	gid_t		__gid_t
 #endif
 
-typedef	int		idtype_t;	/* type of the id */
 typedef	uint32_t	id_t;		/* group id, process id or user id */
 typedef	uint64_t	ino_t;		/* inode number */
 typedef	long		key_t;		/* IPC key (for Sys V IPC) */
@@ -184,7 +183,7 @@ typedef	__pid_t		pid_t;		/* process id */
 #define	pid_t		__pid_t
 #endif
 typedef int32_t		lwpid_t;	/* LWP id */
-typedef quad_t		rlim_t;		/* resource limit */
+typedef uint64_t	rlim_t;		/* resource limit */
 typedef	int32_t		segsz_t;	/* segment size */
 typedef	int32_t		swblk_t;	/* swap offset */
 
@@ -193,22 +192,17 @@ typedef	__uid_t		uid_t;		/* user id */
 #define	uid_t		__uid_t
 #endif
 
-typedef	int32_t		dtime_t;	/* on-disk time_t */
-
 typedef int		mqd_t;
 
 typedef	unsigned long	cpuid_t;
 
 typedef	int		psetid_t;
 
+typedef volatile __cpu_simple_lock_nv_t __cpu_simple_lock_t;
+
 #if defined(_KERNEL) || defined(_STANDALONE)
-/*
- * Boolean type definitions for the kernel environment.  User-space
- * boolean definitions are found in <stdbool.h>.
- */
-#define bool	_Bool
-#define true	1
-#define false	0
+
+#include <sys/stdbool.h>
 
 /*
  * Deprecated Mach-style boolean_t type.  Should not be used by new code.
@@ -223,7 +217,7 @@ typedef int	boolean_t;
 
 #endif /* _KERNEL || _STANDALONE */
 
-#if defined(_KERNEL) || defined(_LIBC)
+#if defined(_KERNEL) || defined(_LIBC) || defined(_KMEMUSER)
 /*
  * semctl(2)'s argument structure.  This is here for the benefit of
  * <sys/syscallargs.h>.  It is not in the user's namespace in SUSv2.
@@ -234,10 +228,8 @@ union __semun {
 	struct semid_ds	*buf;		/* buffer for IPC_STAT & IPC_SET */
 	unsigned short	*array;		/* array for GETALL & SETALL */
 };
-/* For the same reason as above */
 #include <sys/stdint.h>
-typedef intptr_t semid_t;
-#endif /* _KERNEL || _LIBC */
+#endif /* _KERNEL || _LIBC || _KMEMUSER */
 
 /*
  * These belong in unistd.h, but are placed here too to ensure that
@@ -260,17 +252,26 @@ __END_DECLS
 
 #if defined(_NETBSD_SOURCE)
 /* Major, minor numbers, dev_t's. */
-#define	major(x)	((int32_t)((((x) & 0x000fff00) >>  8)))
-#define	minor(x)	((int32_t)((((x) & 0xfff00000) >> 12) | \
-				   (((x) & 0x000000ff) >>  0)))
-#define	makedev(x,y)	((dev_t)((((x) <<  8) & 0x000fff00) | \
-				 (((y) << 12) & 0xfff00000) | \
-				 (((y) <<  0) & 0x000000ff)))
+typedef int32_t __devmajor_t, __devminor_t;
+#define devmajor_t __devmajor_t
+#define devminor_t __devminor_t
+#define NODEVMAJOR (-1)
+#define	major(x)	((devmajor_t)(((uint32_t)(x) & 0x000fff00) >>  8))
+#define	minor(x)	((devminor_t)((((uint32_t)(x) & 0xfff00000) >> 12) | \
+				   (((uint32_t)(x) & 0x000000ff) >>  0)))
+#define	makedev(x,y)	((dev_t)((((dev_t)(x) <<  8) & 0x000fff00U) | \
+				 (((dev_t)(y) << 12) & 0xfff00000U) | \
+				 (((dev_t)(y) <<  0) & 0x000000ffU)))
 #endif
 
 #ifdef	_BSD_CLOCK_T_
 typedef	_BSD_CLOCK_T_		clock_t;
 #undef	_BSD_CLOCK_T_
+#endif
+
+#ifdef	_BSD_PTRDIFF_T_
+typedef	_BSD_PTRDIFF_T_		ptrdiff_t;
+#undef	_BSD_PTRDIFF_T_
 #endif
 
 #ifdef	_BSD_SIZE_T_
@@ -311,7 +312,8 @@ typedef	_BSD_USECONDS_T_	useconds_t;
 
 #ifdef _NETBSD_SOURCE
 #include <sys/fd_set.h>
-#define	NBBY	__NBBY
+
+#define	NBBY			8
 
 typedef struct kauth_cred *kauth_cred_t;
 
@@ -319,7 +321,7 @@ typedef int pri_t;
 
 #endif
 
-#if defined(__STDC__) && defined(_KERNEL)
+#if defined(__STDC__) && (defined(_KERNEL) || defined(_KMEMUSER))
 /*
  * Forward structure declarations for function prototypes.  We include the
  * common structures that cross subsystem boundaries here; others are mostly
@@ -327,7 +329,6 @@ typedef int pri_t;
  */
 struct	lwp;
 typedef struct lwp lwp_t;
-struct	user;
 struct	__ucontext;
 struct	proc;
 typedef struct proc proc_t;

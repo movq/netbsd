@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_conn.h,v 1.18 2008/01/30 14:08:01 ad Exp $	*/
+/*	$NetBSD: smb_conn.h,v 1.20 2010/12/17 13:05:29 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -174,7 +174,7 @@ struct smb_share_info {
 #include <netsmb/smb_subr.h>
 
 #define CONNADDREQ(a1,a2)	((a1)->sa_len == (a2)->sa_len && \
-				 bcmp(a1, a2, (a1)->sa_len) == 0)
+				 memcmp(a1, a2, (a1)->sa_len) == 0)
 
 struct smb_vc;
 struct smb_share;
@@ -445,12 +445,7 @@ struct smbiod {
 	SIMPLEQ_HEAD(, smb_rq)
 				iod_rqlist;	/* list of outstanding requests */
 	int			iod_muxwant;
-#ifdef __NetBSD__
 	struct lwp *		iod_l;
-#else
-	struct proc *		iod_p;
-	struct thread *		iod_td;
-#endif
 	struct smb_cred		iod_scred;
 	struct smb_slock	iod_evlock;	/* iod_evlist */
 	SIMPLEQ_HEAD(,smbiod_event) iod_evlist;

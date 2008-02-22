@@ -1,4 +1,4 @@
-/*   $NetBSD: get_wstr.c,v 1.2 2007/05/28 15:01:55 blymn Exp $ */
+/*   $NetBSD: get_wstr.c,v 1.4 2017/01/06 13:53:18 roy Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,11 +36,16 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_wstr.c,v 1.2 2007/05/28 15:01:55 blymn Exp $");
+__RCSID("$NetBSD: get_wstr.c,v 1.4 2017/01/06 13:53:18 roy Exp $");
 #endif						  /* not lint */
 
 #include "curses.h"
 #include "curses_private.h"
+
+/* prototypes for private functions */
+#ifdef HAVE_WCHAR
+static int __wgetn_wstr(WINDOW *, wchar_t *, int);
+#endif /* HAVE_WCHAR */
 
 /*
  * getn_wstr --
@@ -168,15 +173,16 @@ wgetn_wstr(WINDOW *win, wchar_t *wstr, int n)
 	return ERR;
 #else
 	if (n < 1)
-		return (ERR);
+		return ERR;
 	if (n == 1) {
 		wstr[0] = L'\0';
-		return (ERR);
+		return ERR;
 	}
 	return __wgetn_wstr(win, wstr, n);
 #endif /* HAVE_WCHAR */
 }
 
+#ifdef HAVE_WCHAR
 /*
  * __wgetn_wstr --
  *	The actual implementation.
@@ -186,22 +192,19 @@ wgetn_wstr(WINDOW *win, wchar_t *wstr, int n)
 int
 __wgetn_wstr(WINDOW *win, wchar_t *wstr, int n)
 {
-#ifndef HAVE_WCHAR
-	return ERR;
-#else
 	wchar_t *ostr, ec, kc, sc[ 2 ];
 	int oldx, remain;
 	wint_t wc;
 	cchar_t cc;
 
 	ostr = wstr;
-	if ( erasewchar( &ec ) == ERR )
+	if (erasewchar(&ec) == ERR)
 		return ERR;
-	if ( killwchar( &kc ) == ERR )
+	if (killwchar(&kc) == ERR)
 		return ERR;
-	sc[ 0 ] = ( wchar_t )btowc( ' ' );
-	sc[ 1 ] = L'\0';
-	setcchar( &cc, sc, win->wattr, 0, NULL );
+	sc[0] = (wchar_t)btowc( ' ' );
+	sc[1] = L'\0';
+	setcchar(&cc, sc, win->wattr, 0, NULL);
 	oldx = win->curx;
 	remain = n - 1;
 
@@ -284,5 +287,5 @@ __wgetn_wstr(WINDOW *win, wchar_t *wstr, int n)
 	}
 	*wstr = L'\0';
 	return OK;
-#endif /* HAVE_WCHAR */
 }
+#endif /* HAVE_WCHAR */

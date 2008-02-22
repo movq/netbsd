@@ -1,4 +1,4 @@
-/*	$NetBSD: mace.c,v 1.14 2008/02/02 08:58:20 sekiya Exp $	*/
+/*	$NetBSD: mace.c,v 1.23 2016/07/13 21:33:28 macallan Exp $	*/
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.14 2008/02/02 08:58:20 sekiya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.23 2016/07/13 21:33:28 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,8 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.14 2008/02/02 08:58:20 sekiya Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#define	_SGIMIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/locore.h>
 #include <machine/autoconf.h>
@@ -87,7 +86,7 @@ struct {
 } maceintrtab[MACE_NINTR];
 
 struct mace_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -99,14 +98,19 @@ struct mace_softc {
 	void *isa_ringbuffer;
 };
 
-static int	mace_match(struct device *, struct cfdata *, void *);
-static void	mace_attach(struct device *, struct device *, void *);
+static int	mace_match(device_t, cfdata_t, void *);
+static void	mace_attach(device_t, device_t, void *);
 static int	mace_print(void *, const char *);
-static int	mace_search(struct device *, struct cfdata *,
-			    const int *, void *);
+static int	mace_search(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(mace, sizeof(struct mace_softc),
+CFATTACH_DECL_NEW(mace, sizeof(struct mace_softc),
     mace_match, mace_attach, NULL, NULL);
+
+static void mace_isa_bus_mem_init(bus_space_tag_t, void *);
+
+static struct mips_bus_space	mace_isa_mbst;
+bus_space_tag_t	mace_isa_memt = NULL;
+static int mace_isa_init = 0;
 
 #if defined(BLINK)
 static callout_t mace_blink_ch;
@@ -114,30 +118,41 @@ static void	mace_blink(void *);
 #endif
 
 static int
-mace_match(struct device *parent, struct cfdata *match, void *aux)
+mace_match(device_t parent, struct cfdata *match, void *aux)
 {
 
 	/*
 	 * The MACE is in the O2.
 	 */
 	if (mach_type == MACH_SGI_IP32)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
-static void
-mace_attach(struct device *parent, struct device *self, void *aux)
+void
+mace_init_bus(void)
 {
-	struct mace_softc *sc = (struct mace_softc *)self;
+	if (mace_isa_init == 1)
+		return;
+	mace_isa_init = 1;
+	mace_isa_bus_mem_init(&mace_isa_mbst, NULL);
+	mace_isa_memt = &mace_isa_mbst;
+}
+	
+static void
+mace_attach(device_t parent, device_t self, void *aux)
+{
+	struct mace_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
-	u_int32_t scratch;
+	uint32_t scratch;
 
+	sc->sc_dev = self;
 #ifdef BLINK
 	callout_init(&mace_blink_ch, 0);
 #endif
 
-	sc->iot = SGIMIPS_BUS_SPACE_MACE;
+	sc->iot = normal_memt;	/* for mace registers */
 	sc->dmat = &sgimips_default_bus_dma_tag;
 
 	if (bus_space_map(sc->iot, ma->ma_addr, 0,
@@ -146,10 +161,12 @@ mace_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_normal("\n");
 
-	aprint_debug("%s: isa sts %llx\n", self->dv_xname,
+	aprint_debug("%s: isa sts %#"PRIx64"\n", device_xname(self),
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_STATUS));
-	aprint_debug("%s: isa msk %llx\n", self->dv_xname,
+	aprint_debug("%s: isa msk %#"PRIx64"\n", device_xname(self),
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK));
+
+	mace_init_bus();
 
 	/*
 	 * Turn on most ISA interrupts.  These are actually masked and
@@ -202,10 +219,9 @@ mace_print(void *aux, const char *pnp)
 }
 
 static int
-mace_search(struct device *parent, struct cfdata *cf,
-	    const int *ldesc, void *aux)
+mace_search(device_t parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
-	struct mace_softc *sc = (struct mace_softc *)parent;
+	struct mace_softc *sc = device_private(parent);
 	struct mace_attach_args maa;
 	int tryagain;
 
@@ -213,7 +229,7 @@ mace_search(struct device *parent, struct cfdata *cf,
 		maa.maa_offset = cf->cf_loc[MACECF_OFFSET];
 		maa.maa_intr = cf->cf_loc[MACECF_INTR];
 		maa.maa_intrmask = cf->cf_loc[MACECF_INTRMASK];
-		maa.maa_st = SGIMIPS_BUS_SPACE_MACE;
+		maa.maa_st = normal_memt;
 		maa.maa_sh = sc->ioh;	/* XXX */
 		maa.maa_dmat = &sgimips_default_bus_dma_tag;
 		maa.isa_ringbuffer = sc->isa_ringbuffer;
@@ -245,7 +261,7 @@ mace_intr_establish(int intr, int level, int (*func)(void *), void *arg)
 			maceintrtab[i].intrmask = level;
 			snprintf(maceintrtab[i].evname,
 			    sizeof(maceintrtab[i].evname),
-			    "intr %d level 0x%x", intr, level);
+			    "intr %d lv 0x%x", intr, level);
 			evcnt_attach_dynamic(&maceintrtab[i].evcnt,
 			    EVCNT_TYPE_INTR, NULL,
 			    "mace", maceintrtab[i].evname);
@@ -267,7 +283,7 @@ mace_intr_disestablish(void *cookie)
 		if (&maceintrtab[i] == cookie) {
 			evcnt_detach(&maceintrtab[i].evcnt);
 			for (intr = 0;
-			    maceintrtab[i].irq == (1 << intr); intr ++);
+			    maceintrtab[i].irq == (1 << intr); intr++);
 			level = maceintrtab[i].intrmask;
 			irq = maceintrtab[i].irq;
 
@@ -275,8 +291,8 @@ mace_intr_disestablish(void *cookie)
 			maceintrtab[i].intrmask = 0;
 		        maceintrtab[i].func = NULL;
 		        maceintrtab[i].arg = NULL;
-			bzero(&maceintrtab[i].evcnt, sizeof (struct evcnt));
-			bzero(&maceintrtab[i].evname,
+			memset(&maceintrtab[i].evcnt, 0, sizeof (struct evcnt));
+			memset(&maceintrtab[i].evname, 0,
 			    sizeof (maceintrtab[i].evname));
 			break;
 		}
@@ -296,14 +312,12 @@ mace_intr_disestablish(void *cookie)
 void
 mace_intr(int irqs)
 {
-	u_int64_t isa_irq, isa_mask;
+	uint64_t isa_irq;
 	int i;
 
 	/* irq 4 is the ISA cascade interrupt.  Must handle with care. */
 	if (irqs & (1 << 4)) {
-		isa_mask = mips3_ld((u_int64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
-		    + MACE_ISA_INT_MASK));
-		isa_irq = mips3_ld((u_int64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
+		isa_irq = mips3_ld(MIPS_PHYS_TO_KSEG1(MACE_BASE
 		    + MACE_ISA_INT_STATUS));
 		for (i = 0; i < MACE_NINTR; i++) {
 			if ((maceintrtab[i].irq == (1 << 4)) &&
@@ -326,7 +340,7 @@ mace_intr(int irqs)
 static void
 mace_blink(void *self)
 {
-	struct mace_softc *sc = (struct mace_softc *) self;
+	struct mace_softc *sc = device_private(self);
 	register int s;
 	int value;
 
@@ -347,3 +361,14 @@ mace_blink(void *self)
 
 }
 #endif
+
+#define CHIP	   		mace_isa
+#define	CHIP_MEM		/* defined */
+#define CHIP_ALIGN_STRIDE	8
+#define CHIP_ACCESS_SIZE	8
+#define	CHIP_W1_BUS_START(v)	0x00000000UL
+#define CHIP_W1_BUS_END(v)	0xffffffffUL
+#define	CHIP_W1_SYS_START(v)	0x00000000UL
+#define	CHIP_W1_SYS_END(v)	0xffffffffUL
+
+#include <mips/mips/bus_space_alignstride_chipdep.c>

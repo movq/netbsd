@@ -1,4 +1,4 @@
-.\"	$NetBSD: vgrindefs.5,v 1.9 2003/08/07 11:17:02 agc Exp $
+.\"	$NetBSD: vgrindefs.5,v 1.12 2014/09/19 16:02:58 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -44,14 +44,13 @@ The
 file
 contains all language definitions for
 .Xr vgrind 1 .
-The data base is
-very similar to
-.Xr termcap 5 .
+The data base is of the style
+.Xr capfile 5 .
 .Sh FIELDS
 The following table names and describes each field.
 .Pp
 .Bl -column Namexxx Tpexxx
-.Sy Name	Type	Description
+.It Sy Name	Type	Description
 .It "pb	str	regular expression for start of a procedure"
 .It "bb	str	regular expression for start of a lexical block"
 .It "be	str	regular expression for the end of a lexical block"
@@ -64,6 +63,11 @@ The following table names and describes each field.
 .It "tl	bool	present means procedures are only defined at the top lexical level"
 .It "oc	bool	present means upper and lower case are equivalent"
 .It "kw	str	a list of keywords separated by spaces"
+.El
+.Sh FILES
+.Bl -tag -width /usr/share/misc/vgrindefs -compact
+.It Pa /usr/share/misc/vgrindefs
+File containing terminal descriptions.
 .El
 .Sh EXAMPLES
 The following entry, which describes the C language, is
@@ -144,11 +148,6 @@ by spaces.
 If the "oc" boolean is specified, indicating that upper
 and lower case are equivalent, then all the keywords should be
 specified in lower case.
-.Sh FILES
-.Bl -tag -width /usr/share/misc/vgrindefs -compact
-.It Pa /usr/share/misc/vgrindefs
-File containing terminal descriptions.
-.El
 .Sh SEE ALSO
 .Xr troff 1 ,
 .Xr vgrind 1

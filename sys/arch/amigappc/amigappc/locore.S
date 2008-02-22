@@ -1,4 +1,4 @@
-/*      $NetBSD: locore.S,v 1.15 2008/02/05 22:31:48 garbled Exp $   */
+/*      $NetBSD: locore.S,v 1.25 2014/08/06 15:11:17 joerg Exp $   */
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,65 +31,48 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Amiga part written by Adam Ciarcinski adam@albedo.art.pl */
+/*
+ * Amiga part written by Adam Ciarcinski.
+ * Rewritten for 4.0 and bootargs support by Frank Wille.
+ */
+#include "opt_ddb.h"
+#include "opt_ipkdb.h"
+#include "opt_lockdebug.h"
+#include "opt_multiprocessor.h"
+#include "opt_ppcparam.h"
+#include "assym.h"
+#include "ksyms.h"
+
+#include <sys/syscall.h>
+
+#include <machine/param.h>
+#include <machine/psl.h>
+#include <machine/trap.h>
+#include <machine/asm.h>
+
+#include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
+#include <powerpc/oea/hid.h>
+#include <amiga/amiga/custom.h>
+#include <amigappc/amigappc/p5reg.h>
 
 /*
  * Some instructions gas doesn't understand (yet?)
  */
 #define bdneq   bdnzf 2,
 
-#include "opt_ddb.h"
-#include "opt_ipkdb.h"
-#include "opt_lockdebug.h"
-#include "opt_multiprocessor.h"
-
-#include "assym.h"
-
-#include <sys/syscall.h>
-
-#include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pmap.h>
-#include <machine/psl.h>
-#include <machine/trap.h>
-#define _NOREGNAMES
-#include <machine/asm.h>
-#include <machine/p5reg.h>
-
-#include <machine/hid.h>
-#include <amiga/amiga/custom.h>
-
-#include <powerpc/spr.h>
-
+/*
+ * Globals
+ */
 	.data
-GLOBAL(proc0paddr)
-	.long	0
+GLOBAL(startsym)
+	.long	0			/* start symbol table */
+GLOBAL(endsym)
+	.long	0			/* end symbol table */
 GLOBAL(oeacpufeat)
-	.long	0				/* cpu features */
-GLOBAL(ssir)
-	.word	0
-GLOBAL(delaydivisor)
-	.long	0
-GLOBAL(lowram)
-	.long	0
-
-GLOBAL(eintrnames)
-	.align	4
-GLOBAL(intrcnt)
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	.long	0,0,0,0
-GLOBAL(eintrcnt)
-
-
-idle_u:
-	.long	0			/* fake uarea during idle after exit */
-openfirmware_entry:
-	.long	0			/* openfirmware entry point */
-srsave:
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	.long	0			/* cpu features */
+GLOBAL(eclockfreq)
+	.long	0			/* needed by the aucc driver only */
 
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
@@ -103,10 +86,32 @@ _C_LABEL(kernel_text):
  * Startup entry
  * This is where bootloader jumps after successful kernel loading.
  * Must be the first address in text segment
+ *
+ * Registers passed from bootloader:
+ * r20: E-clock frequency
+ * r21: kernel length in bytes (including ksyms, configdevs and memlists)
+ * r22: entry (__start)
+ * r23: fastmem start
+ * r24: fastmem size
+ * r25: chipmem size
+ * r26: boothowto
+ * r27: esym offset
+ * r28: machine id << 16
+ * r29: amiga flags
+ * r30: inhibit sync flags
+ * r31: kernel base (__start)
  */
-	.text
 	.globl	__start
 __start:
+/*
+ * Disable FPU/MMU exceptions and set interrupt prefix for a
+ * high-vector configuration (exception vectors at 0xfff00000).
+ * Also make sure caches are disabled (should be).
+ */
+	li	0,PSL_IP
+	mtmsr	0
+	isync
+
 /*
  * Disable M68k
  * First of all we must disable M68k, since it cannot be done by
@@ -114,156 +119,131 @@ __start:
  */
 	lis	5,P5BASE@h
 	/* ori	5,5,P5BASE@l	- we assume that the lsb is 0x0000 */
-	li	3,P5_M68K_RESET
-	stb	3,P5_REG_RESET(5)
+	li	9,P5_M68K_RESET
+	stb	9,P5_REG_RESET(5)
+	sync
 
 /*
- * Disable Amiga interrupts
+ * Disable Amiga interrupts and DMA
  */
-	lis	4,0xbfd000@h
-	ori	4,4,0xbfd000@l
-	li	3,0x7f
-	stb	3,0xd00(4)	/* CIAB icr */
-	stb	3,0x1d01(4)	/* CIAA icr */
+	lis	7,0xbfd000@h
+	ori	7,7,0xbfd000@l
+	li	8,0x7f
+	stb	8,0xd00(7)		/* CIAB icr */
+	stb	8,0x1d01(7)		/* CIAA icr */
+	sync
+	lis	7,0xdff000@h
+	ori	7,7,0xdff000@l
+	li	8,0x7fff
+	sth	8,0x9a(7)		/* INTENA */
+	sth	8,0x9c(7)		/* INTREQ */
+	sth	8,0x96(7)		/* DMACON */
+	sync
 
 /*
  * Change interrupt master
  * Only one CPU can get Amiga interrupts, either M68k or PowerPC.
  */
-	li	3,P5_SET_CLEAR|P5_DISABLE_INT
-	stb	3,P5_IPL_EMU(5)	/* disable interrupts */
-	li	3,P5_INT_MASTER
-	stb	3,P5_REG_INT(5)	/* let the PowerPC get interrupts */
-	li	3,P5_DISABLE_INT
-	stb     3,P5_IPL_EMU(5)	/* enable interrupts */
-	li	3,P5_LVL7
-	stb	3,P5_INT_LVL(5)
-
-/*
- * Remove ROM mapping
- * This will give us extra 512K RAM
- */
-	li	3,0x60
-	stb	3,P5_REG_LOCK(5)
-	li	3,0x50
-	stb	3,P5_REG_LOCK(5)
-	li	3,0x30
-	stb	3,P5_REG_LOCK(5)
-	li	3,P5_SET_CLEAR|P5_SHADOW
-	stb	3,P5_REG_SHADOW(5)
-	li	3,0x00
-	stb	3,P5_REG_LOCK(5)
-
-
-/*
- * Clear BAT registers
- * Clearing segment register
- */
-	xor	0,0,0
-	mtibatu	0,0
-	mtibatu	1,0
-	mtibatu	2,0
-	mtibatu	3,0
-	mtdbatu	0,0
-	mtdbatu	1,0
-	mtdbatu	2,0
-	mtdbatu	3,0
-	mtsr	0,0
-	mtsr	1,0
-	mtsr	2,0
-	mtsr	3,0
-	mtsr	4,0
-	mtsr	5,0
-	mtsr	6,0
-	mtsr	7,0
-	mtsr	8,0
-	mtsr	9,0
-	mtsr	10,0
-	mtsr	11,0
-	mtsr	12,0
-	mtsr	13,0
-	mtsr	14,0
-	mtsr	15,0
+	li	0,P5_SET_CLEAR|0x7f
+	stb	0,P5_INT_LVL(5)
+	sync
+	li	9,P5_INT_MASTER|P5_ENABLE_IPL
+	stb	9,P5_REG_INT(5)		/* PPC is master CPU */
+	sync
+	li	8,P5_DISABLE_INT
+	stb	8,P5_IPL_EMU(5)		/* enable interrupts */
+	sync
+	li	7,P5_SET_CLEAR|7
+	stb	7,P5_IPL_EMU(5)		/* all levels */
 	sync
 
 /*
- * Enable caches on 603e/604e
+ * Compute start and end of kernel memory
  */
-	mfspr	3,1008
-	ori	3,3,HID0_ICE|HID0_DCE|HID0_SGE|HID0_BHT
-	ori	4,3,HID0_ICFI|HID0_DCFI
-	sync
-	mtspr	1008,4
-	sync
-	mtspr	1008,3
-	sync
-	isync
+	lis	6,_C_LABEL(end)+3@ha
+	addi	6,6,_C_LABEL(end)+3@l
+	rlwinm	7,6,0,0,29		/* startsym = end - 32-bit alignment */
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	lis	8,_C_LABEL(startsym)@ha
+	stw	7,_C_LABEL(startsym)@l(8)
+	mr.	27,27			/* esym == 0 ? */
+	bne	1f
+	sub	27,7,31			/* esym = startsym : no ksyms! */
+1:
+	add	7,31,27			/* endsym = kernel_base + esym */
+	lis	9,_C_LABEL(endsym)@ha
+	stw	7,_C_LABEL(endsym)@l(9)	/* end of symbol table */
+#endif
+
+	add	4,31,21			/* kernel-end including configdevs */
+	INIT_CPUINFO(4,1,9,0)	
+	mr	14,4
 
 /*
- * Compute end-of-kernel memory
+ * Pass boot arguments
  */
-	lis	8,_C_LABEL(end)@h
-	ori	8,8,_C_LABEL(end)@l
-	li	9,PGOFSET
-	add	8,8,9
-	andc	8,8,9		/* page alignment */
+	lis	11,_C_LABEL(eclockfreq)@ha
+	stw	20,_C_LABEL(eclockfreq)@l(11)
+	mr	3,26			/* boothowto */
+	mr	4,23			/* fphystart */
+	mr	5,24			/* fphysize */
+	mr	6,25			/* cphysize */
+					/* esym, already in r7 */
+	mr	8,28			/* machine id << 16 */
+	mr	9,29			/* amigaflags */
+	mr	10,30			/* inhibitsync */
+	bl	_C_LABEL(set_boot_args)
 
-	addi	8,8,USPACE	/* space for idle_u */
-	lis	9,_C_LABEL(proc0paddr)@ha
-	stw	8,_C_LABEL(proc0paddr)@l(9)
-	addi	1,8,USPACE-FRAMELEN	/* stack pointer for proc0 */
-	mr	4,1
-	xor	0,0,0
-	stwu	0,-16(1)
-
-	lis	3,__start@h
-	ori	3,3,__start@l
+	mr	3,31
+	mr	4,14
 	bl	_C_LABEL(initppc)
 
 /*
- * Jump to main() (from kern/init_main.c)
- * main() should call consinit(), uvm_init() and cpu_startup()
+ * Enable and invalidate the L1 caches.
+ * First the I-caches, then the D-caches. Otherwise the system hangs!!!
  */
-	b	_C_LABEL(main)
+	mfspr	8,SPR_HID0
+	ori	8,8,HID0_ICE
+	ori	9,8,HID0_ICFI
+	sync
+	mtspr	SPR_HID0,9
+	mtspr	SPR_HID0,8
+	sync
+	isync
+	ori	8,8,HID0_DCE
+	ori	9,8,HID0_DCFI
+	sync
+	mtspr	SPR_HID0,9
+	mtspr	SPR_HID0,8
+	sync
+
+/*
+ * Disable serial instr. execution and enable the branch history table for 604
+ */
+	mfpvr	3
+	rlwinm	3,3,16,16,31		/* CPU revision */
+	cmpwi	%r3,9			/* 604e? */
+	bne	1f
+	mfspr	7,SPR_HID0
+	ori	7,7,HID0_SGE|HID0_BHT
+	ori	6,7,HID0_BTCD
+	sync
+	mtspr	SPR_HID0,6		/* flush the BTAC */
+	sync
+	mtspr	SPR_HID0,7
+	sync
+	isync
+1:
+
+/*
+ * You are standing at the gate to NetBSD. --More--
+ * Unspeakable cruelty and harm lurk down there. --More--
+ * Are you sure you want to enter?
+ */
+	bl	_C_LABEL(main)		/* So be it */
 
 loop:
 	b	loop			/* not reached */
-
-/*
- * Colours on the screen
- * For visual test purposes.
- */
-	.globl	_C_LABEL(cpu_fail)
-_C_LABEL(cpu_fail):
-	li	3,0xb8b
-	li	4,0xa0a
-	li	5,0x000
-	lis	2,0xdff000@h
-	ori	2,2,0xdff000@l
-loop1:	sth	3,0x180(2)
-	sth	4,0x180(2)
-	sth	5,0x180(2)
-	b	loop1
-
-
-/*
- * ADAM: fake interrupt handler
- */
-	.globl	_C_LABEL(adamint),_C_LABEL(adamintsize)
-_C_LABEL(adamint):
-	mtsprg	2,2
-	mtsprg	3,3
-	lis	3,0xdff000@h
-	ori	3,3,0xdff000@l
-1:	li	2,0x00a
-	sth	2,0x180(3)
-	li	2,0xaaa
-	sth	2,0x180(3)
-	b	1b
-	mfsprg	3,3
-	mfsprg	2,2
-	rfi
-_C_LABEL(adamintsize) = .-_C_LABEL(adamint)
 
 
 /*

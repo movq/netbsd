@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_and_32_nv_cas.c,v 1.3 2007/11/28 16:59:09 ad Exp $	*/
+/*	$NetBSD: atomic_and_32_nv_cas.c,v 1.7 2014/02/22 17:08:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,6 +48,8 @@ atomic_and_32_nv(volatile uint32_t *addr, uint32_t val)
 
 #undef atomic_and_32_nv
 atomic_op_alias(atomic_and_32_nv,_atomic_and_32_nv)
+crt_alias(__sync_and_and_fetch_4,_atomic_and_32_nv)
+
 #undef atomic_and_uint_nv
 atomic_op_alias(atomic_and_uint_nv,_atomic_and_32_nv)
 __strong_alias(_atomic_and_uint_nv,_atomic_and_32_nv)

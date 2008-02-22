@@ -1,4 +1,4 @@
-/*	$NetBSD: statvfs.h,v 1.13 2007/11/10 07:23:10 yamt Exp $	 */
+/*	$NetBSD: statvfs.h,v 1.18 2013/04/05 17:34:27 christos Exp $	 */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,8 +69,8 @@ struct statvfs {
 	unsigned long	f_frsize;	/* fundamental file system block size */
 	unsigned long	f_iosize;	/* optimal file system block size */
 
+	/* The following are in units of f_frsize */
 	fsblkcnt_t	f_blocks;	/* number of blocks in file system, */
-					/*   (in units of f_frsize) */
 	fsblkcnt_t	f_bfree;	/* free blocks avail in file system */
 	fsblkcnt_t	f_bavail;	/* free blocks avail to non-root */
 	fsblkcnt_t	f_bresvd;	/* blocks reserved for root */
@@ -120,11 +113,14 @@ struct statvfs {
 #define	ST_UNION	MNT_UNION
 #define	ST_ASYNC	MNT_ASYNC
 #define	ST_NOCOREDUMP	MNT_NOCOREDUMP
+#define	ST_RELATIME	MNT_RELATIME
 #define	ST_IGNORE	MNT_IGNORE
 #define	ST_NOATIME	MNT_NOATIME
 #define	ST_SYMPERM	MNT_SYMPERM
 #define	ST_NODEVMTIME	MNT_NODEVMTIME
 #define	ST_SOFTDEP	MNT_SOFTDEP
+#define	ST_LOG		MNT_LOG
+#define	ST_EXTATTR	MNT_EXTATTR
 
 #define	ST_EXRDONLY	MNT_EXRDONLY
 #define	ST_EXPORTED	MNT_EXPORTED

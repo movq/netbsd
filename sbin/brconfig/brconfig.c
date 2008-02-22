@@ -1,4 +1,4 @@
-/*	$NetBSD: brconfig.c,v 1.11 2006/03/20 01:06:07 christos Exp $	*/
+/*	$NetBSD: brconfig.c,v 1.17 2015/06/01 06:15:18 matt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -43,7 +43,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: brconfig.c,v 1.11 2006/03/20 01:06:07 christos Exp $");
+__RCSID("$NetBSD: brconfig.c,v 1.17 2015/06/01 06:15:18 matt Exp $");
 #endif
 
 
@@ -74,29 +74,29 @@ struct command {
 
 #define	CMD_INVERT	0x01	/* "invert" the sense of the command */
 
-void	cmd_add(const struct command *, int, const char *, char **);
-void	cmd_delete(const struct command *, int, const char *, char **);
-void	cmd_up(const struct command *, int, const char *, char **);
-void	cmd_down(const struct command *, int, const char *, char **);
-void	cmd_discover(const struct command *, int, const char *, char **);
-void	cmd_learn(const struct command *, int, const char *, char **);
-void	cmd_flush(const struct command *, int, const char *, char **);
-void	cmd_flushall(const struct command *, int, const char *, char **);
-void	cmd_static(const struct command *, int, const char *, char **);
-void	cmd_deladdr(const struct command *, int, const char *, char **);
-void	cmd_addr(const struct command *, int, const char *, char **);
-void	cmd_maxaddr(const struct command *, int, const char *, char **);
-void	cmd_hellotime(const struct command *, int, const char *, char **);
-void	cmd_fwddelay(const struct command *, int, const char *, char **);
-void	cmd_maxage(const struct command *, int, const char *, char **);
-void	cmd_priority(const struct command *, int, const char *, char **);
-void	cmd_ifpriority(const struct command *, int, const char *, char **);
-void	cmd_ifpathcost(const struct command *, int, const char *, char **);
-void	cmd_timeout(const struct command *, int, const char *, char **);
-void	cmd_stp(const struct command *, int, const char *, char **);
-void	cmd_ipf(const struct command *, int, const char *, char **);
+static void	cmd_add(const struct command *, int, const char *, char **);
+static void	cmd_delete(const struct command *, int, const char *, char **);
+static void	cmd_up(const struct command *, int, const char *, char **);
+static void	cmd_down(const struct command *, int, const char *, char **);
+static void	cmd_discover(const struct command *, int, const char *, char **);
+static void	cmd_learn(const struct command *, int, const char *, char **);
+static void	cmd_flush(const struct command *, int, const char *, char **);
+static void	cmd_flushall(const struct command *, int, const char *, char **);
+static void	cmd_static(const struct command *, int, const char *, char **);
+static void	cmd_deladdr(const struct command *, int, const char *, char **);
+static void	cmd_addr(const struct command *, int, const char *, char **);
+static void	cmd_maxaddr(const struct command *, int, const char *, char **);
+static void	cmd_hellotime(const struct command *, int, const char *, char **);
+static void	cmd_fwddelay(const struct command *, int, const char *, char **);
+static void	cmd_maxage(const struct command *, int, const char *, char **);
+static void	cmd_priority(const struct command *, int, const char *, char **);
+static void	cmd_ifpriority(const struct command *, int, const char *, char **);
+static void	cmd_ifpathcost(const struct command *, int, const char *, char **);
+static void	cmd_timeout(const struct command *, int, const char *, char **);
+static void	cmd_stp(const struct command *, int, const char *, char **);
+static void	cmd_ipf(const struct command *, int, const char *, char **);
 
-const struct command command_table[] = {
+static const struct command command_table[] = {
 	{ "add",		1,	0,		cmd_add },
 	{ "delete",		1,	0,		cmd_delete },
 
@@ -134,25 +134,26 @@ const struct command command_table[] = {
 	{ NULL,			0,	0,		NULL },
 };
 
-void	printall(int);
-void	status(int, const char *);
-int	is_bridge(const char *);
-void	show_config(int, const char *, const char *);
-void	show_interfaces(int, const char *, const char *);
-void	show_addresses(int, const char *, const char *);
-int	get_val(const char *, u_long *);
-int	do_cmd(int, const char *, u_long, void *, size_t, int);
-void	do_ifflag(int, const char *, int, int);
-void	do_bridgeflag(int, const char *, const char *, int, int);
+static void	printall(int);
+static void	status(int, const char *);
+static int	is_bridge(const char *);
+static void	show_config(int, const char *, const char *);
+static void	show_interfaces(int, const char *, const char *);
+static void	show_addresses(int, const char *, const char *);
+static int	get_val(const char *, u_long *);
+#define	do_cmd(a,b,c,d,e,f)	do_cmd2((a),(b),(c),(d),(e),NULL,(f))
+static int	do_cmd2(int, const char *, u_long, void *, size_t, size_t *, int);
+static void	do_ifflag(int, const char *, int, int);
+static void	do_bridgeflag(int, const char *, const char *, int, int);
 
-void	printb(const char *, u_int, const char *);
+static void	printb(const char *, u_int, const char *);
 
-void	usage(void);
+__dead static void	usage(void);
 
-int	aflag;
+static int	aflag;
 
-struct ifreq g_ifr;
-int	g_ifr_updated;
+static struct ifreq g_ifr;
+static int	g_ifr_updated;
 
 int
 main(int argc, char *argv[])
@@ -239,7 +240,7 @@ main(int argc, char *argv[])
 	exit (0);
 }
 
-void
+static void
 usage(void)
 {
 	static const char *usage_strings[] = {
@@ -278,7 +279,7 @@ usage(void)
 	exit(1);
 }
 
-int
+static int
 is_bridge(const char *bridge)
 {
 
@@ -289,7 +290,7 @@ is_bridge(const char *bridge)
 	return (1);
 }
 
-void
+static void
 printb(const char *s, u_int v, const char *bits)
 {
 	int i, any = 0;
@@ -317,7 +318,7 @@ printb(const char *s, u_int v, const char *bits)
 	}
 }
 
-void
+static void
 printall(int sock)
 {
 	struct ifaddrs *ifap, *ifa;
@@ -338,7 +339,7 @@ printall(int sock)
 	freeifaddrs(ifap);
 }
 
-void
+static void
 status(int sock, const char *bridge)
 {
 	struct ifreq ifr;
@@ -370,7 +371,7 @@ status(int sock, const char *bridge)
 	show_addresses(sock, bridge, "\t\t");
 }
 
-void
+static void
 show_config(int sock, const char *bridge, const char *prefix)
 {
 	struct ifbrparam param;
@@ -408,36 +409,32 @@ show_config(int sock, const char *bridge, const char *prefix)
 		ipfflags);
 }
 
-void
+static void
 show_interfaces(int sock, const char *bridge, const char *prefix)
 {
-	static const char *stpstates[] = {
+	static const char stpstates[][11] = {
 		"disabled",
 		"listening",
 		"learning",
 		"forwarding",
 		"blocking",
 	};
-	struct ifbifconf bifc;
 	struct ifbreq *req;
 	char *inbuf = NULL, *ninbuf;
-	int i, len = 8192;
+	size_t len = 8192, nlen;
 
-	for (;;) {
-		ninbuf = realloc(inbuf, len);
+	do {
+		nlen = len;
+		ninbuf = realloc(inbuf, nlen);
 		if (ninbuf == NULL)
 			err(1, "unable to allocate interface buffer");
-		bifc.ifbic_len = len;
-		bifc.ifbic_buf = inbuf = ninbuf;
-		if (do_cmd(sock, bridge, BRDGGIFS, &bifc, sizeof(bifc), 0) < 0)
+		inbuf = ninbuf;
+		if (do_cmd2(sock, bridge, BRDGGIFS, inbuf, nlen, &len, 0) < 0)
 			err(1, "unable to get interface list");
-		if ((bifc.ifbic_len + sizeof(*req)) < len)
-			break;
-		len *= 2;
-	}
+	} while (len > nlen);
 
-	for (i = 0; i < bifc.ifbic_len / sizeof(*req); i++) {
-		req = bifc.ifbic_req + i;
+	for (size_t i = 0; i < len / sizeof(*req); i++) {
+		req = (struct ifbreq *)inbuf + i;
 		printf("%s%s ", prefix, req->ifbr_ifsname);
 		printb("flags", req->ifbr_ifsflags, IFBIFBITS);
 		printf("\n");
@@ -459,34 +456,30 @@ show_interfaces(int sock, const char *bridge, const char *prefix)
 	free(inbuf);
 }
 
-void
+static void
 show_addresses(int sock, const char *bridge, const char *prefix)
 {
-	struct ifbaconf ifbac;
 	struct ifbareq *ifba;
 	char *inbuf = NULL, *ninbuf;
-	int i, len = 8192;
 	struct ether_addr ea;
+	size_t len = 8192, nlen;
 
-	for (;;) {
-		ninbuf = realloc(inbuf, len);
+	do {
+		nlen = len;
+		ninbuf = realloc(inbuf, nlen);
 		if (ninbuf == NULL)
 			err(1, "unable to allocate address buffer");
-		ifbac.ifbac_len = len;
-		ifbac.ifbac_buf = inbuf = ninbuf;
-		if (do_cmd(sock, bridge, BRDGRTS, &ifbac, sizeof(ifbac), 0) < 0)
+		inbuf = ninbuf;
+		if (do_cmd2(sock, bridge, BRDGRTS, inbuf, nlen, &len, 0) < 0)
 			err(1, "unable to get address cache");
-		if ((ifbac.ifbac_len + sizeof(*ifba)) < len)
-			break;
-		len *= 2;
-	}
+	} while (len > nlen);
 
-	for (i = 0; i < ifbac.ifbac_len / sizeof(*ifba); i++) {
-		ifba = ifbac.ifbac_req + i;
+	for (size_t i = 0; i < len / sizeof(*ifba); i++) {
+		ifba = (struct ifbareq *)inbuf + i;
 		memcpy(ea.ether_addr_octet, ifba->ifba_dst,
 		    sizeof(ea.ether_addr_octet));
-		printf("%s%s %s %lu ", prefix, ether_ntoa(&ea),
-		    ifba->ifba_ifsname, ifba->ifba_expire);
+		printf("%s%s %s %jd ", prefix, ether_ntoa(&ea),
+		    ifba->ifba_ifsname, (uintmax_t)ifba->ifba_expire);
 		printb("flags", ifba->ifba_flags, IFBAFBITS);
 		printf("\n");
 	}
@@ -494,7 +487,7 @@ show_addresses(int sock, const char *bridge, const char *prefix)
 	free(inbuf);
 }
 
-int
+static int
 get_val(const char *cp, u_long *valp)
 {
 	char *endptr;
@@ -509,11 +502,12 @@ get_val(const char *cp, u_long *valp)
 	return (0);
 }
 
-int
-do_cmd(int sock, const char *bridge, u_long op, void *arg, size_t argsize,
-    int set)
+static int
+do_cmd2(int sock, const char *bridge, u_long op, void *arg, size_t argsize,
+    size_t *outsizep, int set)
 {
 	struct ifdrv ifd;
+	int error;
 
 	memset(&ifd, 0, sizeof(ifd));
 
@@ -522,10 +516,15 @@ do_cmd(int sock, const char *bridge, u_long op, void *arg, size_t argsize,
 	ifd.ifd_len = argsize;
 	ifd.ifd_data = arg;
 
-	return (ioctl(sock, set ? SIOCSDRVSPEC : SIOCGDRVSPEC, &ifd));
+	error = ioctl(sock, set ? SIOCSDRVSPEC : SIOCGDRVSPEC, &ifd);
+
+	if (outsizep)
+		*outsizep = ifd.ifd_len;
+
+	return error;
 }
 
-void
+static void
 do_ifflag(int sock, const char *bridge, int flag, int set)
 {
 
@@ -537,7 +536,7 @@ do_ifflag(int sock, const char *bridge, int flag, int set)
 	g_ifr_updated = 1;
 }
 
-void
+static void
 do_bridgeflag(int sock, const char *bridge, const char *ifs, int flag,
     int set)
 {
@@ -557,7 +556,7 @@ do_bridgeflag(int sock, const char *bridge, const char *ifs, int flag,
 		err(1, "unable to set bridge flags");
 }
 
-void
+static void
 cmd_add(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -570,7 +569,7 @@ cmd_add(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_delete(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -582,7 +581,7 @@ cmd_delete(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_up(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -590,7 +589,7 @@ cmd_up(const struct command *cmd, int sock, const char *bridge,
 	do_ifflag(sock, bridge, IFF_UP, 1);
 }
 
-void
+static void
 cmd_down(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -598,7 +597,7 @@ cmd_down(const struct command *cmd, int sock, const char *bridge,
 	do_ifflag(sock, bridge, IFF_UP, 0);
 }
 
-void
+static void
 cmd_discover(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -607,7 +606,7 @@ cmd_discover(const struct command *cmd, int sock, const char *bridge,
 	    (cmd->cmd_flags & CMD_INVERT) ? 0 : 1);
 }
 
-void
+static void
 cmd_learn(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -616,7 +615,7 @@ cmd_learn(const struct command *cmd, int sock, const char *bridge,
 	    (cmd->cmd_flags & CMD_INVERT) ? 0 : 1);
 }
 
-void
+static void
 cmd_stp(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -625,7 +624,7 @@ cmd_stp(const struct command *cmd, int sock, const char *bridge,
 	    (cmd->cmd_flags & CMD_INVERT) ? 0 : 1);
 }
 
-void
+static void
 cmd_flush(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -637,7 +636,7 @@ cmd_flush(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s", cmd->cmd_keyword);
 }
 
-void
+static void
 cmd_flushall(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -649,7 +648,7 @@ cmd_flushall(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s", cmd->cmd_keyword);
 }
 
-void
+static void
 cmd_static(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -670,7 +669,7 @@ cmd_static(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s %s", cmd->cmd_keyword, argv[0], argv[1]);
 }
 
-void
+static void
 cmd_deladdr(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -689,7 +688,7 @@ cmd_deladdr(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_addr(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -697,7 +696,7 @@ cmd_addr(const struct command *cmd, int sock, const char *bridge,
 	show_addresses(sock, bridge, "\t");
 }
 
-void
+static void
 cmd_maxaddr(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -713,7 +712,7 @@ cmd_maxaddr(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_hellotime(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -729,7 +728,7 @@ cmd_hellotime(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_fwddelay(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -745,7 +744,7 @@ cmd_fwddelay(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_maxage(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -761,7 +760,7 @@ cmd_maxage(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_priority(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -777,7 +776,7 @@ cmd_priority(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_ifpriority(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -796,7 +795,7 @@ cmd_ifpriority(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_ifpathcost(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -815,7 +814,7 @@ cmd_ifpathcost(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_timeout(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {
@@ -831,7 +830,7 @@ cmd_timeout(const struct command *cmd, int sock, const char *bridge,
 		err(1, "%s %s", cmd->cmd_keyword, argv[0]);
 }
 
-void
+static void
 cmd_ipf(const struct command *cmd, int sock, const char *bridge,
     char **argv)
 {

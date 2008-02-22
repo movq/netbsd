@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2008/01/16 12:34:58 ad Exp $	*/
+/*	$NetBSD: main.c,v 1.6 2016/09/05 01:09:57 sevan Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.1 2008/01/16 12:34:58 ad Exp $");
+__RCSID("$NetBSD: main.c,v 1.6 2016/09/05 01:09:57 sevan Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
@@ -46,18 +39,25 @@ __RCSID("$NetBSD: main.c,v 1.1 2008/01/16 12:34:58 ad Exp $");
 #include <unistd.h>
 #include <err.h>
 
-int	main(int, char **);
+#include "prog_ops.h"
+
 static void	usage(void) __dead;
 
 int
 main(int argc, char **argv)
 {
+	int i;
 
-	if (argc != 2)
+	if (argc < 2)
 		usage();
 
-	if (modctl(MODCTL_UNLOAD, argv[1])) {
-		err(EXIT_FAILURE, NULL);
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
+
+	for (i = 1; i < argc; i++) {
+		if (prog_modctl(MODCTL_UNLOAD, argv[i])) {
+			err(EXIT_FAILURE, "%s", argv[i]);
+		}
 	}
 
 	exit(EXIT_SUCCESS);
@@ -67,6 +67,6 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "Usage: %s <module_name>\n", getprogname());
+	(void)fprintf(stderr, "Usage: %s <module_name ...>\n", getprogname());
 	exit(EXIT_FAILURE);
 }

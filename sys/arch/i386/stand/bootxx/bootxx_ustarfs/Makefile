@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2003/04/16 22:26:11 dsl Exp $
+# $NetBSD: Makefile,v 1.3 2009/11/18 21:02:16 dsl Exp $
 
 FS=ustarfs
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: adlookup.c,v 1.11 2007/11/26 19:01:40 pooka Exp $	*/
+/*	$NetBSD: adlookup.c,v 1.19 2014/02/07 15:29:21 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.11 2007/11/26 19:01:40 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.19 2014/02/07 15:29:21 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,10 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.11 2007/11/26 19:01:40 pooka Exp $");
  *	    caller, this will not occur with RENAME or CREATE.
  */
 int
-adosfs_lookup(v)
-	void *v;
+adosfs_lookup(void *v)
 {
-	struct vop_lookup_args /* {
+	struct vop_lookup_v2_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
@@ -111,8 +110,10 @@ adosfs_lookup(v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
-		return (error);
+	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
+			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
+		return *vpp == NULLVP ? ENOENT : 0;
+	}
 
 	/*
 	 * fake a '.'
@@ -143,7 +144,7 @@ adosfs_lookup(v)
 		 * and fail. Otherwise we have succeded.
 		 *
 		 */
-		VOP_UNLOCK(vdp, 0); /* race */
+		VOP_UNLOCK(vdp); /* race */
 		error = VFS_VGET(vdp->v_mount, (ino_t)adp->pblock, vpp);
 		vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -206,14 +207,14 @@ adosfs_lookup(v)
 #endif
 			return (error);
 		}
-		cnp->cn_nameiop |= SAVENAME;
 #ifdef ADOSFS_DIAGNOSTIC
 		printf("EJUSTRETURN)");
 #endif
 		return(EJUSTRETURN);
 	}
-	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
-		cache_enter(vdp, NULL, cnp);
+	if (nameiop != CREATE)
+		cache_enter(vdp, NULL, cnp->cn_nameptr, cnp->cn_namelen,
+			    cnp->cn_flags);
 #ifdef ADOSFS_DIAGNOSTIC
 	printf("ENOENT)");
 #endif
@@ -237,14 +238,16 @@ found:
 			*vpp = NULL;
 			return (error);
 		}
-		cnp->cn_flags |= SAVENAME;
 		nocache = 1;
 	}
 	if (vdp == *vpp)
-		VREF(vdp);
+		vref(vdp);
 found_lockdone:
-	if ((cnp->cn_flags & MAKEENTRY) && nocache == 0)
-		cache_enter(vdp, *vpp, cnp);
+	if (*vpp != vdp)
+		VOP_UNLOCK(*vpp);
+	if (nocache == 0)
+		cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
+			    cnp->cn_flags);
 
 #ifdef ADOSFS_DIAGNOSTIC
 	printf("0)\n");

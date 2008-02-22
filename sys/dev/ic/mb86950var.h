@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86950var.h,v 1.3 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: mb86950var.h,v 1.9 2015/04/14 20:32:35 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1995 Mika Kortelainen
@@ -30,6 +30,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/rndsource.h>
+
 /*
  * Adapted from if_qnreg.h for the amiga port of NetBSD by Dave J. Barnes, 2004.
  */
@@ -38,7 +40,7 @@
  * EStar_softc: per line info and status
  */
 struct mb86950_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct ethercom sc_ec;		/* ethernet common */
 	struct ifmedia sc_media;	/* supported media information */
 
@@ -59,21 +61,19 @@ struct mb86950_softc {
 
 	u_int8_t sc_enaddr[ETHER_ADDR_LEN];
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 
 	u_int32_t sc_stat;	/* driver status */
 
 #define ESTAR_STAT_ENABLED	0x0001	/* power enabled on interface */
 #define ESTAR_STAT_ATTACHED	0x0002	/* attach has succeeded */
 
-	int	(*sc_enable) __P((struct mb86950_softc *));
-	void	(*sc_disable) __P((struct mb86950_softc *));
+	int	(*sc_enable)(struct mb86950_softc *);
+	void	(*sc_disable)(struct mb86950_softc *);
 
-	int	(*sc_mediachange) __P((struct mb86950_softc *));
-	void	(*sc_mediastatus) __P((struct mb86950_softc *,
-		    struct ifmediareq *));
+	int	(*sc_mediachange)(struct mb86950_softc *);
+	void	(*sc_mediastatus)(struct mb86950_softc *,
+		    struct ifmediareq *);
 
 };
 
@@ -82,10 +82,10 @@ struct mb86950_softc {
 
 #define GOOD_PKT 0x20
 
-void    mb86950_attach  __P((struct mb86950_softc *, u_int8_t *));
-void    mb86950_config  __P((struct mb86950_softc *, int *, int, int));
-int     mb86950_intr    __P((void *));
-int     mb86950_enable  __P((struct mb86950_softc *));
-void    mb86950_disable __P((struct mb86950_softc *));
-int     mb86950_activate __P((struct device *, enum devact));
-int     mb86950_detach  __P((struct mb86950_softc *));
+void    mb86950_attach(struct mb86950_softc *, u_int8_t *);
+void    mb86950_config(struct mb86950_softc *, int *, int, int);
+int     mb86950_intr(void *);
+int     mb86950_enable(struct mb86950_softc *);
+void    mb86950_disable(struct mb86950_softc *);
+int     mb86950_activate(device_t, enum devact);
+int     mb86950_detach(struct mb86950_softc *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.c,v 1.26 2006/10/22 21:11:56 christos Exp $	*/
+/*	$NetBSD: makefs.c,v 1.53 2015/11/27 15:10:32 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: makefs.c,v 1.26 2006/10/22 21:11:56 christos Exp $");
+__RCSID("$NetBSD: makefs.c,v 1.53 2015/11/27 15:10:32 joerg Exp $");
 #endif	/* !__lint */
 
 #include <assert.h>
@@ -52,6 +52,8 @@ __RCSID("$NetBSD: makefs.c,v 1.26 2006/10/22 21:11:56 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
+#include <util.h>
 
 #include "makefs.h"
 #include "mtree.h"
@@ -70,18 +72,26 @@ typedef struct {
 } fstype_t;
 
 static fstype_t fstypes[] = {
-	{ "ffs", ffs_prep_opts,	ffs_parse_opts,	ffs_cleanup_opts, ffs_makefs },
-	{ "cd9660", cd9660_prep_opts, cd9660_parse_opts, cd9660_cleanup_opts,
-	  cd9660_makefs},
+#define ENTRY(name) { \
+	# name, name ## _prep_opts, name ## _parse_opts, \
+	name ## _cleanup_opts, name ## _makefs  \
+}
+	ENTRY(ffs),
+	ENTRY(cd9660),
+	ENTRY(chfs),
+	ENTRY(v7fs),
+	ENTRY(msdos),
+	ENTRY(udf),
 	{ .type = NULL	},
 };
 
 u_int		debug;
 struct timespec	start_time;
+struct stat stampst;
 
 static	fstype_t *get_fstype(const char *);
-static	void	usage(void);
-int		main(int, char *[]);
+static int get_tstamp(const char *, struct stat *);
+static	void	usage(fstype_t *, fsinfo_t *) __dead;
 
 int
 main(int argc, char *argv[])
@@ -90,7 +100,7 @@ main(int argc, char *argv[])
 	fstype_t	*fstype;
 	fsinfo_t	 fsoptions;
 	fsnode		*root;
-	int	 	 ch, len;
+	int	 	 ch, i, len;
 	char		*specfile;
 
 	setprogname(argv[0]);
@@ -108,13 +118,18 @@ main(int argc, char *argv[])
 		fstype->prepare_options(&fsoptions);
 
 	specfile = NULL;
-	if (gettimeofday(&start, NULL) == -1)
-		err(1, "Unable to get system time");
-
+#ifdef CLOCK_REALTIME
+	ch = clock_gettime(CLOCK_REALTIME, &start_time);
+#else
+	ch = gettimeofday(&start, NULL);
 	start_time.tv_sec = start.tv_sec;
 	start_time.tv_nsec = start.tv_usec * 1000;
+#endif
+	if (ch == -1)
+		err(1, "Unable to get system time");
 
-	while ((ch = getopt(argc, argv, "B:b:d:f:F:M:m:N:o:s:S:t:x")) != -1) {
+
+	while ((ch = getopt(argc, argv, "B:b:d:f:F:M:m:N:O:o:rs:S:t:T:xZ")) != -1) {
 		switch (ch) {
 
 		case 'B':
@@ -132,7 +147,7 @@ main(int argc, char *argv[])
 #endif
 			} else {
 				warnx("Invalid endian `%s'.", optarg);
-				usage();
+				usage(fstype, &fsoptions);
 			}
 			break;
 
@@ -188,6 +203,11 @@ main(int argc, char *argv[])
 			fsoptions.maxsize =
 			    strsuftoll("maximum size", optarg, 1LL, LLONG_MAX);
 			break;
+
+		case 'O':
+			fsoptions.offset = 
+			    strsuftoll("offset", optarg, 0LL, LLONG_MAX);
+			break;
 			
 		case 'o':
 		{
@@ -197,10 +217,14 @@ main(int argc, char *argv[])
 				if (*p == '\0')
 					errx(1, "Empty option");
 				if (! fstype->parse_options(p, &fsoptions))
-					usage();
+					usage(fstype, &fsoptions);
 			}
 			break;
 		}
+
+		case 'r':
+			fsoptions.replace = 1;
+			break;
 
 		case 's':
 			fsoptions.minsize = fsoptions.maxsize =
@@ -223,13 +247,23 @@ main(int argc, char *argv[])
 			fstype->prepare_options(&fsoptions);
 			break;
 
+		case 'T':
+			if (get_tstamp(optarg, &stampst) == -1)
+				errx(1, "Cannot get timestamp from `%s'",
+				    optarg);
+			break;
+
 		case 'x':
 			fsoptions.onlyspec = 1;
 			break;
 
+		case 'Z':
+			fsoptions.sparse = 1;
+			break;
+
 		case '?':
 		default:
-			usage();
+			usage(fstype, &fsoptions);
 			/* NOTREACHED */
 
 		}
@@ -243,8 +277,8 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 2)
-		usage();
+	if (argc < 2)
+		usage(fstype, &fsoptions);
 
 	/* -x must be accompanied by -F */
 	if (fsoptions.onlyspec != 0 && specfile == NULL)
@@ -252,8 +286,20 @@ main(int argc, char *argv[])
 
 				/* walk the tree */
 	TIMER_START(start);
-	root = walk_dir(argv[1], NULL);
+	root = walk_dir(argv[1], ".", NULL, NULL, fsoptions.replace);
 	TIMER_RESULTS(start, "walk_dir");
+
+	/* append extra directory */
+	for (i = 2; i < argc; i++) {
+		struct stat sb;
+		if (stat(argv[i], &sb) == -1)
+			err(1, "Can't stat `%s'", argv[i]);
+		if (!S_ISDIR(sb.st_mode))
+			errx(1, "%s: not a directory", argv[i]);
+		TIMER_START(start);
+		root = walk_dir(argv[i], ".", NULL, root, fsoptions.replace);
+		TIMER_RESULTS(start, "walk_dir2");
+	}
 
 	if (specfile) {		/* apply a specfile */
 		TIMER_START(start);
@@ -263,7 +309,7 @@ main(int argc, char *argv[])
 
 	if (debug & DEBUG_DUMP_FSNODES) {
 		printf("\nparent: %s\n", argv[1]);
-		dump_fsnodes(".", root);
+		dump_fsnodes(root);
 		putchar('\n');
 	}
 
@@ -278,21 +324,80 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
+int
+set_option(const option_t *options, const char *option, char *buf, size_t len)
+{
+	char *var, *val;
+	int retval;
+
+	assert(option != NULL);
+
+	var = estrdup(option);
+	for (val = var; *val; val++)
+		if (*val == '=') {
+			*val++ = '\0';
+			break;
+		}
+	retval = set_option_var(options, var, val, buf, len);
+	free(var);
+	return retval;
+}
 
 int
-set_option(option_t *options, const char *var, const char *val)
+set_option_var(const option_t *options, const char *var, const char *val,
+    char *buf, size_t len)
 {
-	int	i;
+	char *s;
+	size_t i;
+
+#define NUM(type) \
+	if (!*val) { \
+		*(type *)options[i].value = 1; \
+		break; \
+	} \
+	*(type *)options[i].value = (type)strsuftoll(options[i].desc, val, \
+	    options[i].minimum, options[i].maximum); break
 
 	for (i = 0; options[i].name != NULL; i++) {
-		if (strcmp(options[i].name, var) != 0)
+		if (var[1] == '\0') {
+			if (options[i].letter != var[0])
+				continue;
+		} else if (strcmp(options[i].name, var) != 0)
 			continue;
-		*options[i].value = (int)strsuftoll(options[i].desc, val,
-		    options[i].minimum, options[i].maximum);
-		return (1);
+		switch (options[i].type) {
+		case OPT_BOOL:
+			*(bool *)options[i].value = 1;
+			break;
+		case OPT_STRARRAY:
+			strlcpy((void *)options[i].value, val, (size_t)
+			    options[i].maximum);
+			break;
+		case OPT_STRPTR:
+			s = estrdup(val);
+			*(char **)options[i].value = s;
+			break;
+		case OPT_STRBUF:
+			if (buf == NULL)
+				abort();
+			strlcpy(buf, val, len);
+			break;
+		case OPT_INT64:
+			NUM(uint64_t);
+		case OPT_INT32:
+			NUM(uint32_t);
+		case OPT_INT16:
+			NUM(uint16_t);
+		case OPT_INT8:
+			NUM(uint8_t);
+		default:
+			warnx("Unknown type %d in option %s", options[i].type,
+			    val);
+			return 0;
+		}
+		return i;
 	}
 	warnx("Unknown option `%s'", var);
-	return (0);
+	return -1;
 }
 
 
@@ -307,17 +412,70 @@ get_fstype(const char *type)
 	return (NULL);
 }
 
+option_t *
+copy_opts(const option_t *o)
+{
+	size_t i;
+	for (i = 0; o[i].name; i++)
+		continue;
+	i++;
+	return memcpy(ecalloc(i, sizeof(*o)), o, i * sizeof(*o));
+}
+
+static int
+get_tstamp(const char *b, struct stat *st)
+{
+	time_t when;
+	char *eb;
+	long long l;
+
+	if (stat(b, st) != -1)
+		return 0;
+
+#ifndef HAVE_NBTOOL_CONFIG_H
+	errno = 0;
+	if ((when = parsedate(b, NULL, NULL)) == -1 && errno != 0)
+#endif
+	{
+		errno = 0;
+		l = strtoll(b, &eb, 0);
+		if (b == eb || *eb || errno)
+			return -1;
+		when = (time_t)l;
+	}
+
+	st->st_ino = 1;
+#if HAVE_STRUCT_STAT_BIRTHTIME 
+	st->st_birthtime =
+#endif
+	st->st_mtime = st->st_ctime = st->st_atime = when;
+	return 0;
+}
+
 static void
-usage(void)
+usage(fstype_t *fstype, fsinfo_t *fsoptions)
 {
 	const char *prog;
 
 	prog = getprogname();
 	fprintf(stderr,
-"usage: %s [-t fs-type] [-o fs-options] [-d debug-mask] [-B endian]\n"
-"\t[-S sector-size] [-M minimum-size] [-m maximum-size] [-s image-size]\n"
-"\t[-b free-blocks] [-f free-files] [-F mtree-specfile] [-x]\n"
-"\t[-N userdb-dir] image-file directory\n",
+"Usage: %s [-rxZ] [-B endian] [-b free-blocks] [-d debug-mask]\n"
+"\t[-F mtree-specfile] [-f free-files] [-M minimum-size] [-m maximum-size]\n"
+"\t[-N userdb-dir] [-O offset] [-o fs-options] [-S sector-size]\n"
+"\t[-s image-size] [-T <timestamp/file>] [-t fs-type]"
+" image-file directory [extra-directory ...]\n",
 	    prog);
+
+	if (fstype) {
+		size_t i;
+		option_t *o = fsoptions->fs_options;
+
+		fprintf(stderr, "\n%s specific options:\n", fstype->type);
+		for (i = 0; o[i].name != NULL; i++)
+			fprintf(stderr, "\t%c%c%20.20s\t%s\n",
+			    o[i].letter ? o[i].letter : ' ',
+			    o[i].letter ? ',' : ' ',
+			    o[i].name, o[i].desc);
+	}
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: s3c24x0_lcd.h,v 1.4 2007/03/04 05:59:38 christos Exp $ */
+/* $NetBSD: s3c24x0_lcd.h,v 1.6 2012/01/30 03:28:33 nisimura Exp $ */
 
 /*
  * Copyright (c) 2004  Genetec Corporation.  All rights reserved.
@@ -34,7 +34,7 @@
 #define	_ARM_S3C2XX0_S3C24X0_LCD_H
 
 #include <dev/rasops/rasops.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* LCD Contoroller */
 
@@ -56,7 +56,7 @@ struct s3c24x0_lcd_screen {
 };
 
 struct s3c24x0_lcd_softc {
-	struct device  dev;
+	device_t		sc_dev;
 
 	/* control registers */
 	bus_space_tag_t  	iot;

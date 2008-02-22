@@ -1,4 +1,4 @@
-/*	$NetBSD: if_strip.c,v 1.85 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: if_strip.c,v 1.110 2018/06/06 01:49:09 maya Exp $	*/
 /*	from: NetBSD: if_sl.c,v 1.38 1996/02/13 22:00:23 christos Exp $	*/
 
 /*
@@ -87,10 +87,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.85 2008/02/20 17:05:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.110 2018/06/06 01:49:09 maya Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#include "bpfilter.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -111,6 +112,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.85 2008/02/20 17:05:53 matt Exp $");
 #include <sys/syslog.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
+#include <sys/socketvar.h>
+#include <sys/device.h>
+#include <sys/module.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -135,10 +139,8 @@ typedef u_char ttychar_t;
 typedef char ttychar_t;
 #endif
 
-#if NBPFILTER > 0
 #include <sys/time.h>
 #include <net/bpf.h>
-#endif
 
 /*
  * SLMAX is a hard limit on input packet size.  To simplify the code
@@ -188,7 +190,7 @@ typedef char ttychar_t;
 #define STRIP_MTU_ONWIRE (SLMTU + 20 + STRIP_HDRLEN) /* (2*SLMTU+2 in sl.c */
 
 
-#define	SLIP_HIWAT	roundup(50,CBSIZE)
+#define	SLIP_HIWAT	roundup(50, TTROUND)
 
 /* This is a NetBSD-1.0 or later kernel. */
 #define CCOUNT(q)	((q)->c_cc)
@@ -222,7 +224,7 @@ struct if_clone strip_cloner =
 
 static void	stripintr(void *);
 
-static int	stripinit(struct strip_softc *);
+static int	stripcreate(struct strip_softc *);
 static struct mbuf *strip_btom(struct strip_softc *, int);
 
 /*
@@ -332,7 +334,8 @@ static int	stripinput(int, struct tty *);
 static int	stripioctl(struct ifnet *, u_long, void *);
 static int	stripopen(dev_t, struct tty *);
 static int	stripoutput(struct ifnet *,
-		    struct mbuf *, const struct sockaddr *, struct rtentry *);
+		    struct mbuf *, const struct sockaddr *,
+		    const struct rtentry *);
 static int	stripstart(struct tty *);
 static int	striptioctl(struct tty *, u_long, void *, int, struct lwp *);
 
@@ -352,10 +355,37 @@ static struct linesw strip_disc = {
 void
 stripattach(void)
 {
+	/*
+	 * Nothing to do here, initialization is handled by the
+	 * module initialization code in slinit() below).
+	 */
+}
+
+static void
+stripinit(void)
+{
+
 	if (ttyldisc_attach(&strip_disc) != 0)
-		panic("stripattach");
+		panic("%s", __func__);
 	LIST_INIT(&strip_softc_list);
 	if_clone_attach(&strip_cloner);
+}
+
+static int
+stripdetach(void)
+{
+	int error = 0;
+
+	if (!LIST_EMPTY(&strip_softc_list))
+		error = EBUSY;
+
+	if (error == 0)
+		error = ttyldisc_detach(&strip_disc);
+
+	if (error == 0)
+		if_clone_detach(&strip_cloner);
+
+	return error;
 }
 
 static int
@@ -363,15 +393,13 @@ strip_clone_create(struct if_clone *ifc, int unit)
 {
 	struct strip_softc *sc;
 
-	MALLOC(sc, struct strip_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
 	sc->sc_unit = unit;
-	(void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname),
-	    "%s%d", ifc->ifc_name, unit);
+	if_initname(&sc->sc_if, ifc->ifc_name, unit);
 	callout_init(&sc->sc_timo_ch, 0);
 	sc->sc_if.if_softc = sc;
 	sc->sc_if.if_mtu = SLMTU;
 	sc->sc_if.if_flags = 0;
-	sc->sc_if.if_type = IFT_OTHER;
 #if 0
 	sc->sc_if.if_flags |= SC_AUTOCOMP /* | IFF_POINTOPOINT | IFF_MULTICAST*/;
 #endif
@@ -385,9 +413,7 @@ strip_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_watchdog = strip_watchdog;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
-#endif
+	bpf_attach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
 	LIST_INSERT_HEAD(&strip_softc_list, sc, sc_iflist);
 	return 0;
 }
@@ -402,17 +428,15 @@ strip_clone_destroy(struct ifnet *ifp)
 
 	LIST_REMOVE(sc, sc_iflist);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
-	FREE(sc, M_DEVBUF);
+	free(sc, M_DEVBUF);
 	return 0;
 }
 
 static int
-stripinit(struct strip_softc *sc)
+stripcreate(struct strip_softc *sc)
 {
 	u_char *p;
 
@@ -475,8 +499,10 @@ stripopen(dev_t dev, struct tty *tp)
 	struct strip_softc *sc;
 	int error;
 
-	if ((error = kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	error = kauth_authorize_network(l->l_cred,
+	    KAUTH_NETWORK_INTERFACE_STRIP,
+	    KAUTH_REQ_NETWORK_INTERFACE_STRIP_ADD, NULL, NULL, NULL);
+	if (error)
 		return (error);
 
 	if (tp->t_linesw == &strip_disc)
@@ -486,7 +512,7 @@ stripopen(dev_t dev, struct tty *tp)
 		if (sc->sc_ttyp == NULL) {
 			sc->sc_si = softint_establish(SOFTINT_NET,
 			    stripintr, sc);
-			if (stripinit(sc) == 0) {
+			if (stripcreate(sc) == 0) {
 				softint_disestablish(sc->sc_si);
 				return (ENOBUFS);
 			}
@@ -650,8 +676,7 @@ strip_sendbody(struct strip_softc *sc, struct mbuf *m)
 			dp = StuffData(mtod(m, u_char *), m->m_len, dp,
 			    &rllstate_ptr);
 		}
-		MFREE(m, m2);
-		m = m2;
+		m = m2 = m_free(m);
 	}
 
 	/*
@@ -725,7 +750,7 @@ strip_send(struct strip_softc *sc, struct mbuf *m0)
  */
 int
 stripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-    struct rtentry *rt)
+    const struct rtentry *rt)
 {
 	struct strip_softc *sc = ifp->if_softc;
 	struct ip *ip;
@@ -734,7 +759,6 @@ stripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	struct ifqueue *ifq;
 	int s, error;
 	u_char dl_addrbuf[STARMODE_ADDR_LEN+1];
-	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	/*
 	 * Verify tty line is up and alive.
@@ -754,26 +778,23 @@ stripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	   	printf("stripout, rt: dst af%d gw af%d",
 		    rt_getkey(rt)->sa_family, rt->rt_gateway->sa_family);
 		if (rt_getkey(rt)->sa_family == AF_INET)
-		  printf(" dst %x",
-		      satocsin(rt_getkey(rt))->sin_addr.s_addr);
+			printf(" dst %x",
+			    satocsin(rt_getkey(rt))->sin_addr.s_addr);
 		printf("\n");
 	}
 #endif
 	switch (dst->sa_family) {
 	case AF_INET:
-                if (rt != NULL && rt->rt_gwroute != NULL)
-                        rt = rt->rt_gwroute;
-
-                /* assume rt is never NULL */
-                if (rt == NULL || rt->rt_gateway->sa_family != AF_LINK
-                    || satocsdl(rt->rt_gateway)->sdl_alen != ifp->if_addrlen) {
+		/* assume rt is never NULL */
+		if (rt == NULL || rt->rt_gateway->sa_family != AF_LINK ||
+		    satocsdl(rt->rt_gateway)->sdl_alen != ifp->if_addrlen) {
 		  	DPRINTF(("strip: could not arp starmode addr %x\n",
-			 satocsin(dst)->sin_addr.s_addr));
+			    satocsin(dst)->sin_addr.s_addr));
 			m_freem(m);
 			return (EHOSTUNREACH);
 		}
-                dldst = CLLADDR(satocsdl(rt->rt_gateway));
-                break;
+		dldst = CLLADDR(satocsdl(rt->rt_gateway));
+		break;
 
 	case AF_LINK:
 		dldst = CLLADDR(satocsdl(dst));
@@ -861,8 +882,7 @@ stripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	splx(s);
 
 	s = splnet();
-	if ((error = ifq_enqueue2(ifp, ifq, m ALTQ_COMMA
-	    ALTQ_DECL(&pktattr))) != 0) {
+	if ((error = ifq_enqueue2(ifp, ifq, m)) != 0) {
 		splx(s);
 		return error;
 	}
@@ -937,7 +957,7 @@ strip_btom(struct strip_softc *sc, int len)
 	m->m_data = sc->sc_pktstart;
 
 	m->m_pkthdr.len = m->m_len = len;
-	m->m_pkthdr.rcvif = &sc->sc_if;
+	m_set_rcvif(m, &sc->sc_if);
 	return (m);
 }
 
@@ -1053,28 +1073,19 @@ stripintr(void *arg)
 {
 	struct strip_softc *sc = arg;
 	struct tty *tp = sc->sc_ttyp;
-	struct mbuf *m;
+	struct mbuf *m, *n;
 	int s, len;
 	u_char *pktstart;
-#ifdef INET
-	u_char c;
-#endif
-#if NBPFILTER > 0
 	u_char chdr[CHDR_LEN];
-#endif
 
 	KASSERT(tp != NULL);
 
 	/*
 	 * Output processing loop.
 	 */
+	mutex_enter(softnet_lock);
 	for (;;) {
-#ifdef INET
-		struct ip *ip;
-#endif
-#if NBPFILTER > 0
 		struct mbuf *bpf_m;
-#endif
 
 		/*
 		 * Do not remove the packet from the queue if it
@@ -1112,7 +1123,6 @@ stripintr(void *arg)
 		 * connection ID compression will get munged when
 		 * this happens.
 		 */
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * We need to save the TCP/IP header before
@@ -1126,8 +1136,8 @@ stripintr(void *arg)
 			bpf_m = m_dup(m, 0, M_COPYALL, M_DONTWAIT);
 		} else
 			bpf_m = NULL;
-#endif
 #ifdef INET
+		struct ip *ip;
 		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
 			if (sc->sc_if.if_flags & SC_COMPRESS)
 				*mtod(m, u_char *) |=
@@ -1135,11 +1145,8 @@ stripintr(void *arg)
 				    &sc->sc_comp, 1);
 		}
 #endif
-#if NBPFILTER > 0
-		if (sc->sc_if.if_bpf && bpf_m != NULL)
-			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
-			    bpf_m);
-#endif
+		if (bpf_m != NULL)
+			bpf_mtap_sl_out(&sc->sc_if, mtod(m, u_char *), bpf_m);
 		getbinuptime(&sc->sc_lastpacket);
 
 		s = spltty();
@@ -1165,7 +1172,6 @@ stripintr(void *arg)
 			break;
 		pktstart = mtod(m, u_char *);
 		len = m->m_pkthdr.len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * Save the compressed header, so we
@@ -1177,8 +1183,8 @@ stripintr(void *arg)
 			 */
 			memcpy(chdr, pktstart, CHDR_LEN);
 		}
-#endif /* NBPFILTER > 0 */
 #ifdef INET
+		u_char c;
 		if ((c = (*pktstart & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
 				c = TYPE_COMPRESSED_TCP;
@@ -1217,23 +1223,20 @@ stripintr(void *arg)
 #endif
 		m->m_data = (void *) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
-			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
+			bpf_mtap_sl_in(&sc->sc_if, chdr, &m);
 			if (m == NULL)
 				continue;
 		}
-#endif
 		/*
 		 * If the packet will fit into a single
-		 * header mbuf, copy it into one, to save
-		 * memory.
+		 * header mbuf, try to copy it into one,
+		 * to save memory.
 		 */
-		if (m->m_pkthdr.len < MHLEN) {
-			struct mbuf *n;
+		if ((m->m_pkthdr.len < MHLEN) &&
+		    (n = m_gethdr(M_DONTWAIT, MT_DATA))) {
 			int pktlen;
 
-			MGETHDR(n, M_DONTWAIT, MT_DATA);
 			pktlen = m->m_pkthdr.len;
 			M_MOVE_PKTHDR(n, m);
 			memcpy(mtod(n, void *), mtod(m, void *), pktlen);
@@ -1247,18 +1250,15 @@ stripintr(void *arg)
 
 #ifdef INET
 		s = splnet();
-		if (IF_QFULL(&ipintrq)) {
-			IF_DROP(&ipintrq);
+		if (__predict_false(!pktq_enqueue(ip_pktq, m, 0))) {
 			sc->sc_if.if_ierrors++;
 			sc->sc_if.if_iqdrops++;
 			m_freem(m);
-		} else {
-			IF_ENQUEUE(&ipintrq, m);
-			schednetisr(NETISR_IP);
 		}
 		splx(s);
 #endif
 	}
+	mutex_exit(softnet_lock);
 }
 
 /*
@@ -1268,14 +1268,14 @@ int
 stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	struct ifreq *ifr;
+	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			ifp->if_flags |= IFF_UP;
 		else
@@ -1283,13 +1283,12 @@ stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFDSTADDR:
-		if (ifa->ifa_addr->sa_family != AF_INET)
+		if (ifreq_getaddr(cmd, ifr)->sa_family != AF_INET)
 			error = EAFNOSUPPORT;
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
 		if (ifr == 0) {
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
@@ -1308,7 +1307,7 @@ stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 	splx(s);
 	return (error);
@@ -1458,11 +1457,11 @@ strip_watchdog(struct ifnet *ifp)
 
 #ifdef DEBUG
 	if (ifp->if_flags & IFF_DEBUG)
-		addlog("\n%s: in watchdog, state %s timeout %ld\n",
+		addlog("\n%s: in watchdog, state %s timeout %lld\n",
 		       ifp->if_xname,
  		       ((unsigned) sc->sc_state < 3) ?
 		       strip_statenames[sc->sc_state] : "<<illegal state>>",
-		       sc->sc_statetimo - time_second);
+		       (long long)(sc->sc_statetimo - time_second));
 #endif
 
 	/*
@@ -1626,7 +1625,7 @@ strip_newpacket(struct strip_softc *sc, u_char *ptr, u_char *end)
 	}
 
 	/* XXX redundant copy */
-	bcopy(sc->sc_rxbuf, sc->sc_pktstart, packetlen );
+	memcpy(sc->sc_pktstart, sc->sc_rxbuf, packetlen );
 	return (packetlen);
 }
 
@@ -1996,3 +1995,10 @@ RecvErr_Message(struct strip_softc *strip_info, u_char *sendername,
 		RecvErr("unparsed radio error message:", strip_info);
 	}
 }
+
+/*
+ * Module infrastructure
+ */
+#include "if_module.h"
+
+IF_MODULE(MODULE_CLASS_DRIVER, strip, "slcompress");

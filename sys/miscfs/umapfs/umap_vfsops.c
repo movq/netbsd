@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vfsops.c,v 1.75 2008/01/28 14:31:19 dholland Exp $	*/
+/*	$NetBSD: umap_vfsops.c,v 1.99 2017/04/11 07:51:37 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.75 2008/01/28 14:31:19 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.99 2017/04/11 07:51:37 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,25 +51,26 @@ __KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.75 2008/01/28 14:31:19 dholland Ex
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <miscfs/umapfs/umap.h>
 #include <miscfs/genfs/layer_extern.h>
 
+MODULE(MODULE_CLASS_VFS, umap, "layerfs");
+
 VFS_PROTOS(umapfs);
+
+static struct sysctllog *umapfs_sysctl_log;
 
 /*
  * Mount umap layer
  */
 int
-umapfs_mount(mp, path, data, data_len)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	size_t *data_len;
+umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	struct umap_args *args = data;
 	struct vnode *lowerrootvp, *vp;
@@ -79,6 +80,8 @@ umapfs_mount(mp, path, data, data_len)
 	int i;
 #endif
 
+	if (args == NULL)
+		return EINVAL;
 	if (*data_len < sizeof *args)
 		return EINVAL;
 
@@ -94,8 +97,9 @@ umapfs_mount(mp, path, data, data_len)
 	}
 
 	/* only for root */
-	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0)
+	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
+	    KAUTH_REQ_SYSTEM_MOUNT_UMAP, NULL, NULL, NULL);
+	if (error)
 		return error;
 
 #ifdef UMAPFS_DIAGNOSTIC
@@ -111,15 +115,21 @@ umapfs_mount(mp, path, data, data_len)
 	/*
 	 * Find lower node
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF,
-		UIO_USERSPACE, args->umap_target);
-	if ((error = namei(&nd)) != 0)
-		return (error);
+	error = pathbuf_copyin(args->umap_target, &pb);
+	if (error) {
+		return error;
+	}
+	NDINIT(&nd, LOOKUP, FOLLOW|LOCKLEAF, pb);
+	if ((error = namei(&nd)) != 0) {
+		pathbuf_destroy(pb);
+		return error;
+	}
 
 	/*
 	 * Sanity check on lower vnode
 	 */
 	lowerrootvp = nd.ni_vp;
+	pathbuf_destroy(pb);
 #ifdef UMAPFS_DIAGNOSTIC
 	printf("vp = %p, check for VDIR...\n", lowerrootvp);
 #endif
@@ -133,21 +143,16 @@ umapfs_mount(mp, path, data, data_len)
 	printf("mp = %p\n", mp);
 #endif
 
-	amp = (struct umap_mount *) malloc(sizeof(struct umap_mount),
-				M_UFSMNT, M_WAITOK);	/* XXX */
-	memset(amp, 0, sizeof(struct umap_mount));
-
+	amp = kmem_zalloc(sizeof(struct umap_mount), KM_SLEEP);
 	mp->mnt_data = amp;
-	amp->umapm_vfs = lowerrootvp->v_mount;
-	if (amp->umapm_vfs->mnt_flag & MNT_LOCAL)
-		mp->mnt_flag |= MNT_LOCAL;
 
 	/*
 	 * Now copy in the number of entries and maps for umap mapping.
 	 */
-	if (args->nentries > MAPFILEENTRIES || args->gnentries > GMAPFILEENTRIES) {
+	if (args->nentries < 0 || args->nentries > MAPFILEENTRIES ||
+	    args->gnentries < 0 || args->gnentries > GMAPFILEENTRIES) {
 		vput(lowerrootvp);
-		return (error);
+		return (EINVAL);
 	}
 
 	amp->info_nentries = args->nentries;
@@ -189,44 +194,44 @@ umapfs_mount(mp, path, data, data_len)
 	amp->umapm_size = sizeof(struct umap_node);
 	amp->umapm_tag = VT_UMAP;
 	amp->umapm_bypass = umap_bypass;
-	amp->umapm_alloc = layer_node_alloc;	/* the default alloc is fine */
 	amp->umapm_vnodeop_p = umap_vnodeop_p;
-	mutex_init(&amp->umapm_hashlock, MUTEX_DEFAULT, IPL_NONE);
-	amp->umapm_node_hashtbl = hashinit(NUMAPNODECACHE, HASH_LIST, M_CACHE,
-	    M_WAITOK, &amp->umapm_node_hash);
-
 
 	/*
 	 * fix up umap node for root vnode.
 	 */
+	VOP_UNLOCK(lowerrootvp);
 	error = layer_node_create(mp, lowerrootvp, &vp);
 	/*
 	 * Make sure the node alias worked
 	 */
 	if (error) {
-		vput(lowerrootvp);
-		free(amp, M_UFSMNT);	/* XXX */
-		return (error);
+		vrele(lowerrootvp);
+		kmem_free(amp, sizeof(struct umap_mount));
+		return error;
 	}
-	/*
-	 * Unlock the node (either the lower or the alias)
-	 */
-	vp->v_vflag |= VV_ROOT;
-	VOP_UNLOCK(vp, 0);
 
 	/*
 	 * Keep a held reference to the root vnode.
 	 * It is vrele'd in umapfs_unmount.
 	 */
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	vp->v_vflag |= VV_ROOT;
 	amp->umapm_rootvp = vp;
+	VOP_UNLOCK(vp);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, args->umap_target,
 	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+	if (error)
+		return error;
+
+	mp->mnt_lower = lowerrootvp->v_mount;
+	if (mp->mnt_lower->mnt_flag & MNT_LOCAL)
+		mp->mnt_flag |= MNT_LOCAL;
 #ifdef UMAPFS_DIAGNOSTIC
 	printf("umapfs_mount: lower %s, alias at %s\n",
 		mp->mnt_stat.f_mntfromname, mp->mnt_stat.f_mntonname);
 #endif
-	return error;
+	return 0;
 }
 
 /*
@@ -262,31 +267,9 @@ umapfs_unmount(struct mount *mp, int mntflags)
 	/*
 	 * Finally, throw away the umap_mount structure
 	 */
-	mutex_destroy(&amp->umapm_hashlock);
-	free(amp, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
-	return (0);
-}
-
-SYSCTL_SETUP(sysctl_vfs_umap_setup, "sysctl vfs.umap subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "umap",
-		       SYSCTL_DESCR("UID/GID remapping file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 10, CTL_EOL);
-	/*
-	 * XXX the "10" above could be dynamic, thereby eliminating
-	 * one more instance of the "number to vfs" mapping problem,
-	 * but "10" is the order as taken from sys/mount.h
-	 */
+	kmem_free(amp, sizeof(struct umap_mount));
+	mp->mnt_data = NULL;
+	return 0;
 }
 
 extern const struct vnodeopv_desc umapfs_vnodeop_opv_desc;
@@ -297,29 +280,62 @@ const struct vnodeopv_desc * const umapfs_vnodeopv_descs[] = {
 };
 
 struct vfsops umapfs_vfsops = {
-	MOUNT_UMAP,
-	sizeof (struct umap_args),
-	umapfs_mount,
-	layerfs_start,
-	umapfs_unmount,
-	layerfs_root,
-	layerfs_quotactl,
-	layerfs_statvfs,
-	layerfs_sync,
-	layerfs_vget,
-	layerfs_fhtovp,
-	layerfs_vptofh,
-	layerfs_init,
-	NULL,
-	layerfs_done,
-	NULL,				/* vfs_mountroot */
-	layerfs_snapshot,
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
-	layerfs_renamelock_enter,
-	layerfs_renamelock_exit,
-	umapfs_vnodeopv_descs,
-	0,				/* vfs_refcount */
-	{ NULL, NULL },
+	.vfs_name = MOUNT_UMAP,
+	.vfs_min_mount_data = sizeof (struct umap_args),
+	.vfs_mount = umapfs_mount,
+	.vfs_start = layerfs_start,
+	.vfs_unmount = umapfs_unmount,
+	.vfs_root = layerfs_root,
+	.vfs_quotactl = layerfs_quotactl,
+	.vfs_statvfs = layerfs_statvfs,
+	.vfs_sync = layerfs_sync,
+	.vfs_loadvnode = layerfs_loadvnode,
+	.vfs_vget = layerfs_vget,
+	.vfs_fhtovp = layerfs_fhtovp,
+	.vfs_vptofh = layerfs_vptofh,
+	.vfs_init = layerfs_init,
+	.vfs_done = layerfs_done,
+	.vfs_snapshot = layerfs_snapshot,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = layerfs_suspendctl,
+	.vfs_renamelock_enter = layerfs_renamelock_enter,
+	.vfs_renamelock_exit = layerfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = umapfs_vnodeopv_descs
 };
-VFS_ATTACH(umapfs_vfsops);
+
+static int
+umap_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&umapfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&umapfs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "umap",
+			       SYSCTL_DESCR("UID/GID remapping file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 10, CTL_EOL);
+		/*
+		 * XXX the "10" above could be dynamic, thereby eliminating
+		 * one more instance of the "number to vfs" mapping problem,
+		 * but "10" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&umapfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&umapfs_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

@@ -1,4 +1,4 @@
-/* 	$NetBSD: wsfont.h,v 1.18 2007/02/02 02:10:24 ober Exp $	*/
+/* 	$NetBSD: wsfont.h,v 1.26 2016/11/20 15:44:40 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,12 @@
 
 #ifndef _WSFONT_H_
 #define _WSFONT_H_ 1
+
+#define WSFONT_FLAGS_MASK	0x7f000000
+#define WSFONT_FLAG_OPT		0x01000000	/* use alternate font */
+#define WSFONT_GLYPH(c, font)	((uint8_t *)font->data + \
+		((c) - font->firstchar) * font->stride * font->fontheight)
+#define FONT_IS_ALPHA(f) ((f)->fontwidth <= (f)->stride)
 
 /*
  * Example:
@@ -61,14 +60,30 @@
 struct wsdisplay_font;
 
 void	wsfont_init(void);
-int	wsfont_matches(struct wsdisplay_font *, const char *, int, int, int);
-int	wsfont_find(const char *, int, int, int, int, int);
+int	wsfont_matches(struct wsdisplay_font *, const char *, int, int, int, int);
+int	wsfont_find(const char *, int, int, int, int, int, int);
+#define WSFONT_FIND_BITMAP	0x01
+#define WSFONT_FIND_ALPHA	0x02
+#define WSFONT_FIND_ALL		0xff
+#define WSFONT_FIND_BESTWIDTH	0x1000
+#define WSFONT_PREFER_ALPHA	0x2000
+
+void	wsfont_walk(void (*)(struct wsdisplay_font *, void *, int), void *);
+
 int	wsfont_add(struct wsdisplay_font *, int);
 int	wsfont_remove(int);
 void	wsfont_enum(void (*)(const char *, int, int, int));
 int	wsfont_lock(int, struct wsdisplay_font **);
 int	wsfont_unlock(int);
 int	wsfont_map_unichar(struct wsdisplay_font *, int);
-int	wsfont_rotate(int);
+int	wsfont_rotate(int, int);
+
+enum {
+	WSFONT_ROTATE_CW,
+	WSFONT_ROTATE_CCW,
+	WSFONT_ROTATE_UD
+};
+
+int	wsfont_make_cookie(int, int, int);
 
 #endif	/* !_WSFONT_H_ */

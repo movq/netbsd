@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.2 2007/11/22 16:17:02 bouyer Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.19 2017/07/29 06:29:32 maxv Exp $	*/
 /*	NetBSD: autoconf.c,v 1.75 2003/12/30 12:33:22 pk Exp 	*/
 
 /*-
@@ -45,14 +45,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2007/11/22 16:17:02 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2017/07/29 06:29:32 maxv Exp $");
 
 #include "opt_xen.h"
-#include "opt_compat_oldboot.h"
 #include "opt_multiprocessor.h"
 #include "opt_nfs_boot.h"
-#include "xennet_hypervisor.h"
-#include "xennet_xenbus.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,16 +57,11 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2007/11/22 16:17:02 bouyer Exp $");
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/conf.h>
-#ifdef COMPAT_OLDBOOT
-#include <sys/reboot.h>
-#endif
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
 #include <sys/dkio.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kauth.h>
 
 #ifdef NFS_BOOT_BOOTSTATIC
@@ -90,9 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2007/11/22 16:17:02 bouyer Exp $");
 #include <machine/pcb.h>
 #include <machine/bootinfo.h>
 
-static void findroot(void);
-static int is_valid_disk(struct device *);
-static void handle_wedges(struct device *, int);
+static int is_valid_disk(device_t);
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
@@ -100,6 +90,8 @@ int x86_ndisks;
 #include "bios32.h"
 #if NBIOS32 > 0
 #include <machine/bios32.h>
+/* XXX */
+extern void platform_init(void);
 #endif
 
 #include "opt_pcibios.h"
@@ -109,32 +101,29 @@ int x86_ndisks;
 #include <i386/pci/pcibios.h>
 #endif
 
-#include "opt_kvm86.h"
-#ifdef KVM86
-#include <machine/kvm86.h>
-#endif
-
 /*
  * Determine i/o configuration for a machine.
  */
 void
 cpu_configure(void)
 {
+	struct pcb *pcb;
 
 	startrtclock();
 
-#if NBIOS32 > 0 && defined(DOM0OPS)
-#ifdef XEN3
-	if (xen_start_info.flags & SIF_INITDOMAIN)
-#endif
+#if defined(DOM0OPS)
+	if (xendomain_is_dom0()) {
+#if NBIOS32 > 0
 		bios32_init();
-#endif /* NBIOS32 > 0 && DOM0OPS */
+		platform_init();
+		/* identify hypervisor type from SMBIOS */
+		identify_hypervisor();
+#endif /* NBIOS32 > 0 */
+	} else
+#endif /* DOM0OPS */
+		vm_guest = VM_GUEST_XEN;
 #ifdef PCIBIOS
 	pcibios_init();
-#endif
-
-#ifdef KVM86
-	kvm86_init();
 #endif
 
 	if (config_rootfound("mainbus", NULL) == NULL)
@@ -145,7 +134,8 @@ cpu_configure(void)
 #endif
 
 	/* resync cr0 after FPU configuration */
-	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
+	pcb = lwp_getpcb(&lwp0);
+	pcb->pcb_cr0 = rcr0();
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
 	cpu_init_idle_lwps();
@@ -157,30 +147,22 @@ cpu_configure(void)
 void
 cpu_rootconf(void)
 {
-	findroot();
+	cpu_bootconf();
 
-	if (booted_wedge) {
-		KASSERT(booted_device != NULL);
-		printf("boot device: %s (%s)\n",
-		    booted_wedge->dv_xname, booted_device->dv_xname);
-		setroot(booted_wedge, 0);
-	} else {
-		printf("boot device: %s\n",
-		    booted_device ? booted_device->dv_xname : "<unknown>");
-		setroot(booted_device, booted_partition);
-	}
+	printf("boot device: %s\n",
+	    booted_device ? device_xname(booted_device) : "<unknown>");
+	rootconf();
 }
 
 
 /*
  * Attempt to find the device from which we were booted.
- * If we can do so, and not instructed not to do so,
- * change rootdev to correspond to the load device.
  */
 void
-findroot(void)
+cpu_bootconf(void)
 {
-	struct device *dv;
+	device_t dv;
+	deviter_t di;
 	union xen_cmdline_parseinfo xcp;
 
 	if (booted_device)
@@ -188,27 +170,36 @@ findroot(void)
 
 	xen_parse_cmdline(XEN_PARSE_BOOTDEV, &xcp);
 
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
-		if (is_valid_disk(dv) == 0)
+	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+	     dv != NULL;
+	     dv = deviter_next(&di)) {
+		bool is_ifnet, is_disk;
+		const char *devname;
+
+		is_ifnet = (device_class(dv) == DV_IFNET);
+		is_disk = is_valid_disk(dv);
+		devname = device_xname(dv);
+
+		if (!is_ifnet && !is_disk)
 			continue;
 
-		if (xcp.xcp_bootdev[0] == 0) {
-			handle_wedges(dv, 0);
+		if (is_disk && xcp.xcp_bootdev[0] == 0) {
+			booted_device = dv;
 			break;
 		}
 
-		if (strncmp(xcp.xcp_bootdev, dv->dv_xname,
-		    strlen(dv->dv_xname)))
+		if (strncmp(xcp.xcp_bootdev, devname, strlen(devname)))
 			continue;
 
-		if (strlen(xcp.xcp_bootdev) > strlen(dv->dv_xname)) {
+		if (is_disk && strlen(xcp.xcp_bootdev) > strlen(devname)) {
 			booted_partition = toupper(
-				xcp.xcp_bootdev[strlen(dv->dv_xname)]) - 'A';
+				xcp.xcp_bootdev[strlen(devname)]) - 'A';
 		}
 
 		booted_device = dv;
 		break;
 	}
+	deviter_release(&di);
 }
 
 #include "pci.h"
@@ -226,6 +217,7 @@ dom0_bootstatic_callback(struct nfs_diskless *nd)
 #if 0
 	struct ifnet *ifp = nd->nd_ifp;
 #endif
+	int flags = 0;
 	union xen_cmdline_parseinfo xcp;
 	struct sockaddr_in *sin;
 
@@ -233,6 +225,12 @@ dom0_bootstatic_callback(struct nfs_diskless *nd)
 	xcp.xcp_netinfo.xi_ifno = 0; /* XXX first interface hardcoded */
 	xcp.xcp_netinfo.xi_root = nd->nd_root.ndm_host;
 	xen_parse_cmdline(XEN_PARSE_NETINFO, &xcp);
+
+	if (xcp.xcp_netinfo.xi_root[0] != '\0') {
+		flags |= NFS_BOOT_HAS_SERVER;
+		if (strchr(xcp.xcp_netinfo.xi_root, ':') != NULL)
+			flags |= NFS_BOOT_HAS_ROOTPATH;
+	}
 
 	nd->nd_myip.s_addr = ntohl(xcp.xcp_netinfo.xi_ip[0]);
 	nd->nd_gwip.s_addr = ntohl(xcp.xcp_netinfo.xi_ip[2]);
@@ -244,17 +242,21 @@ dom0_bootstatic_callback(struct nfs_diskless *nd)
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = ntohl(xcp.xcp_netinfo.xi_ip[1]);
 
-	if (nd->nd_myip.s_addr == 0)
-		return NFS_BOOTSTATIC_NOSTATIC;
-	else
-		return (NFS_BOOTSTATIC_HAS_MYIP|NFS_BOOTSTATIC_HAS_GWIP|
-		    NFS_BOOTSTATIC_HAS_MASK|NFS_BOOTSTATIC_HAS_SERVADDR|
-		    NFS_BOOTSTATIC_HAS_SERVER);
+	if (nd->nd_myip.s_addr)
+		flags |= NFS_BOOT_HAS_MYIP;
+	if (nd->nd_gwip.s_addr)
+		flags |= NFS_BOOT_HAS_GWIP;
+	if (nd->nd_mask.s_addr)
+		flags |= NFS_BOOT_HAS_MASK;
+	if (sin->sin_addr.s_addr)
+		flags |= NFS_BOOT_HAS_SERVADDR;
+
+	return flags;
 }
 #endif
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	/*
 	 * Handle network interfaces here, the attachment information is
@@ -265,18 +267,20 @@ device_register(struct device *dev, void *aux)
 	if (device_class(dev) == DV_IFNET) {
 		union xen_cmdline_parseinfo xcp;
 
-		xen_parse_cmdline(XEN_PARSE_BOOTDEV, &xcp);
-		if (strncmp(xcp.xcp_bootdev, dev->dv_xname, 16) == 0) {
 #ifdef NFS_BOOT_BOOTSTATIC
 #ifdef DOM0OPS
-			if (xen_start_info.flags & SIF_PRIVILEGED) {
-				nfs_bootstatic_callback = dom0_bootstatic_callback;
-			} else
+		if (xendomain_is_privileged()) {
+			nfs_bootstatic_callback = dom0_bootstatic_callback;
+		} else
 #endif
 #if NXENNET_HYPERVISOR > 0 || NXENNET_XENBUS > 0
-			nfs_bootstatic_callback = xennet_bootstatic_callback;
+		nfs_bootstatic_callback = xennet_bootstatic_callback;
 #endif
 #endif
+		xen_parse_cmdline(XEN_PARSE_BOOTDEV, &xcp);
+		if (strncmp(xcp.xcp_bootdev, device_xname(dev),
+		    sizeof(xcp.xcp_bootdev)) == 0)
+		{
 			goto found;
 		}
 	}
@@ -329,23 +333,14 @@ found:
 	if (booted_device) {
 		/* XXX should be a "panic()" */
 		printf("warning: double match for boot device (%s, %s)\n",
-		    booted_device->dv_xname, dev->dv_xname);
+		    device_xname(booted_device), device_xname(dev));
 		return;
 	}
 	booted_device = dev;
 }
 
-static void
-handle_wedges(struct device *dv, int par)
-{
-	if (config_handle_wedges(dv, par) == 0)
-		return;
-	booted_device = dv;
-	booted_partition = par;
-}
-
 static int
-is_valid_disk(struct device *dv)
+is_valid_disk(device_t dv)
 {
 
 	if (device_class(dv) != DV_DISK)

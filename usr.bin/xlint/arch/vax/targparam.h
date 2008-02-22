@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.4 2006/10/20 12:51:12 he Exp $	*/
+/*	$NetBSD: targparam.h,v 1.6 2012/03/27 19:24:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -34,7 +34,7 @@
 /*
  * Machine-dependent target parameters for lint1.
  */
-
+#include "schar.h"
 #include "ilp32.h"
 
 /*    
@@ -42,15 +42,9 @@
  * or the value of sizeof is of type unsigned long.  Note this MUST be
  * kept in sync with the compiler!
  */     
-#ifdef __ELF__
 #define	PTRDIFF_IS_LONG		1
 #define	SIZEOF_IS_ULONG		1
 #define	INTPTR_IS_LONG		1
-#else
-#define	PTRDIFF_IS_LONG		0
-#define	SIZEOF_IS_ULONG		0
-#define	INTPTR_IS_LONG		0
-#endif
 
 #define	FLOAT_SIZE		(4 * CHAR_BIT)
 #define	DOUBLE_SIZE		(8 * CHAR_BIT)

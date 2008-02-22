@@ -1,4 +1,4 @@
-/*	$NetBSD: rom.c,v 1.7 2005/12/11 12:19:30 christos Exp $ */
+/*	$NetBSD: rom.c,v 1.10 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -14,12 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -68,7 +62,7 @@ romopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 
 	bqo = (void *)bootrpb.iovec;
 
-	bzero(lp, sizeof(struct disklabel));
+	memset(lp, 0, sizeof(struct disklabel));
 	dunit = unit;
 	dpart = part;
 
@@ -87,13 +81,7 @@ int	romwrite_uvax(int, int, void *, struct rpb *);
 int	romread_uvax(int, int, void *, struct rpb *);
 
 int
-romstrategy (f, func, dblk, size, buf, rsize)
-	void *f;
-	int func;
-	daddr_t dblk;
-	size_t size;
-	void *buf;
-	size_t *rsize;
+romstrategy (void *f, int func, daddr_t dblk, size_t size, void *buf, size_t *rsize)
 {
 	struct	disklabel *lp;
 	int	block;

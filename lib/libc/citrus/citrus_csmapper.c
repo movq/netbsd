@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_csmapper.c,v 1.8 2008/02/09 14:56:20 junyoung Exp $	*/
+/*	$NetBSD: citrus_csmapper.c,v 1.11 2011/11/20 07:43:52 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_csmapper.c,v 1.8 2008/02/09 14:56:20 junyoung Exp $");
+__RCSID("$NetBSD: citrus_csmapper.c,v 1.11 2011/11/20 07:43:52 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -142,6 +142,7 @@ find_best_pivot_pvdb(const char *src, const char *dst, char *pivot,
 		if (ret)
 			goto quit3;
 		if (_db_lookup_by_s(db3, dst, &r2, NULL) != 0)
+			/* don't break the loop, test all src/dst pairs. */
 			goto quit4;
 		/* r2: norm among pivot and dst */
 		ret = get32(&r2, &val32);
@@ -208,7 +209,7 @@ parse_line(struct parse_arg *pa, struct _region *r)
 		 "%.*s", (int)(z1.end-z1.begin), z1.begin);
 	snprintf(buf, sizeof(buf),
 		 "%.*s", (int)(z2.end-z2.begin), z2.begin);
-	pa->norm = strtoul(buf, NULL, 0);
+	pa->norm = _bcs_strtoul(buf, NULL, 0);
 
 	return 0;
 }

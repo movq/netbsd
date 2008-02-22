@@ -2,8 +2,8 @@
 .\" Copyright 1989 AT&T
 .\" @(#)rpc_clnt_create 1.5 89/07/24 SMI;
 .\" Copyright (c) 1988 Sun Microsystems, Inc. - All Rights Reserved.
-.\"	$NetBSD: rpc_clnt_create.3,v 1.9 2003/04/16 13:34:43 wiz Exp $
-.Dd May 7, 1993
+.\"	$NetBSD: rpc_clnt_create.3,v 1.13 2017/07/03 21:32:49 wiz Exp $
+.Dd May 23, 2009
 .Dt RPC_CLNT_CREATE 3
 .Os
 .Sh NAME
@@ -32,7 +32,7 @@
 .Ft "CLIENT *"
 .Fn clnt_create_vers "const char * host" "const rpcprog_t prognum" "rpcvers_t *vers_outp" "const rpcvers_t vers_low" "const rpcvers_t vers_high" "char *nettype"
 .Ft void
-.Fn clnt_destroy "CLIENT *" "clnt"
+.Fn clnt_destroy "CLIENT * clnt"
 .Ft "CLIENT *"
 .Fn clnt_dg_create "const int fildes" "const struct netbuf *svcaddr" "const rpcprog_t prognum" "const rpcvers_t versnum" "const u_int sendsz" "const u_int recvsz"
 .Ft void
@@ -84,8 +84,8 @@ is ignored in all subsequent calls.
 Note:
 If you set the timeout value to 0
 .Fn clnt_control
-immediately returns an error (
-.Dv RPC_TIMEDOUT ) .
+immediately returns an error
+.Pq Dv RPC_TIMEDOUT .
 Set the timeout parameter to 0 for batching calls.
 .Bl -column CLSET_FD_NCLOSE "struct timeval *" "do not close fd on destroy"
 .It Dv CLGET_SVC_ADDR Ta "struct netbuf *" Ta "get servers address"
@@ -228,7 +228,7 @@ was set using
 .Fn clnt_control ,
 the file descriptor will be closed.
 The caller should call
-.Fn auth_destroy "clnt-\*[Gt]cl_auth"
+.Fn auth_destroy "clnt->cl_auth"
 (before calling
 .Fn clnt_destroy )
 to destroy the associated
@@ -287,7 +287,6 @@ returns a pointer to a buffer that is overwritten
 on each call.
 .Pp
 .It Fn clnt_raw_create
-.IP
 This routine creates an RPC
 client handle for the remote program
 .Fa prognum
@@ -328,7 +327,7 @@ is connected.
 For connectionless transports, if
 .Fa svcaddr
 is
-..Dv NULL ,
+.Dv NULL ,
 .Dv RPC_UNKNOWNADDR
 error is set.
 .Fa fildes

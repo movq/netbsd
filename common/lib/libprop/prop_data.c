@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_data.c,v 1.10 2008/02/16 17:37:13 apb Exp $	*/
+/*	$NetBSD: prop_data.c,v 1.14 2009/01/25 06:59:35 cyber Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,11 +62,13 @@ _PROP_POOL_INIT(_prop_data_pool, sizeof(struct _prop_data), "propdata")
 _PROP_MALLOC_DEFINE(M_PROP_DATA, "prop data",
 		    "property data container object")
 
-static int		_prop_data_free(prop_stack_t, prop_object_t *);
+static _prop_object_free_rv_t
+		_prop_data_free(prop_stack_t, prop_object_t *);
 static bool	_prop_data_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_data_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_data_equals(prop_object_t, prop_object_t,
 				  void **, void **,
 				  prop_object_t *, prop_object_t *);
 
@@ -88,7 +83,7 @@ static const struct _prop_object_type _prop_object_type_data = {
 	((x) != NULL && (x)->pd_obj.po_type == &_prop_object_type_data)
 
 /* ARGSUSED */
-static int
+static _prop_object_free_rv_t
 _prop_data_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_data_t pd = *obj;
@@ -180,7 +175,7 @@ _prop_data_externalize(struct _prop_object_externalize_context *ctx, void *v)
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_data_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -231,7 +226,7 @@ prop_data_create_data(const void *v, size_t size)
 	void *nv;
 
 	pd = _prop_data_alloc();
-	if (pd != NULL) {
+	if (pd != NULL && size != 0) {
 		nv = _PROP_MALLOC(size, M_PROP_DATA);
 		if (nv == NULL) {
 			prop_object_release(pd);
@@ -551,7 +546,11 @@ _prop_data_internalize(prop_stack_t stack, prop_object_t *obj,
 	uint8_t *buf;
 	size_t len, alen;
 
-	/* We don't accept empty elements. */
+	/*
+	 * We don't accept empty elements.
+	 * This actually only checks for the node to be <data/>
+	 * (Which actually causes another error if found.)
+	 */
 	if (ctx->poic_is_empty_element)
 		return (true);
 
@@ -611,7 +610,16 @@ _prop_data_internalize(prop_stack_t stack, prop_object_t *obj,
 		return (true);
 	}
 
-	data->pd_mutable = buf;
+	/*
+	 * Handle alternate type of empty node.
+	 * XML document could contain open/close tags, yet still be empty.
+	 */
+	if (alen == 0) {
+		_PROP_FREE(buf, M_PROP_DATA);
+		data->pd_mutable = NULL;
+	} else {
+		data->pd_mutable = buf;
+	}
 	data->pd_size = len;
 
 	*obj = data;

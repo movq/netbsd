@@ -1,4 +1,4 @@
-/*	$NetBSD: db_write_cmd.c,v 1.22 2007/02/22 06:41:01 thorpej Exp $	*/
+/*	$NetBSD: db_write_cmd.c,v 1.27 2015/06/06 22:06:05 matt Exp $	*/
 
 /*
  * Mach Operating System
@@ -30,19 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_write_cmd.c,v 1.22 2007/02/22 06:41:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_write_cmd.c,v 1.27 2015/06/06 22:06:05 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
 
-#include <machine/db_machdep.h>
-
-#include <ddb/db_lex.h>
-#include <ddb/db_access.h>
-#include <ddb/db_command.h>
-#include <ddb/db_sym.h>
-#include <ddb/db_extern.h>
-#include <ddb/db_output.h>
+#include <ddb/ddb.h>
 
 /*
  * Write to file.
@@ -56,11 +49,14 @@ db_write_cmd(db_expr_t address, bool have_addr,
 	db_expr_t	old_value;
 	db_expr_t	new_value;
 	int		size;
-	bool		wrote_one = false;
+	bool		wrote_one;
+	bool		show_old_val;
 
 	addr = (db_addr_t) address;
+	wrote_one = false;
+	show_old_val = islower((unsigned char)modif[0]);
 
-	switch (modif[0]) {
+	switch (tolower((unsigned char)modif[0])) {
 	case 'b':
 		size = 1;
 		break;
@@ -71,6 +67,15 @@ db_write_cmd(db_expr_t address, bool have_addr,
 	case '\0':
 		size = 4;
 		break;
+	case 'q':
+		if (sizeof(db_expr_t) != sizeof(uint64_t)) {
+			size = -1;
+			db_error("q not supported\n");
+			/*NOTREACHED*/
+		}
+	case 'L':
+		size = sizeof(db_expr_t);
+		break;
 	default:
 		size = -1;
 		db_error("Unknown size\n");
@@ -78,10 +83,14 @@ db_write_cmd(db_expr_t address, bool have_addr,
 	}
 
 	while (db_expression(&new_value)) {
-		old_value = db_get_value(addr, size, false);
 		db_printsym(addr, DB_STGY_ANY, db_printf);
-		db_printf("\t\t%s = ", db_num_to_str(old_value));
-		db_printf("%s\n", db_num_to_str(new_value));
+		if (show_old_val) {
+			old_value = db_get_value(addr, size, false);
+			db_printf("\t\t%s = ", db_num_to_str(old_value));
+			db_printf("%s\n", db_num_to_str(new_value));
+		}
+		else
+			db_printf("\t\t= %s\n", db_num_to_str(new_value));
 		db_put_value(addr, size, new_value);
 		addr += size;
 

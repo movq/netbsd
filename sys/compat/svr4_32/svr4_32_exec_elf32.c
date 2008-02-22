@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_exec_elf32.c,v 1.19 2007/12/08 18:36:27 dsl Exp $	 */
+/*	$NetBSD: svr4_32_exec_elf32.c,v 1.24 2015/03/20 20:36:27 maxv Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec_elf32.c,v 1.19 2007/12/08 18:36:27 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_exec_elf32.c,v 1.24 2015/03/20 20:36:27 maxv Exp $");
 
 #define	ELFSIZE		32				/* XXX should die */
 
@@ -45,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_exec_elf32.c,v 1.19 2007/12/08 18:36:27 dsl 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/exec_elf.h>
@@ -89,6 +81,8 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 
 	a = ai;
 
+	memset(ai, 0, sizeof(ai));
+
 	/*
 	 * Push extra arguments on the stack needed by dynamically
 	 * linked binaries
@@ -100,11 +94,9 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 		platform = a; /* Patch this later. */
 		a++;
 
-		if (pack->ep_ndp->ni_cnd.cn_flags & HASBUF) {
-			a->a_type = AT_SUN_EXECNAME;
-			exec = a; /* Patch this later. */
-			a++;
-		}
+		a->a_type = AT_SUN_EXECNAME;
+		exec = a; /* Patch this later. */
+		a++;
 
 		a->a_type = AT_PHDR;
 		a->a_v = ap->arg_phaddr;
@@ -158,8 +150,7 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 			a++;
 		}
 
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	a->a_type = AT_NULL;
@@ -180,7 +171,7 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 		len += strlen(machine_model) + 1;
 
 		if (exec) {
-			path = pack->ep_ndp->ni_cnd.cn_pnbuf;
+			path = pack->ep_resolvedname;
 
 			/* Copy out the file we're executing. */
 			exec->a_v = (u_long)(*stackp) + len;
@@ -210,6 +201,8 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 		return error;
 
 	a = ai;
+
+	memset(ai, 0, sizeof(ai));
 
 	/*
 	 * Push extra arguments on the stack needed by dynamically
@@ -247,8 +240,7 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 			a++;
 		}
 
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	a->a_type = AT_NULL;
@@ -256,7 +248,7 @@ svr4_32_copyargs(struct lwp *l, struct exec_package *pack, struct ps_strings *ar
 	a++;
 
 	len = (a - ai) * sizeof(AuxInfo);
-	if (copyout(ai, *stackp, len))
+	if ((error = copyout(ai, *stackp, len)) != 0)
 		return error;
 	*stackp += len;
 

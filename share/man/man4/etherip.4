@@ -1,4 +1,4 @@
-.\"     $NetBSD: etherip.4,v 1.6 2007/09/10 10:35:52 cube Exp $
+.\"     $NetBSD: etherip.4,v 1.8 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>.
 .\" All rights reserved.
@@ -39,9 +39,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\"  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\"  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -129,7 +126,7 @@ device is created, it is assigned an Ethernet address
 of the form f2:0b:a5:xx:xx:xx.
 This address can later be changed through a sysctl node.
 .Pp
-The sysctl node is net.link.etherip.\*[Lt]iface\*[Gt].
+The sysctl node is net.link.etherip.<iface>.
 Any string of six colon-separated hexadecimal numbers will be accepted.
 Reading that node will provide a string representation of the current
 Ethernet address.

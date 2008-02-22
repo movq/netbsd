@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.34 2007/11/05 20:43:05 ad Exp $	*/
+/*	$NetBSD: trap.c,v 1.44 2015/03/04 20:30:00 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.34 2007/11/05 20:43:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.44 2015/03/04 20:30:00 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -96,7 +96,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.34 2007/11/05 20:43:05 ad Exp $");
 #include <sys/resourcevar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
-#include <sys/user.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
 #ifdef	KGDB
@@ -107,6 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.34 2007/11/05 20:43:05 ad Exp $");
 
 #include <machine/cpu.h>
 #include <machine/endian.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/reg.h>
@@ -245,22 +245,23 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 {
 	struct lwp *l;
 	struct proc *p;
+	struct pcb *pcb;
 	ksiginfo_t ksi;
 	int tmp;
+	int rv;
 	u_quad_t sticks;
+	void *onfault;
 
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 	l = curlwp;
+	p = l->l_proc;
+	pcb = lwp_getpcb(l);
+	onfault = pcb->pcb_onfault;
 
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
 
-	p = l->l_proc;
-
-#ifdef	DIAGNOSTIC
-	if (l->l_addr == NULL)
-		panic("trap: no pcb");
-#endif
+	KASSERT(pcb != NULL);
 
 	if (USERMODE(tf->tf_sr)) {
 		type |= T_USER;
@@ -309,8 +310,9 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		panic("trap type 0x%x", type);
 
 	case T_BUSERR:		/* kernel bus error */
-		if (l->l_addr->u_pcb.pcb_onfault == NULL)
+		if (onfault == NULL)
 			goto dopanic;
+		rv = EFAULT;
 		/*FALLTHROUGH*/
 
 	copyfault:
@@ -322,7 +324,8 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		 */
 		tf->tf_stackadj = exframesize[tf->tf_format];
 		tf->tf_format = tf->tf_vector = 0;
-		tf->tf_pc = (int) l->l_addr->u_pcb.pcb_onfault;
+		tf->tf_pc = (int)onfault;
+		tf->tf_regs[D0] = rv;
 		goto done;
 
 	case T_BUSERR|T_USER:	/* bus error */
@@ -344,12 +347,12 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		       type==T_COPERR ? "coprocessor" : "format");
 		type |= T_USER;
 
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		SIGACTION(p, SIGILL).sa_handler = SIG_DFL;
 		sigdelset(&p->p_sigctx.ps_sigignore, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
 		sigdelset(&l->l_sigmask, SIGILL);
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_addr = (void *)(int)tf->tf_format;
@@ -366,15 +369,10 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 	case T_FPERR|T_USER:	/* 68881 exceptions */
 		/*
 		 * We pass along the 68881 status register which locore stashed
-		 * in code for us.  Note that there is a possibility that the
-		 * bit pattern of this register will conflict with one of the
-		 * FPE_* codes defined in signal.h.  Fortunately for us, the
-		 * only such codes we use are all in the range 1-7 and the low
-		 * 3 bits of the status register are defined as 0 so there is
-		 * no clash.
+		 * in code for us.
 		 */
 		ksi.ksi_signo = SIGFPE;
-		ksi.ksi_addr = (void *)code;
+		ksi.ksi_code = fpsr2siginfocode(code);
 		break;
 
 	case T_FPEMULI:		/* FPU faults in supervisor mode */
@@ -386,7 +384,7 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 	case T_FPEMULI|T_USER:	/* unimplemented FP instruction */
 	case T_FPEMULD|T_USER:	/* unimplemented FP data type */
 #ifdef	FPU_EMULATE
-		if (fpu_emulate(tf, &l->l_addr->u_pcb.pcb_fpregs, &ksi) == 0)
+		if (fpu_emulate(tf, &pcb->pcb_fpregs, &ksi) == 0)
 			; /* XXX - Deal with tracing? (tf->tf_sr & PSL_T) */
 #else
 		uprintf("pid %d killed: no floating point support\n", p->p_pid);
@@ -478,15 +476,14 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		 * If we were doing profiling ticks or other user mode
 		 * stuff from interrupt code, Just Say No.
 		 */
-		if (l->l_addr->u_pcb.pcb_onfault == (void *)fubail ||
-		    l->l_addr->u_pcb.pcb_onfault == (void *)subail)
-		{
+		if (onfault == (void *)fubail || onfault == (void *)subail) {
 #ifdef	DEBUG
 			if (mmudebug & MDB_CPFAULT) {
 				printf("trap: copyfault fu/su bail\n");
 				Debugger();
 			}
 #endif
+			rv = EFAULT;
 			goto copyfault;
 		}
 		/*FALLTHROUGH*/
@@ -495,7 +492,6 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		vaddr_t va;
 		struct vmspace *vm = p->p_vmspace;
 		struct vm_map *map;
-		int rv;
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
 
@@ -516,7 +512,7 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		map = &vm->vm_map;
 		if ((type & T_USER) == 0) {
 			/* supervisor mode fault */
-			if ((l->l_addr->u_pcb.pcb_onfault == NULL) || KDFAULT(code))
+			if (onfault == NULL || KDFAULT(code))
 				map = kernel_map;
 		}
 
@@ -536,7 +532,9 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		 * This function may also, for example, disallow any
 		 * faults in the kernel text segment, etc.
 		 */
+		pcb->pcb_onfault = NULL;
 		rv = _pmap_fault(map, va, ftype);
+		pcb->pcb_onfault = onfault;
 
 #ifdef	DEBUG
 		if (rv && MDB_ISPID(p->p_pid)) {
@@ -557,6 +555,10 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		if (rv == 0) {
 			if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
 				uvm_grow(p, va);
+
+			if ((type & T_USER) == 0 && ucas_ras_check(tf)) {
+				return;
+			}
 			goto finish;
 		}
 		if (rv == EACCES) {
@@ -566,7 +568,7 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 			ksi.ksi_code = SEGV_MAPERR;
 		if ((type & T_USER) == 0) {
 			/* supervisor mode fault */
-			if (l->l_addr->u_pcb.pcb_onfault) {
+			if (onfault) {
 #ifdef	DEBUG
 				if (mmudebug & MDB_CPFAULT) {
 					printf("trap: copyfault pcb_onfault\n");
@@ -580,14 +582,26 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 			goto dopanic;
 		}
 		ksi.ksi_addr = (void *)v;
-		if (rv == ENOMEM) {
+		switch (rv) {
+		case ENOMEM:
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-		} else {
+			break;
+		case EINVAL:
+			ksi.ksi_signo = SIGBUS;
+			ksi.ksi_code = BUS_ADRERR;
+			break;
+		case EACCES:
 			ksi.ksi_signo = SIGSEGV;
+			ksi.ksi_code = SEGV_ACCERR;
+			break;
+		default:
+			ksi.ksi_signo = SIGSEGV;
+			ksi.ksi_code = SEGV_MAPERR;
+			break;
 		}
 		break;
 		} /* T_MMUFLT */

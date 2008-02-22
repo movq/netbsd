@@ -1,4 +1,4 @@
-/*	$NetBSD: ikphyreg.h,v 1.1 2006/10/21 14:10:33 bouyer Exp $	*/
+/*	$NetBSD: ikphyreg.h,v 1.3 2016/10/28 05:50:18 msaitoh Exp $	*/
 /*******************************************************************************
 Copyright (c) 2001-2005, Intel Corporation 
 All rights reserved.
@@ -41,10 +41,9 @@ POSSIBILITY OF SUCH DAMAGE.
  */
 #define GG82563_PAGE_SHIFT        5
 #define GG82563_REG(page, reg)    \
-        (((page) << GG82563_PAGE_SHIFT) | ((reg) & GG82563_MAX_REG_ADDRESS))
+        (((page) << GG82563_PAGE_SHIFT) | ((reg) & MII_ADDRMASK))
 #define GG82563_MIN_ALT_REG       30
 
-#define GG82563_MAX_REG_ADDRESS        0x1F  /* 5 bit address bus (0-0x1F) */
 #define GG82563_MAX_MULTI_PAGE_REG     0xF   /* Registers equal on all pages */
 
 
@@ -157,7 +156,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #define GG82563_PHY_DEVICE_ID	GG82563_REG(193, 19) /* Device ID */
 
 #define GG82563_PHY_PWR_MGMT_CTRL GG82563_REG(193, 20) /* Power Management Control */
-#define GG82563_PMCR_ENABLE_ELECTRICAL_IDLE         0x0001 /* 1=Enalbe SERDES Electrical Idle */
+#define GG82563_PMCR_ENABLE_ELECTRICAL_IDLE         0x0001 /* 1=Enable SERDES Electrical Idle */
 #define GG82563_PMCR_DISABLE_PORT                   0x0002 /* 1=Disable Port */
 #define GG82563_PMCR_DISABLE_SERDES                 0x0004 /* 1=Disable SERDES */
 #define GG82563_PMCR_REVERSE_AUTO_NEG               0x0008 /* 1=Enable Reverse Auto-Negotiation */

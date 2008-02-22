@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_rq.c,v 1.29 2008/01/02 11:49:03 ad Exp $	*/
+/*	$NetBSD: smb_rq.c,v 1.35 2016/08/15 08:17:35 maxv Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.29 2008/01/02 11:49:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.35 2016/08/15 08:17:35 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,16 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: smb_rq.c,v 1.29 2008/01/02 11:49:03 ad Exp $");
 #include <netsmb/smb_subr.h>
 #include <netsmb/smb_tran.h>
 
-#ifndef __NetBSD__
-MODULE_DEPEND(netsmb, libmchain, 1, 1, 1);
-#endif
-
-#ifdef __NetBSD__
-POOL_INIT(smbrq_pool, sizeof(struct smb_rq), 0, 0, 0, "smbrqpl",
-    &pool_allocator_nointr, IPL_NONE);
-POOL_INIT(smbt2rq_pool, sizeof(struct smb_t2rq), 0, 0, 0, "smbt2pl",
-    &pool_allocator_nointr, IPL_NONE);
-#endif
 
 static int  smb_rq_init(struct smb_rq *, struct smb_connobj *, u_char,
 		struct smb_cred *);
@@ -73,17 +63,25 @@ static int  smb_t2_init(struct smb_t2rq *, struct smb_connobj *, u_short,
 		struct smb_cred *);
 static int  smb_t2_reply(struct smb_t2rq *t2p);
 
-#ifndef __NetBSD__
-int
-smb_rqinit(void)
+static struct pool smbrq_pool, smbt2rq_pool;
+
+void
+smb_rqpool_init(void)
 {
-	pool_init(&smbrq_pool, sizeof(struct smb_rq), 0, 0, 0,
-		"smbrqpl", &pool_allocator_nointr, IPL_NONE);
-	pool_init(&smbt2rq_pool, sizeof(struct smb_t2rq), 0, 0, 0,
-		"smbt2pl", &pool_allocator_nointr, IPL_NONE);
-	return (0);
+
+	pool_init(&smbrq_pool, sizeof(struct smb_rq), 0, 0, 0, "smbrqpl",
+	    &pool_allocator_nointr, IPL_NONE);
+	pool_init(&smbt2rq_pool, sizeof(struct smb_t2rq), 0, 0, 0, "smbt2pl",
+	    &pool_allocator_nointr, IPL_NONE);
 }
-#endif
+
+void
+smb_rqpool_fini(void)
+{
+
+	pool_destroy(&smbrq_pool);
+	pool_destroy(&smbt2rq_pool);
+}
 
 int
 smb_rq_alloc(struct smb_connobj *layer, u_char cmd, struct smb_cred *scred,
@@ -95,6 +93,7 @@ smb_rq_alloc(struct smb_connobj *layer, u_char cmd, struct smb_cred *scred,
 	rqp = pool_get(&smbrq_pool, PR_WAITOK);
 	error = smb_rq_init(rqp, layer, cmd, scred);
 	rqp->sr_flags |= SMBR_ALLOCED;
+	callout_init(&rqp->sr_timo_ch, 0);
 	if (error) {
 		smb_rq_done(rqp);
 		return error;
@@ -110,7 +109,7 @@ smb_rq_init(struct smb_rq *rqp, struct smb_connobj *layer, u_char cmd,
 	int error;
 	struct timeval timo;
 
-	bzero(rqp, sizeof(*rqp));
+	memset(rqp, 0, sizeof(*rqp));
 	smb_sl_init(&rqp->sr_slock, "srslock");
 	error = smb_rq_getenv(layer, &rqp->sr_vc, &rqp->sr_share);
 	if (error)
@@ -166,8 +165,10 @@ smb_rq_done(struct smb_rq *rqp)
 	mb_done(&rqp->sr_rq);
 	md_done(&rqp->sr_rp);
 	smb_sl_destroy(&rqp->sr_slock);
-	if (rqp->sr_flags & SMBR_ALLOCED)
+	if (rqp->sr_flags & SMBR_ALLOCED) {
+		callout_destroy(&rqp->sr_timo_ch);
 		pool_put(&smbrq_pool, rqp);
+	}
 }
 
 /*
@@ -306,7 +307,7 @@ smb_rq_getenv(struct smb_connobj *layer,
 	    case SMBL_VC:
 		vcp = CPTOVC(layer);
 		if (layer->co_parent == NULL) {
-			SMBERROR("zombie VC %s\n", vcp->vc_srvname);
+			SMBERROR(("zombie VC %s\n", vcp->vc_srvname));
 			error = EINVAL;
 			break;
 		}
@@ -315,7 +316,7 @@ smb_rq_getenv(struct smb_connobj *layer,
 		ssp = CPTOSS(layer);
 		cp = layer->co_parent;
 		if (cp == NULL) {
-			SMBERROR("zombie share %s\n", ssp->ss_name);
+			SMBERROR(("zombie share %s\n", ssp->ss_name));
 			error = EINVAL;
 			break;
 		}
@@ -324,7 +325,7 @@ smb_rq_getenv(struct smb_connobj *layer,
 			break;
 		break;
 	    default:
-		SMBERROR("invalid layer %d passed\n", layer->co_level);
+		SMBERROR(("invalid layer %d passed\n", layer->co_level));
 		error = EINVAL;
 	}
 	if (vcpp)
@@ -342,8 +343,8 @@ smb_rq_reply(struct smb_rq *rqp)
 {
 	struct mdchain *mdp = &rqp->sr_rp;
 	int error;
-	u_int8_t errclass;
-	u_int16_t serror;
+	u_int8_t errclass = 0;
+	u_int16_t serror = 0;
 
 	error = smb_iod_waitrq(rqp);
 	if (error)
@@ -373,9 +374,9 @@ smb_rq_reply(struct smb_rq *rqp)
 	(void) md_get_uint16le(mdp, &rqp->sr_rpuid);
 	(void) md_get_uint16le(mdp, &rqp->sr_rpmid);
 
-	SMBSDEBUG("M:%04x, P:%04x, U:%04x, T:%04x, E: %d:%d\n",
+	SMBSDEBUG(("M:%04x, P:%04x, U:%04x, T:%04x, E: %d:%d\n",
 	    rqp->sr_rpmid, rqp->sr_rppid, rqp->sr_rpuid, rqp->sr_rptid,
-	    errclass, serror);
+	    errclass, serror));
 	return (error);
 }
 
@@ -417,7 +418,7 @@ smb_t2_init(struct smb_t2rq *t2p, struct smb_connobj *source, u_short setup,
 {
 	int error;
 
-	bzero(t2p, sizeof(*t2p));
+	memset(t2p, 0, sizeof(*t2p));
 	t2p->t2_source = source;
 	t2p->t2_setupcount = 1;
 	t2p->t2_setupdata = t2p->t2_setup;
@@ -513,8 +514,8 @@ smb_t2_reply(struct smb_t2rq *t2p)
 		    (error = md_get_uint16le(mdp, &pdisp)) != 0)
 			break;
 		if (pcount != 0 && pdisp != totpgot) {
-			SMBERROR("Can't handle misordered parameters %d:%d\n",
-			    pdisp, totpgot);
+			SMBERROR(("Can't handle misordered parameters %d:%d\n",
+			    pdisp, totpgot));
 			error = EINVAL;
 			break;
 		}
@@ -523,7 +524,7 @@ smb_t2_reply(struct smb_t2rq *t2p)
 		    (error = md_get_uint16le(mdp, &ddisp)) != 0)
 			break;
 		if (dcount != 0 && ddisp != totdgot) {
-			SMBERROR("Can't handle misordered data\n");
+			SMBERROR(("Can't handle misordered data\n"));
 			error = EINVAL;
 			break;
 		}
@@ -658,7 +659,7 @@ smb_t2_request_int(struct smb_t2rq *t2p)
 	if (txpcount) {
 		mb_put_mem(mbp, NULL, ALIGN4(len) - len, MB_MZERO);
 		error = md_get_mbuf(&mbparam, txpcount, &m);
-		SMBSDEBUG("%d:%d:%d\n", error, txpcount, txmax);
+		SMBSDEBUG(("%d:%d:%d\n", error, txpcount, txmax));
 		if (error)
 			goto freerq;
 		mb_put_mbuf(mbp, m);

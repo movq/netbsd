@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.14 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: db.c,v 1.18 2015/05/19 13:20:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -29,14 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)db.c	8.4 (Berkeley) 2/21/94";
-#else
-__RCSID("$NetBSD: db.c,v 1.14 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: db.c,v 1.18 2015/05/19 13:20:52 christos Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -53,6 +51,10 @@ static int __dberr(void);
 __weak_alias(dbopen,_dbopen)
 #endif
 
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
 DB *
 dbopen(const char *fname, int flags, mode_t mode, DBTYPE type,
     const void *openinfo)
@@ -61,7 +63,7 @@ dbopen(const char *fname, int flags, mode_t mode, DBTYPE type,
 #define	DB_FLAGS	(DB_LOCK | DB_SHMEM | DB_TXN)
 #define	USE_OPEN_FLAGS							\
 	(O_CREAT | O_EXCL | O_EXLOCK | O_NONBLOCK | O_RDONLY |		\
-	 O_RDWR | O_SHLOCK | O_TRUNC)
+	 O_RDWR | O_SHLOCK | O_TRUNC | O_CLOEXEC)
 
 	if ((flags & ~(USE_OPEN_FLAGS | DB_FLAGS)) == 0)
 		switch (type) {

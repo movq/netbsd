@@ -1,4 +1,4 @@
-/*	$NetBSD: getyx.c,v 1.4 2001/10/14 12:36:09 blymn Exp $	*/
+/*	$NetBSD: getyx.c,v 1.6 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getyx.c,v 1.4 2001/10/14 12:36:09 blymn Exp $");
+__RCSID("$NetBSD: getyx.c,v 1.6 2017/01/06 13:53:18 roy Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -54,13 +47,14 @@ __RCSID("$NetBSD: getyx.c,v 1.4 2001/10/14 12:36:09 blymn Exp $");
 int
 getpary(WINDOW *win)
 {
+
 	if (win == NULL)
 		return -1;
 
 	if (win->orig == NULL)
 		return -1;
 
-	return (win->begy - win->orig->begy);
+	return win->begy - win->orig->begy;
 }
 
 /*
@@ -71,13 +65,14 @@ getpary(WINDOW *win)
 int
 getparx(WINDOW *win)
 {
+
 	if (win == NULL)
 		return -1;
 
 	if (win->orig == NULL)
 		return -1;
 
-	return (win->begx - win->orig->begx);
+	return win->begx - win->orig->begx;
 }
 
 /*
@@ -87,7 +82,8 @@ getparx(WINDOW *win)
 int
 getcury(WINDOW *win)
 {
-	return(win->cury);
+
+	return win->cury;
 }
 
 /*
@@ -97,7 +93,8 @@ getcury(WINDOW *win)
 int
 getcurx(WINDOW *win)
 {
-	return(win->curx);
+
+	return win->curx;
 }
 
 /*
@@ -107,7 +104,8 @@ getcurx(WINDOW *win)
 int
 getbegy(WINDOW *win)
 {
-	return(win->begy);
+
+	return win->begy;
 }
 
 /*
@@ -117,7 +115,8 @@ getbegy(WINDOW *win)
 int
 getbegx(WINDOW *win)
 {
-	return(win->begx);
+
+	return win->begx;
 }
 
 /*
@@ -127,7 +126,8 @@ getbegx(WINDOW *win)
 int
 getmaxy(WINDOW *win)
 {
-	return(win->maxy);
+
+	return win->maxy;
 }
 
 /*
@@ -137,5 +137,6 @@ getmaxy(WINDOW *win)
 int
 getmaxx(WINDOW *win)
 {
-	return(win->maxx);
+
+	return win->maxx;
 }

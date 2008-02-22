@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.21 2007/01/17 21:59:49 hubertf Exp $	*/
+/*	$NetBSD: dir.c,v 1.29 2017/04/28 11:33:00 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dir.c,v 1.21 2007/01/17 21:59:49 hubertf Exp $");
+__RCSID("$NetBSD: dir.c,v 1.29 2017/04/28 11:33:00 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -211,6 +204,7 @@ calcShortSum(u_char *p)
  * Global variables temporarily used during a directory scan
  */
 static char longName[DOSLONGNAMELEN] = "";
+static char *eLongName = longName + sizeof(longName);
 static u_char *buffer = NULL;
 static u_char *delbuf = NULL;
 
@@ -332,7 +326,7 @@ delete(int f, struct bootblock *boot, struct fatEntry *fat, cl_t startcl,
 				break;
 			e = delbuf + endoff;
 		}
-		off = startcl * boot->SecPerClust + boot->ClusterOffset;
+		off = (startcl - CLUST_FIRST) * boot->SecPerClust + boot->FirstCluster;
 		off *= boot->BytesPerSec;
 		if (lseek(f, off, SEEK_SET) != off
 		    || read(f, delbuf, clsz) != clsz) {
@@ -400,7 +394,7 @@ checksize(struct bootblock *boot, struct fatEntry *fat, u_char *p,
 	/*
 	 * Check size on ordinary files
 	 */
-	int32_t physicalSize;
+	u_int32_t physicalSize;
 
 	if (dir->head == CLUST_FREE)
 		physicalSize = 0;
@@ -426,17 +420,39 @@ checksize(struct bootblock *boot, struct fatEntry *fat, u_char *p,
 		      fullpath(dir));
 		if (ask(1, "Drop superfluous clusters")) {
 			cl_t cl;
-			u_int32_t sz = 0;
+			u_int32_t sz, len;
 
-			for (cl = dir->head; (sz += boot->ClusterSize) < dir->size;)
+			for (cl = dir->head, len = sz = 0;
+			    (sz += boot->ClusterSize) < dir->size; len++)
 				cl = fat[cl].next;
 			clearchain(boot, fat, fat[cl].next);
 			fat[cl].next = CLUST_EOF;
+			fat[dir->head].length = len;
 			return FSFATMOD;
 		} else
 			return FSERROR;
 	}
 	return FSOK;
+}
+
+static int
+procName(int from, int to, char **dst, const u_char *src)
+{
+	int k;
+	char *t = *dst;
+
+	for (k = from; k < to && t < eLongName; k += 2) {
+		if (!src[k] && !src[k + 1])
+			break;
+		*t++ = src[k];
+		/*
+		 * Warn about those unusable chars in msdosfs here?	XXX
+		 */
+		if (src[k + 1])
+		    t[-1] = '?';
+	}
+	*dst = t;
+	return k;
 }
 
 /*
@@ -475,7 +491,7 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 			off = boot->ResSectors + boot->FATs * boot->FATsecs;
 		} else {
 			last = boot->SecPerClust * boot->BytesPerSec;
-			off = cl * boot->SecPerClust + boot->ClusterOffset;
+			off = (cl - CLUST_FIRST) * boot->SecPerClust + boot->FirstCluster;
 		}
 
 		off *= boot->BytesPerSec;
@@ -533,6 +549,7 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 			}
 
 			if (p[11] == ATTR_WIN95) {
+				u_int lrnomask = *p & LRNOMASK;
 				if (*p & LRFIRST) {
 					if (shortSum != -1) {
 						if (!invlfn) {
@@ -545,7 +562,7 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 					vallfn = p;
 					valcl = cl;
 				} else if (shortSum != p[13]
-					   || lidx != (*p & LRNOMASK)) {
+				   || lidx != lrnomask) {
 					if (!invlfn) {
 						invlfn = vallfn;
 						invcl = valcl;
@@ -556,52 +573,35 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 					}
 					vallfn = NULL;
 				}
-				lidx = *p & LRNOMASK;
-				t = longName + --lidx * 13;
-				for (k = 1; k < 11 && t < longName + sizeof(longName); k += 2) {
-					if (!p[k] && !p[k + 1])
-						break;
-					*t++ = p[k];
-					/*
-					 * Warn about those unusable chars in msdosfs here?	XXX
-					 */
-					if (p[k + 1])
-						t[-1] = '?';
-				}
-				if (k >= 11)
-					for (k = 14; k < 26 && t < longName + sizeof(longName); k += 2) {
-						if (!p[k] && !p[k + 1])
-							break;
-						*t++ = p[k];
-						if (p[k + 1])
-							t[-1] = '?';
+				lidx = lrnomask;
+				if (lidx != 0) {
+					t = longName + --lidx * 13;
+					k = procName(1, 11, &t, p);
+					if (k >= 11)
+						k = procName(14, 26, &t, p);
+					if (k >= 26)
+						k = procName(28, 32, &t, p);
+					if (t >= eLongName) {
+						pwarn(
+						    "long filename too long\n");
+						if (!invlfn) {
+							invlfn = vallfn;
+							invcl = valcl;
+						}
+						vallfn = NULL;
 					}
-				if (k >= 26)
-					for (k = 28; k < 32 && t < longName + sizeof(longName); k += 2) {
-						if (!p[k] && !p[k + 1])
-							break;
-						*t++ = p[k];
-						if (p[k + 1])
-							t[-1] = '?';
-					}
-				if (t >= longName + sizeof(longName)) {
-					pwarn("long filename too long\n");
-					if (!invlfn) {
-						invlfn = vallfn;
-						invcl = valcl;
-					}
-					vallfn = NULL;
 				}
 				if (p[26] | (p[27] << 8)) {
-					pwarn("long filename record cluster start != 0\n");
+					pwarn("long filename record cluster "
+					    "start != 0\n");
 					if (!invlfn) {
 						invlfn = vallfn;
 						invcl = cl;
 					}
 					vallfn = NULL;
 				}
-				continue;	/* long records don't carry further
-						 * information */
+				continue; 	/* long records don't carry
+						 * further information */
 			}
 
 			/*
@@ -623,7 +623,7 @@ readDosDirSection(int f, struct bootblock *boot, struct fatEntry *fat,
 			dirent.name[8] = '\0';
 			for (k = 7; k >= 0 && dirent.name[k] == ' '; k--)
 				dirent.name[k] = '\0';
-			if (dirent.name[k] != '\0')
+			if (k < 0 || dirent.name[k] != '\0')
 				k++;
 			if (dirent.name[0] == SLOT_E5)
 				dirent.name[0] = 0xe5;
@@ -929,6 +929,7 @@ int
 reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 {
 	struct dosDirEntry d;
+	int len;
 	u_char *p;
 
 	if (!ask(1, "Reconnect"))
@@ -967,10 +968,10 @@ reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 			pwarn("No space in %s\n", LOSTDIR);
 			return FSERROR;
 		}
-		lfoff = lfcl * boot->ClusterSize
-		    + boot->ClusterOffset * boot->BytesPerSec;
+		lfoff = (lfcl - CLUST_FIRST) * boot->ClusterSize
+		    + boot->FirstCluster * boot->BytesPerSec;
 		if (lseek(dosfs, lfoff, SEEK_SET) != lfoff
-		    || read(dosfs, lfbuf, boot->ClusterSize) != boot->ClusterSize) {
+		    || (size_t)read(dosfs, lfbuf, boot->ClusterSize) != boot->ClusterSize) {
 			perr("could not read LOST.DIR");
 			return FSFATAL;
 		}
@@ -980,14 +981,15 @@ reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 	boot->NumFiles++;
 	/* Ensure uniqueness of entry here!				XXX */
 	memset(&d, 0, sizeof d);
-	(void)snprintf(d.name, sizeof(d.name), "%u", head);
+	/* worst case -1 = 4294967295, 10 digits */
+	len = snprintf(d.name, sizeof(d.name), "%u", head);
 	d.flags = 0;
 	d.head = head;
 	d.size = fat[head].length * boot->ClusterSize;
 
-	memset(p, 0, 32);
-	memset(p, ' ', 11);
-	memcpy(p, d.name, strlen(d.name));
+	memcpy(p, d.name, len);
+	memset(p + len, ' ', 11 - len);
+	memset(p + 11, 0, 32 - 11);
 	p[26] = (u_char)d.head;
 	p[27] = (u_char)(d.head >> 8);
 	if (boot->ClustMask == CLUST32_MASK) {
@@ -1000,7 +1002,7 @@ reconnect(int dosfs, struct bootblock *boot, struct fatEntry *fat, cl_t head)
 	p[31] = (u_char)(d.size >> 24);
 	fat[head].flags |= FAT_USED;
 	if (lseek(dosfs, lfoff, SEEK_SET) != lfoff
-	    || write(dosfs, lfbuf, boot->ClusterSize) != boot->ClusterSize) {
+	    || (size_t)write(dosfs, lfbuf, boot->ClusterSize) != boot->ClusterSize) {
 		perr("could not write LOST.DIR");
 		return FSFATAL;
 	}

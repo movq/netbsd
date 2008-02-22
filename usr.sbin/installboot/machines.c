@@ -1,4 +1,4 @@
-/*	$NetBSD: machines.c,v 1.34 2006/09/01 21:47:21 uwe Exp $	*/
+/*	$NetBSD: machines.c,v 1.39 2014/02/24 07:23:44 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,8 +34,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: machines.c,v 1.34 2006/09/01 21:47:21 uwe Exp $");
+#if !defined(__lint)
+__RCSID("$NetBSD: machines.c,v 1.39 2014/02/24 07:23:44 skrll Exp $");
 #endif	/* !__lint */
 
 #include <sys/types.h>
@@ -57,9 +50,10 @@ struct ib_mach
     ib_mach_alpha,
     ib_mach_amd64,
     ib_mach_amiga,
+    ib_mach_emips,
     ib_mach_ews4800mips,
     ib_mach_hp300,
-    ib_mach_hp700,
+    ib_mach_hppa,
     ib_mach_i386,
     ib_mach_landisk,
     ib_mach_macppc,
@@ -74,13 +68,14 @@ struct ib_mach
     ib_mach_vax,
     ib_mach_x68k;
 
-struct ib_mach *machines[] = {
+struct ib_mach * const machines[] = {
     &ib_mach_alpha,
     &ib_mach_amd64,
     &ib_mach_amiga,
+    &ib_mach_emips,
     &ib_mach_ews4800mips,
     &ib_mach_hp300,
-    &ib_mach_hp700,
+    &ib_mach_hppa,
     &ib_mach_i386,
     &ib_mach_landisk,
     &ib_mach_macppc,

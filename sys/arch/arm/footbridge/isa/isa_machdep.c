@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.7 2007/12/03 15:33:18 ad Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.21 2014/03/26 08:52:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996-1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.7 2007/12/03 15:33:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.21 2014/03/26 08:52:00 christos Exp $");
 
 #include "opt_irqstats.h"
 
@@ -85,7 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.7 2007/12/03 15:33:18 ad Exp $");
 #include <sys/proc.h>
 
 #define _ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/pio.h>
@@ -105,15 +98,15 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.7 2007/12/03 15:33:18 ad Exp $");
 #include "isadma.h"
 
 /* prototypes */
-static void isa_icu_init __P((void));
+static void isa_icu_init(void);
 
 struct arm32_isa_chipset isa_chipset_tag;
 
-void isa_strayintr __P((int));
-void intr_calculatemasks __P((void));
-int fakeintr __P((void *));
+void isa_strayintr(int);
+void intr_calculatemasks(void);
+int fakeintr(void *);
 
-int isa_irqdispatch __P((void *arg));
+int isa_irqdispatch(void *arg);
 
 u_int imask[NIPL];
 unsigned imen;
@@ -161,8 +154,7 @@ isa_icu_init(void)
  * Caught a stray interrupt, notify
  */
 void
-isa_strayintr(irq)
-	int irq;
+isa_strayintr(int irq)
 {
 	static u_long strays;
 
@@ -186,7 +178,7 @@ static struct intrq isa_intrq[ICU_LEN];
  * happen very much anyway.
  */
 void
-intr_calculatemasks()
+intr_calculatemasks(void)
 {
 	int irq, level;
 	struct intrq *iq;
@@ -211,12 +203,6 @@ intr_calculatemasks()
 		imask[level] = irqs;
 	}
 
-	imask[IPL_NONE] = 0;
-	imask[IPL_SOFTCLOCK] |= imask[IPL_NONE];
-	imask[IPL_SOFTBIO] |= imask[IPL_SOFTCLOCK];
-	imask[IPL_SOFTNET] |= imask[IPL_SOFTBIO];
-	imask[IPL_SOFTSERIAL] |= imask[IPL_SOFTNET];
-	imask[IPL_VM] |= imask[IPL_SOFTSERIAL];
 	imask[IPL_SCHED] |= imask[IPL_VM];
 	imask[IPL_HIGH] |= imask[IPL_SCHED];
 
@@ -253,8 +239,7 @@ intr_calculatemasks()
 }
 
 int
-fakeintr(arg)
-	void *arg;
+fakeintr(void *arg)
 {
 
 	return 0;
@@ -263,11 +248,7 @@ fakeintr(arg)
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) < ICU_LEN && (x) != 2)
 
 int
-isa_intr_alloc(ic, mask, type, irq)
-	isa_chipset_tag_t ic;
-	int mask;
-	int type;
-	int *irq;
+isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
 	int i, tmp, bestirq, count;
 	struct intrq *iq;
@@ -348,13 +329,7 @@ isa_intr_evcnt(isa_chipset_tag_t ic, int irq)
  * XXX PRONE TO RACE CONDITIONS, UGLY, 'INTERESTING' INSERTION ALGORITHM.
  */
 void *
-isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
-	isa_chipset_tag_t ic;
-	int irq;
-	int type;
-	int level;
-	int (*ih_fun) __P((void *));
-	void *ih_arg;
+isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_fun)(void *), void *ih_arg)
 {
     	struct intrq *iq;
 	struct intrhand *ih;
@@ -421,9 +396,7 @@ isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
  * Deregister an interrupt handler.
  */
 void
-isa_intr_disestablish(ic, arg)
-	isa_chipset_tag_t ic;
-	void *arg;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 {
 	struct intrhand *ih = arg;
 	struct intrq *iq = &isa_intrq[ih->ih_irq];
@@ -456,7 +429,6 @@ isa_intr_disestablish(ic, arg)
 void
 isa_intr_init(void)
 {
-	static void *isa_ih;
  	struct intrq *iq;
  	int i;
  
@@ -468,7 +440,7 @@ isa_intr_init(void)
  		iq = &isa_intrq[i];
  		TAILQ_INIT(&iq->iq_list);
   
- 		sprintf(iq->iq_name, "irq %d", i);
+ 		snprintf(iq->iq_name, sizeof(iq->iq_name), "irq %d", i);
  		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
  		    NULL, "isa", iq->iq_name);
  	}
@@ -479,7 +451,7 @@ isa_intr_init(void)
 #ifndef ISA_FOOTBRIDGE_IRQ 
 #warning Before using isa with footbridge you must define ISA_FOOTBRIDGE_IRQ
 #endif
-	isa_ih = footbridge_intr_claim(ISA_FOOTBRIDGE_IRQ, IPL_BIO, "isabus",
+	footbridge_intr_claim(ISA_FOOTBRIDGE_IRQ, IPL_BIO, "isabus",
 	    isa_irqdispatch, NULL);
 	
 }
@@ -490,8 +462,7 @@ struct arm32_dma_range machdep_isa_dma_ranges[1];
 #endif
 
 void
-isa_footbridge_init(iobase, membase)
-	u_int iobase, membase;
+isa_footbridge_init(u_int iobase, u_int membase)
 {
 #if NISADMA > 0
 	extern struct arm32_dma_range *footbridge_isa_dma_ranges;
@@ -509,9 +480,7 @@ isa_footbridge_init(iobase, membase)
 }
 
 void
-isa_attach_hook(parent, self, iba)
-	struct device *parent, *self;
-	struct isabus_attach_args *iba;
+isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
 {
 	/*
 	 * Since we can only have one ISA bus, we just use a single
@@ -524,9 +493,16 @@ isa_attach_hook(parent, self, iba)
 #endif
 }
 
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+{
+#if NISADMA > 0
+	isa_dmadestroy(ic);
+#endif
+}
+
 int
-isa_irqdispatch(arg)
-	void *arg;
+isa_irqdispatch(void *arg)
 {
 	struct clockframe *frame = arg;
 	int irq;
@@ -554,10 +530,7 @@ isa_irqdispatch(arg)
 
 
 void
-isa_fillw(val, addr, len)
-	u_int val;
-	void *addr;
-	size_t len;
+isa_fillw(u_int val, void *addr, size_t len)
 {
 	if ((u_int)addr >= isa_mem_data_vaddr()
 	    && (u_int)addr < isa_mem_data_vaddr() + 0x100000) {

@@ -1,4 +1,4 @@
-.\"	$NetBSD: fwctl.8,v 1.6 2007/11/06 17:02:15 kiyohara Exp $
+.\"	$NetBSD: fwctl.8,v 1.17 2014/03/18 18:20:46 riastradh Exp $
 .\"
 .\" Copyright (c) 2005 KIYOHARA Takashi
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\" $FreeBSD: src/usr.sbin/fwcontrol/fwcontrol.8,v 1.21 2007/10/31 05:59:17 brueffer Exp $
 .\"
-.Dd November 6, 2007
+.Dd August 24, 2010
 .Dt FWCTL 8
 .Os
 .Sh NAME
@@ -71,21 +71,38 @@ register on all supported nodes.
 Show the configuration ROM on the node.
 .It Fl d Ar node
 Hex dump of the configuration ROM.
+.It Fl f Ar node
+Force specified
+.Ar node
+to be the root node on the next bus reset by sending a PHY config packet.
+Valid values are 0 - 63.
 .It Fl g Ar gap_count
-Broadcast
+Broadcast new
 .Ar gap_count
 by phy_config packet.
+By default this value is 63 on all nodes.
+Valid values are 0 - 63.
+.It Fl i Ar pri_req
+Set the
+.Dv PRIORITY_BUDGET
+register on all supported nodes.
 .It Fl l Ar file
 Load hex dump file of the configuration ROM and parse it.
-.It Fl M Ar modeExplicitly specify either
+.It Fl M Ar mode
+Explicitly specify either
 .Ar dv
 or
 .Ar mpeg
 mode for the incoming stream.
 Only meaningful in case of and must precede the
 .Fl R
-option. If not specified, the program will try to guess. If you get
-an error complaining about "format 0x20", try to force the "mpeg" mode.
+option.
+If not specified, the program will try to guess.
+In case of
+.Dq format 0x20
+error, try to force the
+.Ar mpeg
+mode.
 .It Fl m Ar EUI64 | hostname
 Set default fwmem target.
 Hostname will be converted to EUI64.
@@ -95,7 +112,7 @@ Send a link-on PHY packet to the node.
 Dump PHY registers.
 .It Fl R Ar filename
 Receive DV or MPEG TS stream and dump it to a file.
-Use Ctrl-C to stop the receiving.
+Use Ctrl-C to stop receiving.
 Some DV cameras seem not to send the stream if a bus manager exits.
 If you cannot get the stream, try the following commands:
 .Bd -literal -offset indent
@@ -108,14 +125,13 @@ and CIP header.
 It can be handled by the
 .Pa pkgsrc/multimedia/libdv
 package.
-Resulting MPEG TS stream can be played and sent over a network using
-the VideoLAN
-.Nm vlc
-tool in the
-.Fx
-Ports Collection. The stream can be piped directly to
-.Nm vlc,
-see EXAMPLES.
+The resulting MPEG TS stream can be played and sent over a network using
+the VideoLAN tool
+.Pa ( pkgsrc/multimedia/vlc ) .
+The stream can be piped directly to
+.Nm vlc ,
+see
+.Sx EXAMPLES .
 .It Fl r
 Initiate bus reset.
 .It Fl S Ar filename
@@ -128,6 +144,7 @@ register on the node.
 Show the topology map.
 .It Fl u Ar bus_num
 Specify the IEEE1394 bus number to be operated on.
+The default is bus 0.
 .El
 .Sh FILES
 .Bl -tag
@@ -157,33 +174,32 @@ For PAL, replace
 with
 .Dq Li bs=144000 .
 .Pp
-.Dl "fwcontrol -R file.m2t
+.Dl "fwctl -R file.m2t"
 .Pp
-Receive an MPEG TS stream from a camera producing MPEG transport stream.  This
-has been tested with SONY HDR-FX1E camera that produces HD MPEG-2 stream at
-25 Mbps bandwidth.
+Receive an MPEG TS stream from a camera producing MPEG transport stream.
+This has been tested with SONY HDR-FX1E camera that produces HD
+MPEG-2 stream at 25 Mbps bandwidth.
 .Pp
 To send the stream from the camera over the network using TCP (which
-supprisingly works better with vlc), you can use
-.Dl "fwcontrol -R - | nc 192.168.10.11 9000
+surprisingly works better with vlc), you can use
+.Dl "fwctl -R - | nc 192.168.10.11 9000"
 with
-.Nm netcat
-from ports and to receive the stream, use
+.Pa pkgsrc/net/netcat
+and to receive the stream, use
 .Dl nc -l -p 9000 | vlc -
 .Pp
 To netcast via UDP, you need to use
-.Nm buffer
-program from ports, since vlc is not fast enough to read UDP packets from
-buffers and thus it experiences dropouts when run directly. The sending side
-can use
-.Dl "fwcontrol -R - | nc 192.168.10.11 9000
+.Pa pkgsrc/misc/buffer ,
+since vlc is not fast enough to read UDP packets from
+buffers and thus it experiences dropouts when run directly.
+The sending side can use
+.Dl "fwctl -R - | nc 192.168.10.11 9000"
 and to receive the stream, use
 .Dl nc -l -u -p 9000 | buffer -s 10k -b 1000 -m 20m -p 5 | vlc -
 .Pp
-.Pp
 For more information on how to work with
 .Nm vlc
-see its docs.
+see its documentation.
 .Sh SEE ALSO
 .Xr mplayer 1 ,
 .Xr vlc 1 ,
@@ -202,10 +218,10 @@ It was added to
 .Nx 4.0
 under its present name.
 .Sh AUTHORS
-.An Hidetoshi Shimokawa Aq simokawa@FreeBSD.org
-.An Petr Holub Aq hopet@ics.muni.cz
+.An Hidetoshi Shimokawa Aq Mt simokawa@FreeBSD.org
+.An Petr Holub Aq Mt hopet@ics.muni.cz
 - MPEG TS mode.
-.An KIYOHARA Takashi Aq kiyohara@NetBSD.org
+.An KIYOHARA Takashi Aq Mt kiyohara@NetBSD.org
 .Sh BUGS
 This utility is still under development and provided for debugging
 purposes.

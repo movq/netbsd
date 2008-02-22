@@ -1,4 +1,4 @@
-/*	$NetBSD: event.c,v 1.21 2007/12/05 17:19:54 pooka Exp $	*/
+/*	$NetBSD: event.c,v 1.24 2017/10/25 08:12:39 maya Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: event.c,v 1.21 2007/12/05 17:19:54 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: event.c,v 1.24 2017/10/25 08:12:39 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/fcntl.h>
@@ -65,23 +65,23 @@ int (*ev_out32_hook)(struct firm_event *, int, struct uio *);
  * Initialize a firm_event queue.
  */
 void
-ev_init(ev)
-	struct evvar *ev;
+ev_init(struct evvar *ev)
 {
 
 	ev->ev_get = ev->ev_put = 0;
 	ev->ev_q = malloc((u_long)EV_QSIZE * sizeof(struct firm_event),
 	    M_DEVBUF, M_WAITOK|M_ZERO);
+	selinit(&ev->ev_sel);
 }
 
 /*
  * Tear down a firm_event queue.
  */
 void
-ev_fini(ev)
-	struct evvar *ev;
+ev_fini(struct evvar *ev)
 {
 
+	seldestroy(&ev->ev_sel);
 	free(ev->ev_q, M_DEVBUF);
 }
 
@@ -90,10 +90,7 @@ ev_fini(ev)
  * (User cannot write an event queue.)
  */
 int
-ev_read(ev, uio, flags)
-	struct evvar *ev;
-	struct uio *uio;
-	int flags;
+ev_read(struct evvar *ev, struct uio *uio, int flags)
 {
 	int s, n, cnt, error;
 
@@ -153,10 +150,7 @@ ev_read(ev, uio, flags)
 }
 
 int
-ev_poll(ev, events, l)
-	struct evvar *ev;
-	int events;
-	struct lwp *l;
+ev_poll(struct evvar *ev, int events, struct lwp *l)
 {
 	int s = splev(), revents = 0;
 
@@ -202,8 +196,12 @@ filt_evread(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops ev_filtops =
-	{ 1, NULL, filt_evrdetach, filt_evread };
+static const struct filterops ev_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_evrdetach,
+	.f_event = filt_evread,
+};
 
 int
 ev_kqfilter(struct evvar *ev, struct knote *kn)

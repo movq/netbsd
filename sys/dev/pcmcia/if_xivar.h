@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xivar.h,v 1.4 2005/12/11 12:23:23 christos Exp $	*/
+/*	$NetBSD: if_xivar.h,v 1.9 2015/04/13 16:33:25 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -18,14 +18,10 @@
  *    derived from this software without specific prior written permission.
  */
 
-#include "rnd.h"
-
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 struct xi_softc {
-	struct device sc_dev;			/* Generic device info */
+	device_t sc_dev;			/* Generic device info */
 	struct ethercom sc_ethercom;		/* Ethernet common part */
 
 	struct mii_data sc_mii;			/* MII media information */
@@ -44,12 +40,10 @@ struct xi_softc {
 #define	XI_CHIPSET_DINGO	2
 	u_int8_t	sc_rev;			/* Chip revision */
 
-#if NRND > 0
-	rndsource_element_t	sc_rnd_source;
-#endif
+	krndsource_t	sc_rnd_source;
 };
 
 void	xi_attach(struct xi_softc *, u_int8_t *);
-int	xi_detach(struct device *, int);
-int	xi_activate(struct device *, enum devact);
+int	xi_detach(device_t, int);
+int	xi_activate(device_t, enum devact);
 int	xi_intr(void *);

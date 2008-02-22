@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2003/07/10 10:34:06 lukem Exp $
+#	$NetBSD: Makefile,v 1.10 2014/01/16 01:15:32 christos Exp $
 
 TOP=		${.CURDIR}/..
 WARNS=1
@@ -25,7 +25,7 @@ NEWFS?=		newfs
 UMOUNT?=	umount
 VNCONFIG?=	vnconfig
 
-LISTS=		../ramdiskcommon/list
+LISTS=		${.CURDIR}/../ramdiskcommon/list
 CRUNCHCONF=	../ramdiskcommon/${CBIN}.conf
 MTREECONF=	../ramdiskcommon/mtree.conf
 
@@ -46,8 +46,8 @@ ${IMAGE}: ${CBIN} ${MTREECONF} ${LISTS}
 	${MOUNT} ${VND_DEV} ${MOUNT_POINT}
 	${TOOL_MTREE} -def ${.CURDIR}/${MTREECONF} -p ${MOUNT_POINT}/ -U
 	TOPDIR=${TOP} CURDIR=${.CURDIR} OBJDIR=${.OBJDIR} \
-		TARGDIR=${MOUNT_POINT} ${HOST_SH} ${TOP}/runlist.sh \
-		${.CURDIR}/${LISTS}
+	    KERNOBJDIR=${KERNOBJDIR} TARGDIR=${MOUNT_POINT} ${HOST_SH} \
+	    ${NETBSDSRCDIR}/distrib/common/runlist.sh ${LISTS}
 	@echo ""
 	@df -i ${MOUNT_POINT}
 	@echo ""
@@ -84,4 +84,4 @@ clean cleandir distclean:
 .include <bsd.own.mk>
 .include <bsd.obj.mk>
 .include <bsd.subdir.mk>
-.include <bsd.sys.mk>
+.include <bsd.files.mk>

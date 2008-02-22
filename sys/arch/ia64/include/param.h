@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.2 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.9 2017/04/08 18:03:33 scole Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,13 +41,17 @@
  * Machine dependent constants for Intel Itanium.
  */
 
+#ifdef _KERNEL
+#include <machine/cpu.h>
+#endif
+
 #define	_MACHINE	ia64
 #define	MACHINE		"ia64"
 #define	_MACHINE_ARCH	ia64
 #define	MACHINE_ARCH	"ia64"
 #define	MID_MACHINE	MID_IA64
 
-#ifdef SMP
+#ifdef MULTIPROCESSOR
 #define	MAXCPU		16
 #else
 #define MAXCPU		1
@@ -73,25 +77,12 @@
 #endif
 #define	KSTACK_GUARD_PAGES 0		/* pages of kstack guard; 0 disables */
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-
-#define	ALIGNBYTES		15
-#define	ALIGN(p)		(((u_long)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#define ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
-
 #define ALIGNBYTES32		(sizeof(int) - 1)
 #define ALIGN32(p)		(((u_long)(p) + ALIGNBYTES32) &~ALIGNBYTES32)
 
+#ifndef LOG2_PAGE_SIZE
+#define LOG2_PAGE_SIZE          14              /* 16K pages by default. */
+#endif
 #define	PGSHIFT		14		/* LOG2(NBPG) */
 #define	NBPG		(1 << PGSHIFT)	/* bytes/page */
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
@@ -112,24 +103,18 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
+ * No enforced maxmimum an ia64
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((12 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((32 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_UNLIMITED 1
+
+/* The default size of identity mappings in region 6 & 7. */
+#ifndef LOG2_ID_PAGE_SIZE
+#define LOG2_ID_PAGE_SIZE       16
+#endif
 
 /*
  * Mach derived conversion macros
@@ -145,6 +130,8 @@
 #ifndef _LOCORE
 
 #include <machine/intr.h>
+
+static __inline void delay(unsigned int us) {}	/* XXXXX */
 
 #endif /* _LOCORE */
 #endif /* _KERNEL */

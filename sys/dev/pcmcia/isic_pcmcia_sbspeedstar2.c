@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_pcmcia_sbspeedstar2.c,v 1.11 2007/10/19 12:01:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_pcmcia_sbspeedstar2.c,v 1.13 2014/03/23 02:50:08 christos Exp $");
 
 #include "opt_isicpcmcia.h"
 #ifdef ISICPCMCIA_SBSPEEDSTAR2
@@ -191,8 +184,6 @@ int
 isic_attach_sbspeedstar2(struct pcmcia_isic_softc *psc, struct pcmcia_config_entry *cfe, struct pcmcia_attach_args *pa)
 {
 	struct isic_softc * sc = &psc->sc_isic;
-	bus_space_tag_t t;
-	bus_space_handle_t h;
 
 	/* Validate config info */
 	if (cfe->num_memspace != 0)
@@ -224,9 +215,6 @@ isic_attach_sbspeedstar2(struct pcmcia_isic_softc *psc, struct pcmcia_config_ent
 	sc->sc_maps[0].h = psc->sc_pcioh.ioh;
 	sc->sc_maps[0].offset = 0;
 	sc->sc_maps[0].size = 0;	/* not our mapping */
-
-	t = sc->sc_maps[0].t;
-	h = sc->sc_maps[0].h;
 
 	/* setup access routines */
 

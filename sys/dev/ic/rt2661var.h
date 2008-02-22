@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2661var.h,v 1.7 2007/12/09 20:27:59 jmcneill Exp $	*/
+/*	$NetBSD: rt2661var.h,v 1.12 2017/02/02 10:05:35 nonaka Exp $	*/
 /*	$OpenBSD: rt2661var.h,v 1.4 2006/02/25 12:56:47 damien Exp $	*/
 
 /*-
@@ -52,7 +52,6 @@ struct rt2661_tx_data {
 	bus_dmamap_t			map;
 	struct mbuf			*m;
 	struct ieee80211_node		*ni;
-	struct ieee80211_rssdesc	id;
 };
 
 struct rt2661_tx_ring {
@@ -86,11 +85,11 @@ struct rt2661_rx_ring {
 
 struct rt2661_node {
 	struct ieee80211_node		ni;
-	struct ieee80211_rssadapt	rssadapt;
+	struct ieee80211_amrr_node	amn;
 };
 
 struct rt2661_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 
 	struct ieee80211com		sc_ic;
 	int				(*sc_newstate)(struct ieee80211com *,
@@ -102,20 +101,24 @@ struct rt2661_softc {
 	bus_dma_tag_t			sc_dmat;
 	bus_space_tag_t			sc_st;
 	bus_space_handle_t		sc_sh;
+	void				*sc_soft_ih;
 
 	struct ethercom			sc_ec;
 
 	struct callout			scan_ch;
-	struct callout			rssadapt_ch;
+	struct callout			amrr_ch;
 
 	int				sc_id;
 	int				sc_flags;
-#define RT2661_ENABLED	(1 << 0)
-#define RT2661_FWLOADED	(1 << 1)
+#define RT2661_ENABLED		(1 << 0)
+#define RT2661_FWLOADED		(1 << 1)
+#define RT2661_UPDATE_SLOT	(1 << 2)
+#define RT2661_SET_SLOTTIME	(1 << 3)
 
 	int				sc_tx_timer;
 
 	struct ieee80211_channel	*sc_curchan;
+	struct ieee80211_amrr		amrr;
 
 	uint8_t				rf_rev;
 
@@ -143,6 +146,12 @@ struct rt2661_softc {
 	int				rssi_2ghz_corr;
 	int				rssi_5ghz_corr;
 
+	int				ncalls;
+	int				avg_rssi;
+	int				sifs;
+
+	uint32_t			erp_csr;
+
 	uint8_t				bbp18;
 	uint8_t				bbp21;
 	uint8_t				bbp22;
@@ -150,8 +159,7 @@ struct rt2661_softc {
 	uint8_t				bbp17;
 	uint8_t				bbp64;
 
-#if NBPFILTER > 0
-	void *			sc_drvbpf;
+	struct bpf_if *			sc_drvbpf;
 
 	union {
 		struct rt2661_rx_radiotap_header th;
@@ -166,7 +174,6 @@ struct rt2661_softc {
 	}			sc_txtapu;
 #define sc_txtap		sc_txtapu.th
 	int			sc_txtap_len;
-#endif
 };
 
 #define	sc_if		sc_ec.ec_if

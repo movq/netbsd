@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.29 2006/01/27 18:37:49 cdi Exp $ */
+/*	$NetBSD: vmparam.h,v 1.38 2017/11/14 16:56:03 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,11 +41,13 @@
  */
 
 /*
- * Machine dependent constants for Sun-4c SPARC
+ * Machine dependent constants for Sun 4U and 4V UltraSPARC
  */
 
 #ifndef VMPARAM_H
 #define VMPARAM_H
+
+#define __USE_TOPDOWN_VM
 
 /*
  * We use 8K VM pages on the Sun4U.  Override the PAGE_* definitions
@@ -54,6 +56,12 @@
 #define	PAGE_SHIFT	13
 #define	PAGE_SIZE	(1 << PAGE_SHIFT)
 #define	PAGE_MASK	(PAGE_SIZE - 1)
+
+/*
+ * Default pager_map of 16MB is awfully small.  There is plenty
+ * of VA so use it.
+ */
+#define        PAGER_MAP_DEFAULT_SIZE (512 * 1024 * 1024)
 
 /*
  * The kernel itself is mapped by the boot loader with 4Mb locked VM pages,
@@ -76,8 +84,7 @@
 /*
  * Virtual memory related constants, all in bytes
  */
-/* #ifdef __arch64__ */
-#if 0
+#if __arch64__
 /*
  * 64-bit limits:
  *
@@ -88,71 +95,69 @@
  * of that for data and the other half for stack.
  */
 #ifndef MAXTSIZ
-#define	MAXTSIZ		(4L*1024*1024*1024)	/* max text size */
+#define	MAXTSIZ		(4UL*1024*1024*1024)	/* max text size */
 #endif
 #ifndef DFLDSIZ
-#define	DFLDSIZ		(128L*1024*1024)	/* initial data size limit */
+#define	DFLDSIZ		(128UL*1024*1024)	/* initial data size limit */
 #endif
 #ifndef MAXDSIZ
-#define	MAXDSIZ		(1L<<39)		/* max data size */
+#define	MAXDSIZ		(1UL<<39)		/* max data size */
+/*
+ * For processes not using topdown VA, we need to limit the data size -
+ * they probably have not been compiled with the proper compiler memory
+ * model.
+ */
+#define VM_DEFAULT_ADDRESS_BOTTOMUP(da, sz) \
+    round_page((vaddr_t)(da) + (vsize_t)max(maxdmap,1UL*1024*1024*1024))
 #endif
 #ifndef	DFLSSIZ
 #define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		MAXDSIZ			/* max stack size */
+#define	MAXSSIZ		(128*1024*1024)		/* max stack size */
 #endif
 #else
 /*
  * 32-bit limits:
  *
- * We only have 4GB to play with.  Limit stack, data, and text
- * each to half of that.
+ * We only have 4GB to play with.  Limit data, and text
+ * each to half of that and set a reasonable stack limit.
  *
- * This is silly.  Apparently if we go above these numbers
- * integer overflows in other parts of the kernel cause hangs.
  */
 #ifndef MAXTSIZ
-#define	MAXTSIZ		(1*1024*1024*1024)	/* max text size */
+#define	MAXTSIZ		(2UL*1024*1024*1024)	/* max text size */
 #endif
 #ifndef DFLDSIZ
 #define	DFLDSIZ		(128*1024*1024)		/* initial data size limit */
 #endif
 #ifndef MAXDSIZ
-#define	MAXDSIZ		(1*1024*1024*1024)	/* max data size */
+#define	MAXDSIZ		(2UL*1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ
 #define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		(8*1024*1024)			/* max stack size */
+#define	MAXSSIZ		(64*1024*1024)		/* max stack size */
 #endif
 #endif
 
 /*
- * 32-bit emulation limits.
+ * 32-bit emulation limits (same as sparc - we could go bigger)
  */
 #ifndef MAXTSIZ32
-#define	MAXTSIZ32	(1*1024*1024*1024)	/* max text size */
+#define	MAXTSIZ32	(64*1024*1024)		/* max text size */
 #endif
 #ifndef DFLDSIZ32
-#define	DFLDSIZ32	(128*1024*1024)		/* initial data size limit */
+#define	DFLDSIZ32	(64*1024*1024)		/* initial data size limit */
 #endif
 #ifndef MAXDSIZ32
-#define	MAXDSIZ32	(1*1024*1024*1024)	/* max data size */
+#define	MAXDSIZ32	(512*1024*1024)		/* max data size */
 #endif
 #ifndef	DFLSSIZ32
 #define	DFLSSIZ32	(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ32
-#define	MAXSSIZ32	(8*1024*1024)			/* max stack size */
-#endif
-
-/*
- * Size of shared memory map
- */
-#ifndef SHMMAXPGS
-#define SHMMAXPGS	1024
+#define	MAXSSIZ32	(32*1024*1024)		/* max stack size */
 #endif
 
 /*
@@ -168,41 +173,17 @@
 #define VM_MAXUSER_ADDRESS32	((vaddr_t)(0x00000000ffffffffL&~PGOFSET))
 
 #define VM_MIN_KERNEL_ADDRESS	((vaddr_t)KERNBASE)
+#ifdef __arch64__
+#define	VM_KERNEL_MEM_VA_START	((vaddr_t)0x100000000UL)
+#define VM_MAX_KERNEL_ADDRESS	((vaddr_t)0x000007ffffffffffUL)
+#else
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t)KERNEND)
+#endif
 
 #define VM_PHYSSEG_MAX          32       /* up to 32 segments */
 #define VM_PHYSSEG_STRAT        VM_PSTRAT_BSEARCH
-#define VM_PHYSSEG_NOADD                /* can't add RAM after vm_mem_init */
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
-
-#ifdef _KERNEL
-
-#define	__HAVE_VM_PAGE_MD
-
-/*
- * For each struct vm_page, there is a list of all currently valid virtual
- * mappings of that page.  An entry is a pv_entry_t.
- */
-struct pmap;
-typedef struct pv_entry {
-	struct pv_entry	*pv_next;	/* next pv_entry */
-	struct pmap	*pv_pmap;	/* pmap where mapping lies */
-	vaddr_t		pv_va;		/* virtual address for mapping */
-} *pv_entry_t;
-/* PV flags encoded in the low bits of the VA of the first pv_entry */
-
-struct vm_page_md {
-	struct pv_entry mdpg_pvh;
-};
-#define	VM_MDPAGE_INIT(pg)						\
-do {									\
-	(pg)->mdpage.mdpg_pvh.pv_next = NULL;				\
-	(pg)->mdpage.mdpg_pvh.pv_pmap = NULL;				\
-	(pg)->mdpage.mdpg_pvh.pv_va = 0;				\
-} while (/*CONSTCOND*/0)
-
-#endif	/* _KERNEL */
 
 #endif

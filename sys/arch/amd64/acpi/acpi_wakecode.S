@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.3 2007/12/18 07:17:08 joerg Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.13 2016/07/24 13:04:58 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@netbsd.org>
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 
 /*
  * This code is derived from FreeBSD.  Original copyrights:
@@ -122,6 +114,18 @@ wakeup_16:
 	movw	%cs,%ax
 	movw	%ax,%ds
 	movw	%ax,%ss
+
+	/* If we need to restore a VESA VBE mode, do it now */
+	cmpb	$0,WAKEUP_vesa_modenum
+	je	1f
+	movw	WAKEUP_vesa_modenum,%bx
+	orw	$0x4000,%bx
+	movw	$0x4f02,%ax
+	int	$0x10
+
+	movw	%cs,%ax
+	movw	%ax,%ds
+	movw	%ax,%ss
 1:
 
 	/* Disable beep again if machdep.acpi_beep_on_reset=1 */
@@ -133,9 +137,13 @@ wakeup_16:
 1:
 
 	/* Load temporary 32bit GDT */
+#ifdef __clang__
+	lgdt	tmp_gdt
+#else
 	data32 addr32 lgdt	tmp_gdt
+#endif
 
-	/* Enable protected mode w/o paging */
+	/* Enable protected mode without paging */
 	mov	%cr0,%eax
 	orl	$(CR0_PE),%eax
 	mov	%eax,%cr0
@@ -155,10 +163,10 @@ wakeup_32:
 	/*
 	 * Switched to protected mode w/o paging
 	 */
-
 	nop
+
 	/* Set up segment registers and initial stack for protected mode */
-	movw	$0x10, %ax
+	movw	$0x10,%ax
 	movw	%ax,%ds
 	movw	%ax,%ss
 
@@ -172,10 +180,19 @@ wakeup_32:
 	movl	$(CR4_PAE|CR4_OSFXSR|CR4_OSXMMEXCPT|CR4_PSE),%eax
 	movl	%eax,%cr4
 
-	/* Enable SYSCALL extension and Long Mode */
+	/*
+	 * First switch to Long Mode.  Do not restore the original
+	 * MSR EFER value directly, as enabling the NX bit without
+	 * paging will result in a GPF on AMD CPUs.
+	 *
+	 * Load the correct MSR EFER value now to not depend on the
+	 * data segment register directly after switching to Long Mode.
+	 * After this point, no instruction is allowed to clobber %ebx.
+	 */
+	movl	WAKEUP_efer + ACPI_WAKEUP_ADDR,%ebx
 	movl	$MSR_EFER,%ecx
 	rdmsr
-	movl	WAKEUP_msr_efer + ACPI_WAKEUP_ADDR,%eax
+	orl	$EFER_LME,%eax
 	wrmsr
 
 	/* Load temporary PML4, code will switch to full PML4 later */
@@ -184,11 +201,13 @@ wakeup_32:
 
 	/* Enable paging */
 	movl	%cr0,%eax
-	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_MP|CR0_WP),%eax
+	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_MP|CR0_WP|CR0_AM),%eax
 	movl	%eax,%cr0
-	/* Flush prefetch queue */
+
+	/* Flush the prefetch queue */
 	jmp	1f
 1:
+
 	/* Switch to temporary 64bit GDT */
 	lgdt	tmp_gdt64 + ACPI_WAKEUP_ADDR
 
@@ -198,10 +217,19 @@ wakeup_32:
 	.code64
 wakeup_64:
 
+	/*
+	 * Load the normal system value of MSR EFER.  This includes
+	 * enabling the SYSCALL extension and NXE (if supported).
+	 */
+	movl	%ebx,%eax
+	movl	$MSR_EFER,%ecx
+	wrmsr
+
 	/* Reload data segment with default value */
 	movw	$GSEL(GDATA_SEL, SEL_KPL),%ax
 	movw	%ax,%ds
 
+	/* Restore registers */
 	movq	WAKEUP_curcpu + ACPI_WAKEUP_ADDR,%r8
 	movq	WAKEUP_restorecpu + ACPI_WAKEUP_ADDR,%rbx
 
@@ -243,10 +271,12 @@ WAKEUP_restorecpu:	.quad 0
 
 	.global WAKEUP_vbios_reset
 WAKEUP_vbios_reset:	.byte 0
+	.global WAKEUP_vesa_modenum
+WAKEUP_vesa_modenum:	.word 0
 	.global WAKEUP_beep_on_reset
 WAKEUP_beep_on_reset:	.byte 0
 
 	.global WAKEUP_curcpu
 WAKEUP_curcpu:		.quad 0
-	.global WAKEUP_msr_efer
-WAKEUP_msr_efer:	.long 0
+	.global WAKEUP_efer
+WAKEUP_efer:		.long 0

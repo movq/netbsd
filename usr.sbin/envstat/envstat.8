@@ -1,6 +1,6 @@
-.\"	$NetBSD: envstat.8,v 1.36 2007/12/12 20:27:30 xtraeme Exp $
+.\"	$NetBSD: envstat.8,v 1.62 2014/05/18 11:46:24 kardel Exp $
 .\"
-.\" Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2000, 2007, 2008, 2009, 2014 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 12, 2007
+.Dd May 18, 2014
 .Dt ENVSTAT 8
 .Os
 .Sh NAME
@@ -42,11 +35,11 @@
 .Nd utility to handle environmental sensors
 .Sh SYNOPSIS
 .Nm
-.Op Fl DfIlSx
+.Op Fl DfIklSTWx
 .Op Fl c Ar file
 .Op Fl d Ar device
 .Op Fl i Ar interval
-.Op Fl s Ar "sensor,..."
+.Op Fl s Ar "device:sensor,..."
 .Op Fl w Ar width
 .Sh DESCRIPTION
 .Nm
@@ -67,15 +60,16 @@ The following options are available:
 .Bl -tag -width flag
 .It Fl c
 Accepts a file as argument to set properties for sensors in
-devices registered with the framework. See the
+devices registered with the framework.
+See the
 .Xr envsys.conf 5
 manual page for more information.
 .It Fl D
-Display the names of the drivers that were registered with
+Display the names of the devices that are currently registered with
 the
 .Xr envsys 4
-framework, one per line and some properties for the driver: refresh timeout
-value, for example.
+framework, one per line, along with some properties for the device
+(for example, its refresh timeout value).
 .It Fl d Ar device
 Display only the sensors for the given
 .Ar device .
@@ -85,7 +79,7 @@ you want to only see results from a specific device.
 Display temperature values in degrees Fahrenheit.
 The default is to display temperature values in degrees Celsius.
 .It Fl I
-This flag skips the sensors with invalid state, these are normally
+This flag skips the sensors with invalid state; these are normally
 shown using the
 .Qq N/A
 string by default.
@@ -94,11 +88,14 @@ Repeat the display every
 .Ar interval
 seconds.
 Note that some devices do not provide fresh values on demand.
-See the individual devices manual page for meaningful values for
+See the individual device's manual page for meaningful values for
 .Ar interval .
 If not specified, or specified as 0,
 .Nm
 produces one round of values and exits.
+.It Fl k
+Display temperature values in Kelvin.
+The default is to display temperature values in degrees Celsius.
 .It Fl l
 List the names of all supported sensors, one per line.
 Use of this flag causes
@@ -106,67 +103,123 @@ Use of this flag causes
 to ignore all other option flags.
 .It Fl r
 This flag is provided for compatibility reasons and there's no need
-to use it. In the previous implementation, it was used to enable the
+to use it.
+In the previous implementation, it was used to enable the
 row mode; this mode is now the default.
 .It Fl S
 This flag is used to restore defaults to all devices registered with
-the framework. This will remove all properties that were set in
-the configuration file to the setting that the drivers use by
+the framework.
+This will remove all properties that were set in
+the configuration file to the setting that the devices use by
 default.
-.It Fl s Ar "sensor,..."
-Restrict the display to the named sensors.
-The sensor names must be supplied as a comma separated list.
-Sensor names are case sensitive. Note that it's mandatory to use the
-.Fl d
-flag to specify the device that has the sensor.
+.It Fl s Ar "device:sensor,..."
+Restrict the display to the named devices and sensors.
+The pair device and sensor description must be supplied as a comma separated list.
+Device as well as sensor descriptions are case sensitive.
+Note that the order of the arguments given does not influence the order of output.
+.It Fl T
+Create and display max, min and average statistics for a sensor.
+Must be used with an
+.Ar interval ,
+otherwise statistics cannot be collected up.
+Please note that to get realistic
+values a lower interval value should be used, but that will also increase
+overhead.
 .It Fl w Ar width
 Use
 .Ar width
 as the column width for the output.
 Each column is additionally separated by a single space.
 The default is the length of the longest sensor name.
+.It Fl W
+This option has no effect.
+It is retained for historical reasons.
 .It Fl x
-Shows the property list used by the
+Shows the raw XML property list used by the
 .Xr sysmon_envsys 9
-framework that contains details about all registered drivers
+framework that contains details about all registered devices
 and sensors.
+.El
+.Sh UNITS
+The display mode may show some values with abbreviated units;
+for example:
+.Bl -tag -width "12345678" -compact -offset indent
+.It A
+Amperes
+.It Ah
+Ampere-hours
+.It degC
+degrees Celsius
+.It degF
+degrees Fahrenheit
+.It K
+Kelvin
+.It Ohms
+Ohms
+.It RPM
+Revolutions per minute
+.It V
+Volts DC
+.It VAC
+Volts AC
+.It W
+Watts
+.It Wh
+Watt-hours
+.It %rH
+relative Humidity
 .El
 .Sh EXAMPLES
 To display the
-.Dq acpibat0 charge
-sensor on one line every ten seconds:
+.Dq charge
+sensor of the device
+.Ar acpibat0
+in one line every ten seconds:
 .Pp
-.Dl $ envstat -s \*qacpibat0 charge\*q -d acpibat0 -i 10
+.Dl $ envstat -s \*qacpibat0:charge\*q -i 10
 .Pp
-To list the drivers that are currently registered with
+To list the devices that are currently registered with
 .Xr envsys 4 :
 .Pp
 .Dl $ envstat -D
 .Pp
-To display the sensors of the driver
-.Ar aiboost0 :
+To display the sensors of the device
+.Ar aibs0 :
 .Pp
-.Dl $ envstat -d aiboost0
+.Dl $ envstat -d aibs0
 .Pp
 To set all properties specified in the configuration file:
 .Pp
 .Dl $ envstat -c /etc/envsys.conf
 .Pp
-To remove all properties that were previously set by the configuration
+To remove all properties that were set previously in the configuration
 file:
+.Pp
 .Dl $ envstat -S
+.Pp
+To display statistics for all sensors and ignoring sensors with
+invalid states every second:
+.Pp
+.Dl $ envstat -ITi1
 .Sh SEE ALSO
+.Xr units 1 ,
 .Xr proplib 3 ,
 .Xr acpiacad 4 ,
 .Xr acpibat 4 ,
 .Xr acpitz 4 ,
-.Xr adt7467c 4 ,
-.Xr aiboost 4 ,
+.Xr admtemp 4 ,
+.Xr aibs 4 ,
+.Xr amdtemp 4 ,
 .Xr aps 4 ,
+.Xr arcmsr 4 ,
 .Xr battery_pmu 4 ,
+.Xr cac 4 ,
 .Xr coretemp 4 ,
-.Xr sparc64/envctrl 4 ,
+.Xr dbcool 4 ,
+.Xr envctrl 4 ,
 .Xr envsys 4 ,
+.Xr finsio 4 ,
+.Xr hythygtemp 4 ,
 .Xr ipmi 4 ,
 .Xr itesio 4 ,
 .Xr lm 4 ,
@@ -174,8 +227,10 @@ file:
 .Xr mfi 4 ,
 .Xr nsclpcsio 4 ,
 .Xr owtemp 4 ,
+.Xr pic16lc 4 ,
 .Xr smsc 4 ,
-.Xr sparc/tctrl 4 ,
+.Xr tctrl 4 ,
+.Xr thinkpad 4 ,
 .Xr tm121temp 4 ,
 .Xr ug 4 ,
 .Xr viaenv 4 ,
@@ -196,3 +251,9 @@ was written by
 .An Juan Romero Pardines .
 The previous version was written by
 .An Bill Squier .
+.Sh BUGS
+When displaying statistics using the
+.Fl T
+option, the average value is an average of the minimum, maximum, and
+current sensor values.
+It is not an average of all current values displayed during the session.

@@ -1,4 +1,4 @@
-/*	$NetBSD: bcopy.S,v 1.6 2007/03/04 06:03:12 christos Exp $	*/
+/*	$NetBSD: bcopy.S,v 1.15 2015/08/30 07:55:45 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,11 +35,22 @@
 
 #undef _LOCORE
 #define _LOCORE	/* XXX fredette - unfortunate */
+
+#if defined(SPCOPY) && !defined(_STANDALONE)
+
+#include "opt_diagnostic.h"
+#include "opt_multiprocessor.h"
+
+#include <machine/cpu.h>
+
+#endif
+
 #include <machine/asm.h>
 #include <machine/frame.h>
+#include <machine/reg.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: bcopy.S,v 1.6 2007/03/04 06:03:12 christos Exp $")
+RCSID("$NetBSD: bcopy.S,v 1.15 2015/08/30 07:55:45 uebayasi Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -489,6 +493,7 @@ RCSID("$NetBSD: bcopy.S,v 1.6 2007/03/04 06:03:12 christos Exp $")
 #endif
 
 #if defined(SPCOPY) && !defined(_STANDALONE)
+
 #include <sys/errno.h>
 #include "assym.h"
 
@@ -501,12 +506,9 @@ RCSID("$NetBSD: bcopy.S,v 1.6 2007/03/04 06:03:12 christos Exp $")
 LEAF_ENTRY(spcopy)
 
         /*
-	 * Setup the fault handler, and load %ret0
-	 * with EFAULT, assuming the copy will fail.
+	 * Setup the fault handler, which will fill in %ret0 if triggered.
 	 */
-	.import	curlwp, data
-	ldil    L%curlwp, %r31
-	ldw     R%curlwp(%r31), %r31
+	GET_CURLWP(%r31)
 #ifdef	DIAGNOSTIC
 	comb,<>,n %r0, %r31, Lspcopy_curlwp_ok
 	ldil	L%panic, %r1
@@ -522,10 +524,9 @@ Lspcopy_curlwp_bad:
 Lspcopy_curlwp_ok:
 #endif /* DIAGNOSTIC */
 	ldil    L%spcopy_fault, %r1
-	ldw     L_ADDR(%r31), %r31
+	ldw     L_PCB(%r31), %r31
 	ldo     R%spcopy_fault(%r1), %r1
-	ldi	EFAULT, %ret0
-	stw     %r1, U_PCB+PCB_ONFAULT(%r31)
+	stw     %r1, PCB_ONFAULT(%r31)
 
 	/* Setup the space registers. */
 	mfsp	%sr2, %ret1
@@ -541,7 +542,7 @@ _LABEL(_done):
 	/* Return. */
 	copy	%r0, %ret0
 ALTENTRY(spcopy_fault)
-	stw     %r0, U_PCB+PCB_ONFAULT(%r31)
+	stw     %r0, PCB_ONFAULT(%r31)
 	bv	%r0(%rp)
 	mtsp	%ret1, %sr2
 EXIT(spcopy)

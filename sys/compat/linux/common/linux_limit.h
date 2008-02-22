@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_limit.h,v 1.2 2007/12/04 18:40:16 dsl Exp $ */
+/* 	$NetBSD: linux_limit.h,v 1.7 2015/02/28 13:08:00 njoly Exp $ */
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,9 +56,14 @@ static int linux_to_bsd_limit(int);
     linux_to_bsd_rlimit1(b, l, rlim_cur); \
     linux_to_bsd_rlimit1(b, l, rlim_max)
 
+#define linux32_to_bsd_rlimit1(b, l, f) \
+    (b)->f = (l)->f == LINUX32_RLIM_INFINITY ? RLIM_INFINITY : (uint32_t)(l)->f
+#define linux32_to_bsd_rlimit(b, l) \
+    linux32_to_bsd_rlimit1(b, l, rlim_cur); \
+    linux32_to_bsd_rlimit1(b, l, rlim_max)
+
 static int
-linux_to_bsd_limit(lim)
-	int lim;
+linux_to_bsd_limit(int lim)
 {      
 	switch (lim) {
 	case LINUX_RLIMIT_CPU:
@@ -87,6 +85,7 @@ linux_to_bsd_limit(lim)
 	case LINUX_RLIMIT_MEMLOCK:
 		return RLIMIT_MEMLOCK;
 	case LINUX_RLIMIT_AS:
+		return RLIMIT_AS;
 	case LINUX_RLIMIT_LOCKS:
 		return -EOPNOTSUPP;
 	default:

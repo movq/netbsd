@@ -1,10 +1,12 @@
-#	$NetBSD: files.xen,v 1.82 2008/02/20 21:43:35 drochner Exp $
+#	$NetBSD: files.xen,v 1.169 2018/05/23 07:45:35 maxv Exp $
 #	NetBSD: files.x86,v 1.10 2003/10/08 17:30:00 bouyer Exp 
 #	NetBSD: files.i386,v 1.254 2004/03/25 23:32:10 jmc Exp 
 
-version 20071109
-
+ifdef i386
 maxpartitions 8
+else
+maxpartitions 16
+endif
 
 maxusers 2 16 128
 
@@ -13,11 +15,14 @@ defparam opt_kernbase.h	KERNBASE
 # options for MP configuration through the MP spec
 defflag opt_mpbios.h MPBIOS MPVERBOSE MPDEBUG MPBIOS_SCANPCI
 
+# Interrupt debug
+defflag opt_intrdebug.h	INTRDEBUG
+
 # delay before cpu_reset() for reboot.
 defparam		CPURESET_DELAY
 
-# No unmapped page below kernel stack
-defflag			NOREDZONE
+# splraise()/spllower() debug
+defflag	opt_spldebug.h			SPLDEBUG
 
 # Beep on halt
 defflag opt_beep.h		BEEP_ONHALT
@@ -33,88 +38,84 @@ defparam		PCI_CONF_MODE
 
 file	arch/xen/x86/autoconf.c
 ifdef i386
+file	arch/i386/i386/aout_machdep.c	exec_aout
 file	arch/i386/i386/busfunc.S
 file	arch/i386/i386/cpufunc.S
 file	arch/i386/i386/cpu_in_cksum.S   (inet | inet6) & cpu_in_cksum
-file	arch/i386/i386/db_dbgreg.S	ddb | kstack_check_dr0
 file	arch/i386/i386/db_disasm.c	ddb
 file	arch/i386/i386/db_interface.c	ddb
-file	arch/i386/i386/db_memrw.c	ddb | kgdb
-file	arch/i386/i386/db_trace.c	ddb
+file	arch/i386/i386/db_machdep.c	ddb
 file	arch/i386/i386/dumpsys.c
 file	arch/i386/i386/gdt.c
-file	arch/i386/i386/ipkdb_glue.c	ipkdb
-file	arch/i386/i386/kgdb_machdep.c	kgdb
 file	arch/i386/i386/kobj_machdep.c	modular
 file	arch/i386/i386/machdep.c
-file	arch/i386/i386/identcpu.c
-file	arch/x86/x86/x86_identcpu.c
-file	arch/i386/i386/mem.c
+file	arch/i386/i386/longrun.c
 file	arch/i386/i386/mtrr_k6.c	mtrr
-file	arch/x86/x86/pmap.c
 file	arch/i386/i386/process_machdep.c
-file	arch/i386/i386/procfs_machdep.c	procfs
-file	arch/i386/i386/syscall.c
 file	arch/i386/i386/trap.c
-file	arch/i386/i386/vm_machdep.c
 file	arch/i386/i386/lock_stubs.S
-
-file	arch/i386/i386/mptramp.S		multiprocessor
-file	arch/i386/i386/ipifuncs.c		multiprocessor
-
-file	arch/i386/i386/pmc.c			perfctrs
 
 file	crypto/des/arch/i386/des_enc.S		des
 file	crypto/des/arch/i386/des_cbc.S		des
 
 file	crypto/blowfish/arch/i386/bf_enc.S	blowfish
 file	crypto/blowfish/arch/i386/bf_cbc.S	blowfish
+
 elifdef amd64
-file	arch/amd64/amd64/busfunc.S		dom0ops
+file	arch/amd64/amd64/busfunc.S
 file	arch/amd64/amd64/cpufunc.S
 file	arch/amd64/amd64/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/amd64/amd64/db_disasm.c		ddb
-file	arch/amd64/amd64/db_interface.c	 ddb
-file	arch/amd64/amd64/db_memrw.c		ddb | kgdb
-file	arch/amd64/amd64/db_trace.c		ddb
-file	arch/amd64/amd64/kgdb_machdep.c	 kgdb
+file	arch/amd64/amd64/db_interface.c		ddb
+file	arch/amd64/amd64/db_machdep.c		ddb
 file	arch/amd64/amd64/kobj_machdep.c	 	modular
 file	arch/amd64/amd64/gdt.c
 file	arch/amd64/amd64/machdep.c
-file	arch/amd64/amd64/identcpu.c
-file	arch/x86/x86/x86_identcpu.c
-file	arch/amd64/amd64/mem.c
-file	arch/x86/x86/pmap.c
 file	arch/amd64/amd64/process_machdep.c
-file	arch/amd64/amd64/procfs_machdep.c	procfs
-file	arch/amd64/amd64/syscall.c
 file	arch/amd64/amd64/trap.c
-file	arch/amd64/amd64/vm_machdep.c
-file	arch/amd64/amd64/fpu.c
 file	arch/amd64/amd64/lock_stubs.S
-file	arch/amd64/amd64/mptramp.S		multiprocessor
-file	arch/amd64/amd64/ipifuncs.c		multiprocessor
 endif
 
 file	kern/subr_disk_mbr.c		disk
+file	uvm/pmap/pmap_pvt.c
+file	arch/x86/x86/db_memrw.c		ddb | kgdb
+file	arch/x86/x86/db_trace.c		ddb
+file	arch/x86/x86/fpu.c
+file	arch/x86/x86/dbregs.c
 file	arch/xen/x86/hypervisor_machdep.c
-file	arch/xen/x86/idle_machdep.c
+file	arch/x86/x86/kgdb_machdep.c	kgdb
 # file 	arch/x86/x86/mtrr_i686.c	mtrr
+file	arch/x86/x86/syscall.c
 file	arch/xen/x86/x86_xpmap.c
+file	arch/xen/x86/xen_pmap.c
 file	arch/xen/x86/xen_intr.c
 file	arch/xen/x86/xenfunc.c
+
+file	arch/x86/x86/cpu_ucode.c	dom0ops & cpu_ucode needs-flag
+file	arch/x86/x86/cpu_ucode_amd.c	dom0ops & cpu_ucode needs-flag
+file	arch/x86/x86/cpu_ucode_intel.c	dom0ops & cpu_ucode needs-flag
+file	arch/x86/x86/compat_60_cpu_ucode.c      compat_60 & dom0ops & cpu_ucode
+
 
 file	arch/xen/xen/xen_machdep.c
 file	arch/xen/xen/xen_debug.c
 
 file	arch/xen/xen/clock.c
+file	arch/x86/isa/rtc.c		dom0ops
 file	arch/xen/xen/evtchn.c
-file	arch/xen/xen/ctrl_if.c			!xen3
 
-file	arch/xen/xen/xengnt.c			xen3
+file	arch/xen/xen/xengnt.c
+
+file	arch/x86/x86/cpu_rng.c
 
 file	dev/cons.c
 
+
+#
+# Stack-less Just-In-Time compiler
+#
+
+include	"external/bsd/sljit/conf/files.sljit"
 
 #
 # Machine-independent SCSI drivers
@@ -131,32 +132,38 @@ include	"dev/ata/files.ata"
 # Memory Disk for install floppy
 file	dev/md_root.c			memory_disk_hooks
 
-file	arch/x86/x86/bus_dma.c		pci
-file	arch/xen/x86/xen_bus_dma.c	pci
-file	arch/x86/x86/bus_space.c	pci
-file	arch/x86/x86/cacheinfo.c
-file	arch/xen/x86/consinit.c
-file	arch/xen/x86/intr.c
-file	arch/x86/x86/ipi.c		multiprocessor
-file	arch/x86/x86/sys_machdep.c
-file	arch/x86/x86/x86_machdep.c
+file	arch/x86/x86/bus_dma.c		machdep
+file	arch/x86/x86/core_machdep.c	coredump
+file	arch/xen/x86/xen_bus_dma.c	machdep
+file	arch/x86/x86/bus_space.c	machdep
+file	arch/xen/x86/consinit.c		machdep
+file	arch/x86/x86/identcpu.c		machdep
+file	arch/xen/x86/pintr.c		machdep & dom0ops
+file	arch/xen/x86/xen_ipi.c		multiprocessor
+file	arch/x86/x86/intr.c		machdep
+file	arch/x86/x86/idt.c		machdep
+file	arch/x86/x86/pmap.c		machdep
+file	arch/x86/x86/x86_tlb.c		machdep
+file	arch/x86/x86/procfs_machdep.c	procfs
+file	arch/x86/x86/sys_machdep.c	machdep
+file	arch/x86/x86/tsc.c		machdep
+file	arch/x86/x86/vm_machdep.c	machdep
+file	arch/x86/x86/x86_machdep.c	machdep
+file	arch/x86/x86/cpu_topology.c	machdep
+file	arch/x86/x86/platform.c		machdep
 
 include	"arch/xen/conf/files.compat"
 
 # BIOS32 routines
 define	bios32
-ifdef i386
-file	arch/i386/i386/bios32.c		bios32 needs-flag
-elifdef amd64
-file	arch/amd64/amd64/bios32.c	bios32 needs-flag
-endif
+file	arch/x86/x86/bios32.c		bios32 needs-flag
 
 # xen specific mainbus attributes
 define cpubus { [apid = -1] }
+define cpufeaturebus {}
 define ioapicbus { [apid = -1] }
 define apmbus {}
 define pnpbiosbus {}
-define vesabiosbus {}	
 define hypervisorbus {}
 define xendevbus {}
 define ipmibus {}
@@ -173,25 +180,16 @@ file	arch/xen/x86/mainbus.c		mainbus
 device	hypervisor { [apid = -1]}: isabus, pcibus, sysmon_power, xendevbus, acpibus
 attach hypervisor at hypervisorbus
 file	arch/xen/xen/hypervisor.c	hypervisor needs-flag
-file	arch/xen/xen/shutdown_xenbus.c	hypervisor & xen3
+file	arch/xen/xen/shutdown_xenbus.c	hypervisor
 
-# Xenbus (xen3 only)
+# Xenbus
 device xenbus {[id = -1]}
 attach xenbus at xendevbus
-file arch/xen/xenbus/xenbus_client.c xenbus & xen3 needs-flag
-file arch/xen/xenbus/xenbus_comms.c xenbus & xen3 needs-flag
-file arch/xen/xenbus/xenbus_dev.c xenbus & xen3 & dom0ops needs-flag
-file arch/xen/xenbus/xenbus_probe.c xenbus & xen3 needs-flag
-file arch/xen/xenbus/xenbus_xs.c xenbus & xen3 needs-flag
-
-ifdef i386
-# Numeric Processing Extension; Math Co-processor
-device	npx
-file	arch/i386/isa/npx.c		npx needs-flag
-
-attach	npx at xendevbus with npx_hv
-file	arch/xen/i386/npx_hv.c		npx_hv
-endif
+file arch/xen/xenbus/xenbus_client.c xenbus needs-flag
+file arch/xen/xenbus/xenbus_comms.c xenbus needs-flag
+file arch/xen/xenbus/xenbus_dev.c xenbus needs-flag
+file arch/xen/xenbus/xenbus_probe.c xenbus needs-flag
+file arch/xen/xenbus/xenbus_xs.c xenbus needs-flag
 
 # Xen console support
 device	xencons: tty
@@ -205,19 +203,23 @@ defpseudo xbdback
 
 # Xen Network driver
 device	xennet: arp, ether, ifnet
-attach xennet at xendevbus with xennet_hypervisor
-attach xennet at xenbus with xennet_xenbus
-file	arch/xen/xen/if_xennet_xenbus.c xennet_xenbus needs-flag
-file	arch/xen/xen/if_xennet.c	xennet_hypervisor needs-flag
+attach xennet at xenbus
+file	arch/xen/xen/if_xennet_xenbus.c xennet needs-flag
 
 # Xen Block device driver and wd/sd/cd identities
 device	xbd: disk
-attach	xbd at xendevbus with xbd_hypervisor
-attach	xbd at xenbus with xbd_xenbus
-#file	arch/xen/xen/xbd_hypervisor.c	xbd_hypervisor
-file	arch/xen/xen/xbd_xenbus.c	xbd_xenbus
-#file	arch/xen/xen/xbd.c		xbd | xbd_hypervisor | xbd_xenbus needs-flag
-file	arch/xen/xen/xbd.c		xbd_hypervisor needs-flag
+attach	xbd at xenbus
+file	arch/xen/xen/xbd_xenbus.c	xbd
+
+# PCI frontend
+device xpci: pcibus
+attach xpci at xenbus with xpci_xenbus
+file	arch/xen/xen/xpci_xenbus.c	xpci_xenbus
+
+# Xen Balloon driver
+device	balloon
+attach	balloon at xenbus
+file	arch/xen/xen/balloon.c		balloon
 
 # Non-Xen specific devices and options
 
@@ -229,8 +231,15 @@ include	"dev/pckbport/files.pckbport"
 include "dev/i2o/files.i2o"
 include "dev/pci/files.pci"
 include "dev/pci/files.agp"
-file 	arch/x86/pci/agp_machdep.c	agp
-file	arch/xen/xen/pciide_machdep.c	pciide_common
+file	arch/x86/pci/pciide_machdep.c	pciide_common
+
+device	pciback {unit = -1}
+attach	pciback at pci
+file	arch/xen/xen/pciback.c		pciback
+
+
+# x86 specific PCI hardware
+include "arch/x86/pci/files.pci"
 
 #
 # Machine-independent ISA devices
@@ -248,18 +257,25 @@ include "dev/apm/files.apm"
 include "dev/acpi/files.acpi"
 file	arch/xen/xen/xen_acpi_machdep.c	acpi
 file	arch/x86/x86/mpacpi.c		acpi
-file	arch/x86/x86/acpi_machdep.c	acpi
-file	arch/x86/x86/i8259.c		xen3
+file	arch/x86/x86/i8259.c		dom0ops
+
+# Stubs for x86 routines not included in the system
+file	arch/x86/x86/x86_stub.c
 
 # MP configuration using Intel SMP specification 1.4
 file	arch/x86/x86/mpbios.c		mpbios
 
-ifdef i386
-file	arch/i386/pci/pci_bus_fixup.c	pci_bus_fixup
-file	arch/i386/pci/pci_addr_fixup.c	pci_addr_fixup
-endif
+# MP configuration using either ACPI or Intel SMP specification 1.4
+file 	arch/x86/x86/mp.c		acpi | mpbios
+
+file	arch/x86/pci/pci_bus_fixup.c	pci_bus_fixup
+file	arch/x86/pci/pci_addr_fixup.c	pci_addr_fixup
 
 file	arch/x86/x86/apic.c		ioapic
+file	arch/x86/x86/nmi.c
+
+file	arch/x86/acpi/acpi_machdep.c	acpi
+file	arch/x86/acpi/acpi_pdc.c	acpi
 
 device ioapic
 attach ioapic at ioapicbus
@@ -270,27 +286,9 @@ device ipmi : sysmon_envsys, sysmon_wdog
 attach ipmi at ipmibus
 file	arch/x86/x86/ipmi.c		ipmi needs-flag
 
-# PCI-Host bridge chipsets
-device	pchb: pcibus, agpbus, agp_ali, agp_amd, agp_i810, agp_intel, agp_sis,
-		agp_via
-attach	pchb at pci
-file	arch/x86/pci/pchb.c		pchb			needs-flag
-file	arch/x86/pci/pchb_rnd.c		pchb & rnd
-
-# PCI-ISA bridges
-device	pcib: isabus
-attach	pcib at pci
-file	arch/xen/xen/pcib.c		pcib | ichlpcib
-
-# PCI-LPC bridges
-device	ichlpcib: isabus, sysmon_wdog
-attach	ichlpcib at pci
-file	arch/x86/pci/ichlpcib.c 	ichlpcib
-
-
-# CPUS
-
-device cpu
+# CPUs
+#
+device cpu: cpufeaturebus
 attach cpu at cpubus
 
 device vcpu
@@ -298,44 +296,26 @@ attach vcpu at xendevbus
 
 file	arch/xen/x86/cpu.c		cpu | vcpu
 
+# CPU features
+#
+device	est
+attach	est at cpufeaturebus
+file	arch/x86/x86/est.c		est
+file	arch/x86/x86/intel_busclock.c	est
+
+device	powernow
+attach	powernow at cpufeaturebus
+file	arch/x86/x86/powernow.c		powernow
+
 #
 # Compatibility modules
 #
 
 ifdef i386
-# VM86 mode
-file	arch/i386/i386/vm86.c			vm86
-
-# VM86 in kernel
-file	arch/i386/i386/kvm86.c			kvm86
-file	arch/i386/i386/kvm86call.S		kvm86
 
 # Binary compatibility with previous NetBSD releases (COMPAT_XX)
 file	arch/i386/i386/compat_13_machdep.c	compat_13
-file	arch/i386/i386/compat_16_machdep.c	compat_16 | compat_ibcs2
-
-# SVR4 binary compatibility (COMPAT_SVR4)
-include	"compat/svr4/files.svr4"
-file	arch/i386/i386/svr4_machdep.c		compat_svr4
-file	arch/i386/i386/svr4_sigcode.S		compat_svr4
-file	arch/i386/i386/svr4_syscall.c		compat_svr4
-
-# MACH binary compatibility (COMPAT_MACH)
-include	"compat/mach/files.mach"
-file	arch/i386/i386/mach_machdep.c		compat_mach | compat_darwin
-file	arch/i386/i386/mach_sigcode.S		compat_mach | compat_darwin
-file	arch/i386/i386/mach_syscall.c		compat_mach | compat_darwin
-file	arch/i386/i386/macho_machdep.c		exec_macho
-
-# DARWIN binary compatibility (COMPAT_DARWIN)
-include	"compat/darwin/files.darwin"
-file	arch/i386/i386/darwin_machdep.c		compat_darwin
-
-# iBCS-2 binary compatibility (COMPAT_IBCS2)
-include	"compat/ibcs2/files.ibcs2"
-file	arch/i386/i386/ibcs2_machdep.c		compat_ibcs2
-file	arch/i386/i386/ibcs2_sigcode.S		compat_ibcs2
-file	arch/i386/i386/ibcs2_syscall.c		compat_ibcs2
+file	arch/i386/i386/compat_16_machdep.c	compat_16
 
 # Linux binary compatibility (COMPAT_LINUX)
 include	"compat/linux/files.linux"
@@ -346,14 +326,12 @@ file	arch/x86/x86/linux_trap.c		compat_linux
 
 # FreeBSD binary compatibility (COMPAT_FREEBSD)
 include	"compat/freebsd/files.freebsd"
-file	arch/i386/i386/freebsd_machdep.c	compat_freebsd
-file	arch/i386/i386/freebsd_sigcode.S	compat_freebsd
-file	arch/i386/i386/freebsd_syscall.c	compat_freebsd
-
-# Win32 binary compatibility (COMPAT_PECOFF)
-include	"compat/pecoff/files.pecoff"
 
 elifdef amd64
+
+# Binary compatibility with previous NetBSD releases (COMPAT_XX)
+file	arch/amd64/amd64/compat_16_machdep.c	compat_16
+
 # NetBSD/i386 32-bit binary compatibility (COMPAT_NETBSD32)
 include "compat/netbsd32/files.netbsd32"
 file	arch/amd64/amd64/netbsd32_machdep.c	compat_netbsd32
@@ -379,6 +357,8 @@ include	"compat/ossaudio/files.ossaudio"
 # Bluetooth
 include "dev/bluetooth/files.bluetooth"
 
+include "dev/sdmmc/files.sdmmc"
+
 #
 # CARDBUS
 #
@@ -396,19 +376,18 @@ endif
 include	"dev/pcmcia/files.pcmcia"
 
 # Domain-0 operations
-defflag	opt_xen.h			DOM0OPS XEN_COMPAT_030001
+defflag	opt_xen.h			DOM0OPS
 file	arch/xen/xen/privcmd.c		dom0ops
-file 	arch/xen/x86/xen_shm_machdep.c	dom0ops | xen3
-file	arch/xen/xen/xbdback.c		dom0ops & !xen3
-file	arch/xen/xen/xennetback.c	dom0ops & !xen3
-file	arch/xen/xen/pci_machdep.c	hypervisor & pci & !xen3
-file	arch/x86/pci/pci_machdep.c	hypervisor & pci & xen3
-file	arch/xen/xen/pci_intr_machdep.c	hypervisor & pci
-file	arch/xen/xen/isa_machdep.c	hypervisor & dom0ops
+file 	arch/xen/x86/xen_shm_machdep.c	dom0ops
+file	arch/x86/pci/pci_machdep.c	hypervisor & pci & dom0ops
+file	arch/x86/pci/pci_intr_machdep.c	hypervisor & pci
+file	arch/x86/pci/pci_msi_machdep.c	hypervisor & pci
+file	arch/x86/pci/msipic.c		hypervisor & pci
+file	arch/x86/isa/isa_machdep.c	hypervisor & dom0ops
 file	arch/xen/xen/xenevt.c		xenevt & dom0ops
-file	arch/xen/xen/xennetback_xenbus.c xvif & xen3
-file	arch/xen/xen/xennet_checksum.c	(xvif & xen3) | xennet_xenbus
-file	arch/xen/xen/xbdback_xenbus.c xbdback & xen3
+file	arch/xen/xen/xennetback_xenbus.c xvif
+file	arch/xen/xen/xennet_checksum.c	xvif | xennet
+file	arch/xen/xen/xbdback_xenbus.c xbdback
 
 ifdef i386
 include "arch/i386/conf/majors.i386"

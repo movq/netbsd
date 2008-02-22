@@ -1,4 +1,4 @@
-/*	$NetBSD: becc_pci.c,v 1.8 2005/12/24 20:06:52 perry Exp $	*/
+/*	$NetBSD: becc_pci.c,v 1.18 2015/10/02 05:22:50 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -41,28 +41,30 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.8 2005/12/24 20:06:52 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.18 2015/10/02 05:22:50 msaitoh Exp $");
+
+#include "opt_pci.h"
+#include "pci.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <dev/pci/ppbreg.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
+
+#include <arm/locore.h>
 
 #include <arm/xscale/beccreg.h>
 #include <arm/xscale/beccvar.h>
 
-#include <dev/pci/ppbreg.h>
-#include <dev/pci/pciconf.h>
-
-#include "opt_pci.h"
-#include "pci.h"
-
-void		becc_pci_attach_hook(struct device *, struct device *,
+void		becc_pci_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		becc_pci_bus_maxdevs(void *, int);
 pcitag_t	becc_pci_make_tag(void *, int, int, int);
@@ -70,10 +72,12 @@ void		becc_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	becc_pci_conf_read(void *, pcitag_t, int);
 void		becc_pci_conf_write(void *, pcitag_t, int, pcireg_t);
+void		becc_pci_conf_interrupt(void *, int, int, int, int, int *);
 
-int		becc_pci_intr_map(struct pci_attach_args *,
+int		becc_pci_intr_map(const struct pci_attach_args *,
 		    pci_intr_handle_t *);
-const char	*becc_pci_intr_string(void *, pci_intr_handle_t);
+const char	*becc_pci_intr_string(void *, pci_intr_handle_t,
+		    char *, size_t);
 const struct evcnt *becc_pci_intr_evcnt(void *, pci_intr_handle_t);
 void		*becc_pci_intr_establish(void *, pci_intr_handle_t,
 		    int, int (*)(void *), void *);
@@ -103,6 +107,7 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = becc_pci_decompose_tag;
 	pc->pc_conf_read = becc_pci_conf_read;
 	pc->pc_conf_write = becc_pci_conf_write;
+	pc->pc_conf_interrupt = becc_pci_conf_interrupt;
 
 	pc->pc_intr_v = cookie;
 	pc->pc_intr_map = becc_pci_intr_map;
@@ -125,12 +130,12 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 	/* Reserve the bottom 32K of the PCI address space. */
 	ioext  = extent_create("pciio", sc->sc_ioout_xlate + (32 * 1024),
 	    sc->sc_ioout_xlate + (64 * 1024) - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", sc->sc_owin_xlate[0],
 	    sc->sc_owin_xlate[0] + BECC_PCI_MEM1_SIZE - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
-	aprint_normal("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
+	aprint_normal("%s: configuring PCI bus\n", device_xname(sc->sc_dev));
 	pci_configure_bus(pc, ioext, memext, NULL, 0, arm_dcache_align);
 
 	extent_destroy(ioext);
@@ -139,12 +144,12 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
+becc_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-becc_pci_attach_hook(struct device *parent, struct device *self,
+becc_pci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 
@@ -188,6 +193,9 @@ static int
 becc_pci_conf_setup(struct becc_softc *sc, pcitag_t tag, int offset,
     struct pciconf_state *ps)
 {
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (1);
 
 	becc_pci_decompose_tag(sc, tag, &ps->ps_b, &ps->ps_d, &ps->ps_f);
 
@@ -326,7 +334,7 @@ becc_pci_conf_write(void *v, pcitag_t tag, int offset, pcireg_t val)
 }
 
 int
-becc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+becc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int irq;
 
@@ -369,10 +377,11 @@ becc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-becc_pci_intr_string(void *v, pci_intr_handle_t ih)
+becc_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
 
-	return (becc_irqnames[ih]);
+	strlcpy(buf, becc_irqnames[ih], len);
+	return buf;
 }
 
 const struct evcnt *

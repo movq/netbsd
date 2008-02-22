@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isapnp.c,v 1.16 2007/10/19 12:00:31 ad Exp $	*/
+/*	$NetBSD: if_tr_isapnp.c,v 1.22 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.16 2007/10/19 12:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.22 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,15 +61,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.16 2007/10/19 12:00:31 ad Exp $")
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-int	tr_isapnp_match(struct device *, struct cfdata *, void *);
-void	tr_isapnp_attach(struct device *, struct device *, void *);
+int	tr_isapnp_match(device_t, cfdata_t, void *);
+void	tr_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(tr_isapnp, sizeof(struct tr_softc),
+CFATTACH_DECL_NEW(tr_isapnp, sizeof(struct tr_softc),
     tr_isapnp_match, tr_isapnp_attach, NULL, NULL);
 
 int
-tr_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+tr_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -88,31 +80,31 @@ tr_isapnp_match(struct device *parent, struct cfdata *match,
 
 
 void
-tr_isapnp_attach(struct device *parent, struct device *self,
-    void *aux)
+tr_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct tr_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	int mmioidx, sramidx;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s\n", sc->sc_dev.dv_xname, ipa->ipa_devident,
-	    ipa->ipa_devclass);
+	aprint_normal_dev(self, "%s %s\n",
+	    ipa->ipa_devident, ipa->ipa_devclass);
 
+	sc->sc_dev = self;
 	sc->sc_piot = ipa->ipa_iot;
 	sc->sc_pioh = ipa->ipa_io[0].h;
 
 	if (strcmp(ipa->ipa_devlogic, "TCM3190") == 0) {
 		mmioidx = 0;
 		sramidx = 1;
-	}
-	else {	/* Default */
+	} else { /* Default */
 		mmioidx = 1;
 		sramidx = 0;
 	}

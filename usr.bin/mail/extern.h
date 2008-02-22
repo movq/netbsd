@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.30 2007/10/27 15:14:50 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.34 2016/09/05 00:40:29 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)extern.h	8.2 (Berkeley) 4/20/95
- *	$NetBSD: extern.h,v 1.30 2007/10/27 15:14:50 christos Exp $
+ *	$NetBSD: extern.h,v 1.34 2016/09/05 00:40:29 sevan Exp $
  */
 
 #ifndef __EXTERN_H__
@@ -126,6 +126,7 @@ void	sort(const char **);
 struct smopts_s *findsmopts(const char *, int);
 int	smoptscmd(void *);
 int	unsmoptscmd(void *);
+int	Header(void *);
 
 /*
  * from cmdtab.c
@@ -158,10 +159,11 @@ const char *expand(const char *);
 off_t	fsize(FILE *);
 const char *getdeadletter(void);
 int	getfold(char *, size_t);
-void	holdsigs(void);
-int	mail_readline(FILE *, char *, int);
+#ifdef USE_EDITLINE
+#define readline xreadline	/* readline() is defined in libedit */
+#endif
+int	readline(FILE *, char *, int, int);
 int	putline(FILE *, const char *, int);
-void	relsesigs(void);
 int	rm(char *);
 FILE *	setinput(const struct message *);
 void	setptr(FILE *, off_t);
@@ -201,14 +203,13 @@ int	first(int, int);
 int	get_Hflag(char **);
 int	getmsglist(char *, int *, int);
 int	getrawlist(const char [], char **, int);
-int	show_headers_and_exit(int) __attribute__((__noreturn__));
+int	show_headers_and_exit(int) __dead;
 
 /*
  * from main.c
  */
 struct name *lexpand(char *, int);
 void	setscreensize(void);
-int	main(int, char **);
 
 /*
  * from names.c
@@ -222,7 +223,7 @@ struct name * extract(char [], int);
 struct name * gexpand(struct name *, struct grouphead *, int, int);
 struct name * nalloc(char [], int);
 struct name * outof(struct name *, FILE *, struct header *);
-const char ** unpack(struct name *);
+const char ** unpack(struct name *, struct name *);
 struct name * usermap(struct name *);
 #if 0
 void	prettyprint(struct name *);	/* commented out? */
@@ -253,7 +254,7 @@ void	flush_files(FILE *, int);
 /*
  * from quit.c
  */
-void	quit(void);
+void	quit(jmp_buf);
 int	quitcmd(void *);
 
 /*
@@ -292,7 +293,7 @@ int	isign(const char *, struct ignoretab []);
 void	istrcpy(char *, const char *);
 int	member(char *, struct ignoretab *);
 char *	nameof(struct message *, int);
-int	sasprintf(char **ret, const char *format, ...);
+int	sasprintf(char **ret, const char *format, ...) __printflike(2, 3);
 char *	savestr(const char *);
 struct message *set_m_flag(int, int, int);
 char *	skin(char *);

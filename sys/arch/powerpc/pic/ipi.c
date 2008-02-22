@@ -1,4 +1,4 @@
-/* $NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $ */
+/* $NetBSD: ipi.c,v 1.12 2015/01/23 07:27:05 nonaka Exp $ */
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.12 2015/01/23 07:27:05 nonaka Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_pic.h"
@@ -44,54 +37,58 @@ __KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $");
 #include "opt_altivec.h"
 
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/xcall.h>
+#include <sys/ipi.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
-#include <powerpc/atomic.h>
-#include <powerpc/fpu.h>
-#include <powerpc/altivec.h>
+#include <powerpc/psl.h>
 
-#include <arch/powerpc/pic/picvar.h>
-#include <arch/powerpc/pic/ipivar.h>
+#include <powerpc/pic/picvar.h>
+#include <powerpc/pic/ipivar.h>
 #include "opt_ipi.h"
 
 #ifdef MULTIPROCESSOR
 
 struct ipi_ops ipiops;
-volatile u_long IPI[CPU_MAXNUM];
 
 /* Process an actual IPI */
 
 int
-ppcipi_intr(void *v)
+ipi_intr(void *v)
 {
-	int cpu_id = cpu_number();
+	struct cpu_info * const ci = curcpu();
+	int cpu_id = cpu_index(ci);
 	int msr;
-	u_long ipi;
+	uint32_t ipi;
 
-	curcpu()->ci_ev_ipi.ev_count++;
-	ipi = atomic_loadlatch_ulong(&IPI[cpu_id], 0);
+	ci->ci_ev_ipi.ev_count++;
+	ipi = atomic_swap_32(&ci->ci_pending_ipis, 0);
 
-	if (ipi == PPC_IPI_NOMESG)
+	if (ipi == IPI_NOMESG)
 		return 1;
 
-	if (ipi & PPC_IPI_FLUSH_FPU)
-		save_fpu_cpu();
+	if (ipi & IPI_XCALL)
+		xc_ipi_handler();
 
-#ifdef ALTIVEC
-	if (ipi & PPC_IPI_FLUSH_VEC)
-		save_vec_cpu();
-#endif
+	if (ipi & IPI_GENERIC)
+		ipi_cpu_handler();
 
-	if (ipi & PPC_IPI_HALT) {
+	if (ipi & IPI_SUSPEND)
+		cpu_pause(NULL);
+
+	if (ipi & IPI_HALT) {
+		struct cpuset_info * const csi = &cpuset_info;
 		aprint_normal("halting CPU %d\n", cpu_id);
+		kcpuset_set(csi->cpus_halted, cpu_id);
 		msr = (mfmsr() & ~PSL_EE) | PSL_POW;
 		for (;;) {
 			__asm volatile ("sync; isync");
 			mtmsr(msr);
 		}
 	}
+
 	return 1;
 }
-
 #endif /*MULTIPROCESSOR*/

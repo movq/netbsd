@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthree_sbus.c,v 1.19 2007/10/19 12:01:10 ad Exp $ */
+/*	$NetBSD: cgthree_sbus.c,v 1.31 2016/04/21 18:10:57 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -85,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.19 2007/10/19 12:01:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.31 2016/04/21 18:10:57 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,44 +103,35 @@ __KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.19 2007/10/19 12:01:10 ad Exp $")
 
 #include <dev/sbus/sbusvar.h>
 
-/* Allocate an `sbusdev' in addition to the cgthree softc */
-struct cgthree_sbus_softc {
-	struct cgthree_softc bss_softc;
-	struct sbusdev bss_sd;
-};
-
 
 /* autoconfiguration driver */
-static int	cgthreematch_sbus(struct device *, struct cfdata *, void *);
-static void	cgthreeattach_sbus(struct device *, struct device *, void *);
+static int	cgthreematch_sbus(device_t, cfdata_t, void *);
+static void	cgthreeattach_sbus(device_t, device_t, void *);
 
-CFATTACH_DECL(cgthree_sbus, sizeof(struct cgthree_softc),
+CFATTACH_DECL_NEW(cgthree_sbus, sizeof(struct cgthree_softc),
     cgthreematch_sbus, cgthreeattach_sbus, NULL, NULL);
 
 /*
  * Match a cgthree.
  */
 int
-cgthreematch_sbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cgthreematch_sbus(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
-	return (strcmp(cf->cf_name, sa->sa_name) == 0);
+	if (strcmp(cf->cf_name, sa->sa_name) == 0)
+		return 100;	/* beat genfb(4) */
+
+	return 0;
 }
 
 /*
  * Attach a display.  We need to notice if it is the console, too.
  */
 void
-cgthreeattach_sbus(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+cgthreeattach_sbus(device_t parent, device_t self, void *args)
 {
-	struct cgthree_softc *sc = (struct cgthree_softc *)self;
-	struct sbusdev *sd = &((struct cgthree_sbus_softc *)self)->bss_sd;
+	struct cgthree_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = args;
 	struct fbdevice *fb = &sc->sc_fb;
 	int node = sa->sa_node;
@@ -155,12 +139,14 @@ cgthreeattach_sbus(parent, self, args)
 	const char *name;
 	bus_space_handle_t bh;
 
+	sc->sc_dev = self;
+
 	/* Remember cookies for cgthree_mmap() */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_paddr = sbus_bus_addr(sa->sa_bustag, sa->sa_slot, sa->sa_offset);
 
-	fb->fb_device = &sc->sc_dev;
-	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags & FB_USERMASK;
+	fb->fb_device = self;
+	fb->fb_flags = device_cfdata(self)->cf_flags & FB_USERMASK;
 	fb->fb_type.fb_type = FBTYPE_SUN3COLOR;
 
 	fb->fb_type.fb_depth = 8;
@@ -169,15 +155,14 @@ cgthreeattach_sbus(parent, self, args)
 	/*
 	 * When the ROM has mapped in a cgthree display, the address
 	 * maps only the video RAM, so in any case we have to map the
-	 * registers ourselves.  We only need the video RAM if we are
-	 * going to print characters via rconsole.
+	 * registers ourselves.
 	 */
 	if (sbus_bus_map(sa->sa_bustag,
 			 sa->sa_slot,
 			 sa->sa_offset + CG3REG_REG,
 			 sizeof(struct fbcontrol),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map control registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map control registers\n");
 		return;
 	}
 	sc->sc_fbc = (struct fbcontrol *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -187,21 +172,21 @@ cgthreeattach_sbus(parent, self, args)
 	if (name == NULL)
 		name = "cgthree";
 
+	fb->fb_pixels = NULL;
 	if (sa->sa_npromvaddrs != 0)
 		fb->fb_pixels = (void *)(u_long)sa->sa_promvaddrs[0];
-	if (isconsole && fb->fb_pixels == NULL) {
+	if (fb->fb_pixels == NULL) {
 		int ramsize = fb->fb_type.fb_height * fb->fb_linebytes;
 		if (sbus_bus_map(sa->sa_bustag,
 				 sa->sa_slot,
 				 sa->sa_offset + CG3REG_MEM,
 				 ramsize,
 				 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-			printf("%s: cannot map pixels\n", self->dv_xname);
+			aprint_error_dev(self, "cannot map pixels\n");
 			return;
 		}
 		fb->fb_pixels = (char *)bus_space_vaddr(sa->sa_bustag, bh);
 	}
 
-	sbus_establish(sd, &sc->sc_dev);
 	cgthreeattach(sc, name, isconsole);
 }

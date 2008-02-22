@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel_gpt.h,v 1.4 2007/12/28 19:53:09 riz Exp $	*/
+/*	$NetBSD: disklabel_gpt.h,v 1.12 2013/11/24 08:17:50 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -68,6 +68,8 @@ struct gpt_hdr {
 
 #define	GPT_HDR_BLKNO		1
 
+#define	GPT_HDR_SIZE		0x5c
+
 /*
  * GUID Partition Entry
  */
@@ -80,8 +82,19 @@ struct gpt_ent {
 	uint16_t	ent_name[36];	/* partition name in UNICODE-16 */
 };
 
-#define	GPT_ENT_ATTR_PLATFORM	(1ULL << 0)	/* required for platform
-						   to function */
+#define	GPT_ENT_ATTR_REQUIRED_PARTITION		(1ULL << 0)
+					/* required for platform to function */
+#define	GPT_ENT_ATTR_NO_BLOCK_IO_PROTOCOL	(1ULL << 1)
+					/* UEFI won't recognize file system */
+#define	GPT_ENT_ATTR_LEGACY_BIOS_BOOTABLE	(1ULL << 2)
+					/* legacy BIOS boot partition */
+/* The following three entries are from FreeBSD. */
+#define GPT_ENT_ATTR_BOOTME			(1ULL << 59)
+					/* indicates a bootable partition */
+#define GPT_ENT_ATTR_BOOTONCE			(1ULL << 58)
+				/* attempt to boot this partition only once */
+#define GPT_ENT_ATTR_BOOTFAILED			(1ULL << 57)
+		/* partition that was marked bootonce but failed to boot */
 
 /*
  * Partition types defined by the EFI specification:
@@ -121,6 +134,8 @@ struct gpt_ent {
 	{0x516e7cb6,0x6ecf,0x11d6,0x8f,0xf8,{0x00,0x02,0x2d,0x09,0x71,0x2b}}
 #define	GPT_ENT_TYPE_FREEBSD_VINUM	\
 	{0x516e7cb8,0x6ecf,0x11d6,0x8f,0xf8,{0x00,0x02,0x2d,0x09,0x71,0x2b}}
+#define GPT_ENT_TYPE_FREEBSD_ZFS	\
+	{0x516e7cba,0x6ecf,0x11d6,0x8f,0xf8,{0x00,0x02,0x2d,0x09,0x71,0x2b}}
 /*
  * The following are unused but documented here to avoid reuse.
  *
@@ -137,7 +152,12 @@ struct gpt_ent {
 #define	GPT_ENT_TYPE_MS_LDM_DATA	\
 	{0xaf9b60a0,0x1431,0x4f62,0xbc,0x68,{0x33,0x11,0x71,0x4a,0x69,0xad}}
 
-#define	GPT_ENT_TYPE_LINUX_DATA		GPT_ENT_TYPE_MS_BASIC_DATA
+/*
+ * Linux originally used GPT_ENT_TYPE_MS_BASIC_DATA in place of
+ * GPT_ENT_TYPE_LINUX_DATA.
+ */
+#define	GPT_ENT_TYPE_LINUX_DATA		\
+	{0x0fc63daf,0x8483,0x4772,0x8e,0x79,{0x3d,0x69,0xd8,0x47,0x7d,0xe4}}
 #define	GPT_ENT_TYPE_LINUX_RAID		\
 	{0xa19d880f,0x05fc,0x4d3b,0xa0,0x06,{0x74,0x3f,0x0f,0x84,0x91,0x1e}}
 #define	GPT_ENT_TYPE_LINUX_SWAP		\
@@ -147,5 +167,13 @@ struct gpt_ent {
 
 #define	GPT_ENT_TYPE_APPLE_HFS		\
 	{0x48465300,0x0000,0x11aa,0xaa,0x11,{0x00,0x30,0x65,0x43,0xec,0xac}}
+#define	GPT_ENT_TYPE_APPLE_UFS		\
+	{0x55465300,0x0000,0x11aa,0xaa,0x11,{0x00,0x30,0x65,0x43,0xec,0xac}}
+
+/*
+ * Used by GRUB 2.
+ */
+#define	GPT_ENT_TYPE_BIOS		\
+	{0x21686148,0x6449,0x6e6f,0x74,0x4e,{0x65,0x65,0x64,0x45,0x46,0x49}}
 
 #endif /* _SYS_DISKLABEL_GPT_H_ */

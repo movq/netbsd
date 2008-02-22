@@ -1,4 +1,4 @@
-/*      $NetBSD: sa11x0_com.c,v 1.42 2007/12/27 12:29:16 rjs Exp $        */
+/*      $NetBSD: sa11x0_com.c,v 1.55 2015/04/13 21:18:41 riastradh Exp $        */
 
 /*-
  * Copyright (c) 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -18,13 +18,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.42 2007/12/27 12:29:16 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.55 2015/04/13 21:18:41 riastradh Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -80,9 +73,8 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.42 2007/12/27 12:29:16 rjs Exp $");
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 
-#include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
-#include <sys/rnd.h>
+#ifdef RND_COM
+#include <sys/rndsource.h>
 #endif
 
 #include <sys/param.h>
@@ -100,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.42 2007/12/27 12:29:16 rjs Exp $");
 
 #include <dev/cons.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/sa11x0/sa11x0_reg.h>
 #include <arm/sa11x0/sa11x0_var.h>
 #include <arm/sa11x0/sa11x0_comreg.h>
@@ -124,20 +116,30 @@ dev_type_tty(sacomtty);
 dev_type_poll(sacompoll);
 
 const struct cdevsw sacom_cdevsw = {
-	sacomopen, sacomclose, sacomread, sacomwrite, sacomioctl,
-	sacomstop, sacomtty, sacompoll, nommap, ttykqfilter, D_TTY
+	.d_open = sacomopen,
+	.d_close = sacomclose,
+	.d_read = sacomread,
+	.d_write = sacomwrite,
+	.d_ioctl = sacomioctl,
+	.d_stop = sacomstop,
+	.d_tty = sacomtty,
+	.d_poll = sacompoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
-static	int	sacom_match(struct device *, struct cfdata *, void *);
-static	void	sacom_attach(struct device *, struct device *, void *);
+static	int	sacom_match(device_t, cfdata_t, void *);
+static	void	sacom_attach(device_t, device_t, void *);
 static	void	sacom_filltx(struct sacom_softc *);
 static	void	sacom_attach_subr(struct sacom_softc *);
 #if defined(DDB) || defined(KGDB)
 static	void	sacom_enable_debugport(struct sacom_softc *);
 #endif
-int		sacom_detach(struct device *, int);
+int		sacom_detach(device_t, int);
 void		sacom_config(struct sacom_softc *);
-int		sacom_activate(struct device *, enum devact);
+int		sacom_activate(device_t, enum devact);
 void		sacom_shutdown(struct sacom_softc *);
 static	u_int	cflag2cr0(tcflag_t);
 int		sacomparam(struct tty *, struct termios *);
@@ -166,17 +168,16 @@ static inline void sacom_schedrx(struct sacom_softc *);
 
 #ifdef hpcarm
 /* HPCARM specific functions */
-static void	sacom_j720_init(struct sa11x0_softc *, struct sacom_softc *);
+static void	sacom_j720_init(device_t, device_t);
 #endif
 
-#define COMUNIT_MASK	0x7ffff
-#define COMDIALOUT_MASK	0x80000
+#define COMDIALOUT_MASK	TTDIALOUT_MASK
 
-#define COMUNIT(x)	(minor(x) & COMUNIT_MASK)
-#define COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
+#define COMUNIT(x)	TTUNIT(x)
+#define COMDIALOUT(x)	TTDIALOUT(x)
 
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			 device_is_active(&(sc)->sc_dev))
+			 device_is_active((sc)->sc_dev))
 
 #define COM_BARRIER(t, h, f) bus_space_barrier((t), (h), 0, COM_NPORTS, (f))
 #define COM_LOCK(sc)
@@ -200,7 +201,7 @@ static int sacomconsattached;
 static int sacomconsrate;
 static tcflag_t sacomconscflag;
 
-CFATTACH_DECL(sacom, sizeof(struct sacom_softc),
+CFATTACH_DECL_NEW(sacom, sizeof(struct sacom_softc),
     sacom_match, sacom_attach, NULL, NULL);
 extern struct cfdriver sacom_cd;
 
@@ -227,47 +228,47 @@ struct consdev sacomcons = {
 #endif
 
 static int
-sacom_match(struct device *parent, struct cfdata *match, void *aux)
+sacom_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
 }
 
 void
-sacom_attach(struct device *parent, struct device *self, void *aux)
+sacom_attach(device_t parent, device_t self, void *aux)
 {
-	struct sacom_softc *sc = (struct sacom_softc*)self;
+	struct sacom_softc *sc = device_private(self);
 	struct sa11x0_attach_args *sa = aux;
 
 #ifdef hpcarm
 	struct platid_data *p;
-	void (*mdinit)(struct device *, struct sacom_softc *);
+	void (*mdinit)(device_t, device_t);
 #endif
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_baseaddr = sa->sa_addr;
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0,
 	    &sc->sc_ioh)) {
-		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(self, "unable to map registers\n");
 		return;
 	}
 
-	printf("%s: ", sc->sc_dev.dv_xname);
 	switch (sc->sc_baseaddr) {
 	case SACOM1_BASE:
-		printf("SA-11x0 UART1\n");
+		aprint_normal_dev(self, "SA-11x0 UART1\n");
 		break;
 	case SACOM2_BASE:
-		printf("SA-11x0 UART2 (IRDA)\n");
+		aprint_normal_dev(self, "SA-11x0 UART2 (IRDA)\n");
 		break;
 	case SACOM3_BASE:
-		printf("SA-11x0 UART3\n");
+		aprint_normal_dev(self, "SA-11x0 UART3\n");
 		break;
 	default:
-		printf("unknown SA-11x0 UART\n");
+		aprint_normal_dev(self, "unknown SA-11x0 UART\n");
 		break;
 	}
 
@@ -277,7 +278,7 @@ sacom_attach(struct device *parent, struct device *self, void *aux)
 	/* Do hpcarm specific initialization, if any */
 	if ((p = platid_search_data(&platid, sacom_platid_table)) != NULL) {
 		mdinit = p->data;
-		(mdinit)(parent, sc);
+		(*mdinit)(parent, self);
 	}
 #endif
 
@@ -303,7 +304,7 @@ sacom_attach_subr(struct sacom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sacomstart;
 	tp->t_param = sacomparam;
 	tp->t_hwiflow = sacomhwiflow;
@@ -313,8 +314,7 @@ sacom_attach_subr(struct sacom_softc *sc)
 	sc->sc_rbput = sc->sc_rbget = sc->sc_rbuf;
 	sc->sc_rbavail = SACOM_RING_SIZE;
 	if (sc->sc_rbuf == NULL) {
-		printf("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "unable to allocate ring buffer\n");
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (SACOM_RING_SIZE << 1);
@@ -328,19 +328,20 @@ sacom_attach_subr(struct sacom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&sacom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
 		delay(10000); /* XXX */
-		printf("%s: console\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "console\n");
 		delay(10000); /* XXX */
 	}
 
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, sacomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-			  RND_TYPE_TTY, 0);
+#ifdef RND_COM
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_TTY, RND_FLAG_COLLECT_TIME|
+					RND_FLAG_ESTIMATE_TIME);
 #endif
 
 	/* if there are no enable/disable functions, assume the device
@@ -355,16 +356,24 @@ sacom_attach_subr(struct sacom_softc *sc)
 
 /* This is necessary when dynamically changing SAIP configuration. */
 int
-sacom_detach(struct device *self, int flags)
+sacom_detach(device_t dev, int flags)
 {
-	struct sacom_softc *sc = (struct sacom_softc *)self;
+	struct sacom_softc *sc = device_private(dev);
 	int maj, mn;
+
+	if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB))
+		return EBUSY;
+
+	if (sc->disable != NULL && sc->enabled != 0) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&sacom_cdevsw);
 
 	/* Nuke the vnodes for any open instances. */
-	mn = device_unit(self);
+	mn = device_unit(dev);
 	vdevgone(maj, mn, mn, VCHR);
 
 	mn |= COMDIALOUT_MASK;
@@ -375,12 +384,12 @@ sacom_detach(struct device *self, int flags)
 
 	/* Detach and free the tty. */
 	tty_detach(sc->sc_tty);
-	ttyfree(sc->sc_tty);
+	tty_free(sc->sc_tty);
 
 	/* Unhook the soft interrupt handler. */
 	softint_disestablish(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
@@ -422,34 +431,17 @@ sacom_enable_debugport(struct sacom_softc *sc)
 #endif
 
 int
-sacom_activate(struct device *self, enum devact act)
+sacom_activate(device_t dev, enum devact act)
 {
-	struct sacom_softc *sc = (struct sacom_softc *)self;
-	int s, rv = 0;
+	struct sacom_softc *sc = device_private(dev);
 
-	s = splserial();
-	COM_LOCK(sc);
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		if (sc->disable != NULL && sc->enabled != 0) {
-			(*sc->disable)(sc);
-			sc->enabled = 0;
-		}
-		break;
+		sc->enabled = 0;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	COM_UNLOCK(sc);	
-	splx(s);
-	return rv;
 }
 
 void
@@ -503,12 +495,12 @@ sacomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s, s2;
 	int error;
 
-	sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	sc = device_lookup_private(&sacom_cd, COMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, COM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return ENXIO;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return ENXIO;
 
 	tp = sc->sc_tty;
@@ -534,8 +526,7 @@ sacomopen(dev_t dev, int flag, int mode, struct lwp *l)
 				COM_UNLOCK(sc);
 				splx(s2);
 				splx(s);
-				printf("%s: device enable failed\n",
-				       sc->sc_dev.dv_xname);
+				aprint_normal_dev(sc->sc_dev, "device enable failed\n");
 				return EIO;
 			}
 			sc->enabled = 1;
@@ -633,7 +624,8 @@ bad:
 int
 sacomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -661,7 +653,8 @@ sacomclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sacomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -673,7 +666,8 @@ sacomread(dev_t dev, struct uio *uio, int flag)
 int
 sacomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -685,7 +679,8 @@ sacomwrite(dev_t dev, struct uio *uio, int flag)
 int
 sacompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -697,7 +692,8 @@ sacompoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 sacomtty(dev_t dev)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return tp;
@@ -706,7 +702,8 @@ sacomtty(dev_t dev)
 int
 sacomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -856,7 +853,8 @@ cflag2cr0(tcflag_t cflag)
 int
 sacomparam(struct tty *tp, struct termios *t)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(tp->t_dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(tp->t_dev));
 	int ospeed = SACOMSPEED(t->c_ospeed);
 	u_int cr0;
 	int s;
@@ -973,8 +971,7 @@ sacom_iflush(struct sacom_softc *sc)
 #endif
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: sacom_iflush timeout %02x\n", sc->sc_dev.dv_xname,
-		       reg);
+		aprint_debug_dev(sc->sc_dev, "sacom_iflush timeout %02x\n", reg);
 #endif
 }
 
@@ -1001,7 +998,8 @@ int
 sacomhwiflow(struct tty *tp, int block)
 {
 #if 0
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(tp->t_dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(tp->t_dev));
 	int s;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -1053,7 +1051,8 @@ sacom_hwiflow(struct sacom_softc *sc)
 void
 sacomstart(struct tty *tp)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(tp->t_dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(tp->t_dev));
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int s;
@@ -1126,7 +1125,8 @@ sacom_filltx(struct sacom_softc *sc)
 void
 sacomstop(struct tty *tp, int flag)
 {
-	struct sacom_softc *sc = device_lookup(&sacom_cd, COMUNIT(tp->t_dev));
+	struct sacom_softc *sc =
+		device_lookup_private(&sacom_cd, COMUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -1402,19 +1402,23 @@ sacomintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 	return 1;
 }
 
 static void
-sacom_j720_init(struct sa11x0_softc *parent, struct sacom_softc *sc) {
+sacom_j720_init(device_t parent, device_t self)
+{
+	struct sa11x0_softc *sasc;
+
+	sasc = device_private(parent);
 
 	/* XXX  this should be done at sc->enable function */
-	bus_space_write_4(parent->sc_iot, parent->sc_gpioh,
+	bus_space_write_4(sasc->sc_iot, sasc->sc_gpioh,
 	    SAGPIO_PCR, 0xa0000);
-	bus_space_write_4(parent->sc_iot, parent->sc_gpioh,
+	bus_space_write_4(sasc->sc_iot, sasc->sc_gpioh,
 	    SAGPIO_PSR, 0x100);
 }
 
@@ -1426,7 +1430,7 @@ sacominit(bus_space_tag_t iot, bus_addr_t iobase, int baud, tcflag_t cflag,
 	int brd, cr0;
 
 	if (bus_space_map(iot, iobase, SACOM_NPORTS, 0, iohp))
-		printf("register map failed\n");
+		aprint_normal("register map failed\n");
 
 	/* wait for the Tx queue to drain and disable the UART */
 	while (bus_space_read_4(iot, *iohp, SACOM_SR1) & SR1_TBY)

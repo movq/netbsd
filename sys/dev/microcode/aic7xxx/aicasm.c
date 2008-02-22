@@ -1,4 +1,4 @@
-/*	$NetBSD: aicasm.c,v 1.6 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: aicasm.c,v 1.9 2016/08/15 08:52:33 maxv Exp $	*/
 
 /*
  * Aic7xxx SCSI host adapter firmware asssembler
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: aicasm.c,v 1.6 2005/12/11 12:22:18 christos Exp $");
+__RCSID("$NetBSD: aicasm.c,v 1.9 2016/08/15 08:52:33 maxv Exp $");
 
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -309,7 +309,7 @@ main(int argc, char *argv[])
 }
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr,
@@ -321,7 +321,7 @@ usage()
 }
 
 static void
-back_patch()
+back_patch(void)
 {
 	struct instruction *cur_instr;
 
@@ -350,7 +350,7 @@ back_patch()
 }
 
 static void
-output_code()
+output_code(void)
 {
 	struct instruction *cur_instr;
 	patch_t *cur_patch;
@@ -594,6 +594,8 @@ output_listing(char *ifilename)
 			if (isatty(fileno(stdin)) == 0)
 				putchar(input);
 		}
+		free(func_values);
+		func_values = NULL;
 		fprintf(stdout, "\nThanks!\n");
 	}
 
@@ -603,6 +605,11 @@ output_listing(char *ifilename)
 	     cur_instr != NULL;
 	     cur_instr = STAILQ_NEXT(cur_instr, links), instrcount++) {
 
+		/*
+		 * XXX XXX XXX: What exactly are we trying to do here?
+		 * 'func_values' is always NULL, so check_patch will
+		 * necessarily crash.
+		 */
 		if (check_patch(&cur_patch, instrcount,
 				&skip_addr, func_values) == 0) {
 			/* Don't count this instruction as it is in a patch
@@ -725,7 +732,7 @@ stop(const char *string, int err_code)
 }
 
 struct instruction *
-seq_alloc()
+seq_alloc(void)
 {
 	struct instruction *new_instr;
 
@@ -739,7 +746,7 @@ seq_alloc()
 }
 
 critical_section_t *
-cs_alloc()
+cs_alloc(void)
 {
 	critical_section_t *new_cs;
 
@@ -753,7 +760,7 @@ cs_alloc()
 }
 
 scope_t *
-scope_alloc()
+scope_alloc(void)
 {
 	scope_t *new_scope;
 

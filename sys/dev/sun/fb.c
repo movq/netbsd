@@ -1,4 +1,4 @@
-/*	$NetBSD: fb.c,v 1.27 2007/03/04 06:02:45 christos Exp $ */
+/*	$NetBSD: fb.c,v 1.36 2016/04/21 18:06:06 macallan Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb.c,v 1.27 2007/03/04 06:02:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb.c,v 1.36 2016/04/21 18:06:06 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,12 +87,22 @@ dev_type_mmap(fbmmap);
 dev_type_kqfilter(fbkqfilter);
 
 const struct cdevsw fb_cdevsw = {
-	fbopen, fbclose, noread, nowrite, fbioctl,
-	nostop, notty, fbpoll, fbmmap, fbkqfilter, D_OTHER
+	.d_open = fbopen,
+	.d_close = fbclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = fbioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = fbpoll,
+	.d_mmap = fbmmap,
+	.d_kqfilter = fbkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 void
-fb_unblank()
+fb_unblank(void)
 {
 
 	struct fbdevlist *fbl = &fblist;
@@ -111,8 +121,7 @@ fb_unblank()
  * other sources of configuration information (e.g. EEPROM entries).
  */
 int
-fb_is_console(node)
-	int node;
+fb_is_console(int node)
 {
 #if !defined(SUN4U)
 	int fbnode;
@@ -147,9 +156,7 @@ fb_is_console(node)
 }
 
 void
-fb_attach(fb, isconsole)
-	struct fbdevice *fb;
-	int isconsole;
+fb_attach(struct fbdevice *fb, int isconsole)
 {
 	static int seen_force = 0;
 	int nfb = 0;
@@ -168,17 +175,17 @@ fb_attach(fb, isconsole)
 		if ((fbl->fb_next = malloc(sizeof (struct fbdevlist),
 		    M_DEVBUF, M_NOWAIT)) == NULL)
 			printf("%s: replacing %s at /dev/fb0\n",
-			    fb->fb_device->dv_xname,
-			    fblist.fb_dev->fb_device->dv_xname);
+			    device_xname(fb->fb_device),
+			    device_xname(fblist.fb_dev->fb_device));
 		else {
 			fbl = fbl->fb_next;
 			nfb++;
 			fbl->fb_dev = fblist.fb_dev;
 			fbl->fb_next = NULL;
-			printf("%s: moved to /dev/fb%d\n",
-			    fbl->fb_dev->fb_device->dv_xname, nfb);
-			printf("%s: attached to /dev/fb0\n",
-			    fb->fb_device->dv_xname);
+			aprint_normal_dev(fbl->fb_dev->fb_device,
+			    "moved to /dev/fb%d\n", nfb);
+			aprint_normal_dev(fbl->fb_dev->fb_device,
+			    "attached to /dev/fb0\n");
 		}
 		fblist.fb_dev = fb;
 		if (fb->fb_flags & FB_FORCE)
@@ -192,8 +199,9 @@ fb_attach(fb, isconsole)
 			}
 			if ((fbl->fb_next = malloc(sizeof (struct fbdevlist),
 			    M_DEVBUF, M_NOWAIT)) == NULL) {
-				printf("%s: no space to attach after /dev/fb%d\n",
-					fb->fb_device->dv_xname, nfb);
+				aprint_error_dev(fb->fb_device,
+				    "no space to attach after /dev/fb%d\n",
+				    nfb);
 				return;
 			}
 			fbl = fbl->fb_next;
@@ -201,16 +209,13 @@ fb_attach(fb, isconsole)
 		}
 		fbl->fb_dev = fb;
 		fbl->fb_next = NULL;
-		printf("%s: attached to /dev/fb%d\n",
-			fbl->fb_dev->fb_device->dv_xname, nfb);
+		aprint_normal_dev(fbl->fb_dev->fb_device,
+		     "attached to /dev/fb%d\n", nfb);
 	}
 }
 
 int
-fbopen(dev, flags, mode, l)
-	dev_t dev;
-	int flags, mode;
-	struct lwp *l;
+fbopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -227,10 +232,7 @@ fbopen(dev, flags, mode, l)
 }
 
 int
-fbclose(dev, flags, mode, l)
-	dev_t dev;
-	int flags, mode;
-	struct lwp *l;
+fbclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -247,12 +249,7 @@ fbclose(dev, flags, mode, l)
 }
 
 int
-fbioctl(dev, cmd, data, flags, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flags;
-	struct lwp *l;
+fbioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -269,10 +266,7 @@ fbioctl(dev, cmd, data, flags, l)
 }
 
 int
-fbpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+fbpoll(dev_t dev, int events, struct lwp *l)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -289,9 +283,7 @@ fbpoll(dev, events, l)
 }
 
 int
-fbkqfilter(dev, kn)
-	dev_t dev;
-	struct knote *kn;
+fbkqfilter(dev_t dev, struct knote *kn)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -307,10 +299,7 @@ fbkqfilter(dev, kn)
 }
 
 paddr_t
-fbmmap(dev, off, prot)
-	dev_t dev;
-	off_t off;
-	int prot;
+fbmmap(dev_t dev, off_t off, int prot)
 {
 	int unit, nunit;
 	struct fbdevlist *fbl = &fblist;
@@ -330,9 +319,7 @@ fbmmap(dev, off, prot)
 }
 
 void
-fb_setsize_obp(fb, depth, def_width, def_height, node)
-	struct fbdevice *fb;
-	int depth, def_width, def_height, node;
+fb_setsize_obp(struct fbdevice *fb, int depth, int def_width, int def_height, int node)
 {
 	fb->fb_type.fb_width = prom_getpropint(node, "width", def_width);
 	fb->fb_type.fb_height = prom_getpropint(node, "height", def_height);
@@ -341,9 +328,7 @@ fb_setsize_obp(fb, depth, def_width, def_height, node)
 }
 
 void
-fb_setsize_eeprom(fb, depth, def_width, def_height)
-	struct fbdevice *fb;
-	int depth, def_width, def_height;
+fb_setsize_eeprom(struct fbdevice *fb, int depth, int def_width, int def_height)
 {
 #if !defined(SUN4U)
 	struct eeprom *eep = (struct eeprom *)eeprom_va;
@@ -397,148 +382,3 @@ fb_setsize_eeprom(fb, depth, def_width, def_height)
 #endif /* !SUN4U */
 }
 
-
-
-#ifdef RASTERCONSOLE
-static void fb_bell(int);
-
-static void
-fb_bell(on)
-	int on;
-{
-#if NKBD > 0
-	kbd_bell(on);
-#endif
-}
-
-void
-fbrcons_init(fb)
-	struct fbdevice *fb;
-{
-	struct rconsole	*rc = &fb->fb_rcons;
-	struct rasops_info *ri = &fb->fb_rinfo;
-	int maxrow, maxcol;
-#if !defined(RASTERCONS_FULLSCREEN)
-	int *row, *col;
-#endif
-
-	/* Set up what rasops needs to know about */
-	bzero(ri, sizeof *ri);
-	ri->ri_stride = fb->fb_linebytes;
-	ri->ri_bits = (void *)fb->fb_pixels;
-	ri->ri_depth = fb->fb_type.fb_depth;
-	ri->ri_width = fb->fb_type.fb_width;
-	ri->ri_height = fb->fb_type.fb_height;
-	maxrow = 5000;
-	maxcol = 5000;
-
-#if !defined(RASTERCONS_FULLSCREEN)
-#if !defined(SUN4U)
-	if (CPU_ISSUN4) {
-		struct eeprom *eep = (struct eeprom *)eeprom_va;
-
-		if (eep == NULL) {
-			maxcol = 80;
-			maxrow = 34;
-		} else {
-			maxcol = eep->eeTtyCols;
-			maxrow = eep->eeTtyRows;
-		}
-	}
-#endif /* !SUN4U */
-	if (!CPU_ISSUN4) {
-		char buf[6+1];	/* Enough for six digits */
-		maxcol = (prom_getoption("screen-#columns", buf, sizeof buf) == 0)
-			? strtoul(buf, NULL, 10)
-			: 80;
-
-		maxrow = (prom_getoption("screen-#rows", buf, sizeof buf) != 0)
-			? strtoul(buf, NULL, 10)
-			: 34;
-
-	}
-#endif /* !RASTERCONS_FULLSCREEN */
-	/*
-	 * - force monochrome output
-	 * - eraserows() hack to clear the *entire* display
-	 * - cursor is currently enabled
-	 * - center output
-	 */
-	ri->ri_flg = RI_FULLCLEAR | RI_CURSOR | RI_CENTER;
-
-	/* Get operations set and connect to rcons */
-	if (rasops_init(ri, maxrow, maxcol))
-		panic("fbrcons_init: rasops_init failed!");
-
-	if (ri->ri_depth == 8) {
-		int i;
-		for (i = 0; i < 16; i++) {
-
-			/*
-			 * Cmap entries are repeated four times in the
-			 * 32 bit wide `devcmap' entries for optimization
-			 * purposes; see rasops(9)
-			 */
-#define I_TO_DEVCMAP(i)	((i) | ((i)<<8) | ((i)<<16) | ((i)<<24))
-
-			/*
-			 * Use existing colormap entries for black and white
-			 */
-			if ((i & 7) == WSCOL_BLACK) {
-				ri->ri_devcmap[i] = I_TO_DEVCMAP(255);
-				continue;
-			}
-
-			if ((i & 7) == WSCOL_WHITE) {
-				ri->ri_devcmap[i] = I_TO_DEVCMAP(0);
-				continue;
-			}
-			/*
-			 * Other entries refer to ANSI map, which for now
-			 * is setup in bt_subr.c
-			 */
-			ri->ri_devcmap[i] = I_TO_DEVCMAP(i + 1);
-#undef I_TO_DEVCMAP
-		}
-	}
-
-	rc->rc_row = rc->rc_col = 0;
-#if !defined(RASTERCONS_FULLSCREEN)
-	/* Determine addresses of prom emulator row and column */
-	if (!CPU_ISSUN4 && !romgetcursoraddr(&row, &col)) {
-		rc->rc_row = *row;
-		rc->rc_col = *col;
-	}
-#endif
-	ri->ri_crow = rc->rc_row;
-	ri->ri_ccol = rc->rc_col;
-
-	rc->rc_ops = &ri->ri_ops;
-	rc->rc_cookie = ri;
-	rc->rc_bell = fb_bell;
-	rc->rc_maxcol = ri->ri_cols;
-	rc->rc_maxrow = ri->ri_rows;
-	rc->rc_width = ri->ri_emuwidth;
-	rc->rc_height = ri->ri_emuheight;
-	rc->rc_deffgcolor = WSCOL_BLACK;
-	rc->rc_defbgcolor = WSCOL_WHITE;
-	rcons_init(rc, 0);
-
-	/* Hook up virtual console */
-	v_putc = rcons_cnputc;
-}
-
-int
-fbrcons_rows()
-{
-	return ((fblist.fb_dev != NULL) ?
-	    fblist.fb_dev->fb_rcons.rc_maxrow : 0);
-}
-
-int
-fbrcons_cols()
-{
-	return ((fblist.fb_dev != NULL) ?
-	    fblist.fb_dev->fb_rcons.rc_maxcol : 0);
-}
-#endif /* RASTERCONSOLE */

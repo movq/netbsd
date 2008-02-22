@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $ */
+/* $NetBSD: radeonfb_bios.c,v 1.5 2018/02/08 09:05:19 dholland Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.5 2018/02/08 09:05:19 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $")
 #include <dev/pci/radeonfbreg.h>
 #include <dev/pci/radeonfbvar.h>
 
-#ifdef RADEON_BIOS_INIT
+#include "opt_radeonfb.h"
+
+#ifdef RADEONFB_BIOS_INIT
 
 /*
  * Globals for the entire BIOS.
@@ -73,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $")
 #define	MEM_CONFIG_OFFSET		0x48
 
 /*
- * Values related to generic intialization tables.
+ * Values related to generic initialization tables.
  */
 #define	TABLE_ENTRY_FLAG_MASK		0xe000
 #define	TABLE_ENTRY_INDEX_MASK		0x1fff
@@ -106,7 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb_bios.c,v 1.2 2007/10/19 12:00:55 ad Exp $")
 #define	PLL_WAIT_CHK_SET_CLK_PWRMGT_CNTL24	5
 
 
-#ifdef	RADEON_BIOS_DEBUG
+#ifdef	RADEONFB_BIOS_DEBUG
 #define	DPRINTF(x)	printf x
 #else
 #define	DPRINTF(x)
@@ -571,7 +573,7 @@ radeonfb_bios_init(struct radeonfb_softc *sc)
 		DPRINTF(("%s: parsing table %s\n", XNAME(sc), tp->name));
 
 		if (tp->offset != 0) {
-			uint16_t	temp, offset;;
+			uint16_t	temp, offset;
 
 			temp = GETBIOS16(sc, ROM_HEADER_OFFSET);
 			offset = GETBIOS16(sc, temp + tp->offset);

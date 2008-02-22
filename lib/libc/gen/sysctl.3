@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.3,v 1.193 2006/12/18 00:09:59 wiz Exp $
+.\"	$NetBSD: sysctl.3,v 1.203 2017/07/03 21:32:49 wiz Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,14 +29,16 @@
 .\"
 .\"	@(#)sysctl.3	8.4 (Berkeley) 5/9/95
 .\"
-.Dd December 4, 2006
+.Dd June 13, 2014
 .Dt SYSCTL 3
 .Os
 .Sh NAME
 .Nm sysctl ,
 .Nm sysctlbyname ,
 .Nm sysctlgetmibinfo ,
-.Nm sysctlnametomib
+.Nm sysctlnametomib ,
+.Nm asysctl ,
+.Nm asysctlbyname
 .Nd get or set system information
 .Sh LIBRARY
 .Lb libc
@@ -48,12 +50,16 @@
 "const void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlbyname "const char *sname" "void *oldp" "size_t *oldlenp" \
-"void *newp" "size_t newlen"
+"const void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlgetmibinfo "const char *sname" "int *name" "u_int *namelenp" \
 "char *cname" "size_t *csz" "struct sysctlnode **rnode" "int v"
 .Ft int
 .Fn sysctlnametomib "const char *sname" "int *name" "size_t *namelenp"
+.Ft void *
+.Fn asysctl "const int *name" "size_t namelen" "size_t *len"
+.Ft void *
+.Fn asysctlbyname "const char *sname" "size_t *len"
 .Sh DESCRIPTION
 The
 .Nm
@@ -219,7 +225,7 @@ The numeric and text names of sysctl variables are described in
 .Xr sysctl 7 .
 The numeric names are defined as preprocessor macros.
 The top level names are defined with a CTL_ prefix in
-.Aq Pa sys/sysctl.h .
+.In sys/sysctl.h .
 The next and subsequent levels down have different prefixes for each
 subtree.
 .Pp
@@ -234,7 +240,7 @@ size_t len;
 mib[0] = CTL_KERN;
 mib[1] = KERN_MAXPROC;
 len = sizeof(maxproc);
-sysctl(mib, 2, \*[Am]maxproc, \*[Am]len, NULL, 0);
+sysctl(mib, 2, &maxproc, &len, NULL, 0);
 .Ed
 .sp
 To retrieve the standard search path for the system utilities -
@@ -246,10 +252,22 @@ char *p;
 .sp
 mib[0] = CTL_USER;
 mib[1] = USER_CS_PATH;
-sysctl(mib, 2, NULL, \*[Am]len, NULL, 0);
+sysctl(mib, 2, NULL, &len, NULL, 0);
 p = malloc(len);
-sysctl(mib, 2, p, \*[Am]len, NULL, 0);
+sysctl(mib, 2, p, &len, NULL, 0);
 .Ed
+.Pp
+The
+.Fn asysctl
+and
+.Fn asysctlbyname
+functions are wrappers for
+.Fn sysctl
+and
+.Fn sysctlbyname .
+They return memory allocated with
+.Xr malloc 3
+and resize the buffer in a loop until all data fits.
 .Sh DYNAMIC OPERATIONS
 Several meta-identifiers are provided to perform operations on the
 .Nm
@@ -268,7 +286,7 @@ tree.
 .Pp
 The core interface to all of these meta-functions is the structure
 that the kernel uses to describe the tree internally, as defined in
-.Aq Pa sys/sysctl.h
+.In sys/sysctl.h
 as:
 .Pp
 .Bd -literal
@@ -321,10 +339,10 @@ size_t len;
 .sp
 mib[0] = CTL_VFS;
 mib[1] = CTL_QUERY;
-memset(\*[Am]query, 0, sizeof(query));
+memset(&query, 0, sizeof(query));
 query.sysctl_flags = SYSCTL_VERSION;
 len = sizeof(vfs);
-sysctl(mib, 2, \*[Am]vfs[0], \*[Am]len, \*[Am]query, sizeof(query));
+sysctl(mib, 2, &vfs[0], &len, &query, sizeof(query));
 .Ed
 .Pp
 Note that a reference to an empty node with
@@ -428,21 +446,21 @@ size_t len;
 .sp
 mib[0] = CTL_CREATE;		/* create at top-level */
 len = sizeof(node);
-memset(\*[Am]node, 0, len);
+memset(&node, 0, len);
 node.sysctl_flags = SYSCTL_VERSION|CTLFLAG_READWRITE|CTLTYPE_NODE;
 snprintf(node.sysctl_name, sizeof(node.sysctl_name), "local");
 node.sysctl_num = CTL_CREATE;	/* request dynamic MIB number */
-sysctl(\*[Am]mib[0], 1, \*[Am]node, \*[Am]len, \*[Am]node, len);
+sysctl(&mib[0], 1, &node, &len, &node, len);
 .sp
 mib[0] = node.sysctl_num;	/* use new MIB number */
 mib[1] = CTL_CREATESYM;		/* create at second level */
 len = sizeof(node);
-memset(\*[Am]node, 0, len);
+memset(&node, 0, len);
 node.sysctl_flags = SYSCTL_VERSION|CTLFLAG_READWRITE|CTLTYPE_INT;
 snprintf(node.sysctl_name, sizeof(node.sysctl_name), "audiodebug");
 node.sysctl_num = CTL_CREATE;
 node.sysctl_data = "audiodebug"; /* kernel symbol to be used */
-sysctl(\*[Am]mib[0], 2, NULL, NULL, \*[Am]node, len);
+sysctl(&mib[0], 2, NULL, NULL, &node, len);
 .Ed
 .Pp
 The process for deleting nodes is similar, but less data needs to
@@ -472,17 +490,17 @@ above example:
 int mib[2];
 .sp
 len = sizeof(node);
-memset(\*[Am]node, 0, len);
+memset(&node, 0, len);
 node.sysctl_flags = SYSCTL_VERSION;
 .sp
 mib[0] = 3214;			/* assumed number for "local" */
 mib[1] = CTL_DESTROY;
 node.sysctl_num = 3215;		/* assumed number for "audiodebug" */
-sysctl(\*[Am]mib[0], 2, NULL, NULL, \*[Am]node, len);
+sysctl(&mib[0], 2, NULL, NULL, &node, len);
 .sp
 mib[0] = CTL_DESTROY;
 node.sysctl_num = 3214;		/* now deleting "local" */
-sysctl(\*[Am]mib[0], 1, NULL, NULL, \*[Am]node, len);
+sysctl(&mib[0], 1, NULL, NULL, &node, len);
 .Ed
 .Pp
 Descriptions of each of the nodes can also be retrieved, if they are
@@ -528,23 +546,23 @@ size_t len;
 /* retrieve kern-level descriptions */
 mib[0] = CTL_KERN;
 mib[1] = CTL_DESCRIBE;
-d = (struct sysctldesc *)\*[Am]buf[0];
+d = (struct sysctldesc *)&buf[0];
 len = sizeof(buf);
-sysctl(mib, 2, d, \*[Am]len, NULL, 0);
-while ((caddr_t)d \*[Lt] (caddr_t)\*[Am]buf[len]) {
-	printf("node %d: %.*s\\n", d-\*[Gt]descr_num, d-\*[Gt]descr_len,
-	    d-\*[Gt]descr_str);
+sysctl(mib, 2, d, &len, NULL, 0);
+while ((caddr_t)d < (caddr_t)&buf[len]) {
+	printf("node %d: %.*s\\n", d->descr_num, d->descr_len,
+	    d->descr_str);
 	d = NEXT_DESCR(d);
 }
 .sp
 /* retrieve description for kern.securelevel */
-memset(\*[Am]desc, 0, sizeof(desc));
+memset(&desc, 0, sizeof(desc));
 desc.sysctl_flags = SYSCTL_VERSION;
 desc.sysctl_num = KERN_SECURELEVEL;
-d = (struct sysctldesc *)\*[Am]buf[0];
+d = (struct sysctldesc *)&buf[0];
 len = sizeof(buf);
-sysctl(mib, 2, d, \*[Am]len, \*[Am]desc, sizeof(desc));
-printf("kern.securelevel: %.*s\\n", d-\*[Gt]descr_len, d-\*[Gt]descr_str);
+sysctl(mib, 2, d, &len, &desc, sizeof(desc));
+printf("kern.securelevel: %.*s\\n", d->descr_len, d->descr_str);
 .Ed
 .Pp
 Descriptions can also be set as follows, subject to the following rules:
@@ -568,11 +586,11 @@ int mib[2];
 /* presuming the given top-level node was just added... */
 mib[0] = 3214; /* mib numbers taken from previous examples */
 mib[1] = CTL_DESCRIBE;
-memset(\*[Am]desc, 0, sizeof(desc));
+memset(&desc, 0, sizeof(desc));
 desc.sysctl_flags = SYSCTL_VERSION;
 desc.sysctl_num = 3215;
 desc.sysctl_desc = "audio debug control knob";
-sysctl(mib, 2, NULL, NULL, \*[Am]desc, sizeof(desc));
+sysctl(mib, 2, NULL, NULL, &desc, sizeof(desc));
 .Ed
 .Pp
 Upon successfully setting a description, the new description will be
@@ -596,8 +614,6 @@ Valid flags are:
 .Bl -column CTLFLAGXPERMANENTXXX
 .It Sy Name	Description
 .It CTLFLAG\_READONLY	Node is read-only
-.It CTLFLAG\_READONLY1	Node becomes read-only at securelevel 1
-.It CTLFLAG\_READONLY2	Node becomes read-only at securelevel 2
 .It CTLFLAG\_READWRITE	Node is writable by the superuser
 .It CTLFLAG\_ANYWRITE	Node is writable by anyone
 .It CTLFLAG\_PRIVATE	Node is readable only by the superuser
@@ -621,12 +637,12 @@ by processes)
 .Sh RETURN VALUES
 If the call to
 .Nm
-is successful, the number of bytes copied out is returned.
+is successful, 0 is returned.
 Otherwise \-1 is returned and
 .Va errno
 is set appropriately.
 .Sh FILES
-.Bl -tag -width \*[Lt]netinet6/udp6Xvar.h\*[Gt] -compact
+.Bl -tag -width <netinet6/udp6Xvar.h> -compact
 .It Aq Pa sys/sysctl.h
 definitions for top level identifiers, second level kernel and hardware
 identifiers, and user level identifiers
@@ -671,9 +687,9 @@ unavailable.
 .It Bq Er EINVAL
 The
 .Fa name
-array is zero or greater than CTL_MAXNAME.
-.It Bq Er EINVAL
-A non-null
+array is zero or greater than
+.Dv CTL_MAXNAME ;
+or a non-null
 .Fa newp
 is given and its specified length in
 .Fa newlen
@@ -686,9 +702,8 @@ array specifies an intermediate rather than terminal name.
 .It Bq Er ENOENT
 The
 .Fa name
-array specifies a node that does not exist in the tree.
-.It Bq Er ENOENT
-An attempt was made to destroy a node that does not exist, or to
+array specifies a node that does not exist in the tree;
+or an attempt was made to destroy a node that does not exist, or to
 create or destroy a node below a node that does not exist.
 .It Bq Er ENOMEM
 The length pointed to by
@@ -706,17 +721,16 @@ The
 array specifies a value that is unknown or a meta-operation was
 attempted that the requested node does not support.
 .It Bq Er EPERM
-An attempt is made to set a read-only value.
-.It Bq Er EPERM
-A process without appropriate privilege attempts to set a value or to
-create or destroy a node.
-.It Bq Er EPERM
-An attempt to change a value protected by the current kernel security
+An attempt is made to set a read-only value; or
+a process without appropriate privilege attempts to set a value or to
+create or destroy a node; or
+an attempt to change a value protected by the current kernel security
 level is made.
 .El
 .Sh SEE ALSO
 .Xr sysctl 7 ,
-.Xr sysctl 8
+.Xr sysctl 8 ,
+.Xr secmodel_securelevel 9
 .\" .Xr sysctl 9
 .Sh HISTORY
 The

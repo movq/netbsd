@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.19 2007/10/17 19:55:31 garbled Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.22 2011/06/18 08:08:28 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -35,12 +35,14 @@
 
 #include <powerpc/pci_machdep.h>
 
+#ifdef _KERNEL
+
 extern struct powerpc_bus_dma_tag pci_bus_dma_tag;
 
 /*
  * Functions provided to machine-independent PCI code.
  */
-void	macppc_pci_attach_hook(struct device *, struct device *,
+void	macppc_pci_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 
 /*
@@ -49,5 +51,7 @@ void	macppc_pci_attach_hook(struct device *, struct device *,
 void	pci_init(int);
 int	pcidev_to_ofdev(pci_chipset_tag_t, pcitag_t);
 void	macppc_pci_get_chipset_tag(pci_chipset_tag_t);
+
+#endif /* _KERNEL */
 
 #endif /* MACPPC_PCI_MACHDEP_H */

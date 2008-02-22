@@ -1,4 +1,4 @@
-/*	$NetBSD: promlib.c,v 1.1 2006/01/27 18:31:12 cdi Exp $ */
+/*	$NetBSD: promlib.c,v 1.3 2011/05/21 15:50:42 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,6 +36,9 @@
 
 #include <sys/types.h>
 #include <machine/promlib.h>
+
+#include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include "openfirm.h"
 
@@ -146,7 +142,7 @@ prom_init(void)
 
 	OF_initialize();
 
-	memset(promops, 0, sizeof(promops));
+	memset(&promops, 0, sizeof(promops));
 
 	/* Access to boot arguments */
 	promops.po_bootpath = openfirmware_bootpath;

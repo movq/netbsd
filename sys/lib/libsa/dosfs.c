@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.c,v 1.12 2007/11/24 13:20:55 isaki Exp $	*/
+/*	$NetBSD: dosfs.c,v 1.21 2016/03/11 18:38:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Robert Nordier
@@ -150,6 +150,23 @@ static int ioread(DOS_FS *, u_int, void *, u_int);
 static int iobuf(DOS_FS *, u_int);
 static int ioget(struct open_file *, u_int, void *, u_int);
 
+#define strcasecmp(s1, s2) dos_strcasecmp(s1, s2)
+static int
+strcasecmp(const char *s1, const char *s2)
+{
+	char c1, c2;
+	#define TO_UPPER(c) ((c) >= 'a' && (c) <= 'z' ? (c) - ('a' - 'A') : (c))
+	for (;;) {
+		c1 = *s1++;
+		c2 = *s2++;
+		if (TO_UPPER(c1) != TO_UPPER(c2))
+			return 1;
+		if (c1 == 0)
+			return 0;
+	}
+	#undef TO_UPPER
+}
+
 /*
  * Mount DOS filesystem
  */
@@ -158,7 +175,7 @@ dos_mount(DOS_FS *fs, struct open_file *fd)
 {
 	int     err;
 
-	bzero(fs, sizeof(DOS_FS));
+	(void)memset(fs, 0, sizeof(DOS_FS));
 	fs->fd = fd;
 	if ((err = !(fs->buf = alloc(SECSIZ)) ? errno : 0) ||
 	    (err = ioget(fs->fd, 0, fs->buf, 1)) ||
@@ -201,7 +218,7 @@ dosunmount(DOS_FS *fs)
 /*
  * Open DOS file
  */
-int
+__compactcall int
 dosfs_open(const char *path, struct open_file *fd)
 {
 	const struct direntry *de;
@@ -238,12 +255,13 @@ dosfs_open(const char *path, struct open_file *fd)
 	f->offset = 0;
 	f->c = 0;
 #else
-	bzero(f, sizeof(DOS_FILE));
+	(void)memset(f, 0, sizeof(DOS_FILE));
 #endif
 	f->fs = fs;
 	fs->links++;
 	f->de = *de;
 	fd->f_fsdata = (void *)f;
+	fsmod = "msdos";
 
 out:
 	return err;
@@ -252,7 +270,7 @@ out:
 /*
  * Read from file
  */
-int
+__compactcall int
 dosfs_read(struct open_file *fd, void *vbuf, size_t nbyte, size_t *resid)
 {
 	off_t   size;
@@ -309,7 +327,7 @@ out:
 /*
  * Not implemented.
  */
-int
+__compactcall int
 dosfs_write(struct open_file *fd, void *start, size_t size, size_t *resid)
 {
 
@@ -321,7 +339,7 @@ dosfs_write(struct open_file *fd, void *start, size_t size, size_t *resid)
 /*
  * Reposition within file
  */
-off_t
+__compactcall off_t
 dosfs_seek(struct open_file *fd, off_t offset, int whence)
 {
 	off_t   off;
@@ -355,7 +373,7 @@ dosfs_seek(struct open_file *fd, off_t offset, int whence)
 /*
  * Close open file
  */
-int
+__compactcall int
 dosfs_close(struct open_file *fd)
 {
 	DOS_FILE *f = (DOS_FILE *)fd->f_fsdata;
@@ -371,7 +389,7 @@ dosfs_close(struct open_file *fd)
 /*
  * Return some stat information on a file.
  */
-int
+__compactcall int
 dosfs_stat(struct open_file *fd, struct stat *sb)
 {
 	DOS_FILE *f = (DOS_FILE *)fd->f_fsdata;
@@ -386,6 +404,15 @@ dosfs_stat(struct open_file *fd, struct stat *sb)
 		return EINVAL;
 	return 0;
 }
+
+#if defined(LIBSA_ENABLE_LS_OP)
+#include "ls.h"
+__compactcall void
+dosfs_ls(struct open_file *f, const char *pattern)
+{
+	lsunsup("dosfs");
+}
+#endif
 
 /*
  * Parse DOS boot sector
@@ -539,11 +566,12 @@ lookup(DOS_FS *fs, u_int clus, const char *name, const struct direntry **dep)
 						}
 					} else if (!(dir[ent].de.deAttributes &
 						     ATTR_VOLUME)) {
-						if ((ok = xdn == 1)) {
+						ok = xdn == 1;
+						if (ok) {
 							for (x = 0, i = 0;
 							     i < 11; i++)
 								x = ((((x & 1) << 7) | (x >> 1)) +
-								    dir[ent].de.deName[i]) & 0xff;
+								    msdos_dirchar(&dir[ent].de,i)) & 0xff;
 							ok = chk == x &&
 							    !strcasecmp(name, (const char *)lfn);
 						}

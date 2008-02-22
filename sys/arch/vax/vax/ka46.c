@@ -1,4 +1,4 @@
-/*	$NetBSD: ka46.c,v 1.23 2007/03/04 06:00:59 christos Exp $ */
+/*	$NetBSD: ka46.c,v 1.26 2017/05/22 16:46:15 ragge Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of 
- *	Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,23 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka46.c,v 1.23 2007/03/04 06:00:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka46.c,v 1.26 2017/05/22 16:46:15 ragge Exp $");
 
 #include <sys/param.h>
-#include <sys/types.h>
+#include <sys/systm.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/pte.h>
-#include <machine/cpu.h>
-#include <machine/mtpr.h>
 #include <machine/sid.h>
-#include <machine/pmap.h>
 #include <machine/nexus.h>
-#include <machine/uvax.h>
 #include <machine/ka410.h>
 #include <machine/ka420.h>
 #include <machine/ka46.h>
@@ -64,38 +51,40 @@ static	void	ka46_halt(void);
 static	void	ka46_reboot(int);
 static	void	ka46_cache_enable(void);
 
+static const char * const ka46_devs[] = { "cpu", "vsbus", NULL };
+
 struct	vs_cpu *ka46_cpu;
 
 /* 
  * Declaration of 46-specific calls.
  */
-struct	cpu_dep ka46_calls = {
-	ka46_steal_pages,
-	ka46_mchk,
-	ka46_memerr, 
-	ka46_conf,
-	chip_gettime,
-	chip_settime,
-	12,      /* ~VUPS */
-	2,	/* SCB pages */
-	ka46_halt,
-	ka46_reboot,
-	NULL,
-	NULL,
-	CPU_RAISEIPL,
+const struct cpu_dep ka46_calls = {
+	.cpu_steal_pages = ka46_steal_pages,
+	.cpu_mchk	= ka46_mchk,
+	.cpu_memerr	= ka46_memerr, 
+	.cpu_conf	= ka46_conf,
+	.cpu_gettime	= chip_gettime,
+	.cpu_settime	= chip_settime,
+	.cpu_vups	= 12,      /* ~VUPS */
+	.cpu_scbsz	= 2,	/* SCB pages */
+	.cpu_halt	= ka46_halt,
+	.cpu_reboot	= ka46_reboot,
+	.cpu_devs	= ka46_devs,
+	.cpu_flags	= CPU_RAISEIPL,
 };
 
+static const char * const ka46_cpustrs[4] = {
+	[0] = "unknown KA46 type 0",
+	[1] = "KA47, Mariah, 2KB L1 cache, 256KB L2 cache",
+	[2] = "KA46, Mariah, 2KB L1 cache, 256KB L2 cache",
+	[3] = "unknown KA46 type 3",
+};
 
 void
-ka46_conf()
+ka46_conf(void)
 {
-	switch(vax_siedata & 0x3) {
-		case 1: printf("cpu0: KA47\n"); break;
-		case 2: printf("cpu0: KA46\n"); break;
-		default: printf("cpu0: unknown KA46-type\n"); break;
-	}
+	curcpu()->ci_cpustr = ka46_cpustrs[vax_siedata & 0x3];
 	ka46_cpu = (void *)vax_map_physmem(VS_REGS, 1);
-	printf("cpu: turning on floating point chip\n");
 	mtpr(2, PR_ACCS); /* Enable floating points */
 	/*
 	 * Setup parameters necessary to read time from clock chip.
@@ -106,7 +95,7 @@ ka46_conf()
 }
 
 void
-ka46_cache_enable()
+ka46_cache_enable(void)
 {
 	int i, *tmp;
 
@@ -138,7 +127,7 @@ ka46_cache_enable()
 }
 
 void
-ka46_memerr()
+ka46_memerr(void)
 {
 	printf("Memory err!\n");
 }
@@ -151,7 +140,7 @@ ka46_mchk(void *addr)
 }
 
 void
-ka46_steal_pages()
+ka46_steal_pages(void)
 {
 
 	/* Turn on caches (to speed up execution a bit) */
@@ -162,16 +151,16 @@ ka46_steal_pages()
 #define KA46_HLT_HALT	0xcf
 #define KA46_HLT_BOOT	0x8b
 
-static void
-ka46_halt()
+void
+ka46_halt(void)
 {
-	((volatile u_int8_t *) clk_page)[KA46_CPMBX] = KA46_HLT_HALT;
+	((volatile uint8_t *) clk_page)[KA46_CPMBX] = KA46_HLT_HALT;
 	__asm("halt");
 }
 
-static void
+void
 ka46_reboot(int arg)
 {
-	((volatile u_int8_t *) clk_page)[KA46_CPMBX] = KA46_HLT_BOOT;
+	((volatile uint8_t *) clk_page)[KA46_CPMBX] = KA46_HLT_BOOT;
 	__asm("halt");
 }

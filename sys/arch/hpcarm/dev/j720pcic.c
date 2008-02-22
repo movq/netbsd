@@ -1,4 +1,4 @@
-/*      $NetBSD: j720pcic.c,v 1.4 2006/03/04 13:57:11 peter Exp $        */
+/*      $NetBSD: j720pcic.c,v 1.8 2011/07/19 15:37:38 dyoung Exp $        */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 /* Jornada 720 PCMCIA support. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: j720pcic.c,v 1.4 2006/03/04 13:57:11 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: j720pcic.c,v 1.8 2011/07/19 15:37:38 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,8 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: j720pcic.c,v 1.4 2006/03/04 13:57:11 peter Exp $");
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
@@ -68,8 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: j720pcic.c,v 1.4 2006/03/04 13:57:11 peter Exp $");
 
 #include "sacpcic.h"
 
-static int	sacpcic_match(struct device *, struct cfdata *, void *);
-static void	sacpcic_attach(struct device *, struct device *, void *);
+static int	sacpcic_match(device_t, cfdata_t, void *);
+static void	sacpcic_attach(device_t, device_t, void *);
 
 static void	j720_socket_setup(struct sapcic_socket *);
 static void	j720_set_power(struct sapcic_socket *, int);
@@ -92,23 +85,28 @@ static struct platid_data sacpcic_platid_table[] = {
 	{ NULL, NULL }
 };
 
-CFATTACH_DECL(sacpcic, sizeof(struct sacpcic_softc),
+CFATTACH_DECL_NEW(sacpcic, sizeof(struct sacpcic_softc),
     sacpcic_match, sacpcic_attach, NULL, NULL);
 
 
 static int
-sacpcic_match(struct device *parent, struct cfdata *cf, void *aux)
+sacpcic_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-sacpcic_attach(struct device *parent, struct device *self, void *aux)
+sacpcic_attach(device_t parent, device_t self, void *aux)
 {
+	struct sacc_softc *psc;
+	struct sacpcic_softc *sc;
 
-	sacpcic_attach_common((struct sacc_softc *)parent,
-	    (struct sacpcic_softc *)self, aux, j720_socket_setup);
+	psc = device_private(parent);
+	sc = device_private(self);
+	sc->sc_pc.sc_dev = self;
+
+	sacpcic_attach_common(psc, sc, aux, j720_socket_setup);
 }
 
 static void

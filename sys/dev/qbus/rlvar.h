@@ -1,4 +1,4 @@
-/*	$NetBSD: rlvar.h,v 1.7 2007/03/04 06:02:30 christos Exp $	*/
+/*	$NetBSD: rlvar.h,v 1.9 2017/05/22 17:22:29 ragge Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,10 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rlvar.h,v 1.7 2007/03/04 06:02:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rlvar.h,v 1.9 2017/05/22 17:22:29 ragge Exp $");
 
 struct rlc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
+	struct uba_softc *sc_uh;
 	struct evcnt sc_intrcnt;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -53,7 +48,8 @@ struct rlc_softc {
 };
 
 struct rl_softc {
-	struct device rc_dev;
+	device_t rc_dev;
+	struct rlc_softc *rc_rlc;
 	struct disk rc_disk;
 	int rc_state;
 	int rc_head;

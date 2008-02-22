@@ -1,4 +1,4 @@
-/*	$NetBSD: int_const.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: int_const.h,v 1.4 2014/08/13 22:51:58 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 #ifndef _IA64_INT_CONST_H_
 #define _IA64_INT_CONST_H_
 
+#ifdef __INTMAX_C_SUFFIX__
+#include <sys/common_int_const.h>
+#else
 /* XXX: cherry: needs to be audited */
 /*
  * 7.18.4 Macros for integer constants
@@ -51,8 +47,8 @@
 #define	INT32_C(c)	c
 #define	INT64_C(c)	c ## L
 
-#define	UINT8_C(c)	c ## U
-#define	UINT16_C(c)	c ## U
+#define	UINT8_C(c)	c
+#define	UINT16_C(c)	c
 #define	UINT32_C(c)	c ## U
 #define	UINT64_C(c)	c ## UL
 
@@ -60,5 +56,7 @@
 
 #define	INTMAX_C(c)	c ## L
 #define	UINTMAX_C(c)	c ## UL
+
+#endif /* !__INTMAX_C_SUFFIX__ */
 
 #endif /* !_IA64_INT_CONST_H_ */

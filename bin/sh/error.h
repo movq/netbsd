@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.16 2003/08/07 09:05:30 agc Exp $	*/
+/*	$NetBSD: error.h,v 1.19 2012/03/15 02:02:20 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -88,22 +88,24 @@ extern volatile int intpending;
 #define CLEAR_PENDING_INT intpending = 0
 #define int_pending() intpending
 
-void exraise(int) __attribute__((__noreturn__));
+#if ! defined(SHELL_BUILTIN)
+void exraise(int) __dead;
 void onint(void);
-void error(const char *, ...) __attribute__((__noreturn__));
-void exerror(int, const char *, ...) __attribute__((__noreturn__));
+void error(const char *, ...) __dead __printflike(1, 2);
+void exerror(int, const char *, ...) __dead __printflike(2, 3);
 const char *errmsg(int, int);
+#endif /* ! SHELL_BUILTIN */
 
-void sh_err(int, const char *, ...) __attribute__((__noreturn__));
-void sh_verr(int, const char *, va_list) __attribute__((__noreturn__));
-void sh_errx(int, const char *, ...) __attribute__((__noreturn__));
-void sh_verrx(int, const char *, va_list) __attribute__((__noreturn__));
-void sh_warn(const char *, ...);
-void sh_vwarn(const char *, va_list);
-void sh_warnx(const char *, ...);
-void sh_vwarnx(const char *, va_list);
+void sh_err(int, const char *, ...) __dead __printflike(2, 3);
+void sh_verr(int, const char *, va_list) __dead __printflike(2, 0);
+void sh_errx(int, const char *, ...) __dead __printflike(2, 3);
+void sh_verrx(int, const char *, va_list) __dead __printflike(2, 0);
+void sh_warn(const char *, ...) __printflike(1, 2);
+void sh_vwarn(const char *, va_list) __printflike(1, 0);
+void sh_warnx(const char *, ...) __printflike(1, 2);
+void sh_vwarnx(const char *, va_list) __printflike(1, 0);
 
-void sh_exit(int) __attribute__((__noreturn__));
+void sh_exit(int) __dead;
 
 
 /*

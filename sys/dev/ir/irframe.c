@@ -1,4 +1,4 @@
-/*	$NetBSD: irframe.c,v 1.39 2007/03/06 20:45:59 drochner Exp $	*/
+/*	$NetBSD: irframe.c,v 1.46 2014/07/25 08:10:37 dholland Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irframe.c,v 1.39 2007/03/06 20:45:59 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irframe.c,v 1.46 2014/07/25 08:10:37 dholland Exp $");
 
 #include "irframe.h"
 
@@ -74,12 +67,21 @@ dev_type_poll(irframepoll);
 dev_type_kqfilter(irframekqfilter);
 
 const struct cdevsw irframe_cdevsw = {
-	irframeopen, irframeclose, irframeread, irframewrite, irframeioctl,
-	nostop, notty, irframepoll, nommap, irframekqfilter, D_OTHER,
+	.d_open = irframeopen,
+	.d_close = irframeclose,
+	.d_read = irframeread,
+	.d_write = irframewrite,
+	.d_ioctl = irframeioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = irframepoll,
+	.d_mmap = nommap,
+	.d_kqfilter = irframekqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
-int irframe_match(struct device *parent, struct cfdata *match, void *aux);
-int irframe_activate(struct device *self, enum devact act);
+int irframe_match(device_t parent, cfdata_t match, void *aux);
 
 Static int irf_set_params(struct irframe_softc *sc, struct irda_params *p);
 Static int irf_reset_params(struct irframe_softc *sc);
@@ -89,16 +91,15 @@ Static int irf_reset_params(struct irframe_softc *sc);
 CFDRIVER_DECL(irframe, DV_DULL, NULL);
 #endif
 
-CFATTACH_DECL(irframe, sizeof(struct irframe_softc),
-    irframe_match, irframe_attach, irframe_detach, irframe_activate);
+CFATTACH_DECL_NEW(irframe, sizeof(struct irframe_softc),
+    irframe_match, irframe_attach, irframe_detach, NULL);
 
 extern struct cfdriver irframe_cd;
 
 #define IRFRAMEUNIT(dev) (minor(dev))
 
 int
-irframe_match(struct device *parent, struct cfdata *match,
-    void *aux)
+irframe_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct ir_attach_args *ia = aux;
 
@@ -106,13 +107,14 @@ irframe_match(struct device *parent, struct cfdata *match,
 }
 
 void
-irframe_attach(struct device *parent, struct device *self, void *aux)
+irframe_attach(device_t parent, device_t self, void *aux)
 {
 	struct irframe_softc *sc = device_private(self);
 	struct ir_attach_args *ia = aux;
 	const char *delim;
 	int speeds = 0;
 
+	sc->sc_dev = self;
 	sc->sc_methods = ia->ia_methods;
 	sc->sc_handle = ia->ia_handle;
 
@@ -124,7 +126,7 @@ irframe_attach(struct device *parent, struct device *self, void *aux)
 	    sc->sc_methods->im_set_params == NULL ||
 	    sc->sc_methods->im_get_speeds == NULL ||
 	    sc->sc_methods->im_get_turnarounds == NULL)
-		panic("%s: missing methods", sc->sc_dev.dv_xname);
+		panic("%s: missing methods", device_xname(self));
 #endif
 
 	(void)sc->sc_methods->im_get_speeds(sc->sc_handle, &speeds);
@@ -147,28 +149,18 @@ irframe_attach(struct device *parent, struct device *self, void *aux)
 		delim = ",";
 	}
 	printf("\n");
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 int
-irframe_activate(struct device *self, enum devact act)
-{
-	/*struct irframe_softc *sc = device_private(self);*/
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
-	case DVACT_DEACTIVATE:
-		break;
-	}
-	return (0);
-}
-
-int
-irframe_detach(struct device *self, int flags)
+irframe_detach(device_t self, int flags)
 {
 	/*struct irframe_softc *sc = device_private(self);*/
 	int maj, mn;
+
+	pmf_device_deregister(self);
 
 	/* XXX needs reference count */
 
@@ -188,10 +180,10 @@ irframeopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct irframe_softc *sc;
 	int error;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (EIO);
 	if (sc->sc_open)
 		return (EBUSY);
@@ -214,7 +206,7 @@ irframeclose(dev_t dev, int flag, int mode, struct lwp *l)
 	struct irframe_softc *sc;
 	int error;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	sc->sc_open = 0;
@@ -230,10 +222,10 @@ irframeread(dev_t dev, struct uio *uio, int flag)
 {
 	struct irframe_softc *sc;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(&sc->sc_dev) || !sc->sc_open)
+	if (!device_is_active(sc->sc_dev) || !sc->sc_open)
 		return (EIO);
 	if (uio->uio_resid < sc->sc_params.maxsize) {
 #ifdef DIAGNOSTIC
@@ -250,10 +242,10 @@ irframewrite(dev_t dev, struct uio *uio, int flag)
 {
 	struct irframe_softc *sc;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(&sc->sc_dev) || !sc->sc_open)
+	if (!device_is_active(sc->sc_dev) || !sc->sc_open)
 		return (EIO);
 	if (uio->uio_resid > sc->sc_params.maxsize) {
 #ifdef DIAGNOSTIC
@@ -313,7 +305,7 @@ irf_set_params(struct irframe_softc *sc, struct irda_params *p)
 #ifdef DIAGNOSTIC
 		if (p->speed != sc->sc_speed) {
 			sc->sc_speed = p->speed;
-			printf("%s: set speed %u\n", sc->sc_dev.dv_xname,
+			aprint_verbose_dev(sc->sc_dev, "set speed %u\n",
 			       sc->sc_speed);
 		}
 #endif
@@ -344,10 +336,10 @@ irframeioctl(dev_t dev, u_long cmd, void *addr, int flag,
 	void *vaddr = addr;
 	int error;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
-	if (!device_is_active(&sc->sc_dev) || !sc->sc_open)
+	if (!device_is_active(sc->sc_dev) || !sc->sc_open)
 		return (EIO);
 
 	switch (cmd) {
@@ -384,10 +376,10 @@ irframepoll(dev_t dev, int events, struct lwp *l)
 {
 	struct irframe_softc *sc;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
 	if (sc == NULL)
 		return (POLLHUP);
-	if (!device_is_active(&sc->sc_dev) || !sc->sc_open)
+	if (!device_is_active(sc->sc_dev) || !sc->sc_open)
 		return (POLLHUP);
 
 	return (sc->sc_methods->im_poll(sc->sc_handle, events, l));
@@ -398,8 +390,8 @@ irframekqfilter(dev_t dev, struct knote *kn)
 {
 	struct irframe_softc *sc;
 
-	sc = device_lookup(&irframe_cd, IRFRAMEUNIT(dev));
-	if (!device_is_active(&sc->sc_dev) || !sc->sc_open)
+	sc = device_lookup_private(&irframe_cd, IRFRAMEUNIT(dev));
+	if (!device_is_active(sc->sc_dev) || !sc->sc_open)
 		return (1);
 
 	return (sc->sc_methods->im_kqfilter(sc->sc_handle, kn));

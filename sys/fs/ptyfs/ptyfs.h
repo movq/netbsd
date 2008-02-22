@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs.h,v 1.6 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: ptyfs.h,v 1.14 2014/08/15 13:40:39 hannken Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -87,13 +87,17 @@ typedef enum {
 /*
  * control data for the proc file system.
  */
+struct ptyfskey {
+	ptyfstype	ptk_type;	/* type of ptyfs node */
+	int		ptk_pty;	/* the pty index */
+};
 struct ptyfsnode {
-	LIST_ENTRY(ptyfsnode) ptyfs_hash;	/* hash chain */
-	struct vnode	*ptyfs_vnode;	/* vnode associated with this ptyfsnode */
-	ptyfstype	ptyfs_type;	/* type of ptyfs node */
-	int		ptyfs_pty;	/* the pty index */
+	SLIST_ENTRY(ptyfsnode) ptyfs_hash;	/* hash chain */
+	struct ptyfskey	ptyfs_key;
+#define ptyfs_type	ptyfs_key.ptk_type
+#define ptyfs_pty	ptyfs_key.ptk_pty
 	u_long		ptyfs_fileno;	/* unique file id */
-	int		ptyfs_flag;	/* status flag for times */
+	int		ptyfs_status;	/* status flag for times */
 #define	PTYFS_ACCESS	1
 #define	PTYFS_MODIFY	2
 #define	PTYFS_CHANGE	4
@@ -106,8 +110,14 @@ struct ptyfsnode {
 };
 
 struct ptyfsmount {
+	kmutex_t pmnt_lock;
+	TAILQ_ENTRY(ptyfsmount) pmnt_le;
+	struct mount *pmnt_mp;
 	gid_t pmnt_gid;
 	mode_t pmnt_mode;
+	int pmnt_flags;
+	int pmnt_bitmap_size;
+	uint8_t *pmnt_bitmap;
 };
 
 #define VFSTOPTY(mp)	((struct ptyfsmount *)(mp)->mnt_data)
@@ -118,9 +128,10 @@ struct ptyfs_args {
 	int version;
 	gid_t gid;
 	mode_t mode;
+	int flags;
 };
 
-#define PTYFS_ARGSVERSION	1
+#define PTYFS_ARGSVERSION	2
 
 /*
  * Kernel stuff follows
@@ -137,20 +148,20 @@ struct ptyfs_args {
     pty_makedev((ptyfs)->ptyfs_type == PTYFSpts ? 't' : 'p', (ptyfs)->ptyfs_pty)
 
 #define PTYFS_ITIMES(ptyfs, acc, mod, cre) \
-   while ((ptyfs)->ptyfs_flag & (PTYFS_ACCESS|PTYFS_CHANGE|PTYFS_MODIFY)) \
+   while ((ptyfs)->ptyfs_status & (PTYFS_ACCESS|PTYFS_CHANGE|PTYFS_MODIFY)) \
 	ptyfs_itimes(ptyfs, acc, mod, cre)
 /*
  * Convert between ptyfsnode vnode
  */
 #define VTOPTYFS(vp)	((struct ptyfsnode *)(vp)->v_data)
-#define PTYFSTOV(ptyfs)	((ptyfs)->ptyfs_vnode)
 
-int ptyfs_freevp(struct vnode *);
-int ptyfs_allocvp(struct mount *, struct vnode **, ptyfstype, int,
-    struct lwp *);
+void ptyfs_set_active(struct mount *, int);
+void ptyfs_clr_active(struct mount *, int);
+int ptyfs_next_active(struct mount *, int);
+int ptyfs_allocvp(struct mount *, struct vnode **, ptyfstype, int);
 void ptyfs_hashinit(void);
-void ptyfs_hashreinit(void);
 void ptyfs_hashdone(void);
+struct ptyfsnode *ptyfs_get_node(ptyfstype, int);
 void ptyfs_itimes(struct ptyfsnode *, const struct timespec *,
     const struct timespec *, const struct timespec *);
 
@@ -159,8 +170,5 @@ extern struct vfsops ptyfs_vfsops;
 
 int	ptyfs_root(struct mount *, struct vnode **);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_ptyfs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 #endif /* _KERNEL */
 #endif /* _FS_PTYFS_PTYFS_H_ */

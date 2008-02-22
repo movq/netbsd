@@ -1,4 +1,4 @@
-.\" $NetBSD: shquote.3,v 1.8 2003/07/26 19:24:44 salo Exp $
+.\" $NetBSD: shquote.3,v 1.10 2017/07/03 21:32:49 wiz Exp $
 .\"
 .\" Copyright (c) 2001 Christopher G. Demetriou
 .\" All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd March 1, 2001
+.Dd September 7, 2008
 .Dt SHQUOTE 3
 .Os
 .Sh NAME
@@ -156,12 +156,12 @@ int argc;
  * Size buffer to hold the command string, and allocate it.
  * Buffer of length one given to snprintf() for portability.
  */
-cmdlen = snprintf(\*[Am]c, 1, "${PROG-%s} ", PROG_DEFAULT);
-qlen = shquotev(argc, argv, NULL, 0) + 1;
+cmdlen = snprintf(&c, 1, "${PROG-%s} ", PROG_DEFAULT);
+qlen = shquotev(argc, argv, NULL, 0);
 if (qlen == (size_t)-1) {
 	\&...
 }
-cmdlen += qlen;
+cmdlen += qlen + 1;
 cmd = malloc(cmdlen);
 if (cmd == NULL) {
 	\&...
@@ -194,13 +194,13 @@ int argc, i;
  * Size buffer to hold the command string, and allocate it.
  * Buffer of length one given to snprintf() for portability.
  */
-cmdlen = snprintf(\*[Am]c, 1, "${PROG-%s} ", PROG_DEFAULT);
-for (i = 0; i \*[Lt] argc; i++) {
-	qlen = shquote(argv[i], NULL, 0) + 1;
+cmdlen = snprintf(&c, 1, "${PROG-%s} ", PROG_DEFAULT);
+for (i = 0; i < argc; i++) {
+	qlen = shquote(argv[i], NULL, 0);
 	if (qlen == (size_t)-1) {
 		\&...
 	}
-	cmdlen += qlen;
+	cmdlen += qlen + 1;
 }
 cmd = malloc(cmdlen);
 if (cmd == NULL) {
@@ -211,7 +211,7 @@ if (cmd == NULL) {
 len = snprintf(cmd, cmdlen, "${PROG-%s} ", PROG_DEFAULT);
 
 /* Quote all of the arguments when copying them. */
-for (i = 0; i \*[Lt] argc; i++) {
+for (i = 0; i < argc; i++) {
 	qlen = shquote(argv[i], cmd + len, cmdlen - len);
 	if (qlen == (size_t)-1) {
 		/* Should not ever happen. */
@@ -220,7 +220,7 @@ for (i = 0; i \*[Lt] argc; i++) {
 	len += qlen;
 	cmd[len++] = ' ';
 }
-cmd[--len] = '\0';
+cmd[--len] = '\e0';
 
 /* "cmd" can now be passed to system(). */
 .Ed

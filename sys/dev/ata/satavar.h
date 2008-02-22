@@ -1,4 +1,4 @@
-/*	$NetBSD: satavar.h,v 1.4 2007/10/19 11:59:36 ad Exp $	*/
+/*	$NetBSD: satavar.h,v 1.10 2018/06/21 21:52:15 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,6 +41,8 @@
 
 const char *sata_speed(uint32_t);
 uint32_t sata_reset_interface(struct ata_channel *, bus_space_tag_t,
-    bus_space_handle_t, bus_space_handle_t);
+    bus_space_handle_t, bus_space_handle_t, int);
+void	sata_interpret_det(struct ata_channel *, uint32_t);
+void	sata_interpret_sig(struct ata_channel *, int, uint32_t);
 
 #endif /* _DEV_ATA_SATAVAR_H_ */

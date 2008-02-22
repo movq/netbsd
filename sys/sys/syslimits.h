@@ -1,4 +1,4 @@
-/*	$NetBSD: syslimits.h,v 1.23 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: syslimits.h,v 1.28 2015/08/21 07:19:39 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -36,6 +36,10 @@
 
 #include <sys/featuretest.h>
 
+#if defined(_KERNEL_OPT)
+#include "opt_syslimits.h"
+#endif
+
 #if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
 #define	ARG_MAX		 (256 * 1024)	/* max bytes for an exec function */
@@ -46,11 +50,12 @@
 #define	LINK_MAX		32767	/* max file link count */
 #define	MAX_CANON		  255	/* max bytes in term canon input line */
 #define	MAX_INPUT		  255	/* max bytes in terminal input */
-#define	NAME_MAX		  255	/* max bytes in a file name */
+#define	NAME_MAX		  511	/* max bytes in a file name, must be */
+					/* kept in sync with MAXNAMLEN */
 #define	NGROUPS_MAX		   16	/* max supplemental group id's */
 #define	UID_MAX		   2147483647U	/* max value for a uid_t (2^31-2) */
 #ifndef OPEN_MAX
-#define	OPEN_MAX		   64	/* max open files per process */
+#define	OPEN_MAX		  128	/* max open files per process */
 #endif
 #define	PATH_MAX		 1024	/* max bytes in pathname */
 #define	PIPE_BUF		  512	/* max bytes for atomic pipe writes */

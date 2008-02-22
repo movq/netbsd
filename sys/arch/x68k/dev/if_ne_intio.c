@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_intio.c,v 1.10 2005/12/11 12:19:37 christos Exp $	*/
+/*	$NetBSD: if_ne_intio.c,v 1.19 2018/06/22 04:17:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.10 2005/12/11 12:19:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.19 2018/06/22 04:17:41 msaitoh Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,14 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.10 2005/12/11 12:19:37 christos Ex
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
 #if BPFILTER > 0
 #include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <machine/bus.h>
@@ -75,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.10 2005/12/11 12:19:37 christos Ex
 #include <dev/ic/dp8390var.h>
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
-#include <dev/ic/rtl80x9reg.h>
-#include <dev/ic/rtl80x9var.h>
 
 #include <arch/x68k/dev/intiovar.h>
 
@@ -85,17 +74,16 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.10 2005/12/11 12:19:37 christos Ex
 #define NE_INTIO_INTR  (0xf9)
 #define NE_INTIO_INTR2 (0xf8)
 
-static int  ne_intio_match(struct device *, struct cfdata *, void *);
-static void ne_intio_attach(struct device *, struct device *, void *);
-static int  ne_intio_intr(void *);
+static int  ne_intio_match(device_t, cfdata_t, void *);
+static void ne_intio_attach(device_t, device_t, void *);
 
 #define ne_intio_softc ne2000_softc
 
-CFATTACH_DECL(ne_intio, sizeof(struct ne_intio_softc),
+CFATTACH_DECL_NEW(ne_intio, sizeof(struct ne_intio_softc),
     ne_intio_match, ne_intio_attach, NULL, NULL);
 
 static int
-ne_intio_match(struct device *parent, struct cfdata *cf, void *aux)
+ne_intio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_bst;
@@ -119,7 +107,7 @@ ne_intio_match(struct device *parent, struct cfdata *cf, void *aux)
 		return 0;
 
 	/* Check whether the board is inserted or not */
-	if (badaddr(INTIO_ADDR(ia->ia_addr)))
+	if (badaddr((void *)IIOV(ia->ia_addr)))
 		return 0;
 
 	/* Map I/O space */
@@ -137,13 +125,13 @@ ne_intio_match(struct device *parent, struct cfdata *cf, void *aux)
 
  out:
 	bus_space_unmap(iot, ioh, NE2000_NPORTS);
-	return rv;
+	return (rv != 0) ? 1 : 0;
 }
 
 static void
-ne_intio_attach(struct device *parent, struct device *self, void *aux)
+ne_intio_attach(device_t parent, device_t self, void *aux)
 {
-	struct ne_intio_softc *sc = (struct ne_intio_softc *)self;
+	struct ne_intio_softc *sc = device_private(self);
 	struct dp8390_softc *dsc = &sc->sc_dp8390;
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_bst;
@@ -153,19 +141,20 @@ ne_intio_attach(struct device *parent, struct device *self, void *aux)
 	const char *typestr;
 	int netype;
 
-	printf(": Nereid Ethernet\n");
+	dsc->sc_dev = self;
+	aprint_normal(": Nereid Ethernet\n");
 
 	/* Map I/O space */
 	if (bus_space_map(iot, ia->ia_addr, NE2000_NPORTS*2,
 			BUS_SPACE_MAP_SHIFTED_EVEN, &ioh)){
-		printf("%s: can't map I/O space\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
 	asict = iot;
 	if (bus_space_subregion(iot, ioh, NE2000_ASIC_OFFSET*2,
 			NE2000_ASIC_NPORTS*2, &asich)) {
-		printf("%s: can't subregion I/O space\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't subregion I/O space\n");
 		return;
 	}
 
@@ -188,29 +177,18 @@ ne_intio_attach(struct device *parent, struct device *self, void *aux)
 
 	case NE2000_TYPE_NE2000:
 		typestr = "NE2000";
-		/*
-		 * Check for a Realtek 8019.
-		 */
-		bus_space_write_1(iot, ioh, ED_P0_CR,
-			ED_CR_PAGE_0 | ED_CR_STP);
-		if (bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID0) ==
-		      RTL0_8019ID0 &&
-		      bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID1) ==
-		      RTL0_8019ID1) {
-			typestr = "NE2000 (RTL8019)";
-			dsc->sc_mediachange = rtl80x9_mediachange;
-			dsc->sc_mediastatus = rtl80x9_mediastatus;
-			dsc->init_card      = rtl80x9_init_card;
-			dsc->sc_media_init  = rtl80x9_media_init;
-		}
+		break;
+
+	case NE2000_TYPE_RTL8019:
+		typestr = "NE2000 (RTL8019)";
 		break;
 
 	default:
-		printf("%s: where did the card go?!\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "where did the card go?!\n");
 		return;
 	}
 
-	printf("%s: %s Ethernet\n", dsc->sc_dev.dv_xname, typestr);
+	aprint_normal_dev(self, "%s Ethernet\n", typestr);
 
 	/* This interface is always enabled */
 	dsc->sc_enabled = 1;
@@ -222,19 +200,7 @@ ne_intio_attach(struct device *parent, struct device *self, void *aux)
 	ne2000_attach(sc, NULL);
 
 	/* Establish the interrupt handler */
-	if (intio_intr_establish(ia->ia_intr, "ne", ne_intio_intr, dsc))
-		printf("%s: couldn't establish interrupt handler\n",
-			dsc->sc_dev.dv_xname);
-}
-
-static int
-ne_intio_intr(void *arg)
-{
-	int error;
-	int s;
-
-	s = splnet();
-	error = dp8390_intr(arg);
-	splx(s);
-	return error;
+	if (intio_intr_establish(ia->ia_intr, "ne", dp8390_intr, dsc))
+		aprint_error_dev(self,
+		    "couldn't establish interrupt handler\n");
 }

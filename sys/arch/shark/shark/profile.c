@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.c,v 1.12 2007/03/04 06:00:43 christos Exp $	*/
+/*	$NetBSD: profile.c,v 1.17 2016/07/07 06:55:38 msaitoh Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.12 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.17 2016/07/07 06:55:38 msaitoh Exp $");
 
 #include "profiler.h"
 
@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: profile.c,v 1.12 2007/03/04 06:00:43 christos Exp $"
 #include <sys/buf.h>
 #include <sys/time.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
@@ -117,13 +116,22 @@ dev_type_read(profread);
 dev_type_ioctl(profioctl);
 
 const struct cdevsw prof_cdevsw = {
-	profopen, profclose, profread, nowrite, profioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	.d_open = profopen,
+	.d_close = profclose,
+	.d_read = profread,
+	.d_write = nowrite,
+	.d_ioctl = profioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 void 
-profilerattach(n)
-    int n;
+profilerattach(int n)
 {
     /* reset the profiler state */
     prof_sc.state = 0;
@@ -138,11 +146,7 @@ profilerattach(n)
  *       EROFS if attempt to open in write mode.
  */
 int
-profopen(dev, flag, mode, p)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct proc *p;
+profopen(dev_t dev, int flag, int mode, struct proc *p)
 {
 
     /* check that the minor number is correct. */
@@ -163,7 +167,7 @@ profopen(dev, flag, mode, p)
 	return EROFS;
     }
     /* flag the device as open. */
-    prof_sc.state |= PROF_OPEN; 
+    prof_sc.state |= PROF_OPEN;
     nhashTables = 0;
     phashTables[0] = phashTables[1] = NULL;
     return 0;
@@ -174,11 +178,7 @@ profopen(dev, flag, mode, p)
  * 
  */
 int
-profclose(dev, flag, mode, p)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct proc *p;
+profclose(dev_t dev, int flag, int mode, struct proc *p)
 {
     /* clear the state, and stop profiling if 
      * it is happening.
@@ -189,10 +189,7 @@ profclose(dev, flag, mode, p)
 }
 
 int
-profread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+profread(dev_t dev, struct uio *uio, int flags)
 {
     int error;
     int real, backup;
@@ -285,12 +282,7 @@ profread(dev, uio, flags)
 static int profcount = 0;
 static int ints = 0;
 int
-profioctl(dev, cmd, data, flag, p)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct proc *p;
+profioctl(dev_t dev, u_long cmd, void *data, int flag, struct proc *p)
 {
     int error = 0;
     struct profStartInfo *info = (struct profStartInfo *) data;
@@ -393,7 +385,7 @@ profStart(struct profStartInfo *info)
 	     (int)&prof_sc,
 	     hatStack + HATSTACKSIZE - sizeof(unsigned),
 	     profHatWedge);
-    restore_interrupts(savedInts); 
+    restore_interrupts(savedInts);
 }
 
 void
@@ -404,7 +396,7 @@ profStop(void)
 
     savedInts = disable_interrupts(I32_bit | F32_bit);
     hatClkOff();
-    restore_interrupts(savedInts); 
+    restore_interrupts(savedInts);
 
     spl = splbio();
     /* only free the buffer's if we were profiling,

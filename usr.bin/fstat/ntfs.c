@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs.c,v 1.10 2006/05/11 11:56:38 yamt Exp $	*/
+/*	$NetBSD: ntfs.c,v 1.13 2014/10/18 08:33:30 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ntfs.c,v 1.10 2006/05/11 11:56:38 yamt Exp $");
+__RCSID("$NetBSD: ntfs.c,v 1.13 2014/10/18 08:33:30 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -63,7 +56,7 @@ ntfs_filestat(struct vnode *vp, struct filestat *fsp)
 
 	/* to get the ntnode, we have to go in two steps - firstly
 	 * to read appropriate struct fnode and then getting the address
-	 * of ntnode and reading it's contents */
+	 * of ntnode and reading its contents */
 	if (!KVM_READ(VTOF(vp), &fn, sizeof (fn))) {
 		dprintf("can't read fnode at %p for pid %d", VTOF(vp), Pid);
 		return 0;
@@ -79,7 +72,7 @@ ntfs_filestat(struct vnode *vp, struct filestat *fsp)
 	}
 
 	fsp->fsid = ntnode.i_dev & 0xffff;
-	fsp->fileid = (long)ntnode.i_number;
+	fsp->fileid = ntnode.i_number;
 	fsp->mode = (mode_t)ntm.ntm_mode | getftype(vp->v_type);
 	fsp->size = fn.f_size;
 	fsp->rdev = 0;  /* XXX */

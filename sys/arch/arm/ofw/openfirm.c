@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.6 2007/02/28 20:31:40 macallan Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.10 2012/01/31 04:32:07 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -65,11 +65,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.6 2007/02/28 20:31:40 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.10 2012/01/31 04:32:07 matt Exp $");
 
 #include <sys/param.h>
-
-#include <machine/stdarg.h>
 
 #include <dev/ofw/openfirm.h>
 
@@ -88,8 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.6 2007/02/28 20:31:40 macallan Exp $"
 
 
 int
-OF_peer(phandle)
-	int phandle;
+OF_peer(int phandle)
 {
 	static struct {
 		const char *name;
@@ -110,8 +107,7 @@ OF_peer(phandle)
 }
 
 int
-OF_child(phandle)
-	int phandle;
+OF_child(int phandle)
 {
 	static struct {
 		const char *name;
@@ -132,8 +128,7 @@ OF_child(phandle)
 }
 
 int
-OF_parent(phandle)
-	int phandle;
+OF_parent(int phandle)
 {
 	static struct {
 		const char *name;
@@ -154,8 +149,7 @@ OF_parent(phandle)
 }
 
 int
-OF_instance_to_package(ihandle)
-	int ihandle;
+OF_instance_to_package(int ihandle)
 {
 	static struct {
 		const char *name;
@@ -176,10 +170,7 @@ OF_instance_to_package(ihandle)
 }
 
 int
-OF_nextprop(handle, prop, nextprop)
-	int handle;
-	const char *prop;
-	void *nextprop;
+OF_nextprop(int handle, const char *prop, void *nextprop)
 {
 	static struct {
 		const char *name;
@@ -205,11 +196,7 @@ OF_nextprop(handle, prop, nextprop)
 }
 
 int
-OF_getprop(handle, prop, buf, buflen)
-	int handle;
-	const char *prop;
-	void *buf;
-	int buflen;
+OF_getprop(int handle, const char *prop, void *buf, int buflen)
 {
 	static struct {
 		const char *name;
@@ -238,11 +225,7 @@ OF_getprop(handle, prop, buf, buflen)
 }
 
 int
-OF_setprop(handle, prop, buf, buflen)
-	int handle;
-	const char *prop;
-	const void *buf;
-	int buflen;
+OF_setprop(int handle, const char *prop, const void *buf, int buflen)
 {
 	static struct {
 		const char *name;
@@ -271,9 +254,7 @@ OF_setprop(handle, prop, buf, buflen)
 }
 
 int
-OF_getproplen(handle, prop)
-	int handle;
-	const char *prop;
+OF_getproplen(int handle, const char *prop)
 {
 	static struct {
 		const char *name;
@@ -296,8 +277,7 @@ OF_getproplen(handle, prop)
 }
 
 int
-OF_finddevice(name)
-	const char *name;
+OF_finddevice(const char *name)
 {
 	static struct {
 		const char *name;
@@ -318,10 +298,7 @@ OF_finddevice(name)
 }
 
 int
-OF_instance_to_path(ihandle, buf, buflen)
-	int ihandle;
-	char *buf;
-	int buflen;
+OF_instance_to_path(int ihandle, char *buf, int buflen)
 {
 	static struct {
 		const char *name;
@@ -346,10 +323,7 @@ OF_instance_to_path(ihandle, buf, buflen)
 }
 
 int
-OF_package_to_path(phandle, buf, buflen)
-	int phandle;
-	char *buf;
-	int buflen;
+OF_package_to_path(int phandle, char *buf, int buflen)
 {
 	static struct {
 		const char *name;
@@ -496,8 +470,7 @@ OF_call_method_1(method, ihandle, nargs, va_alist)
 }
 
 int
-OF_open(dname)
-	const char *dname;
+OF_open(const char *dname)
 {
 	static struct {
 		const char *name;
@@ -518,8 +491,7 @@ OF_open(dname)
 }
 
 void
-OF_close(handle)
-	int handle;
+OF_close(int handle)
 {
 	static struct {
 		const char *name;
@@ -537,10 +509,7 @@ OF_close(handle)
 }
 
 int
-OF_read(handle, addr, len)
-	int handle;
-	void *addr;
-	int len;
+OF_read(int handle, void *addr, int len)
 {
 	static struct {
 		const char *name;
@@ -565,10 +534,7 @@ OF_read(handle, addr, len)
 }
 
 int
-OF_write(handle, addr, len)
-	int handle;
-	const void *addr;
-	int len;
+OF_write(int handle, const void *addr, int len)
 {
 	static struct {
 		const char *name;
@@ -593,9 +559,7 @@ OF_write(handle, addr, len)
 }
 
 int
-OF_seek(handle, pos)
-	int handle;
-	u_quad_t pos;
+OF_seek(int handle, u_quad_t pos)
 {
 	static struct {
 		const char *name;
@@ -620,10 +584,7 @@ OF_seek(handle, pos)
 }
 
 void *
-OF_claim(virt, size, align)
-        void *virt;
-        u_int size;
-        u_int align;
+OF_claim(void *virt, u_int size, u_int align)
 {
         static struct {
                 const char *name;
@@ -648,9 +609,7 @@ OF_claim(virt, size, align)
 }
 
 void
-OF_release(virt, size)
-        void *virt;
-        u_int size;
+OF_release(void *virt, u_int size)
 {
         static struct {
                 const char *name;
@@ -670,7 +629,7 @@ OF_release(virt, size)
 }
 
 int
-OF_milliseconds()
+OF_milliseconds(void)
 {
         static struct {
                 const char *name;
@@ -688,8 +647,7 @@ OF_milliseconds()
 }
 
 void
-OF_boot(bootspec)
-	const char *bootspec;
+OF_boot(const char *bootspec)
 {
 	static struct {
 		const char *name;
@@ -708,7 +666,7 @@ OF_boot(bootspec)
 }
 
 void
-OF_enter()
+OF_enter(void)
 {
 	static struct {
 		const char *name;
@@ -724,7 +682,7 @@ OF_enter()
 }
 
 void
-OF_exit()
+OF_exit(void)
 {
 	static struct {
 		const char *name;
@@ -740,16 +698,17 @@ OF_exit()
 	while (1);			/* just in case */
 }
 
-void
-(*OF_set_callback(newfunc))(void *)
-	void (*newfunc)(void *);
+typedef void (*of_callback_t)(void *);
+
+of_callback_t
+OF_set_callback(of_callback_t newfunc)
 {
 	static struct {
 		const char *name;
 		int nargs;
 		int nreturns;
-		void (*newfunc)(void *);
-		void (*oldfunc)(void *);
+		of_callback_t newfunc;
+		of_callback_t oldfunc;
 	} args = {
 		"set-callback",
 		1,

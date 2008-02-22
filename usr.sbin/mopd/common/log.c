@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.1 2003/04/20 00:17:42 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.4 2016/06/08 01:11:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: log.c,v 1.1 2003/04/20 00:17:42 christos Exp $");
+__RCSID("$NetBSD: log.c,v 1.4 2016/06/08 01:11:49 christos Exp $");
 #endif
 
 #include <err.h>
@@ -54,13 +47,15 @@ mopLogErr(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1024];
+	int error;
 
 	va_start(ap, fmt);
 	if (mopInteractive)
 		verr(1, fmt, ap);
 	else {
-		snprintf(buf, sizeof(buf), "%s: %%m", buf);
-		vsyslog(LOG_ERR, buf, ap);
+		error = errno;
+		vsnprintf(buf, sizeof(buf), fmt, ap);
+		syslog(LOG_ERR, "%s: %s", buf, strerror(error));
 	}
 	va_end(ap);
 	exit(1);
@@ -71,13 +66,15 @@ mopLogWarn(const char *fmt, ...)
 {
 	va_list ap;
 	char buf[1024];
+	int error;
 
 	va_start(ap, fmt);
 	if (mopInteractive)
 		vwarn(fmt, ap);
 	else {
-		snprintf(buf, sizeof(buf), "%s: %%m", buf);
-		vsyslog(LOG_WARNING, buf, ap);
+		error = errno;
+		vsnprintf(buf, sizeof(buf), fmt, ap);
+		syslog(LOG_WARNING, "%s: %s", buf, strerror(error));
 	}
 	va_end(ap);
 }

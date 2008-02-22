@@ -1,4 +1,4 @@
-/*	$NetBSD: monster.c,v 1.14 2008/01/14 03:50:01 dholland Exp $	*/
+/*	$NetBSD: monster.c,v 1.17 2013/08/11 03:44:27 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)monster.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: monster.c,v 1.14 2008/01/14 03:50:01 dholland Exp $");
+__RCSID("$NetBSD: monster.c,v 1.17 2013/08/11 03:44:27 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,38 +87,48 @@ const char *const m_names[] = {
 	"zombie"
 };
 
+#define FILL 0,0,0,0,0,0,0,0,0,0,0,0,0,NULL
+
 static object mon_tab[MONSTERS] = {
-	{(ASLEEP|WAKENS|WANDERS|RUSTS),"0d0",25,'A',20,9,18,100,0,0,0,0,0},
-	{(ASLEEP|WANDERS|FLITS|FLIES),"1d3",10,'B',2,1,8,60,0,0,0,0,0},
-	{(ASLEEP|WANDERS),"3d3/2d5",32,'C',15,7,16,85,0,10,0,0,0},
-	{(ASLEEP|WAKENS|FLAMES),"4d6/4d9",145,'D',5000,21,126,100,0,90,0,0,0},
-	{(ASLEEP|WAKENS),"1d3",11,'E',2,1,7,65,0,0,0,0,0},
-	{(HOLDS|STATIONARY),"5d5",73,'F',91,12,126,80,0,0,0,0,0},
+	{(ASLEEP|WAKENS|WANDERS|RUSTS),"0d0",25,'A',20,9,18,100,0,0, FILL},
+	{(ASLEEP|WANDERS|FLITS|FLIES),"1d3",10,'B',2,1,8,60,0,0, FILL},
+	{(ASLEEP|WANDERS),"3d3/2d5",32,'C',15,7,16,85,0,10, FILL},
+	{(ASLEEP|WAKENS|FLAMES),"4d6/4d9",145,'D',5000,21,126,100,0,90, FILL},
+	{(ASLEEP|WAKENS),"1d3",11,'E',2,1,7,65,0,0, FILL},
+	{(HOLDS|STATIONARY),"5d5",73,'F',91,12,126,80,0,0, FILL},
 	{(ASLEEP|WAKENS|WANDERS|FLIES),"5d5/5d5",115,'G',
-			2000,20,126,85,0,10,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS),"1d3/1d2",15,'H',3,1,10,67,0,0,0,0,0},
-	{(ASLEEP|FREEZES),"0d0",15,'I',5,2,11,68,0,0,0,0,0},
-	{(ASLEEP|WANDERS),"3d10/4d5",132,'J',3000,21,126,100,0,0,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS|FLIES),"1d4",10,'K',2,1,6,60,0,0,0,0,0},
-	{(ASLEEP|STEALS_GOLD),"0d0",25,'L',21,6,16,75,0,0,0,0,0},
+			2000,20,126,85,0,10, FILL},
+	{(ASLEEP|WAKENS|WANDERS),"1d3/1d2",15,'H',3,1,10,67,0,0, FILL},
+	{(ASLEEP|FREEZES),"0d0",15,'I',5,2,11,68,0,0, FILL},
+	{(ASLEEP|WANDERS),"3d10/4d5",132,'J',3000,21,126,100,0,0, FILL},
+	{(ASLEEP|WAKENS|WANDERS|FLIES),"1d4",10,'K',2,1,6,60,0,0, FILL},
+	{(ASLEEP|STEALS_GOLD),"0d0",25,'L',21,6,16,75,0,0, FILL},
 	{(ASLEEP|WAKENS|WANDERS|CONFUSES),"4d4/3d7",97,'M',
-			250,18,126,85,0,25,0,0,0},
-	{(ASLEEP|STEALS_ITEM),"0d0",25,'N',39,10,19,75,0,100,0,0,0},
-	{(ASLEEP|WANDERS|WAKENS|SEEKS_GOLD),"1d6",25,'O',5,4,13,70,0,10,0,0,0},
-	{(ASLEEP|INVISIBLE|WANDERS|FLITS),"5d4",76,'P',120,15,24,80,0,50,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS),"3d5",30,'Q',20,8,17,78,0,20,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS|STINGS),"2d5",19,'R',10,3,12,70,0,0,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS),"1d3",8,'S',2,1,9,50,0,0,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS),"4d6/1d4",75,'T',125,13,22,75,0,33,0,0,0},
+			250,18,126,85,0,25, FILL},
+	{(ASLEEP|STEALS_ITEM),"0d0",25,'N',39,10,19,75,0,100, FILL},
+	{(ASLEEP|WANDERS|WAKENS|SEEKS_GOLD),"1d6",25,'O',5,4,13,70,0,10, FILL},
+	{(ASLEEP|INVISIBLE|WANDERS|FLITS),"5d4",76,'P',120,15,24,80,0,50, FILL},
+	{(ASLEEP|WAKENS|WANDERS),"3d5",30,'Q',20,8,17,78,0,20, FILL},
+	{(ASLEEP|WAKENS|WANDERS|STINGS),"2d5",19,'R',10,3,12,70,0,0, FILL},
+	{(ASLEEP|WAKENS|WANDERS),"1d3",8,'S',2,1,9,50,0,0, FILL},
+	{(ASLEEP|WAKENS|WANDERS),"4d6/1d4",75,'T',125,13,22,75,0,33, FILL},
 	{(ASLEEP|WAKENS|WANDERS),"4d10",90,'U',
-			200,17,26,85,0,33,0,0,0},
+			200,17,26,85,0,33, FILL},
 	{(ASLEEP|WAKENS|WANDERS|DRAINS_LIFE),"1d14/1d4",55,'V',
-			350,19,126,85,0,18,0,0,0},
-	{(ASLEEP|WANDERS|DROPS_LEVEL),"2d8",45,'W',55,14,23,75,0,0,0,0,0},
-	{(ASLEEP|IMITATES),"4d6",42,'X',110,16,25,75,0,0,0,0,0},
-	{(ASLEEP|WANDERS),"3d6",35,'Y',50,11,20,80,0,20,0,0,0},
-	{(ASLEEP|WAKENS|WANDERS),"1d7",21,'Z',8,5,14,69,0,0,0,0,0}
+			350,19,126,85,0,18, FILL},
+	{(ASLEEP|WANDERS|DROPS_LEVEL),"2d8",45,'W',55,14,23,75,0,0, FILL},
+	{(ASLEEP|IMITATES),"4d6",42,'X',110,16,25,75,0,0, FILL},
+	{(ASLEEP|WANDERS),"3d6",35,'Y',50,11,20,80,0,20, FILL},
+	{(ASLEEP|WAKENS|WANDERS),"1d7",21,'Z',8,5,14,69,0,0, FILL}
 };
+
+static void aim_monster(object *);
+static int flit(object *);
+static int move_confused(object *);
+static int mtry(object *, short, short);
+static int no_room_for_monster(int);
+static void put_m_at(short, short, object *);
+static int rogue_is_around(int, int);
 
 void
 put_mons(void)
@@ -433,7 +443,7 @@ O:
 	}
 }
 
-int
+static int
 mtry(object *monster, short row, short col)
 {
 	if (mon_can_go(monster, row, col)) {
@@ -591,7 +601,7 @@ mon_name(const object *monster)
 	return(m_names[ch]);
 }
 
-int
+static int
 rogue_is_around(int row, int col)
 {
 	short rdif, cdif, retval;
@@ -671,7 +681,7 @@ create_monster(void)
 
 	for (i = 0; i < 9; i++) {
 		rand_around(i, &row, &col);
-		if (((row == rogue.row) && (col = rogue.col)) ||
+		if (((row == rogue.row) && (col == rogue.col)) ||
 				(row < MIN_ROW) || (row > (DROWS-2)) ||
 				(col < 0) || (col > (DCOLS-1))) {
 			continue;
@@ -694,7 +704,7 @@ create_monster(void)
 	}
 }
 
-void
+static void
 put_m_at(short row, short col, object *monster)
 {
 	monster->row = row;
@@ -705,7 +715,7 @@ put_m_at(short row, short col, object *monster)
 	aim_monster(monster);
 }
 
-void
+static void
 aim_monster(object *monster)
 {
 	short i, rn, d, r;
@@ -738,7 +748,7 @@ rogue_can_see(int row, int col)
 	return(retval);
 }
 
-int
+static int
 move_confused(object *monster)
 {
 	short i, row, col;
@@ -768,7 +778,7 @@ move_confused(object *monster)
 	return(0);
 }
 
-int
+static int
 flit(object *monster)
 {
 	short i, row, col;
@@ -805,7 +815,7 @@ gr_obj_char(void)
 	return(rs[r]);
 }
 
-int
+static int
 no_room_for_monster(int rn)
 {
 	short i, j;

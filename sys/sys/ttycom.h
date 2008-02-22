@@ -1,4 +1,4 @@
-/*	$NetBSD: ttycom.h,v 1.18 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: ttycom.h,v 1.21 2017/10/25 06:32:59 kre Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -36,9 +36,10 @@
  *	@(#)ttycom.h	8.1 (Berkeley) 3/28/94
  */
 
-#ifndef	_SYS_TTYCOM_H_
-#define	_SYS_TTYCOM_H_
+#ifndef	_POSIX_SYS_TTYCOM_H_
+#define	_POSIX_SYS_TTYCOM_H_
 
+#include <sys/syslimits.h>
 #include <sys/ioccom.h>
 
 /*
@@ -56,13 +57,25 @@ struct winsize {
 	unsigned short	ws_xpixel;	/* horizontal size, pixels */
 	unsigned short	ws_ypixel;	/* vertical size, pixels */
 };
+#endif /* !_POSIX_SYS_TTYCOM_H_ */
 
-/* ptmget, for /dev/ptm pty getting ioctl PTMGET */
+#if defined(_NETBSD_SOURCE) || defined(_SYS_IOCTL_H_)
+
+#ifndef	_NETBSD_SYS_TTYCOM_H_
+#define	_NETBSD_SYS_TTYCOM_H_
+
+/*
+ * The following are not exposed when imported via <termios.h>
+ * when _POSIX_SOURCE (et.al.) is defined (and hence _NETBSD_SOURCE
+ * is not, unless that is added manually.)
+ */
+
+/* ptmget, for /dev/ptm pty getting ioctl TIOCPTMGET, and for TIOCPTSNAME */
 struct ptmget {
 	int	cfd;
 	int	sfd;
-	char	cn[16];
-	char	sn[16];
+	char	cn[PATH_MAX];
+	char	sn[PATH_MAX];
 };
 
 #define _PATH_PTMDEV	"/dev/ptm"
@@ -153,6 +166,8 @@ typedef char linedn_t[TTLINEDNAMELEN];
 #define TIOCGRANTPT 	 _IO('t', 71) 			/* grantpt(3) */
 #define TIOCPTSNAME 	 _IOR('t', 72, struct ptmget)	/* ptsname(3) */
 
+#define TIOCSQSIZE	 _IOW('t', 128, int)	/* set queue size */
+#define TIOCGQSIZE	 _IOR('t', 129, int)	/* get queue size */
 
 #define	TTYDISC		0		/* termios tty line discipline */
 #define	TABLDISC	3		/* tablet discipline */
@@ -161,4 +176,5 @@ typedef char linedn_t[TTLINEDNAMELEN];
 #define	STRIPDISC	6		/* metricom wireless IP discipline */
 #define	HDLCDISC	9		/* HDLC discipline */
 
-#endif /* !_SYS_TTYCOM_H_ */
+#endif /* !_NETBSD_SYS_TTYCOM_H_ */
+#endif /* _NETBSD_SOURCE || _IOCTL_H */

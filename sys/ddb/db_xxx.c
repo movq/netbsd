@@ -1,4 +1,4 @@
-/*	$NetBSD: db_xxx.c,v 1.48 2007/12/02 19:35:33 ad Exp $	*/
+/*	$NetBSD: db_xxx.c,v 1.71 2015/02/27 00:47:30 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,32 +37,41 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_xxx.c,v 1.48 2007/12/02 19:35:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_xxx.c,v 1.71 2015/02/27 00:47:30 ozaki-r Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_kgdb.h"
+#include "opt_aio.h"
+#include "opt_mqueue.h"
+#endif
+
+#ifndef _KERNEL
+#include <stdbool.h>
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/msgbuf.h>
-
 #include <sys/callout.h>
+#include <sys/file.h>
+#include <sys/filedesc.h>
+#include <sys/lockdebug.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
 #include <sys/pool.h>
+#include <sys/uio.h>
 #include <sys/kauth.h>
 #include <sys/mqueue.h>
+#include <sys/vnode.h>
+#include <sys/module.h>
+#include <sys/cpu.h>
+#include <sys/vmem.h>
 
-#include <machine/db_machdep.h>
+#include <ddb/ddb.h>
+#include <ddb/db_user.h>
 
-#include <ddb/db_access.h>
-#include <ddb/db_command.h>
-#include <ddb/db_interface.h>
-#include <ddb/db_lex.h>
-#include <ddb/db_output.h>
-#include <ddb/db_sym.h>
-#include <ddb/db_extern.h>
 #ifdef KGDB
 #include <sys/kgdb.h>
 #endif
@@ -71,37 +80,60 @@ void
 db_kill_proc(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
+#ifdef _KERNEL	/* XXX CRASH(8) */
 	struct proc *p;
+	ksiginfo_t	ksi;
 	db_expr_t pid, sig;
 	int t;
 
 	/* What pid? */
 	if (!db_expression(&pid)) {
-		db_error("pid?\n");
-		/*NOTREACHED*/
+	       db_error("pid?\n");
+	       /*NOTREACHED*/
 	}
 	/* What sig? */
 	t = db_read_token();
 	if (t == tCOMMA) {
-		if (!db_expression(&sig)) {
-			db_error("sig?\n");
-			/*NOTREACHED*/
-		}
+	       if (!db_expression(&sig)) {
+		       db_error("sig?\n");
+		       /*NOTREACHED*/
+	       }
 	} else {
-		db_unread_token(t);
-		sig = 15;
+	       db_unread_token(t);
+	       sig = 15;
 	}
 	if (db_read_token() != tEOL) {
-		db_error("?\n");
-		/*NOTREACHED*/
+	       db_error("?\n");
+	       /*NOTREACHED*/
 	}
-
-	p = pfind((pid_t)pid);
+	/* We might stop when the mutex is held or when not */
+	t = mutex_tryenter(proc_lock);
+#ifdef DIAGNOSTIC
+	if (!t) {
+	       db_error("could not acquire proc_lock mutex\n");
+	       /*NOTREACHED*/
+	}
+#endif
+	p = proc_find((pid_t)pid);
 	if (p == NULL) {
+		if (t)
+			mutex_exit(proc_lock);
 		db_error("no such proc\n");
 		/*NOTREACHED*/
 	}
-	psignal(p, (int)sig);
+	KSI_INIT(&ksi);
+	ksi.ksi_signo = sig;
+	ksi.ksi_code = SI_USER;
+	ksi.ksi_pid = 0;
+	ksi.ksi_uid = 0;
+	mutex_enter(p->p_lock);
+	kpsignal2(p, &ksi);
+	mutex_exit(p->p_lock);
+	if (t)
+		mutex_exit(proc_lock);
+#else
+	db_printf("This command is not currently supported.\n");
+#endif
 }
 
 #ifdef KGDB
@@ -116,131 +148,84 @@ db_kgdb_cmd(db_expr_t addr, bool haddr,
 #endif
 
 void
+db_show_files_cmd(db_expr_t addr, bool haddr,
+	      db_expr_t count, const char *modif)
+{
+#ifdef _KERNEL	/* XXX CRASH(8) */
+	struct proc *p;
+	int i;
+	filedesc_t *fdp;
+	fdfile_t *ff;
+	file_t *fp;
+	struct vnode *vp;
+	bool full = false;
+	fdtab_t *dt;
+
+	if (!haddr) {
+		db_printf("usage: show files address\n");
+		db_printf("\taddress == an address of a proc structure\n");
+		return;
+	}
+
+	if (modif[0] == 'f')
+		full = true;
+
+	p = (struct proc *) (uintptr_t) addr;
+
+	fdp = p->p_fd;
+	dt = fdp->fd_dt;
+	for (i = 0; i < dt->dt_nfiles; i++) {
+		if ((ff = dt->dt_ff[i]) == NULL)
+			continue;
+
+		fp = ff->ff_file;
+
+		/* Only look at vnodes... */
+		if (fp != NULL && fp->f_type == DTYPE_VNODE
+		    && fp->f_vnode != NULL) {
+			vp = fp->f_vnode;
+			vfs_vnode_print(vp, full, db_printf);
+
+#ifdef LOCKDEBUG
+			db_printf("\nv_uobj.vmobjlock lock details:\n");
+			lockdebug_lock_print(vp->v_uobj.vmobjlock, db_printf);
+			db_printf("\n");
+#endif
+		}
+	}
+#endif
+}
+
+#ifdef AIO
+void
 db_show_aio_jobs(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
+
 	aio_print_jobs(db_printf);
 }
+#endif
 
+#ifdef MQUEUE
 void
 db_show_mqueue_cmd(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
+
+#ifdef _KERNEL	/* XXX CRASH(8) */
 	mqueue_print_list(db_printf);
+#endif
 }
+#endif
 
 void
-db_show_all_procs(db_expr_t addr, bool haddr,
+db_show_module_cmd(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
-	const char *mode;
-	struct proc *p, *pp, *cp;
-	struct lwp *l, *cl;
-	const struct proclist_desc *pd;
-	char nbuf[MAXCOMLEN + 1];
 
-	if (modif[0] == 0)
-		mode = "n";			/* default == normal mode */
-	else
-		mode = strchr("mawln", modif[0]);
-
-	if (mode == NULL || *mode == 'm') {
-		db_printf("usage: show all procs [/a] [/l] [/n] [/w]\n");
-		db_printf("\t/a == show process address info\n");
-		db_printf("\t/l == show LWP info\n");
-		db_printf("\t/n == show normal process info [default]\n");
-		db_printf("\t/w == show process wait/emul info\n");
-		return;
-	}
-
-	switch (*mode) {
-	case 'a':
-		db_printf(" PID       %10s %18s %18s %18s\n",
-		    "COMMAND", "STRUCT PROC *", "UAREA *", "VMSPACE/VM_MAP");
-		break;
-	case 'l':
-		db_printf(" PID        %4s S %9s %18s %18s %-8s\n",
-		    "LID", "FLAGS", "STRUCT LWP *", "NAME", "WAIT");
-		break;
-	case 'n':
-		db_printf(" PID       %8s %8s %10s S %7s %4s %16s %7s\n",
-		    "PPID", "PGRP", "UID", "FLAGS", "LWPS", "COMMAND", "WAIT");
-		break;
-	case 'w':
-		db_printf(" PID       %4s %16s %8s %4s %-12s%s\n",
-		    "LID", "COMMAND", "EMUL", "PRI", "WAIT-MSG",
-		    "WAIT-CHANNEL");
-		break;
-	}
-
-	/* XXX LOCKING XXX */
-	pd = proclists;
-	cp = curproc;
-	cl = curlwp;
-	for (pd = proclists; pd->pd_list != NULL; pd++) {
-		LIST_FOREACH(p, pd->pd_list, p_list) {
-			pp = p->p_pptr;
-			if (p->p_stat == 0) {
-				continue;
-			}
-			l = LIST_FIRST(&p->p_lwps);
-			db_printf("%c%-10d", (cp == p ? '>' : ' '), p->p_pid);
-
-			switch (*mode) {
-
-			case 'a':
-				db_printf("%10.10s %18lx %18lx %18lx\n",
-				    p->p_comm, (long)p,
-				    (long)(l != NULL ? l->l_addr : 0),
-				    (long)p->p_vmspace);
-				break;
-			case 'l':
-				 while (l != NULL) {
-				 	if (l->l_name != NULL) {
-				 		snprintf(nbuf, sizeof(nbuf),
-				 		    "%s", l->l_name);
-					} else
-				 		snprintf(nbuf, sizeof(nbuf),
-				 		    "%s", p->p_comm);
-					db_printf("%c%4d %d %9x %18lx %18s %-8s\n",
-					    (cl == l ? '>' : ' '), l->l_lid,
-					    l->l_stat, l->l_flag, (long)l, nbuf,
-					    (l->l_wchan && l->l_wmesg) ?
-					    l->l_wmesg : "");
-
-					l = LIST_NEXT(l, l_sibling);
-					if (l)
-						db_printf("%11s","");
-				}
-				break;
-			case 'n':
-				db_printf("%8d %8d %10d %d %#7x %4d %16s %7.7s\n",
-				    pp ? pp->p_pid : -1, p->p_pgrp->pg_id,
-				    kauth_cred_getuid(p->p_cred), p->p_stat, p->p_flag,
-				    p->p_nlwps, p->p_comm,
-				    (p->p_nlwps != 1) ? "*" : (
-				    (l->l_wchan && l->l_wmesg) ?
-				    l->l_wmesg : ""));
-				break;
-
-			case 'w':
-				 while (l != NULL) {
-					db_printf(
-					    "%4d %16s %8s %4d %-12s %-18lx\n",
-					    l->l_lid, p->p_comm,
-					    p->p_emul->e_name, l->l_priority,
-					    (l->l_wchan && l->l_wmesg) ?
-					    l->l_wmesg : "", (long)l->l_wchan);
-					l = LIST_NEXT(l, l_sibling);
-					if (l != NULL) {
-						db_printf("%c%-10d", (cp == p ?
-						    '>' : ' '), p->p_pid);
-					}
-				}
-				break;
-			}
-		}
-	}
+#ifdef _KERNEL	/* XXX CRASH(8) */
+	module_print_list(db_printf);
+#endif
 }
 
 void
@@ -248,38 +233,55 @@ db_show_all_pools(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
 
+#ifdef _KERNEL	/* XXX CRASH(8) */
 	pool_printall(modif, db_printf);
+#endif
 }
 
 void
-db_dmesg(db_expr_t addr, bool haddr, db_expr_t count,
-    const char *modif)
+db_show_all_vmems(db_expr_t addr, bool have_addr,
+    db_expr_t count, const char *modif)
 {
-	struct kern_msgbuf *mbp;
-	db_expr_t print;
-	int ch, newl, skip, i;
-	char *p, *bufdata;
 
-        if (!msgbufenabled || msgbufp->msg_magic != MSG_MAGIC) {
+#ifdef _KERNEL	/* XXX CRASH(8) */
+	vmem_printall(modif, db_printf);
+#endif
+}
+
+void
+db_dmesg(db_expr_t addr, bool haddr, db_expr_t count, const char *modif)
+{
+	struct kern_msgbuf mb, *mbp;
+	db_expr_t print;
+	int newl, skip, i;
+	char *p, *bufdata, ch;
+
+	if (!db_read_int("msgbufenabled")) {
+		db_printf("message buffer not available\n");
+		return;
+	}
+	mbp = (struct kern_msgbuf *)db_read_ptr("msgbufp");
+	db_read_bytes((db_addr_t)mbp, sizeof(mb), (char *)&mb);
+	if (mb.msg_magic != MSG_MAGIC) {
 		db_printf("message buffer not available\n");
 		return;
 	}
 
-	mbp = msgbufp;
 	bufdata = &mbp->msg_bufc[0];
 
-	if (haddr && addr < mbp->msg_bufs)
+	if (haddr && addr < mb.msg_bufs)
 		print = addr;
 	else
-		print = mbp->msg_bufs;
+		print = mb.msg_bufs;
 
-	for (newl = skip = i = 0, p = bufdata + mbp->msg_bufx;
-	    i < mbp->msg_bufs; i++, p++) {
-		if (p == bufdata + mbp->msg_bufs)
+	for (newl = skip = i = 0, p = bufdata + mb.msg_bufx;
+	    i < mb.msg_bufs; i++, p++) {
+		if (p == bufdata + mb.msg_bufs)
 			p = bufdata;
-		if (i < mbp->msg_bufs - print)
+		if (i < mb.msg_bufs - print) {
 			continue;
-		ch = *p;
+		}
+		db_read_bytes((db_addr_t)p, sizeof(ch), &ch);
 		/* Skip "\n<.*>" syslog sequences. */
 		if (skip) {
 			if (ch == '>')
@@ -304,5 +306,21 @@ db_show_sched_qs(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
 
+#ifdef _KERNEL	/* XXX CRASH(8) */
 	sched_print_runqueue(db_printf);
+#endif
+}
+
+void
+db_show_panic(db_expr_t addr, bool haddr, db_expr_t count, const char *modif)
+{
+#ifdef _KERNEL	/* XXX CRASH(8) */
+        int s;
+
+	s = splhigh();
+
+	db_printf("Panic string: %s\n", panicstr);
+
+	(void)splx(s);
+#endif
 }

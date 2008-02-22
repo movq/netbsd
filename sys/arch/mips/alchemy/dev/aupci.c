@@ -1,4 +1,4 @@
-/* $NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: aupci.c,v 1.17 2015/10/02 05:22:51 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -35,7 +35,7 @@
 #include "pci.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.17 2015/10/02 05:22:51 msaitoh Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,12 +45,12 @@ __KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/pte.h>
+#include <mips/locore.h>
+#include <mips/pte.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: aupci.c,v 1.8 2007/02/28 04:21:53 thorpej Exp $");
 #include <mips/alchemy/dev/aupcivar.h>
 
 struct aupci_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 	struct mips_pci_chipset		sc_pc;
 	struct mips_bus_space		sc_mem_space;
 	struct mips_bus_space		sc_io_space;
@@ -89,18 +89,17 @@ struct aupci_softc {
 	/* XXX: dma tag */
 };
 
-int		aupcimatch(struct device *, struct cfdata *, void *);
-void		aupciattach(struct device *, struct device *, void *);
+int		aupcimatch(device_t, struct cfdata *, void *);
+void		aupciattach(device_t, device_t, void *);
 
 #if NPCI > 0
-static void aupci_attach_hook(struct device *, struct device *,
-    struct pcibus_attach_args *);
+static void aupci_attach_hook(device_t, device_t, struct pcibus_attach_args *);
 static int aupci_bus_maxdevs(void *, int);
 static pcitag_t aupci_make_tag(void *, int, int, int);
 static void aupci_decompose_tag(void *, pcitag_t, int *, int *, int *);
 static pcireg_t aupci_conf_read(void *, pcitag_t, int);
 static void aupci_conf_write(void *, pcitag_t, int, pcireg_t);
-static const char *aupci_intr_string(void *, pci_intr_handle_t);
+static const char *aupci_intr_string(void *, pci_intr_handle_t, char *, size_t);
 static void aupci_conf_interrupt(void *, int, int, int, int, int *);
 static void *aupci_intr_establish(void *, pci_intr_handle_t, int,
     int (*)(void *), void *);
@@ -116,7 +115,7 @@ static struct extent	*mem_ex = NULL;
 
 #endif	/* NPCI > 0 */
 
-CFATTACH_DECL(aupci, sizeof(struct aupci_softc),
+CFATTACH_DECL_NEW(aupci, sizeof(struct aupci_softc),
     aupcimatch, aupciattach, NULL, NULL);
 
 int aupci_found = 0;
@@ -132,7 +131,7 @@ int aupci_found = 0;
 #endif
 
 int
-aupcimatch(struct device *parent, struct cfdata *match, void *aux)
+aupcimatch(device_t parent, struct cfdata *match, void *aux)
 {
 	struct aubus_attach_args *aa = (struct aubus_attach_args *)aux;
 
@@ -146,9 +145,9 @@ aupcimatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-aupciattach(struct device *parent, struct device *self, void *aux)
+aupciattach(device_t parent, device_t self, void *aux)
 {
-	struct aupci_softc		*sc = (struct aupci_softc *)self;
+	struct aupci_softc		*sc = device_private(self);
 	struct aubus_attach_args	*aa = (struct aubus_attach_args *)aux;
 	uint32_t			cfg;
 #if NPCI > 0
@@ -159,11 +158,11 @@ aupciattach(struct device *parent, struct device *self, void *aux)
 	
 	aupci_found = 1;
 
+	sc->sc_dev = self;
 	sc->sc_bust = aa->aa_st;
 	if (bus_space_map(sc->sc_bust, aa->aa_addrs[0], 512, 0,
 		&sc->sc_bush) != 0) {
-		printf("\n%s: unable to map PCI registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error(": unable to map PCI registers\n");
 		return;
 	}
 
@@ -204,13 +203,9 @@ aupciattach(struct device *parent, struct device *self, void *aux)
 
 	cfg = bus_space_read_4(sc->sc_bust, sc->sc_bush, AUPCI_COMMAND_STATUS);
 
-	printf(": Alchemy Host-PCI Bridge");
-	if (cfg & PCI_STATUS_66MHZ_SUPPORT)
-		printf(", 66MHz");
-	else
-		printf(", 33MHz");
-
-	printf("\n");
+	aprint_normal(": Alchemy Host-PCI Bridge, %sMHz\n",
+	    (cfg & PCI_STATUS_66MHZ_SUPPORT) ? "66" : "33");
+	aprint_naive("\n");
 
 #if NPCI > 0
 	/*
@@ -264,13 +259,13 @@ aupciattach(struct device *parent, struct device *self, void *aux)
 
 #ifdef PCI_NETBSD_CONFIGURE
 	mem_ex = extent_create("pcimem", mstart, 0xffffffff,
-	    M_DEVBUF, NULL, 0, EX_WAITOK);
+	    NULL, 0, EX_WAITOK);
 
 	io_ex = extent_create("pciio", AUPCI_IO_START, AUPCI_IO_END,
-	    M_DEVBUF, NULL, 0, EX_WAITOK);
+	    NULL, 0, EX_WAITOK);
 
 	pci_configure_bus(&sc->sc_pc,
-	    io_ex, mem_ex, NULL, 0, mips_dcache_align);
+	    io_ex, mem_ex, NULL, 0, mips_cache_info.mci_dcache_align);
 	extent_destroy(mem_ex);
 	extent_destroy(io_ex);
 #endif
@@ -281,7 +276,7 @@ aupciattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat = aa->aa_dt;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &sc->sc_pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
@@ -292,7 +287,7 @@ aupciattach(struct device *parent, struct device *self, void *aux)
 #if NPCI > 0
 
 void
-aupci_attach_hook(struct device *parent, struct device *self,
+aupci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -338,6 +333,9 @@ aupci_conf_access(void *v, int dir, pcitag_t tag, int reg, pcireg_t *datap)
 	bus_addr_t		addr;
 	int			b, d, f;
 	bus_space_handle_t	h;
+
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return false;
 
 	aupci_decompose_tag(v, tag, &b, &d, &f);
 	if (b) {
@@ -401,12 +399,10 @@ aupci_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 }
 
 const char *
-aupci_intr_string(void *v, pci_intr_handle_t ih)
+aupci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char	name[16];
-
-	sprintf(name, "irq %u", (unsigned)ih);
-	return (name);
+	snprintf(buf, len, "irq %u", (unsigned)ih);
+	return buf;
 }
 
 void *

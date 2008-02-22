@@ -1,4 +1,4 @@
-/*	$NetBSD: teach.c,v 1.18 2007/12/15 19:44:39 perry Exp $	*/
+/*	$NetBSD: teach.c,v 1.24 2013/09/13 20:46:50 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,30 +31,22 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)teach.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: teach.c,v 1.18 2007/12/15 19:44:39 perry Exp $");
+__RCSID("$NetBSD: teach.c,v 1.24 2013/09/13 20:46:50 joerg Exp $");
 #endif
 #endif				/* not lint */
 
 #include "back.h"
 #include "tutor.h"
 
-const char   *const helpm[] = {
-	"\nEnter a space or newline to roll, or",
-	"     b   to display the board",
-	"     d   to double",
-	"     q   to quit\n",
-	0
-};
-
-const char   *const contin[] = {
+static const char *const contin[] = {
 	"",
 	0
 };
@@ -63,6 +55,7 @@ int
 main(int argc __unused, char *argv[])
 {
 	int     i;
+	struct move mmstore, *mm;
 
 	/* revoke setgid privileges */
 	setgid(getgid());
@@ -76,20 +69,20 @@ main(int argc __unused, char *argv[])
 	raw.c_lflag &= ~ICANON;	/* set up modes */
 	ospeed = cfgetospeed(&old);	/* for termlib */
 	tflag = getcaps(getenv("TERM"));
-#ifdef V7
+
+	/* need this now beceause getarg() may try to load a game */
+	mm = &mmstore;
+	move_init(mm);
 	while (*++argv != 0)
-#else
-	while (*++argv != -1)
-#endif
-		getarg(&argv);
+		getarg(mm, &argv);
 	if (tflag) {
 		noech.c_oflag &= ~(ONLCR | OXTABS);
 		raw.c_oflag &= ~(ONLCR | OXTABS);
 		clear();
 	}
-	text(hello);
-	text(list);
-	i = text(contin);
+	wrtext(hello);
+	wrtext(list);
+	i = wrtext(contin);
 	if (i == 0)
 		i = 2;
 	init();
@@ -99,45 +92,45 @@ main(int argc __unused, char *argv[])
 			leave();
 
 		case 2:
-			if ((i = text(intro1)) != 0)
+			if ((i = wrtext(intro1)) != 0)
 				break;
 			wrboard();
-			if ((i = text(intro2)) != 0)
+			if ((i = wrtext(intro2)) != 0)
 				break;
 
 		case 3:
-			if ((i = text(moves)) != 0)
+			if ((i = wrtext(moves)) != 0)
 				break;
 
 		case 4:
-			if ((i = text(removepiece)) != 0)
+			if ((i = wrtext(removepiece)) != 0)
 				break;
 
 		case 5:
-			if ((i = text(hits)) != 0)
+			if ((i = wrtext(hits)) != 0)
 				break;
 
 		case 6:
-			if ((i = text(endgame)) != 0)
+			if ((i = wrtext(endgame)) != 0)
 				break;
 
 		case 7:
-			if ((i = text(doubl)) != 0)
+			if ((i = wrtext(doubl)) != 0)
 				break;
 
 		case 8:
-			if ((i = text(stragy)) != 0)
+			if ((i = wrtext(stragy)) != 0)
 				break;
 
 		case 9:
-			if ((i = text(prog)) != 0)
+			if ((i = wrtext(prog)) != 0)
 				break;
 
 		case 10:
-			if ((i = text(lastch)) != 0)
+			if ((i = wrtext(lastch)) != 0)
 				break;
 		}
-	tutor();
+	tutor(mm);
 	/* NOTREACHED */
 	return (0);
 }

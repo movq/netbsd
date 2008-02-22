@@ -1,4 +1,4 @@
-/*	$NetBSD: inch.c,v 1.7 2007/05/28 15:01:56 blymn Exp $	*/
+/*	$NetBSD: inch.c,v 1.11 2017/01/06 13:53:18 roy Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: inch.c,v 1.7 2007/05/28 15:01:56 blymn Exp $");
+__RCSID("$NetBSD: inch.c,v 1.11 2017/01/06 13:53:18 roy Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -53,6 +46,7 @@ __RCSID("$NetBSD: inch.c,v 1.7 2007/05/28 15:01:56 blymn Exp $");
 chtype
 inch(void)
 {
+
 	return winch(stdscr);
 }
 
@@ -63,6 +57,7 @@ inch(void)
 chtype
 mvinch(int y, int x)
 {
+
 	return mvwinch(stdscr, y, x);
 }
 
@@ -73,6 +68,7 @@ mvinch(int y, int x)
 chtype
 mvwinch(WINDOW *win, int y, int x)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -88,13 +84,14 @@ mvwinch(WINDOW *win, int y, int x)
 chtype
 winch(WINDOW *win)
 {
-#ifndef HAVE_WCHAR
-	chtype	 ch;
+	chtype	ch;
+	attr_t	attr;
 
-	ch = (chtype) (((win)->lines[(win)->cury]->line[(win)->curx].ch & __CHARTEXT) |
-	  (chtype) ((win)->lines[(win)->cury]->line[(win)->curx].attr & __ATTRIBUTES));
-	return (ch);
-#else
-	return ( chtype )win->lines[ win->cury ]->line[ win->curx ].ch;
-#endif /* HAVE_WCHAR */
+	ch = (chtype) ((win)->alines[(win)->cury]->line[(win)->curx].ch &
+	    __CHARTEXT);
+	attr = (attr_t) ((win)->alines[(win)->cury]->line[(win)->curx].attr &
+	    __ATTRIBUTES);
+	if (__using_color && ((attr & __COLOR) == __default_color))
+		attr &= ~__default_color;
+	return (ch | attr);
 }

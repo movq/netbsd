@@ -1,4 +1,4 @@
-/*	$NetBSD: netio.c,v 1.11 2005/12/11 12:17:19 christos Exp $	*/
+/*	$NetBSD: netio.c,v 1.16 2016/06/11 06:20:11 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 4. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -86,8 +74,6 @@
 
 #include <sys/param.h>
 #include <sys/socket.h>
-
-#include <machine/stdarg.h>
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -183,7 +169,7 @@ netmountroot(struct open_file *f, char *devname)
  get_my_ip:
 		printf("My IP address? ");
 		memset(input_line, 0, sizeof(input_line));
-		gets(input_line);
+		kgets(input_line, sizeof(input_line));
 		if ((myip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
 			printf("invalid IP address: %s\n", input_line);
@@ -193,7 +179,7 @@ netmountroot(struct open_file *f, char *devname)
  get_my_netmask:
 		printf("My netmask? ");
 		memset(input_line, 0, sizeof(input_line)); 
-		gets(input_line);
+		kgets(input_line, sizeof(input_line));
 		if ((netmask = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
 			printf("invalid netmask: %s\n", input_line);
@@ -203,7 +189,7 @@ netmountroot(struct open_file *f, char *devname)
  get_my_gateway:
 		printf("My gateway? ");
 		memset(input_line, 0, sizeof(input_line)); 
-		gets(input_line);
+		kgets(input_line, sizeof(input_line));
 		if ((gateip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
 			printf("invalid IP address: %s\n", input_line);
@@ -213,7 +199,7 @@ netmountroot(struct open_file *f, char *devname)
  get_server_ip:
 		printf("Server IP address? ");
 		memset(input_line, 0, sizeof(input_line)); 
-		gets(input_line);
+		kgets(input_line, sizeof(input_line));
 		if ((rootip.s_addr = inet_addr(input_line)) ==
 		    htonl(INADDR_NONE)) {
 			printf("invalid IP address: %s\n", input_line);
@@ -223,7 +209,7 @@ netmountroot(struct open_file *f, char *devname)
  get_server_path:
 		printf("Server path? ");
 		memset(rootpath, 0, sizeof(rootpath)); 
-		gets(rootpath);
+		kgets(rootpath, sizeof(rootpath));
 		if (rootpath[0] == '\0' || rootpath[0] == '\n')
 			goto get_server_path;
 

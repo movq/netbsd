@@ -1,6 +1,6 @@
 #!@BSHELL@ -
 #
-#	$NetBSD: host-mkdep.in,v 1.17 2007/07/09 15:27:10 jmmv Exp $
+#	$NetBSD: host-mkdep.in,v 1.31 2015/05/12 00:04:34 christos Exp $
 #
 # Copyright (c) 1991, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -43,6 +43,7 @@ AWK_OPTIONAL=
 QUIET=false
 CPPFLAGS=
 NEWEXT=.o
+PREFIX=
 OUTFILE=.depend
 SRCS=
 
@@ -61,10 +62,10 @@ set_objlist()
 		IFS="$oifs"
 		objlist=
 		for suf in "$@"; do
-			objlist="$objlist${objlist:+ }$file$suf"
+			objlist="$objlist${objlist:+ }$PREFIX$file$suf"
 		done
 	else
-		objlist="$file"
+		objlist="$PREFIX$file"
 	fi
 }
 
@@ -83,8 +84,9 @@ while [ $# -gt 0 ]; do
 		-o)	OPTIONAL=true; AWK_OPTIONAL='print ".OPTIONAL:" $0';;
 		-p)	NEWEXT=;;
 		-q)	QUIET=true;;
+		-[iv])	;;
 
-		-[fs])	# Options with arguments
+		-[fPs])	# Options with arguments
 			[ -z "$optarg" ] && {
 				[ $# = 1 ] && usage
 				shift
@@ -92,6 +94,7 @@ while [ $# -gt 0 ]; do
 			}
 			case "-$option" in
 			-f)	OUTFILE="$optarg";;
+			-P)	PREFIX="$optarg";;
 			-s)	NEWEXT="$optarg";;
 			esac
 			optarg=
@@ -117,45 +120,75 @@ done
 if $MERGE; then
 	SRCS="$*"
 else
-	while [ $# -gt 0 ]; do
+	#
+	# Process argument list.
+	# This is tricky, because arguments may contain spaces and other
+	# escapes characters.  The argument list is used like a tail queue.
+	# $cppargs has one x for each unprocessed argument, so when an
+	# argument is processed, it is shifted and the corresponding number
+	# of x's is removed.  The advantage to counting is that suffix removal
+	# works without fork.
+	#
+	cppargs=
+	for arg; do
+		cppargs="x$cppargs"
+	done
+	while [ -n "$cppargs" ]; do
 		case "$1" in
 		-L)			# takes an arg, but ignored
 				shift 2
+				cppargs=${cppargs%xx}
 				;;
 
 		-c|-[lLMOW]*)		# takes no extra args
 				shift
+				cppargs=${cppargs%x}
 				;;
 
 		-[IDU]*)
-				CPPFLAGS="$CPPFLAGS $1"
+				set -- "$@" "$1"
 				shift
+				cppargs=${cppargs%x}
 				;;
 
-		-[IDU]|-include|-isystem)
-				CPPFLAGS="$CPPFLAGS $1 $2"
+		-[IDU]|-include|-isystem|-isysroot)
+				set -- "$@" "$1" "$2"
 				shift 2
+				cppargs=${cppargs%xx}
 				;;
 				
 		-isystem-cxx|-cxx-isystem)
-				CPPFLAGS="$CPPFLAGS -isystem $2"
+				set -- "$@" "-isystem" "$2"
 				shift 2
+				cppargs=${cppargs%xx}
+				;;
+		-std=*)
+				set -- "$@" "$1"
+				shift
+				cppargs=${cppargs%x}
 				;;
 
 		-no-cpp-precomp)	# This is a Darwin-specific option.
-				CPPFLAGS="$CPPFLAGS $1"
+				set -- "$@" "$1"
 				shift
+				cppargs=${cppargs%x}
 				;;
 
 		-nostdinc*)	# This is a gcc/g++ ism; ignore if not gcc/g++
 				case "@CFLAGS@" in
 				*-O2*)	# Autoconf puts -O2 when gcc only
-					CPPFLAGS="$CPPFLAGS $1"
+					set -- "$@" "$1"
 					;;
 				esac	
 				shift
+				cppargs=${cppargs%x}
 				;;
-
+		--sysroot*)
+				shift
+				;;
+		-[iv])
+				shift
+				;;
 		-*)		
 				echo "$0: Unknown option: $1" 1>&2 # all other -options
 				exit 1
@@ -164,6 +197,7 @@ else
 		*)	
 				SRCS="$SRCS $1"	# source file
 				shift
+				cppargs=${cppargs%x}
 				;;
 		esac
 	done
@@ -182,7 +216,7 @@ if $MERGE; then
 			if ! $QUIET; then echo "$0: Ignoring $f" >&2; fi
 			continue
 		fi
-		while IFS=':'; read target dependants; do
+		while IFS=':'; read target dependents; do
 			IFS=
 			t1="${target#* }"
 			file="${target%.o}"
@@ -190,9 +224,9 @@ if $MERGE; then
 				set_objlist $file
 				target="$objlist"
 			fi
-			echo "$target:$dependants"
+			echo "$target:$dependents"
 			if "$OPTIONAL"; then
-				echo ".OPTIONAL:$dependants"
+				echo ".OPTIONAL:$dependents"
 			fi
 		done <$f
 	done >$TMP
@@ -202,13 +236,14 @@ else
 		file=${file%.*}
 		set_objlist $file
 
-		@CPP@ $CPPFLAGS $f | @AWK@ '
+		( (@CPP@ "$@" $f; echo $? >&3) | @AWK@ '
 			/^#/ {
 				# Be as tolerant as possible.
 				sub(/^#(line)? [ 0-9]*\"?/, "")
 				sub(/^#(pragma).*/, "")
 				sub(/^<.*/, "")
 				sub(/\".*$/, "")
+				sub(/^\.\//, "")
 				sub(/ [ 0-9]*$/, "")
 
 				if ($0 in seenfiles) next
@@ -218,7 +253,7 @@ else
 				print "'"$objlist"'" ": " $0
 				'"$AWK_OPTIONAL"'
 			}
-		' >> $TMP
+		' >> $TMP) 3>&1 | (read a; exit $a)
 	done
 fi
 

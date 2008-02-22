@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.38 2007/02/21 22:59:46 thorpej Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.41 2014/09/21 16:32:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -63,10 +63,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.38 2007/02/21 22:59:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.41 2014/09/21 16:32:51 christos Exp $");
 
 #include <sys/param.h>
+#ifdef _KERNEL
 #include <sys/systm.h>
+#endif
 
 #include <machine/db_machdep.h>
 
@@ -168,6 +170,9 @@ static const char *const dregs[8] = {"d0","d1","d2","d3","d4","d5","d6","d7"};
 static const char *const fpregs[8] = {
 	"fp0","fp1","fp2","fp3","fp4","fp5","fp6","fp7" };
 static const char *const fpcregs[3] = { "fpiar", "fpsr", "fpcr" };
+#ifndef _KERNEL
+static const char hexdigits[] = "0123456789abcdef";
+#endif
 
 /*
  * Disassemble intruction at location ``loc''.
@@ -844,7 +849,7 @@ opcode_0101(dis_buffer_t *dbuf, u_short opc)
 static void
 opcode_branch(dis_buffer_t *dbuf, u_short opc)
 {
-	int disp, sz;
+	int disp;
 
 	if (IS_INST(BRA,opc))
 		addstr(dbuf, "bra");
@@ -858,20 +863,17 @@ opcode_branch(dis_buffer_t *dbuf, u_short opc)
 		/* 16-bit signed displacement */
 		disp = *(dbuf->val + 1);
 		dbuf->used++;
-		sz = SIZE_WORD;
 		addchar('w');
 	} else if (disp == 0xff) {
 		/* 32-bit signed displacement */
 		disp = *(long *)(dbuf->val + 1);
 		dbuf->used += 2;
-		sz = SIZE_LONG;
 		addchar('l');
 	} else {
 		/* 8-bit signed displacement in opcode. */
 		/* Needs to be sign-extended... */
 		if (ISBITSET(disp,7))
 			disp -= 256;
-		sz = SIZE_BYTE;
 		addchar('b');
 	}
 	addchar('\t');
@@ -1187,7 +1189,7 @@ opcode_1000(dis_buffer_t *dbuf, u_short opc)
 		addstr(dbuf, "@-,");
 		PRINT_AREG(dbuf,BITFIELD(opc,11,9));
 		addstr(dbuf, "@-");
-	} else if (IS_INST(SBCDA,opc)) {
+	} else if (IS_INST(SBCDD,opc)) {
 		addstr(dbuf, "sbcd\t");
 		PRINT_DREG(dbuf,BITFIELD(opc,2,0));
 		addchar(',');
@@ -1245,7 +1247,7 @@ opcode_1100(dis_buffer_t *dbuf, u_short opc)
 		addstr(dbuf, "@-,");
 		PRINT_AREG(dbuf,BITFIELD(opc,11,9));
 		addstr(dbuf, "@-");
-	} else if (IS_INST(ABCDA,opc)) {
+	} else if (IS_INST(ABCDD,opc)) {
 		addstr(dbuf, "abcd\t");
 		PRINT_DREG(dbuf,BITFIELD(opc,2,0));
 		addchar(',');

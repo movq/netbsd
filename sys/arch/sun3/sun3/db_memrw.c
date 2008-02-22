@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.26 2005/12/11 12:19:27 christos Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.28 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.26 2005/12/11 12:19:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.28 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,10 +73,10 @@ static void db_write_text(char *, size_t size, const char *);
  * This used to check for valid PTEs, but now that
  * traps in DDB work correctly, "Just Do It!"
  */
-void 
+void
 db_read_bytes(db_addr_t addr, size_t size, char *data)
 {
-	 char *src = (char *)addr;
+	char *src = (char *)addr;
 
 	if (size == 4) {
 		*((int *)data) = *((int *)src);
@@ -105,7 +98,7 @@ db_read_bytes(db_addr_t addr, size_t size, char *data)
  * Write bytes somewhere in kernel text.
  * Makes text page writable temporarily.
  */
-static void 
+static void
 db_write_text(char *dst, size_t size, const char *data)
 {
 	int oldpte, tmppte;
@@ -179,7 +172,7 @@ db_write_text(char *dst, size_t size, const char *data)
 /*
  * Write bytes to kernel address space for debugger.
  */
-void 
+void
 db_write_bytes(db_addr_t addr, size_t size, const char *data)
 {
 	char *dst = (char *)addr;

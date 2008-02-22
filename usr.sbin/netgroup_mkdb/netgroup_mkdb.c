@@ -1,4 +1,4 @@
-/*	$NetBSD: netgroup_mkdb.c,v 1.16 2007/12/15 19:44:56 perry Exp $	*/
+/*	$NetBSD: netgroup_mkdb.c,v 1.18 2009/10/21 01:07:47 snj Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -32,7 +27,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: netgroup_mkdb.c,v 1.16 2007/12/15 19:44:56 perry Exp $");
+__RCSID("$NetBSD: netgroup_mkdb.c,v 1.18 2009/10/21 01:07:47 snj Exp $");
 #endif
 
 #include <sys/types.h>
@@ -95,7 +90,7 @@ static	int	 dups = 0;
 static const char ng_empty[] = "";
 #define NG_EMPTY(a)	((a) ? (a) : ng_empty)
 
-static char    *dbname = _PATH_NETGROUP_DB;
+static const char *dbname = _PATH_NETGROUP_DB;
 
 int
 main(int argc, char **argv)
@@ -103,7 +98,7 @@ main(int argc, char **argv)
 	DB		 *db, *ndb, *hdb, *udb;
 	int               ch;
 	char		  buf[MAXPATHLEN];
-	char		 *fname = _PATH_NETGROUP;
+	const char	 *fname = _PATH_NETGROUP;
 
 
 	while ((ch = getopt(argc, argv, "dDo:")) != -1)
@@ -315,7 +310,7 @@ ng_insert(DB *db, const char *name)
 	DB             *xdb = NULL;
 	DBT             key, data;
 
-	key.data = (u_char *)name;
+	key.data = __UNCONST(name);
 	key.size = strlen(name) + 1;
 
 	switch ((db->get)(db, &key, &data, 0)) {

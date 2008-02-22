@@ -1,4 +1,4 @@
-.\"	$NetBSD: symlink.7,v 1.13 2007/12/04 22:09:02 mjf Exp $
+.\"	$NetBSD: symlink.7,v 1.25 2017/04/24 09:42:19 wiz Exp $
 .\"
 .\" Copyright (c) 1992, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)symlink.7	8.3 (Berkeley) 3/31/94
 .\"
-.Dd February 7, 2007
+.Dd April 21, 2017
 .Dt SYMLINK 7
 .Os
 .Sh NAME
@@ -81,7 +81,7 @@ exceeded.
 .Pp
 There are three separate areas that need to be discussed.
 They are as follows:
-.sp
+.Pp
 .Bl -enum -compact -offset indent
 .It
 Symbolic links used as file name arguments for system calls.
@@ -107,16 +107,20 @@ the system call
 would return a file descriptor to the file
 .Qq afile .
 .Pp
-There are eight system calls that do not follow links, and which operate
+There are eleven system calls that do not follow links, and which operate
 on the symbolic link itself.
 They are:
 .Xr lchflags 2 ,
 .Xr lchmod 2 ,
 .Xr lchown 2 ,
+.\".Xr lpathconf 2 ,
 .Xr lstat 2 ,
 .Xr lutimes 2 ,
 .Xr readlink 2 ,
+.Xr readlinkat 2 ,
 .Xr rename 2 ,
+.Xr renameat 2 ,
+.Xr unlinkat 2 .
 and
 .Xr unlink 2 .
 Because
@@ -124,6 +128,48 @@ Because
 is an alias for
 .Xr unlink 2 ,
 it also does not follow symbolic links.
+When
+.Xr rmdir 2
+or
+.Xr unlinkat 2
+with the
+.Dv AT_REMOVEDIR
+flag
+is applied to a symbolic link, it fails with the error
+.Er ENOTDIR .
+.Pp
+The
+.Xr linkat 2
+system call does not follow symbolic links
+unless given the
+.Dv AT_SYMLINK_FOLLOW
+flag.
+.Pp
+The following system calls follow symbolic links
+unless given the
+.Dv AT_SYMLINK_NOFOLLOW
+flag:
+.\" .Xr chflagsat 2 ,
+.Xr fchmodat 2 ,
+.Xr fchownat 2 ,
+.Xr fstatat 2 ,
+and
+.Xr utimensat 2 .
+.Pp
+The owner and group of an existing symbolic link can be changed by
+means of the
+.Xr lchown 2
+system call.
+The flags, access permissions, owner/group and modification time of
+an existing symbolic link can be changed by means of the
+.Xr lchflags 2 ,
+.Xr lchmod 2 ,
+.Xr lchown 2 ,
+and
+.Xr lutimes 2
+system calls, respectively.
+Of these, only the flags and ownership are used by the system;
+the access permissions are ignored.
 .Pp
 The
 .Bx 4.4
@@ -132,6 +178,11 @@ system differs from historical
 systems in that the system call
 .Xr chown 2
 has been changed to follow symbolic links.
+The
+.Xr lchown 2
+system call was added later when the limitations of the new
+.Xr chown 2
+became apparent.
 .Pp
 If the filesystem is mounted with the
 .Em symperm
@@ -193,7 +244,7 @@ would report that
 .Qq Li slink
 was a symbolic link.
 .Pp
-There are three exceptions to this rule.
+There are five exceptions to this rule.
 The
 .Xr mv 1
 and
@@ -216,11 +267,13 @@ option is not specified),
 the
 .Nm ls
 command follows symbolic links named as arguments if the
+.\" .Fl H
+.\" or
 .Fl L
 option is specified,
 or if the
 .Fl F ,
-.Fl d
+.Fl d ,
 or
 .Fl l
 options are not specified.
@@ -231,19 +284,31 @@ option is specified,
 always follows symbolic links.
 .Nm ls
 is the only command where the
+.\" .Fl H
+.\" and
 .Fl L
 option affects its behavior even though it is not doing a walk of
 a file tree).
+.Pp
+The
+.Xr file 1
+and
+.Xr stat 1
+commands are also exceptions to this rule.
+These
+commands do not follow symbolic links named as argument by default,
+but do follow symbolic links named as argument if the
+.Fl L
+option is specified.
 .Pp
 The
 .Bx 4.4
 system differs from historical
 .Bx 4
 systems in that the
-.Nm chown ,
-.Nm chgrp
+.Nm chown
 and
-.Nm file
+.Nm chgrp
 commands follow symbolic links specified on the command line.
 .Ss Commands traversing a file tree
 The following commands either optionally or always traverse file trees:
@@ -256,7 +321,7 @@ The following commands either optionally or always traverse file trees:
 .Xr ls 1 ,
 .Xr pax 1 ,
 .Xr rm 1 ,
-.Xr tar 1
+.Xr tar 1 ,
 and
 .Xr chown 8 .
 .Pp
@@ -377,7 +442,7 @@ physical name space.
 .Pp
 For commands that do not by default do file tree traversals, the
 .Fl H ,
-.Fl L
+.Fl L ,
 and
 .Fl P
 flags are ignored if the
@@ -385,7 +450,7 @@ flags are ignored if the
 flag is not also specified.
 In addition, you may specify the
 .Fl H ,
-.Fl L
+.Fl L ,
 and
 .Fl P
 options more than once; the last one specified determines the
@@ -406,7 +471,7 @@ The
 .Nm rm
 command does not support the
 .Fl H ,
-.Fl L
+.Fl L ,
 or
 .Fl P
 options.
@@ -414,7 +479,16 @@ options.
 To maintain compatibility with historic systems,
 the
 .Nm ls
-command never follows symbolic links unless the
+command acts a little differently.
+If you do not specify the
+.Fl F ,
+.Fl d ,
+or
+.Fl l
+options,
+.Nm ls
+will follow symbolic links specified on the command line.
+If the
 .Fl L
 flag is specified.
 If the
@@ -431,10 +505,12 @@ command does not support the
 or
 .Fl P
 options.
-.Sh MAGIC SYMLINKS
-Magic symlinks can be enabled by setting
+.Ss Magic symlinks
+So-called
+.Dq magic symlinks
+can be enabled by setting the
 .Dq vfs.generic.magiclinks
-with
+variable with
 .Xr sysctl 8 .
 When magic symlinks are enabled
 .Dq magic
@@ -474,7 +550,7 @@ characters, allowing for more complex patterns in symbolic links such as:
 .Ed
 .Pp
 The following patterns are supported:
-.Bl -tag -width @machine_arch
+.Bl -tag -width @machine_arch -offset indent
 .It @domainname
 Expands to the machine's domain name, as set by
 .Xr setdomainname 3 .
@@ -483,37 +559,76 @@ Expands to the machine's host name, as set by
 .Xr sethostname 3 .
 .It @emul
 Expands to the name of the current process's emulation.
+Defaults to
+.Dv netbsd .
+Other valid emulations are:
+.Dv aout ,
+.Dv aoutm68k ,
+.Dv darwin ,
+.Dv freebsd ,
+.Dv ibcs2 ,
+.Dv linux ,
+.Dv linux32 ,
+.Dv m68k4k ,
+.Dv netbsd32 ,
+.Dv osf1 ,
+.Dv sunos ,
+.Dv sunos32 ,
+.Dv svr4 ,
+.Dv svr4_32 ,
+.Dv ultrix ,
+.Dv vax1k .
 .It @kernel_ident
 Expands to the name of the
 .Xr config 1
 file used to generate the running kernel.
+For example
+.Dv GENERIC .
 .It @machine
 Expands to the value of
 .Li MACHINE
-for the system
-.Po
+for the system.
+For native binaries, this is
 equivalent to the output of
 .Dq uname -m
-.Pc .
+or
+.Xr sysctl 3
+.Dq hw.machine .
+.Po
+For non-native binaries, the values returned by uname and sysctl
+typically vary to match the emulation environment.
+.Pc
 .It @machine_arch
 Expands to the value of
 .Li MACHINE_ARCH
-for the system
-.Po
+for the system.
+For native binaries, this is
 equivalent to the output of
 .Dq uname -p
-.Pc .
+or
+.Xr sysctl 3
+.Dq hw.machine_arch .
+.Po
+For non-native binaries, the values returned by uname and sysctl
+typically vary to match the emulation environment.
+.Pc
 .It @osrelease
 Expands to the operating system release of the running kernel
 .Po
 equivalent to the output of
 .Dq uname -r
+or
+.Xr sysctl 3
+.Dq kern.osrelease
 .Pc .
 .It @ostype
 Expands to the operating system type of the running kernel
 .Po
 equivalent to the output of
 .Dq uname -s
+or
+.Xr sysctl 3
+.Dq kern.ostype
 .Pc .
 This will always be
 .Dq NetBSD
@@ -521,9 +636,13 @@ on
 .Nx
 systems.
 .It @ruid
-Exapnds to the real user-id of the process.
+Expands to the real user-id of the process.
 .It @uid
 Expands to the effective user-id of the process.
+.It @rgid
+Expands to the real group-id of the process.
+.It @gid
+Expands to the effective group-id of the process.
 .El
 .Sh SEE ALSO
 .Xr chflags 1 ,

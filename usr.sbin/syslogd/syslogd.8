@@ -1,4 +1,4 @@
-.\"	$NetBSD: syslogd.8,v 1.42 2006/09/15 20:32:59 christos Exp $
+.\"	$NetBSD: syslogd.8,v 1.55 2017/07/03 21:35:32 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)syslogd.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd September 15, 2006
+.Dd March 28, 2012
 .Dt SYSLOGD 8
 .Os
 .Sh NAME
@@ -38,33 +38,18 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl dnrSsTUv
-.Bk -words
 .Op Fl b Ar bind_address
-.Ek
-.Bk -words
 .Op Fl f Ar config_file
-.Ek
-.Bk -words
 .Op Fl g Ar group
-.Ek
-.Bk -words
 .Op Fl m Ar mark_interval
-.Ek
-.Bk -words
+.Op Fl o Ar output_format
 .Op Fl P Ar file_list
-.Ek
-.Bk -words
 .Oo
 .Fl p Ar log_socket
 .Op Fl p Ar log_socket2 ...
 .Oc
-.Ek
-.Bk -words
 .Op Fl t Ar chroot_dir
-.Ek
-.Bk -words
 .Op Fl u Ar user
-.Ek
 .Sh DESCRIPTION
 .Nm
 reads and logs messages to the system console, log files, other
@@ -78,7 +63,7 @@ which corresponds to it is used.
 .It Fl d
 Enable debugging to the standard output,
 and do not disassociate from the controlling terminal.
-.It Fl f
+.It Fl f Ar config_file
 Specify the pathname of an alternative configuration file;
 the default is
 .Pa /etc/syslog.conf .
@@ -86,23 +71,31 @@ the default is
 Set GID to
 .Ar group
 after the sockets and log files have been opened.
-.It Fl m
+.It Fl m Ar mark_interval
 Select the number of minutes between ``mark'' messages;
 the default is 20 minutes.
 .It Fl n
 Do not perform hostname lookups; report only numeric addresses.
+.It Fl o Ar output_format
+Select output message format.
+.Bl -hang
+.It Em bsd , rfc3164
+traditional BSD Syslog format (default)
+.It Em syslog , rfc5424
+new syslog-protocol format
+.El
 .It Fl P
 Specify the pathname of a file containing a list of sockets to be
 created.
 The format of the file is simply one socket per line.
-.It Fl p
+.It Fl p Ar log_socket
 Specify the pathname of a log socket.
 Multiple
 .Fl p
 options create multiple log sockets.
 If no
 .Fl p
-arguments are created, the default socket of
+arguments are given, the default socket of
 .Pa /var/run/log
 is used.
 .It Fl r
@@ -147,7 +140,7 @@ configuration file.
 Without this option, messages at the specified priority or higher are
 logged.
 This option changes the default priority comparison from
-.Sq \*[Gt]=
+.Sq >=
 to
 .Sq = .
 .It Fl v
@@ -219,17 +212,11 @@ Refer to
 .Xr hosts_access 5
 for details.
 .Ss SYSLOG PROTOCOL NOTES
-The message sent to
 .Nm
-should consist of a single line.
-The message can contain a priority code, which should be a preceding
-decimal number in angle braces, for example,
-.Sq Aq 5 .
-This priority code should map into the priorities defined in the
-include file
-.Aq Pa sys/syslog.h .
-See RFC 3164 for detailed description of the message format.
-.Pp
+accepts messages in traditional BSD Syslog or in newer Syslog Protocol
+format.
+See RFC 3164 (BSD Syslog) and RFC 5424 (Syslog Protocol) for detailed
+description of the message format.
 Messages from the local kernel that are not tagged with a priority code
 receive the default facility
 .Dv LOG_KERN
@@ -238,7 +225,7 @@ and priority
 All other untagged messages receive the default facility
 .Dv LOG_USER
 and priority
-.Dv LOT_NOTICE .
+.Dv LOG_NOTICE .
 .Sh FILES
 .Bl -tag -width /var/run/syslogd.pid -compact
 .It Pa /etc/syslog.conf
@@ -265,6 +252,12 @@ The kernel log device.
 .%D August 2001
 .%T The BSD syslog Protocol
 .Re
+.Rs
+.%R RFC
+.%N 5424
+.%D March 2009
+.%T The Syslog Protocol
+.Re
 .Sh HISTORY
 The
 .Nm
@@ -274,3 +267,6 @@ Support for multiple log sockets appeared in
 .Nx 1.4 .
 libwrap support appeared in
 .Nx 1.6 .
+Support for RFC 5424, TLS encryption and authentication, signed messages
+appeared in
+.Nx 6.0 .

@@ -1,4 +1,4 @@
-/*	$NetBSD: pud_dev.c,v 1.4 2007/11/22 11:26:27 pooka Exp $	*/
+/*	$NetBSD: pud_dev.c,v 1.7 2015/12/08 20:36:15 christos Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pud_dev.c,v 1.4 2007/11/22 11:26:27 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pud_dev.c,v 1.7 2015/12/08 20:36:15 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -57,6 +57,7 @@ doopenclose(dev_t dev, int flags, int fmt, int class, int type)
 	return pud_request(dev, &pc_oc, sizeof(pc_oc), class, type);
 }
 
+#include <sys/disklabel.h>
 static int
 doioctl(dev_t dev, u_long cmd, void *data, int flag, int class, int type)
 {
@@ -223,7 +224,7 @@ static int
 pud_cdev_close(dev_t dev, int flags, int fmt, lwp_t *l)
 {
 
-	return doopenclose(dev, flags, fmt, PUD_REQ_CDEV, PUD_CDEV_OPEN);
+	return doopenclose(dev, flags, fmt, PUD_REQ_CDEV, PUD_CDEV_CLOSE);
 }
 
 static int

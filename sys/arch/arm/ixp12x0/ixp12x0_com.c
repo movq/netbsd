@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_com.c,v 1.32 2008/01/08 02:07:51 matt Exp $ */
+/*	$NetBSD: ixp12x0_com.c,v 1.47 2015/04/13 21:18:41 riastradh Exp $ */
 /*
  * Copyright (c) 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -20,13 +20,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,14 +66,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.32 2008/01/08 02:07:51 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.47 2015/04/13 21:18:41 riastradh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
-#include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
-#include <sys/rnd.h>
+#ifdef RND_COM
+#include <sys/rndsource.h>
 #endif
 
 #include <sys/param.h>
@@ -95,9 +87,10 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.32 2008/01/08 02:07:51 matt Exp $"
 #include <sys/uio.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ixp12x0/ixp12x0_comreg.h>
 #include <arm/ixp12x0/ixp12x0_comvar.h>
@@ -128,8 +121,8 @@ inline static void	ixpcom_rxsoft(struct ixpcom_softc *, struct tty *);
 void            ixpcomcnprobe(struct consdev *);
 void            ixpcomcninit(struct consdev *);
 
-u_int32_t	ixpcom_cr = 0;		/* tell cr to *_intr.c */
-u_int32_t	ixpcom_imask = 0;	/* intrrupt mask from *_intr.c */
+uint32_t	ixpcom_cr = 0;		/* tell cr to *_intr.c */
+uint32_t	ixpcom_imask = 0;	/* intrrupt mask from *_intr.c */
 
 
 static struct ixpcom_cons_softc {
@@ -157,8 +150,18 @@ dev_type_tty(ixpcomtty);
 dev_type_poll(ixpcompoll);
 
 const struct cdevsw ixpcom_cdevsw = {
-	ixpcomopen, ixpcomclose, ixpcomread, ixpcomwrite, ixpcomioctl,
-	ixpcomstop, ixpcomtty, ixpcompoll, nommap, ttykqfilter, D_TTY
+	.d_open = ixpcomopen,
+	.d_close = ixpcomclose,
+	.d_read = ixpcomread,
+	.d_write = ixpcomwrite,
+	.d_ioctl = ixpcomioctl,
+	.d_stop = ixpcomstop,
+	.d_tty = ixpcomtty,
+	.d_poll = ixpcompoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 struct consdev ixpcomcons = {
@@ -170,14 +173,11 @@ struct consdev ixpcomcons = {
 #define DEFAULT_COMSPEED 38400
 #endif
 
-#define COMUNIT_MASK    0x7ffff
-#define COMDIALOUT_MASK 0x80000
-
-#define COMUNIT(x)	(minor(x) & COMUNIT_MASK)
-#define COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
+#define COMUNIT(x)	TTUNIT(x)
+#define COMDIALOUT(x)	TTDIALOUT(x)
 
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			 device_is_active(&(sc)->sc_dev))
+			 device_is_active((sc)->sc_dev))
 
 #define COM_BARRIER(t, h, f) bus_space_barrier((t), (h), 0, COM_NPORTS, (f))
 
@@ -187,8 +187,7 @@ struct consdev ixpcomcons = {
 #define CFLAGS2CR_MASK	(CR_PE | CR_OES | CR_SBS | CR_DSS | CR_BRD)
 
 void
-ixpcom_attach_subr(sc)
-	struct ixpcom_softc *sc;
+ixpcom_attach_subr(struct ixpcom_softc *sc)
 {
 	struct tty *tp;
 
@@ -207,7 +206,7 @@ ixpcom_attach_subr(sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = ixpcomstart;
 	tp->t_param = ixpcomparam;
 	tp->t_hwiflow = ixpcomhwiflow;
@@ -218,7 +217,7 @@ ixpcom_attach_subr(sc)
 	sc->sc_rbavail = IXPCOM_RING_SIZE;
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (IXPCOM_RING_SIZE << 1);
@@ -236,16 +235,17 @@ ixpcom_attach_subr(sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&ixpcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
-		aprint_normal("%s: console\n", sc->sc_dev.dv_xname);
+		aprint_normal("%s: console\n", device_xname(sc->sc_dev));
 	}
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, ixpcomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-			  RND_TYPE_TTY, 0);
+#ifdef RND_COM
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_TTY, RND_FLAG_COLLECT_TIME|
+					RND_FLAG_ESTIMATE_TIME);
 #endif
 
 	/* if there are no enable/disable functions, assume the device
@@ -260,13 +260,11 @@ ixpcom_attach_subr(sc)
 }
 
 static int
-ixpcomparam(tp, t)
-	struct tty *tp;
-	struct termios *t;
+ixpcomparam(struct tty *tp, struct termios *t)
 {
 	struct ixpcom_softc *sc
-		= device_lookup(&ixpcom_cd, COMUNIT(tp->t_dev));
-	u_int32_t cr;
+		= device_lookup_private(&ixpcom_cd, COMUNIT(tp->t_dev));
+	uint32_t cr;
 	int s;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -347,9 +345,7 @@ ixpcomparam(tp, t)
 }
 
 static int
-ixpcomhwiflow(tp, block)
-	struct tty *tp;
-	int block;
+ixpcomhwiflow(struct tty *tp, int block)
 {
 	return (0);
 }
@@ -374,11 +370,10 @@ ixpcom_filltx(struct ixpcom_softc *sc)
 }
 
 static void
-ixpcomstart(tp)
-	struct tty *tp;
+ixpcomstart(struct tty *tp)
 {
 	struct ixpcom_softc *sc
-		= device_lookup(&ixpcom_cd, COMUNIT(tp->t_dev));
+		= device_lookup_private(&ixpcom_cd, COMUNIT(tp->t_dev));
 	int s;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -471,22 +466,19 @@ ixpcom_shutdown(struct ixpcom_softc *sc)
 }
 
 int
-ixpcomopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+ixpcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct ixpcom_softc *sc;
 	struct tty *tp;
 	int s, s2;
 	int error;
 
-	sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, COM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -521,7 +513,7 @@ ixpcomopen(dev, flag, mode, l)
 				splx(s2);
 				splx(s);
 				printf("%s: device enable failed\n",
-				       sc->sc_dev.dv_xname);
+				       device_xname(sc->sc_dev));
 				return (EIO);
 			}
 			sc->enabled = 1;
@@ -617,12 +609,9 @@ bad:
 }
 
 int
-ixpcomclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+ixpcomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -648,12 +637,9 @@ ixpcomclose(dev, flag, mode, l)
 }
 
 int
-ixpcomread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ixpcomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -663,12 +649,9 @@ ixpcomread(dev, uio, flag)
 }
 
 int
-ixpcomwrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ixpcomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -678,12 +661,9 @@ ixpcomwrite(dev, uio, flag)
 }
 
 int
-ixpcompoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+ixpcompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -693,10 +673,9 @@ ixpcompoll(dev, events, l)
 }
 
 struct tty *
-ixpcomtty(dev)
-	dev_t dev;
+ixpcomtty(dev_t dev)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
@@ -705,7 +684,7 @@ ixpcomtty(dev)
 int
 ixpcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct ixpcom_softc *sc = device_lookup(&ixpcom_cd, COMUNIT(dev));
+	struct ixpcom_softc *sc = device_lookup_private(&ixpcom_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -762,12 +741,10 @@ ixpcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
  * Stop output on a line.
  */
 void
-ixpcomstop(tp, flag)
-	struct tty *tp;
-	int flag;
+ixpcomstop(struct tty *tp, int flag)
 {
 	struct ixpcom_softc *sc
-		= device_lookup(&ixpcom_cd, COMUNIT(tp->t_dev));
+		= device_lookup_private(&ixpcom_cd, COMUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -784,8 +761,7 @@ ixpcomstop(tp, flag)
 }
 
 static u_int
-cflag2cr(cflag)
-	tcflag_t cflag;
+cflag2cr(tcflag_t cflag)
 {
 	u_int cr;
 
@@ -798,8 +774,7 @@ cflag2cr(cflag)
 }
 
 static void
-ixpcom_iflush(sc)
-	struct ixpcom_softc *sc;
+ixpcom_iflush(struct ixpcom_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -823,7 +798,7 @@ ixpcom_iflush(sc)
 			bus_space_read_4(iot, ioh, IXPCOM_DR);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: com_iflush timeout %02x\n", sc->sc_dev.dv_xname,
+		printf("%s: com_iflush timeout %02x\n", device_xname(sc->sc_dev),
 		       reg);
 #endif
 }
@@ -839,12 +814,7 @@ ixpcom_set_cr(struct ixpcom_softc *sc)
 }
 
 int
-ixpcomcnattach(iot, iobase, ioh, ospeed, cflag)
-	bus_space_tag_t iot;
-	bus_addr_t iobase;
-	bus_space_handle_t ioh;
-	int ospeed;
-	tcflag_t cflag;
+ixpcomcnattach(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t ioh, int ospeed, tcflag_t cflag)
 {
 	int cr;
 
@@ -884,23 +854,18 @@ ixpcomcnattach(iot, iobase, ioh, ospeed, cflag)
 }
 
 void
-ixpcomcnprobe(cp)
-	struct consdev *cp;
+ixpcomcnprobe(struct consdev *cp)
 {
 	cp->cn_pri = CN_REMOTE;
 }
 
 void
-ixpcomcnpollc(dev, on)
-	dev_t dev;
-	int on;
+ixpcomcnpollc(dev_t dev, int on)
 {
 }
 
 void
-ixpcomcnputc(dev, c)
-	dev_t dev;
-	int c;
+ixpcomcnputc(dev_t dev, int c)
 {
 	int			s;
 	bus_space_tag_t		iot = ixpcomcn_sc.sc_iot;
@@ -924,8 +889,7 @@ ixpcomcnputc(dev, c)
 }
 
 int
-ixpcomcngetc(dev)
-        dev_t dev;
+ixpcomcngetc(dev_t dev)
 {
 	int			c;
 	int			s;
@@ -945,9 +909,7 @@ ixpcomcngetc(dev)
 }
 
 inline static void
-ixpcom_txsoft(sc, tp)
-	struct ixpcom_softc *sc;
-	struct tty *tp;
+ixpcom_txsoft(struct ixpcom_softc *sc, struct tty *tp)
 {
 	CLR(tp->t_state, TS_BUSY);
 	if (ISSET(tp->t_state, TS_FLUSH))
@@ -958,11 +920,9 @@ ixpcom_txsoft(sc, tp)
 }
 
 inline static void
-ixpcom_rxsoft(sc, tp)
-	struct ixpcom_softc *sc;
-	struct tty *tp;
+ixpcom_rxsoft(struct ixpcom_softc *sc, struct tty *tp)
 {
-	int (*rint) __P((int, struct tty *)) = tp->t_linesw->l_rint;
+	int (*rint)(int, struct tty *) = tp->t_linesw->l_rint;
 	u_char *get, *end;
 	u_int cc, scc;
 	u_char lsr;
@@ -1084,7 +1044,7 @@ ixpcomintr(void* arg)
 	u_int cc;
 	u_int cr;
 	u_int sr;
-	u_int32_t c;
+	uint32_t c;
 
 	if (COM_ISALIVE(sc) == 0)
 		return (0);
@@ -1220,7 +1180,7 @@ ixpcomintr(void* arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 	return (1);

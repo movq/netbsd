@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_var.h,v 1.7 2006/04/12 12:42:27 simonb Exp $	*/
+/*	$NetBSD: sa11x0_var.h,v 1.11 2011/07/01 20:31:39 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001, The NetBSD Foundation, Inc.  All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,10 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct sa11x0_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 	bus_space_handle_t sc_gpioh;
@@ -59,7 +52,8 @@ struct sa11x0_softc {
 typedef void *sa11x0_chipset_tag_t;
 
 struct sa11x0_attach_args {
-	sa11x0_chipset_tag_t	sa_sc;		
+	const char *		sa_name;
+	sa11x0_chipset_tag_t	sa_sc;
 	bus_space_tag_t		sa_iot;		/* Bus tag */
 	bus_addr_t		sa_addr;	/* i/o address  */
 	bus_size_t		sa_size;
@@ -68,7 +62,7 @@ struct sa11x0_attach_args {
 	int			sa_gpio;
 };
 
-void *sa11x0_intr_establish(sa11x0_chipset_tag_t, int, int, int, 
+void *sa11x0_intr_establish(sa11x0_chipset_tag_t, int, int, int,
 			    int (*)(void *), void *);
 void sa11x0_intr_disestablish(sa11x0_chipset_tag_t, void *);
 

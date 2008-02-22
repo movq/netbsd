@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.13 2006/06/12 15:39:01 tsutsui Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.17 2016/10/18 22:04:33 jdolecek Exp $	*/
 /*      $OpenBSD: isa_machdep.h,v 1.5 1997/04/19 17:20:00 pefo Exp $  */
 
 /*
@@ -45,18 +45,19 @@ typedef struct arc_isa_bus *isa_chipset_tag_t;
  */
 #define isa_outb(x,y)   outb(arc_bus_io.bs_vbase + (x)- arc_bus_io.bs_start, y)
 #define isa_inb(x)      inb(arc_bus_io.bs_vbase + (x) - arc_bus_io.bs_start)
- 
+
 struct arc_isa_bus {
         void    *ic_data;
 
 	struct isa_dma_state ic_dmastate;
 
-        void    (*ic_attach_hook)(struct device *, struct device *,
+        void    (*ic_attach_hook)(device_t, device_t,
                     struct isabus_attach_args *);
 	const struct evcnt *(*ic_intr_evcnt)(isa_chipset_tag_t, int);
         void    *(*ic_intr_establish)(isa_chipset_tag_t, int, int, int,
                     int (*)(void *), void *);
         void    (*ic_intr_disestablish)(isa_chipset_tag_t, void *);
+	void	(*ic_detach_hook)(isa_chipset_tag_t, device_t);
 };
 
 
@@ -65,15 +66,21 @@ struct arc_isa_bus {
  */
 #define isa_attach_hook(p, s, a)                             /*           \
     (*(a)->iba_ic->ic_attach_hook)((p), (s), (a)) */
+#define	isa_detach_hook(c, s)						\
+    (*(c)->ic_detach_hook)((c), (s))
 #define	isa_intr_evcnt(c, i)					\
     (*(c)->ic_intr_evcnt)((c)->ic_data, (i))
 #define isa_intr_establish(c, i, t, l, f, a)                         \
+    (*(c)->ic_intr_establish)((c)->ic_data, (i), (t), (l), (f), (a))
+#define isa_intr_establish_xname(c, i, t, l, f, a, x)			\
     (*(c)->ic_intr_establish)((c)->ic_data, (i), (t), (l), (f), (a))
 #define isa_intr_disestablish(c, h)                                     \
     (*(c)->ic_intr_disestablish)((c)->ic_data, (h))
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
+#define	isa_dmadestroy(ic)						\
+	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmacascade(ic, c)						\
 	_isa_dmacascade(&(ic)->ic_dmastate, (c))
 #define	isa_dmamaxsize(ic, c)						\

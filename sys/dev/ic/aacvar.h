@@ -1,4 +1,4 @@
-/*	$NetBSD: aacvar.h,v 1.11 2007/12/15 00:39:27 perry Exp $	*/
+/*	$NetBSD: aacvar.h,v 1.15 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -167,6 +160,7 @@ struct aac_softc;
 #define AAC_QUIRK_NEW_COMM	(1 << 11)	/* New comm. i/f supported */
 #define AAC_QUIRK_RAW_IO	(1 << 12)	/* Raw I/O interface */
 #define AAC_QUIRK_ARRAY_64BIT	(1 << 13)	/* 64-bit array size */
+#define AAC_QUIRK_LBA_64BIT	(1 << 14)	/* 64-bit LBA support */
 
 
 /*
@@ -280,7 +274,7 @@ struct aac_ccb {
 	u_int			ac_flags;
 
 	void			(*ac_intr)(struct aac_ccb *);
-	struct device		*ac_device;
+	device_t		ac_device;
 	void			*ac_context;
 };
 #define AAC_CCB_MAPPED	 	0x01
@@ -291,14 +285,14 @@ struct aac_ccb {
 struct aac_drive {
 	u_int	hd_present;
 	u_int	hd_devtype;
-	u_int	hd_size;
+	u_int64_t	hd_size;
 };
 
 /*
  * Per-controller structure.
  */
 struct aac_softc {
-	struct device		sc_dv;
+	device_t		sc_dv;
 	void			*sc_ih;
 	bus_space_tag_t		sc_memt;
 	bus_space_handle_t	sc_memh;
@@ -353,6 +347,7 @@ struct aac_attach_args {
 };
 
 int	aac_attach(struct aac_softc *);
+int	aac_devscan(struct aac_softc *);
 void	aac_ccb_enqueue(struct aac_softc *, struct aac_ccb *);
 void	aac_ccb_free(struct aac_softc *, struct aac_ccb *);
 struct aac_ccb *aac_ccb_alloc(struct aac_softc *, int);

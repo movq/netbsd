@@ -1,24 +1,23 @@
-#	$NetBSD: Makefile,v 1.24 2002/05/02 16:42:53 wiz Exp $
+#	$NetBSD: Makefile,v 1.36 2018/06/16 18:58:00 kamil Exp $
+
+NOSANITIZER=		# defined
 
 .include <bsd.own.mk>
 
-.if ${OBJECT_FMT} == "ELF" && exists(${MACHINE_ARCH}_elf)
-SUBDIR=	${MACHINE_ARCH}_elf
-.elif ${OBJECT_FMT} == "ELF" && exists(${MACHINE_CPU}_elf)
-SUBDIR=	${MACHINE_CPU}_elf
-.elif exists(${MACHINE_ARCH})
-SUBDIR=	${MACHINE_ARCH}
-.elif exists(${MACHINE_CPU})
-SUBDIR=	${MACHINE_CPU}
+CSU_MACHINE_ARCH?=	${MACHINE_ARCH}
+CSU_MACHINE_CPU?=	${MACHINE_CPU}
+
+.if !empty(CSU_MACHINE_ARCH:Mearm*)
+ARCHDIR:=	${.CURDIR}/arch/earm
+.elif exists(${.CURDIR}/arch/${CSU_MACHINE_ARCH}/Makefile.inc)
+ARCHDIR:=	${.CURDIR}/arch/${CSU_MACHINE_ARCH}
+.elif exists(${.CURDIR}/arch/${CSU_MACHINE_CPU}/Makefile.inc)
+ARCHDIR:=	${.CURDIR}/arch/${CSU_MACHINE_CPU}
 .else
-.BEGIN:
-	@echo no SUBDIR for ${MACHINE_ARCH}_elf, ${MACHINE_ARCH} nor \
-	    ${MACHINE_CPU}
-	@false
+.error Architecture (${CSU_MACHINE_ARCH} or ${CSU_MACHINE_CPU}) unsupported
 .endif
 
-.if (${OBJECT_FMT} != "ELF")
-SUBDIR+= c++
-.endif
 
-.include <bsd.subdir.mk>
+.PATH:	${ARCHDIR}
+.include "${ARCHDIR}/Makefile.inc"
+.include "${.CURDIR}/common/Makefile.inc"

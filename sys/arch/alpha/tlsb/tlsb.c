@@ -1,4 +1,4 @@
-/* $NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $ */
+/* $NetBSD: tlsb.c,v 1.38 2014/03/26 08:09:06 christos Exp $ */
 /*
  * Copyright (c) 1997 by Matthew Jacob
  * NASA AMES Research Center.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.38 2014/03/26 08:09:06 christos Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -62,16 +62,16 @@ __KERNEL_RCSID(0, "$NetBSD: tlsb.c,v 1.32 2007/03/04 05:59:12 christos Exp $");
 
 #define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
-static int	tlsbmatch __P((struct device *, struct cfdata *, void *));
-static void	tlsbattach __P((struct device *, struct device *, void *));
+static int	tlsbmatch(device_t, cfdata_t, void *);
+static void	tlsbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tlsb, sizeof (struct device),
+CFATTACH_DECL_NEW(tlsb, 0,
     tlsbmatch, tlsbattach, NULL, NULL);
 
 extern struct cfdriver tlsb_cd;
 
-static int	tlsbprint __P((void *, const char *));
-static const char *tlsb_node_type_str __P((u_int32_t));
+static int	tlsbprint(void *, const char *);
+static const char *tlsb_node_type_str(uint32_t);
 
 /*
  * There can be only one TurboLaser, and we'll overload it
@@ -85,9 +85,7 @@ static const char *tlsb_node_type_str __P((u_int32_t));
 int	tlsb_found;
 
 static int
-tlsbprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+tlsbprint(void *aux, const char *pnp)
 {
 	struct tlsb_dev_attach_args *tap = aux;
 
@@ -102,10 +100,7 @@ tlsbprint(aux, pnp)
 }
 
 static int
-tlsbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+tlsbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -125,13 +120,10 @@ tlsbmatch(parent, cf, aux)
 }
 
 static void
-tlsbattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+tlsbattach(device_t parent, device_t self, void *aux)
 {
 	struct tlsb_dev_attach_args ta;
-	u_int32_t tldev;
+	uint32_t tldev;
 	int node;
 	int locs[TLSBCF_NLOCS];
 
@@ -155,7 +147,7 @@ tlsbattach(parent, self, aux)
 		 * Check for invalid address.  This may not really
 		 * be necessary, but what the heck...
 		 */
-		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(u_int32_t)))
+		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(uint32_t)))
 			continue;
 		tldev = TLSB_GET_NODEREG(node, TLDEV);
 		if (tldev == 0) {
@@ -179,7 +171,7 @@ tlsbattach(parent, self, aux)
 		 * Deal with hooking CPU instances to TurboLaser nodes.
 		 */
 		if (TLDEV_ISCPU(tldev)) {
-			printf("%s node %d: %s\n", self->dv_xname,
+			aprint_normal("%s node %d: %s\n", device_xname(self),
 			    node, tlsb_node_type_str(tldev));
 		}
 		/*
@@ -195,7 +187,7 @@ tlsbattach(parent, self, aux)
 	 * *Now* search for I/O nodes (in descending order)
 	 */
 	while (--node > 0) {
-		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(u_int32_t)))
+		if (badaddr(TLSB_NODE_REG_ADDR(node, TLDEV), sizeof(uint32_t)))
 			continue;
 		tldev = TLSB_GET_NODEREG(node, TLDEV);
 		if (tldev == 0) {
@@ -214,8 +206,8 @@ tlsbattach(parent, self, aux)
 			 * XXX per-CPU interrupt queue?
 			 */
 			printf("%s node %d: routing interrupts to %s\n",
-			  self->dv_xname, node,
-			  cpu_info[hwrpb->rpb_primary_cpu_id]->ci_softc->sc_dev.dv_xname);
+			  device_xname(self), node,
+			  device_xname(cpu_info[hwrpb->rpb_primary_cpu_id]->ci_softc->sc_dev));
 			TLSB_PUT_NODEREG(node, TLCPUMASK,
 			    (1UL << hwrpb->rpb_primary_cpu_id));
 #else
@@ -241,8 +233,7 @@ tlsbattach(parent, self, aux)
 }
 
 static const char *
-tlsb_node_type_str(dtype)
-	u_int32_t dtype;
+tlsb_node_type_str(uint32_t dtype)
 {
 	static char	tlsb_line[64];
 
@@ -269,8 +260,8 @@ tlsb_node_type_str(dtype)
 		return ("Dual CPU, 16MB cache");
 
 	default:
-		memset(tlsb_line, 0, sizeof(tlsb_line));
-		sprintf(tlsb_line, "unknown, dtype 0x%x", dtype);
+		snprintf(tlsb_line, sizeof(tlsb_line), "unknown, dtype 0x%x",
+		    dtype);
 		return (tlsb_line);
 	}
 	/* NOTREACHED */

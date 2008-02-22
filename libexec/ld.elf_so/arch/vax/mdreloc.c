@@ -1,12 +1,11 @@
-/*	$NetBSD: mdreloc.c,v 1.21 2006/05/21 04:17:35 mrg Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.34 2017/08/10 19:03:27 joerg Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.21 2006/05/21 04:17:35 mrg Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.34 2017/08/10 19:03:27 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/stat.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -41,7 +40,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
+	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		*where = (Elf_Addr)(relocbase + rela->r_addend);
@@ -49,19 +48,36 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
+	const Elf_Sym *def = NULL;
+	const Obj_Entry *defobj = NULL;
+	unsigned long last_symnum = ULONG_MAX;
 
 	for (rela = obj->rela; rela < obj->relalim; rela++) {
 		Elf_Addr        *where;
-		const Elf_Sym   *def;
-		const Obj_Entry *defobj;
 		Elf_Addr         tmp;
-		unsigned long	 symnum;
+		unsigned long    symnum;
 
 		where = (Elf_Addr *)(obj->relocbase + rela->r_offset);
-		symnum = ELF_R_SYM(rela->r_info);
+
+		switch (ELF_R_TYPE(rela->r_info)) {
+		case R_TYPE(32):	/* word32 S + A */
+		case R_TYPE(GLOB_DAT):	/* word32 S + A */
+			symnum = ELF_R_SYM(rela->r_info);
+			if (last_symnum != symnum) {
+				last_symnum = symnum;
+				def = _rtld_find_symdef(symnum, obj, &defobj,
+				    false);
+				if (def == NULL)
+					return -1;
+			}
+			break;
+
+		default:
+			break;
+		}
 
 		switch (ELF_R_TYPE(rela->r_info)) {
 		case R_TYPE(NONE):
@@ -69,10 +85,6 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 
 		case R_TYPE(32):	/* word32 S + A */
 		case R_TYPE(GLOB_DAT):	/* word32 S + A */
-			def = _rtld_find_symdef(symnum, obj, &defobj, false);
-			if (def == NULL)
-				return -1;
-
 			tmp = (Elf_Addr)(defobj->relocbase + def->st_value +
 			    rela->r_addend);
 
@@ -109,13 +121,13 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 
 		default:
 			rdbg(("sym = %lu, type = %lu, offset = %p, "
-			    "addend = %p, contents = %p, symbol = %s",
-			    symnum, (u_long)ELF_R_TYPE(rela->r_info),
+			    "addend = %p, contents = %p",
+			    (u_long)ELF_R_SYM(rela->r_info),
+			    (u_long)ELF_R_TYPE(rela->r_info),
 			    (void *)rela->r_offset, (void *)rela->r_addend,
-			    (void *)*where,
-			    obj->strtab + obj->symtab[symnum].st_name));
+			    (void *)*where));
 			_rtld_error("%s: Unsupported relocation type %ld "
-			    "in non-PLT relocations\n",
+			    "in non-PLT relocations",
 			    obj->path, (u_long) ELF_R_TYPE(rela->r_info));
 			return -1;
 		}
@@ -124,7 +136,7 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 }
 
 int
-_rtld_relocate_plt_lazy(const Obj_Entry *obj)
+_rtld_relocate_plt_lazy(Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 
@@ -138,7 +150,8 @@ _rtld_relocate_plt_lazy(const Obj_Entry *obj)
 
 		/* Just relocate the GOT slots pointing into the PLT */
 		*where += (Elf_Addr)obj->relocbase;
-		rdbg(("fixup !main in %s --> %p", obj->path, (void *)*where));
+		rdbg(("lazy fixup pltgot %p in %s --> %p", where, obj->path,
+		    (void *)*where));
 	}
 
 	return 0;
@@ -151,16 +164,25 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 	Elf_Addr new_value;
 	const Elf_Sym  *def;
 	const Obj_Entry *defobj;
+	unsigned long info = rela->r_info;
 
-	assert(ELF_R_TYPE(rela->r_info) == R_TYPE(JMP_SLOT));
+	assert(ELF_R_TYPE(info) == R_TYPE(JMP_SLOT));
 
-	def = _rtld_find_symdef(ELF_R_SYM(rela->r_info), obj, &defobj, true);
-	if (def == NULL)
+	def = _rtld_find_plt_symdef(ELF_R_SYM(info), obj, &defobj, tp != NULL);
+	if (__predict_false(def == NULL))
 		return -1;
+	if (__predict_false(def == &_rtld_sym_zero))
+		return 0;
 
-	new_value = (Elf_Addr)(defobj->relocbase + def->st_value +
-	    rela->r_addend);
-	rdbg(("bind now/fixup in %s --> old=%p new=%p",
+	if (ELF_ST_TYPE(def->st_info) == STT_GNU_IFUNC) {
+		if (tp == NULL)
+			return 0;
+		new_value = _rtld_resolve_ifunc(defobj, def);
+	} else {
+		new_value = (Elf_Addr)(defobj->relocbase + def->st_value +
+		    rela->r_addend);
+	}
+	rdbg(("bind now/fixup pltgot %p in %s --> old=%p new=%p", where,
 	    defobj->strtab + def->st_name, (void *)*where, (void *)new_value));
 	if (*where != new_value)
 		*where = new_value;
@@ -174,15 +196,17 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 caddr_t
 _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 {
-	const Elf_Rela *rela = (const Elf_Rela *)((caddr_t)obj->pltrela + reloff);
+	const Elf_Rela *rela = (const Elf_Rela *)((const uint8_t *)obj->pltrela + reloff);
 	Elf_Addr result;
 	int err;
 
 	result = 0;	/* XXX gcc */
 
+	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
 	if (err)
 		_rtld_die();
+	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }

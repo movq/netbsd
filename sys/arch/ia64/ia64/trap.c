@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.5 2007/02/09 21:55:05 ad Exp $ */
+/* $NetBSD: trap.c,v 1.14 2017/04/08 17:47:14 scole Exp $ */
 
 /*-
  * Copyright (c) 2005 Marcel Moolenaar
@@ -42,13 +42,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.5 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.14 2017/04/08 17:47:14 scole Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,6 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.5 2007/02/09 21:55:05 ad Exp $");
 #include <machine/frame.h>
 #include <machine/md_var.h>
 #include <machine/cpu.h>
+#include <machine/cpufunc.h>
 #include <machine/ia64_cpu.h>
 #include <machine/fpu.h>
 #ifdef DDB
@@ -324,10 +318,9 @@ trap_decode_break(struct trapframe *tf)
  * Start a new LWP
  */
 void
-startlwp(arg)
-	void *arg;
+startlwp(void *arg)
 {
-	return;
+	panic("XXX %s implement", __func__);
 }
 
 #ifdef DDB
@@ -373,6 +366,7 @@ trap_panic(int vector, struct trapframe *tf)
 int
 do_ast(struct trapframe *tf)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
@@ -388,7 +382,6 @@ trap(int vector, struct trapframe *tf)
 	struct lwp *l;
 	uint64_t ucode;
 	int sig, user;
-	u_int sticks;
 	ksiginfo_t ksi;
 
 	user = TRAPF_USERMODE(tf) ? 1 : 0;
@@ -403,11 +396,9 @@ trap(int vector, struct trapframe *tf)
 	if (user) {
 		ia64_set_fpsr(IA64_FPSR_DEFAULT);
 		p = l->l_proc;
-		sticks = p->p_sticks;
 		l->l_md.md_tf = tf;
 		LWP_CACHE_CREDS(l, p);
 	} else {
-		sticks = 0;		/* XXX bogus -Wuninitialized warning */
 		p = NULL;
 	}
 	sig = 0;
@@ -420,6 +411,7 @@ trap(int vector, struct trapframe *tf)
 		 */
 		trap_panic(vector, tf);
 		break;
+
 	case IA64_VEC_ITLB:
 	case IA64_VEC_DTLB:
 	case IA64_VEC_EXT_INTR:
@@ -532,7 +524,6 @@ trap(int vector, struct trapframe *tf)
 			} else if (ucode == 0x100000) {
 				break_syscall(tf);
 				return;		/* do_ast() already called. */
-
 			} else if (ucode == 0x180000) {
 				mcontext_t mc;
 
@@ -552,6 +543,78 @@ trap(int vector, struct trapframe *tf)
 			goto out;
 		}
 		break;
+
+	case IA64_VEC_PAGE_NOT_PRESENT:
+	case IA64_VEC_INST_ACCESS_RIGHTS:
+	case IA64_VEC_DATA_ACCESS_RIGHTS: {
+		struct pcb * const pcb = lwp_getpcb(l);
+		vaddr_t va;
+		struct vm_map *map;
+		vm_prot_t ftype;
+		uint64_t onfault;
+		int error = 0;
+
+		va = trunc_page(tf->tf_special.ifa);
+
+		if (va >= VM_MAXUSER_ADDRESS) {
+			/*
+			 * Don't allow user-mode faults for kernel virtual
+			 * addresses, including the gateway page.
+			 */
+			if (user)
+				goto no_fault_in;
+			map = kernel_map;
+		} else {
+			map = (p != NULL) ? &p->p_vmspace->vm_map : NULL;
+			if (map == NULL)
+				goto no_fault_in;
+		}
+
+		if (tf->tf_special.isr & IA64_ISR_X)
+			ftype = VM_PROT_EXECUTE;
+		else if (tf->tf_special.isr & IA64_ISR_W)
+			ftype = VM_PROT_WRITE;
+		else
+			ftype = VM_PROT_READ;
+
+		onfault = pcb->pcb_onfault;
+		pcb->pcb_onfault = 0;
+		error = uvm_fault(map, va, ftype);
+		pcb->pcb_onfault = onfault;
+
+		if (error == 0)
+			goto out;
+
+no_fault_in:
+		if (!user) {
+			/* Check for copyin/copyout fault. */
+			if (pcb->pcb_onfault != 0) {
+				tf->tf_special.iip = pcb->pcb_onfault;
+				tf->tf_special.psr &= ~IA64_PSR_RI;
+				tf->tf_scratch.gr8 = error;
+				goto out;
+			}
+			trap_panic(vector, tf);
+		}
+		ucode = va;
+		sig = (error == EACCES) ? SIGBUS : SIGSEGV;
+		break;
+	}
+
+/* XXX: Fill in the rest */
+
+	case IA64_VEC_SPECULATION:
+		/*
+		 * The branching behaviour of the chk instruction is not
+		 * implemented by the processor. All we need to do is
+		 * compute the target address of the branch and make sure
+		 * that control is transfered to that address.
+		 * We should do this in the IVT table and not by entring
+		 * the kernel...
+		 */
+		tf->tf_special.iip += tf->tf_special.ifa << 4;
+		tf->tf_special.psr &= ~IA64_PSR_RI;
+		goto out;
 
 /* XXX: Fill in the rest */
 
@@ -581,14 +644,9 @@ trap(int vector, struct trapframe *tf)
 	ksi.ksi_code = ucode;
 	trapsignal(l, &ksi);
 
-#if 1
 out:
-#endif
-
 	if (user) {
 		mi_userret(l);
 	}
-
-
 	return;
 }

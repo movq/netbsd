@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.19 2008/01/23 20:02:15 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.28 2017/10/22 00:59:28 maya Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,16 +46,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2008/01/23 20:02:15 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.28 2017/10/22 00:59:28 maya Exp $");
 
 #include "opt_multiprocessor.h"
+#include "opt_intrdebug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 
 #include <machine/pte.h>
-#include <machine/cpu.h>
+#include <machine/cpufunc.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -75,23 +78,24 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2008/01/23 20:02:15 joerg Exp $");
 extern void platform_init(void);
 #endif
 
+#include <x86/efi.h>
 #include <x86/x86/tsc.h>
 
 /*
  * Determine i/o configuration for a machine.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
-
 	startrtclock();
 
 #if NBIOS32 > 0
+	efi_init();
 	bios32_init();
 	platform_init();
+	/* identify hypervisor type from SMBIOS */
+	identify_hypervisor();
 #endif
-
-	x86_64_proc0_tss_ldt_init();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
@@ -107,8 +111,6 @@ cpu_configure()
 #ifdef MULTIPROCESSOR
 	cpu_init_idle_lwps();
 #endif
-
-	init_TSC_tc();
 
 	spl0();
 	lcr8(0);

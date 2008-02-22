@@ -1,4 +1,4 @@
-/*	$NetBSD: process.h,v 1.4 2001/01/16 02:50:32 cgd Exp $	*/
+/*	$NetBSD: process.h,v 1.7 2011/08/30 19:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: process.h,v 1.4 2001/01/16 02:50:32 cgd Exp $
+ *	$NetBSD: process.h,v 1.7 2011/08/30 19:49:11 joerg Exp $
  *
  */
 
@@ -36,10 +31,10 @@
 #define _PROCESS_H_
 
 __BEGIN_DECLS
-void	mopProcessDL __P((FILE *, struct if_info *, u_char *, int *,
-			  u_char *, u_char *, int, u_short));
-void	mopProcessRC __P((FILE *, struct if_info *, u_char *, int *,
-			  u_char *, u_char *, int, u_short));
+void	mopProcessDL(FILE *, struct if_info *, u_char *, int *,
+		     const u_char *, const u_char *, int, u_short);
+void	mopProcessRC(FILE *, struct if_info *, u_char *, int *,
+		     const u_char *, const u_char *, int, u_short);
 __END_DECLS
 
 #endif /* _PROCESS_H_ */

@@ -1,4 +1,4 @@
-/* 	$NetBSD: xlcom.c,v 1.6 2008/01/09 08:15:53 elad Exp $ */
+/* 	$NetBSD: xlcom.c,v 1.11 2014/07/25 08:10:33 dholland Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xlcom.c,v 1.6 2008/01/09 08:15:53 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xlcom.c,v 1.11 2014/07/25 08:10:33 dholland Exp $");
 
 #include "opt_kgdb.h"
 
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: xlcom.c,v 1.6 2008/01/09 08:15:53 elad Exp $");
 #define XLCOM_RXBUF_SIZE 	1024
 
 struct xlcom_softc {
-	struct device 		sc_dev;
+	device_t 		sc_dev;
 	struct tty 		*sc_tty;
 	void 			*sc_ih;
 
@@ -138,8 +138,18 @@ static dev_type_tty(xlcom_tty);
 static dev_type_stop(xlcom_stop);
 
 const struct cdevsw xlcom_cdevsw = {
-	xlcom_open, xlcom_close, xlcom_read, xlcom_write, xlcom_ioctl,
-	xlcom_stop, xlcom_tty, xlcom_poll, nommap, ttykqfilter, D_TTY
+	.d_open = xlcom_open,
+	.d_close = xlcom_close,
+	.d_read = xlcom_read,
+	.d_write = xlcom_write,
+	.d_ioctl = xlcom_ioctl,
+	.d_stop = xlcom_stop,
+	.d_tty = xlcom_tty,
+	.d_poll = xlcom_poll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 extern struct cfdriver xlcom_cd;
@@ -149,34 +159,35 @@ static int 	xlcom_param(struct tty *, struct termios *);
 static void 	xlcom_start(struct tty *);
 
 /* Generic device. */
-static void 	xlcom_attach(struct device *, struct device *, void *);
+static void 	xlcom_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(xlcom, sizeof(struct xlcom_softc),
+CFATTACH_DECL_NEW(xlcom, sizeof(struct xlcom_softc),
     xcvbus_child_match, xlcom_attach, NULL, NULL);
 
 
 static void
-xlcom_attach(struct device *parent, struct device *self, void *aux)
+xlcom_attach(device_t parent, device_t self, void *aux)
 {
 	struct xcvbus_attach_args 	*vaa = aux;
-	struct xlcom_softc 		*sc = (struct xlcom_softc *)self;
+	struct xlcom_softc 		*sc = device_private(self);
 	struct tty 			*tp;
 	dev_t 				dev;
 
-	printf(": UartLite serial port\n");
+	aprint_normal(": UartLite serial port\n");
+
+	sc->sc_dev = self;
 
 #if defined(KGDB)
 	/* We don't want to share kgdb port with the user. */
 	if (sc->sc_iot == kgdb_iot && sc->sc_ioh == kgdb_ioh) {
-		printf("%s: already in use by kgdb\n", device_xname(self));
+		aprint_error_dev(self, "already in use by kgdb\n");
 		return;
 	}
 #endif /* KGDB */
 
 	if ((sc->sc_ih = intr_establish(vaa->vaa_intr, IST_LEVEL, IPL_SERIAL,
 	    xlcom_intr, sc)) == NULL) {
-		printf("%s: could not establish interrupt\n",
-		    device_xname(self));
+		aprint_error_dev(self, "could not establish interrupt\n");
 		return ;
 	}
 
@@ -189,15 +200,14 @@ xlcom_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_iot = consdev_iot;
 		sc->sc_ioh = consdev_ioh;
 
-		printf("%s: console\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(self, "console\n");
 	} else {
 		sc->sc_iot = vaa->vaa_iot;
 
 		if (bus_space_map(vaa->vaa_iot, vaa->vaa_addr, XLCOM_SIZE, 0,
 		    &sc->sc_ioh) != 0) {
-			printf("%s: could not map registers\n",
-			    device_xname(self));
-			return ;
+			aprint_error_dev(self, "could not map registers\n");
+			return;
 		}
 
 		/* Reset FIFOs. */
@@ -214,12 +224,12 @@ xlcom_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_tx_soft = softint_establish(SOFTINT_SERIAL, xlcom_tx_soft, sc);
 
 	if (sc->sc_rx_soft == NULL || sc->sc_tx_soft == NULL) {
-		printf("%s: could not establish Rx or Tx softintr\n",
-		    sc->sc_dev.dv_xname);
-		return ;
+		aprint_error_dev(self,
+		    "could not establish Rx or Tx softintr\n");
+		return;
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_dev = dev;
 	tp->t_oproc = xlcom_start;
 	tp->t_param = xlcom_param;
@@ -396,7 +406,7 @@ xlcom_open(dev_t dev, int flags, int mode, struct lwp *l)
 	struct tty 		*tp;
 	int 			error, s;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -452,7 +462,7 @@ xlcom_read(dev_t dev, struct uio *uio, int flag)
 	struct xlcom_softc 	*sc;
 	struct tty 		*tp;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	tp = sc->sc_tty;
@@ -466,7 +476,7 @@ xlcom_write(dev_t dev, struct uio *uio, int flag)
 	struct xlcom_softc 	*sc;
 	struct tty 		*tp;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	tp = sc->sc_tty;
@@ -480,7 +490,7 @@ xlcom_poll(dev_t dev, int events, struct lwp *l)
 	struct xlcom_softc 	*sc;
 	struct tty 		*tp;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	tp = sc->sc_tty;
@@ -494,7 +504,7 @@ xlcom_tty(dev_t dev)
 	struct xlcom_softc 	*sc;
 	struct tty 		*tp;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (NULL);
 	tp = sc->sc_tty;
@@ -509,7 +519,7 @@ xlcom_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	struct tty 		*tp;
 	int 			error;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	tp = sc->sc_tty;
@@ -533,7 +543,7 @@ xlcom_close(dev_t dev, int flag, int mode, struct lwp *l)
 	struct xlcom_softc 	*sc;
 	struct tty 		*tp;
 
-	sc = device_lookup(&xlcom_cd, minor(dev));
+	sc = device_lookup_private(&xlcom_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	tp = sc->sc_tty;
@@ -554,7 +564,7 @@ xlcom_stop(struct tty *tp, int flag)
 	struct xlcom_softc 	*sc;
 	int 			s;
 
-	sc = device_lookup(&xlcom_cd, UNIT(tp->t_dev));
+	sc = device_lookup_private(&xlcom_cd, UNIT(tp->t_dev));
 	if (sc == NULL)
 		return ;
 
@@ -590,7 +600,7 @@ xlcom_start(struct tty *tp)
 	struct xlcom_softc 	*sc;
 	int 			s1, s2;
 
-	sc = device_lookup(&xlcom_cd, UNIT(tp->t_dev));
+	sc = device_lookup_private(&xlcom_cd, UNIT(tp->t_dev));
 	if (sc == NULL)
 		return ;
 

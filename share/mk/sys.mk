@@ -1,5 +1,9 @@
-#	$NetBSD: sys.mk,v 1.94 2008/02/09 02:37:22 mrg Exp $
+#	$NetBSD: sys.mk,v 1.133 2018/06/22 11:25:03 maya Exp $
 #	@(#)sys.mk	8.2 (Berkeley) 3/21/94
+#
+# This file contains the basic rules for make(1) and is read first
+# Do not put conditionals that are set on different files here and
+# expect them to work.
 
 unix?=		We run NetBSD.
 
@@ -13,41 +17,51 @@ RANLIB?=	ranlib
 
 AS?=		as
 AFLAGS?=
-COMPILE.s?=	${CC} ${AFLAGS} -c
-LINK.s?=	${CC} ${AFLAGS} ${LDFLAGS}
-COMPILE.S?=	${CC} ${AFLAGS} ${CPPFLAGS} -c -traditional-cpp
-LINK.S?=	${CC} ${AFLAGS} ${CPPFLAGS} ${LDFLAGS}
+COMPILE.s?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} -c
+LINK.s?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${LDFLAGS}
+_ASM_TRADITIONAL_CPP=	-x assembler-with-cpp
+COMPILE.S?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} ${_ASM_TRADITIONAL_CPP} -c
+LINK.S?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} ${LDFLAGS}
 
 CC?=		cc
-.if ${MACHINE_ARCH} == "alpha" || \
-    ${MACHINE_ARCH} == "arm" || \
-    ${MACHINE_ARCH} == "x86_64" || \
-    ${MACHINE_ARCH} == "armeb" || \
-    ${MACHINE_ARCH} == "hppa" || \
-    ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "m68k" || \
-    ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb" || \
-    ${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb" || \
-    ${MACHINE_ARCH} == "powerpc" || \
-    ${MACHINE_ARCH} == "sparc" || \
-    ${MACHINE_ARCH} == "sparc64"
-DBG?=	-O2
-.elif ${MACHINE_ARCH} == "vax"
-DBG?=	-O1 -fgcse -fstrength-reduce -fgcse-after-reload
-.elif ${MACHINE_ARCH} == "m68000"
-DBG?=	-O0
+.if ${MACHINE_ARCH} == "sh3el" || ${MACHINE_ARCH} == "sh3eb"
+# -O2 is too -falign-* zealous for low-memory sh3 machines
+DBG?=	-Os -freorder-blocks
+.elif ${MACHINE_ARCH} == "m68k" || ${MACHINE_ARCH} == "m68000"
+# -freorder-blocks (enabled by -O2) produces much bigger code
+DBG?=	-O2 -fno-reorder-blocks
+.elif ${MACHINE_ARCH} == "coldfire"
+DBG?=	-O1
+.elif !empty(MACHINE_ARCH:Maarch64*)
+DBG?=	-O2 ${"${.TARGET:M*.po}" == "":? -fomit-frame-pointer:}
 .else
-DBG?=	-O
+DBG?=	-O2
+.endif
+.if ${MKDTRACE:Uno} != "no"
+DTRACE_OPTS?=	-fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-ipa-sra -fno-ipa-icf
 .endif
 CFLAGS?=	${DBG}
 LDFLAGS?=
-COMPILE.c?=	${CC} ${CFLAGS} ${CPPFLAGS} -c
+COMPILE.c?=	${CC} ${CFLAGS} ${DTRACE_OPTS} ${CPPFLAGS} -c
 LINK.c?=	${CC} ${CFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
-CXX?=		c++
-CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-std=gnu99}
+# C Type Format data is required for DTrace
+CTFFLAGS	?=	-g -L VERSION
+CTFMFLAGS	?=	-t -g -L VERSION
 
-COMPILE.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} -c
+CXX?=		c++
+# Strip flags unsupported by C++ compilers
+# Remove -Wsystem-headers because C++ headers aren't clean of warnings
+CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-Wno-pointer-sign:N-ffreestanding:N-std=gnu[0-9][0-9]:N-Wold-style-definition:N-Wno-format-zero-length:N-Wsystem-headers}
+
+__ALLSRC1=	${empty(DESTDIR):?${.ALLSRC}:${.ALLSRC:S|^${DESTDIR}|^destdir|}}
+__ALLSRC2=	${empty(MAKEOBJDIR):?${__ALLSRC1}:${__ALLSRC1:S|^${MAKEOBJDIR}|^obj|}}
+__ALLSRC3=	${empty(NETBSDSRCDIR):?${__ALLSRC2}:${__ALLSRC2:S|^${NETBSDSRCDIR}|^src|}}
+__ALLSRC4=	${empty(X11SRCDIR):?${__ALLSRC3}:${__ALLSRC3:S|^${X11SRCDIR}|^xsrc|}}
+__BUILDSEED=	${BUILDSEED}/${__ALLSRC4:O}/${.TARGET}
+_CXXSEED?=	${BUILDSEED:D-frandom-seed=${__BUILDSEED:hash}}
+
+COMPILE.cc?=	${CXX} ${_CXXSEED} ${CXXFLAGS} ${DTRACE_OPTS} ${CPPFLAGS} -c
 LINK.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
 OBJC?=		${CC}
@@ -77,7 +91,7 @@ LFLAGS?=
 LEX.l?=		${LEX} ${LFLAGS}
 
 LINT?=		lint
-LINTFLAGS?=	-chapbxzFS
+LINTFLAGS?=	-chapbxzgFS
 
 LORDER?=	lorder
 
@@ -103,8 +117,11 @@ YACC.y?=	${YACC} ${YFLAGS}
 # C
 .c:
 	${LINK.c} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+# XXX: disable for now
+#	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .c.o:
 	${COMPILE.c} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .c.a:
 	${COMPILE.c} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -129,6 +146,7 @@ YACC.y?=	${YACC} ${YFLAGS}
 	${LINK.f} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
 .f.o:
 	${COMPILE.f} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .f.a:
 	${COMPILE.f} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -136,8 +154,10 @@ YACC.y?=	${YACC} ${YFLAGS}
 
 .F:
 	${LINK.F} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .F.o:
 	${COMPILE.F} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .F.a:
 	${COMPILE.F} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -147,6 +167,7 @@ YACC.y?=	${YACC} ${YFLAGS}
 	${LINK.r} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
 .r.o:
 	${COMPILE.r} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .r.a:
 	${COMPILE.r} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -155,8 +176,10 @@ YACC.y?=	${YACC} ${YFLAGS}
 # Pascal
 .p:
 	${LINK.p} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .p.o:
 	${COMPILE.p} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .p.a:
 	${COMPILE.p} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -165,16 +188,20 @@ YACC.y?=	${YACC} ${YFLAGS}
 # Assembly
 .s:
 	${LINK.s} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .s.o:
 	${COMPILE.s} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .s.a:
 	${COMPILE.s} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
 	rm -f ${.PREFIX}.o
 .S:
 	${LINK.S} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .S.o:
 	${COMPILE.S} ${.IMPSRC}
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 .S.a:
 	${COMPILE.S} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -191,6 +218,7 @@ YACC.y?=	${YACC} ${YFLAGS}
 .l.o:
 	${LEX.l} ${.IMPSRC}
 	${COMPILE.c} -o ${.TARGET} lex.yy.c
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 	rm -f lex.yy.c
 
 # Yacc
@@ -204,6 +232,7 @@ YACC.y?=	${YACC} ${YFLAGS}
 .y.o:
 	${YACC.y} ${.IMPSRC}
 	${COMPILE.c} -o ${.TARGET} y.tab.c
+	${defined(CTFCONVERT):?${CTFCONVERT} ${CTFFLAGS} ${.TARGET}:}
 	rm -f y.tab.c
 
 # Shell

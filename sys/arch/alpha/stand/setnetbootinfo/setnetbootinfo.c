@@ -1,4 +1,4 @@
-/* $NetBSD: setnetbootinfo.c,v 1.12 2002/09/22 05:38:30 mycroft Exp $ */
+/* $NetBSD: setnetbootinfo.c,v 1.14 2014/03/26 08:09:06 christos Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou
@@ -66,9 +66,7 @@ usage(void)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct netbbinfo *netbbinfop;
 	struct stat sb;
@@ -141,10 +139,12 @@ main(argc, argv)
 		outfilename = outfile;
 	else {
 		/* name + 12 for enet addr + '.' before enet addr + NUL */
-		outfilename = malloc(strlen(netboot) + 14);
+		size_t len = strlen(netboot) + 14;
+		outfilename = malloc(len);
 		if (outfilename == NULL)
 			err(1, "malloc of output file name failed");
-		sprintf(outfilename, "%s.%02x%02x%02x%02x%02x%02x", netboot,
+		snprintf(outfilename, len,
+		    "%s.%02x%02x%02x%02x%02x%02x", netboot,
 		    ether_addr->ether_addr_octet[0],
 		    ether_addr->ether_addr_octet[1],
 		    ether_addr->ether_addr_octet[2],

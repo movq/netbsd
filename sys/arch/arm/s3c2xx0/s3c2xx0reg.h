@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2xx0reg.h,v 1.5 2005/12/11 12:16:51 christos Exp $ */
+/* $NetBSD: s3c2xx0reg.h,v 1.7 2014/03/17 10:27:46 skrll Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -43,17 +43,16 @@
 /*
  * S3C2800, 2410 and 2400 have a common built-in UART block. However,
  * there are small diffs in bit position of some registers.
- * Following definitions can be foune in s3c{2800,24x0}reg.h for
+ * Following definitions can be found in s3c{2800,24x0}reg.h for
  * that reason.
  *
- *  ULCON_IR                 (Infra-red mode)
- *  ULCON_PARITY_SHIFT       (Parity mode bit position)
  *  UMCON_AFC                (Auto flow control)
  *  UMSTAT_DCTS              (CTS change)
  */
 
 #define	SSCOM_ULCON 0x00 /* UART line control */
-/*       ULCON_PARITY_SHIFT and ULCON_IR is defined in s3c{2800,24x0}reg.h */
+#define	 ULCON_IR  	(1<<6)
+#define	 ULCON_PARITY_SHIFT  3
 #define	 ULCON_PARITY_NONE  (0<<ULCON_PARITY_SHIFT)
 #define	 ULCON_PARITY_ODD   (4<<ULCON_PARITY_SHIFT)
 #define	 ULCON_PARITY_EVEN  (5<<ULCON_PARITY_SHIFT)

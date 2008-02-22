@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.16 2006/07/29 19:10:56 ad Exp $
+.\"	$NetBSD: hardware,v 1.19 2017/06/22 16:46:52 flxd Exp $
 .
 .Ss2 Supported machines
 .(bullet -offset indent
@@ -35,7 +35,7 @@ DECsystem 5800 (xbi-based multiprocessor, a Vax 6200 with
 Vax CPU boards replaced with Mips CPU boards)
 .bullet)
 .Pp
-The minimal configuration requires 8 MB of RAM and ~60 MB of disk space.
+The minimal configuration requires 8 MB of RAM and 170 MB of disk space.
 To install the entire system requires much more disk space, and to run
 X or compile the system, more RAM is recommended, as
 .Nx
@@ -52,7 +52,7 @@ DECstation 2100 and 3100 baseboard video
 one-bit mono or 8-bit pseudocolor frame buffers.
 .bullet)
 .It
-DECstation 5000 series TurboChannel video
+DECstation 5000 series TURBOchannel video
 .(bullet -compact
 PMAG-DV Personal DECstation baseboard 1024x768 frame buffer
 .It
@@ -105,7 +105,7 @@ on-board
 .Em asc
 SCSI controller (5000 series machines)
 .It
-TurboChannel
+TURBOchannel
 .Em asc No SCSI controller
 .Pq the Em PMAZ
 .bullet)
@@ -128,7 +128,7 @@ Audio drivers for Personal DECstation machines
 .It
 Floppy driver for Personal DECstation machines
 .It
-TurboChannel audio hardware (LoFi)
+TURBOchannel audio hardware (LoFi)
 .bullet)
 .(Note
 The primary obstacle to supporting the above is non-availability of sample

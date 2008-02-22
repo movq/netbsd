@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.45 2014/10/17 20:49:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.45 2014/10/17 20:49:22 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp
 #include <uvm/uvm.h>
 
 #define BUFFERSIZE (64 * 1024)
+#define MAXBUFFERSIZE (256 * 1024)
 
 /*
  * The map entries can *almost* be read with programs like cat.  However,
@@ -111,29 +112,22 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	struct vmspace *vm;
 	struct vm_map *map;
 	struct vm_map_entry *entry;
-	char *buffer;
+	char *buffer = NULL;
+	size_t bufsize = BUFFERSIZE;
 	char *path;
 	struct vnode *vp;
 	struct vattr va;
 	dev_t dev;
 	long fileid;
 	size_t pos;
+	int width = (int)((curl->l_proc->p_flag & PK_32) ? sizeof(int32_t) : 
+	    sizeof(void *)) * 2;
 
 	if (uio->uio_rw != UIO_READ)
 		return EOPNOTSUPP;
 
-	if (uio->uio_offset != 0) {
-		/*
-		 * we return 0 here, so that the second read returns EOF
-		 * we don't support reading from an offset because the
-		 * map could have changed between the two reads.
-		 */
-		return 0;
-	}
-
 	error = 0;
 
-	buffer = malloc(BUFFERSIZE, M_TEMP, M_WAITOK);
 	if (linuxmode != 0)
 		path = malloc(MAXPATHLEN * 4, M_TEMP, M_WAITOK);
 	else
@@ -145,6 +139,8 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	map = &vm->vm_map;
 	vm_map_lock_read(map);
 
+again:
+	buffer = malloc(bufsize, M_TEMP, M_WAITOK);
 	pos = 0;
 	for (entry = map->header.next; entry != &map->header;
 	    entry = entry->next) {
@@ -159,7 +155,9 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 			if (UVM_ET_ISOBJ(entry) &&
 			    UVM_OBJ_IS_VNODE(entry->object.uvm_obj)) {
 				vp = (struct vnode *)entry->object.uvm_obj;
+				vn_lock(vp, LK_SHARED | LK_RETRY);
 				error = VOP_GETATTR(vp, &va, curl->l_cred);
+				VOP_UNLOCK(vp);
 				if (error == 0 && vp != pfs->pfs_vnode) {
 					fileid = va.va_fileid;
 					dev = va.va_fsid;
@@ -167,20 +165,22 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 					    MAXPATHLEN * 4, vp, curl, p);
 				}
 			}
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
-			    "%0*lx-%0*lx %c%c%c%c %0*lx %02x:%02x %ld     %s\n",
-			    (int)sizeof(void *) * 2,(unsigned long)entry->start,
-			    (int)sizeof(void *) * 2,(unsigned long)entry->end,
+			pos += snprintf(buffer + pos, bufsize - pos,
+			    "%.*"PRIxVADDR"-%.*"PRIxVADDR" %c%c%c%c "
+			    "%.*lx %.2llx:%.2llx %-8ld %25.s %s\n",
+			    width, entry->start,
+			    width, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
 			    (entry->protection & VM_PROT_EXECUTE) ? 'x' : '-',
 			    (entry->etype & UVM_ET_COPYONWRITE) ? 'p' : 's',
-			    (int)sizeof(void *) * 2,
-			    (unsigned long)entry->offset,
-			    major(dev), minor(dev), fileid, path);
+			    width, (unsigned long)entry->offset,
+			    (unsigned long long)major(dev),
+			    (unsigned long long)minor(dev), fileid, "", path);
 		} else {
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
-			    "0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d\n",
+			pos += snprintf(buffer + pos, bufsize - pos,
+			    "%#"PRIxVADDR" %#"PRIxVADDR" "
+			    "%c%c%c %c%c%c %s %s %d %d %d\n",
 			    entry->start, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
@@ -195,12 +195,32 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 			    entry->inheritance, entry->wired_count,
 			    entry->advice);
 		}
+		if (pos >= bufsize) {
+			bufsize <<= 1;
+			if (bufsize > MAXBUFFERSIZE) {
+				error = ENOMEM;
+				vm_map_unlock_read(map);
+				uvmspace_free(vm);
+				goto out;
+			}
+			free(buffer, M_TEMP);
+			goto again;
+		}
 	}
 
 	vm_map_unlock_read(map);
 	uvmspace_free(vm);
 
-	error = uiomove(buffer, pos, uio);
+	/*
+	 * We support reading from an offset, because linux does.
+	 * The map could have changed between the two reads, and
+	 * that could result in junk, but typically it does not.
+	 */
+	if (uio->uio_offset < pos)
+		error = uiomove(buffer + uio->uio_offset,
+		    pos - uio->uio_offset, uio);
+	else
+		error = 0;
 out:
 	if (path != NULL)
 		free(path, M_TEMP);

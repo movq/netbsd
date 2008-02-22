@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.10 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: signal.h,v 1.15 2018/04/01 04:35:04 ryo Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -38,29 +38,24 @@
  *
  * signal.h
  *
- * Architecture dependant signal types and structures
+ * Architecture dependent signal types and structures
  *
  * Created      : 30/09/94
  */
 
-#ifndef _ARM32_SIGNAL_H_
-#define _ARM32_SIGNAL_H_
+#ifndef _ARM_SIGNAL_H_
+#define _ARM_SIGNAL_H_
 
 #include <sys/featuretest.h>
+#include <sys/sigtypes.h>
 
 #ifndef _LOCORE
 typedef int sig_atomic_t;
 #endif
 
-#if defined(_NETBSD_SOURCE)
+#if defined(__arm__)
 
-#ifdef _KERNEL
-#ifdef COMPAT_16
-#define SIGTRAMP_VALID(vers)	((unsigned)(vers) <= 2)
-#else
-#define SIGTRAMP_VALID(vers)	((vers) == 2)
-#endif
-#endif
+#if defined(_NETBSD_SOURCE)
 
 #ifndef _LOCORE
 /*
@@ -162,6 +157,7 @@ struct sigcontext {
 #define SIG_CODE_SEGV_TYPE_MASK	SIG_CODE_BUS_TYPE_MASK
 
 #endif	/* _NETBSD_SOURCE */
+#endif	/* __arm__ */
 #endif	/* !_ARM_SIGNAL_H_ */
 
 /* End of signal.h */

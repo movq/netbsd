@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_pci_io.c,v 1.4 2007/03/05 03:05:16 mrg Exp $	*/
+/*	$NetBSD: alpha_pci_io.c,v 1.8 2017/02/20 15:23:43 rin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 
 #include <sys/param.h>
 
-#include <machine/bwx.h>
+#include <machine/alpha_cpu.h>
 #include <machine/sysarch.h>
 #include <machine/pio.h>
 
@@ -202,7 +195,7 @@ alpha_pci_io_swiz_outb(bus_addr_t ioaddr, uint8_t val)
 {
 	uint32_t *port = alpha_pci_io_swiz(ioaddr, 0);
 	bus_addr_t offset = ioaddr & 3;
-	uint32_t nval = ((uint32_t)val) << (8 * offset);
+	uint32_t nval = ((uint32_t)val) << (uint32_t)(8 * offset);
 
 	*port = nval;
 	alpha_mb();
@@ -213,7 +206,7 @@ alpha_pci_io_swiz_outw(bus_addr_t ioaddr, uint16_t val)
 {
 	uint32_t *port = alpha_pci_io_swiz(ioaddr, 1);
 	bus_addr_t offset = ioaddr & 3;
-	uint32_t nval = ((uint32_t)val) << (8 * offset);
+	uint32_t nval = ((uint32_t)val) << (uint32_t)(8 * offset);
 
 	*port = nval;
 	alpha_mb();
@@ -234,6 +227,7 @@ alpha_pci_io_swiz_outl(bus_addr_t ioaddr, uint32_t val)
  * these instructions.
  */
 __asm(".arch ev56");
+#include <machine/bwx.h>
 
 uint8_t
 alpha_pci_io_bwx_inb(bus_addr_t ioaddr)

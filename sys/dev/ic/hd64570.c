@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.54 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,11 +65,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.54 2018/06/26 06:48:00 msaitoh Exp $");
 
-#include "bpfilter.h"
 #include "opt_inet.h"
-#include "opt_iso.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,15 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $");
 #endif
 #endif
 
-#ifdef ISO
-#include <net/if_llc.h>
-#include <netiso/iso.h>
-#include <netiso/iso_var.h>
-#endif
-
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -170,7 +160,7 @@ static	void sca_port_up(sca_port_t *);
 static	void sca_port_down(sca_port_t *);
 
 static	int sca_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
-			    struct rtentry *);
+			    const struct rtentry *);
 static	int sca_ioctl(struct ifnet *, u_long, void *);
 static	void sca_start(struct ifnet *);
 static	void sca_watchdog(struct ifnet *);
@@ -225,6 +215,7 @@ dmac_read_2(sca_port_t *scp, u_int reg)
 	return sca_read_2(scp->sca, scp->dmac_off + reg);
 }
 
+#if SCA_DEBUG_LEVEL > 0
 /*
  * read the chain pointer
  */
@@ -236,6 +227,7 @@ sca_desc_read_chainp(struct sca_softc *sc, struct sca_desc *dp)
 	return (bus_space_read_2(sc->scu_memt, sc->scu_memh,
 	    sca_page_addr(sc, dp) + offsetof(struct sca_desc, sd_chainp)));
 }
+#endif
 
 /*
  * write the chain pointer
@@ -251,6 +243,7 @@ sca_desc_write_chainp(struct sca_softc *sc, struct sca_desc *dp, u_int16_t cp)
 		    + offsetof(struct sca_desc, sd_chainp), cp);
 }
 
+#if SCA_DEBUG_LEVEL > 0
 /*
  * read the buffer pointer
  */
@@ -270,6 +263,7 @@ sca_desc_read_bufp(struct sca_softc *sc, struct sca_desc *dp)
 	}
 	return (address);
 }
+#endif
 
 /*
  * write the buffer pointer
@@ -461,17 +455,16 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 #endif
 	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	if_alloc_sadl(ifp);
-
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_HDLC, HDLC_HDRLEN);
-#endif
+	bpf_attach(ifp, DLT_HDLC, HDLC_HDRLEN);
+	bpf_mtap_softint_init(ifp);
 
 	if (sc->sc_parent == NULL)
 		printf("%s: port %d\n", ifp->if_xname, port);
 	else
 		printf("%s at %s port %d\n",
-		       ifp->if_xname, sc->sc_parent->dv_xname, port);
+		       ifp->if_xname, device_xname(sc->sc_parent), port);
 
 	/*
 	 * reset the last seen times on the cisco keepalive protocol
@@ -801,16 +794,12 @@ sca_output(
     struct ifnet *ifp,
     struct mbuf *m,
     const struct sockaddr *dst,
-    struct rtentry *rt0)
+    const struct rtentry *rt0)
 {
-#ifdef ISO
-	struct hdlc_llc_header *llc;
-#endif
 	struct hdlc_header *hdlc;
 	struct ifqueue *ifq = NULL;
 	int s, error, len;
 	short mflags;
-	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	error = 0;
 
@@ -823,7 +812,7 @@ sca_output(
 	 * If the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
 	 */
-	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
 
 	/*
 	 * determine address family, and priority for this packet
@@ -860,21 +849,6 @@ sca_output(
 		hdlc->h_proto = htons(HDLC_PROTOCOL_IPV6);
 		break;
 #endif
-#ifdef ISO
-       case AF_ISO:
-               /*
-                * Add cisco llc serial line header. If there is no
-                * space in the first mbuf, allocate another.
-                */
-		M_PREPEND(m, sizeof(struct hdlc_llc_header), M_DONTWAIT);
-		if (m == 0)
-			return (ENOBUFS);
-		hdlc = mtod(m, struct hdlc_header *);
-		llc = mtod(m, struct hdlc_llc_header *);
-		llc->hl_dsap = llc->hl_ssap = LLC_ISO_LSAP;
-		llc->hl_ffb = 0;
-		break;
-#endif
 	default:
 		printf("%s: address family %d unsupported\n",
 		       ifp->if_xname, dst->sa_family);
@@ -903,7 +877,7 @@ sca_output(
 		} else
 			IF_ENQUEUE(ifq, m);
 	} else
-		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+		IFQ_ENQUEUE(&ifp->if_snd, m, error);
 	if (error != 0) {
 		splx(s);
 		ifp->if_oerrors++;
@@ -926,10 +900,7 @@ sca_output(
 }
 
 static int
-sca_ioctl(ifp, cmd, addr)
-     struct ifnet *ifp;
-     u_long cmd;
-     void *addr;
+sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -938,12 +909,12 @@ sca_ioctl(ifp, cmd, addr)
 
 	s = splnet();
 
-	ifr = (struct ifreq *)addr;
-	ifa = (struct ifaddr *)addr;
+	ifr = (struct ifreq *)data;
+	ifa = (struct ifaddr *)data;
 	error = 0;
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
@@ -997,6 +968,8 @@ sca_ioctl(ifp, cmd, addr)
 		break;
 
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		if (ifr->ifr_flags & IFF_UP) {
 			ifp->if_flags |= IFF_UP;
 			sca_port_up(ifp->if_softc);
@@ -1008,7 +981,7 @@ sca_ioctl(ifp, cmd, addr)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 
 	splx(s);
@@ -1021,8 +994,7 @@ sca_ioctl(ifp, cmd, addr)
  * MUST BE CALLED AT splnet()
  */
 static void
-sca_start(ifp)
-	struct ifnet *ifp;
+sca_start(struct ifnet *ifp)
 {
 	sca_port_t *scp = ifp->if_softc;
 	struct sca_softc *sc = scp->sca;
@@ -1143,13 +1115,10 @@ X
 
 	ifp->if_opackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Pass packet to bpf if there is a listener.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, mb_head);
-#endif
+	bpf_mtap(ifp, mb_head, BPF_D_OUT);
 
 	m_freem(mb_head);
 
@@ -1336,7 +1305,7 @@ sca_dmac_intr(sca_port_t *scp, u_int8_t isr)
 				/*
 				 * check for more packets
 				 */
-				sca_start(&scp->sp_if);
+				if_schedule_deferred_start(&scp->sp_if);
 			}
 		}
 	}
@@ -1560,7 +1529,8 @@ sca_frame_avail(sca_port_t *scp)
 static void
 sca_frame_process(sca_port_t *scp)
 {
-	struct ifqueue *ifq;
+	pktqueue_t *pktq = NULL;
+	struct ifqueue *ifq = NULL;
 	struct hdlc_header *hdlc;
 	struct cisco_pkt *cisco;
 	sca_desc_t *desc;
@@ -1568,6 +1538,7 @@ sca_frame_process(sca_port_t *scp)
 	u_int8_t *bufp;
 	u_int16_t len;
 	u_int32_t t;
+	int isr = 0;
 
 	t = time_uptime * 1000;
 	desc = &scp->sp_rxdesc[scp->sp_rxstart];
@@ -1605,10 +1576,7 @@ sca_frame_process(sca_port_t *scp)
 		return;
 	}
 
-#if NBPFILTER > 0
-	if (scp->sp_if.if_bpf)
-		bpf_mtap(scp->sp_if.if_bpf, m);
-#endif
+	bpf_mtap_softint(&scp->sp_if, m);
 
 	scp->sp_if.if_ipackets++;
 
@@ -1617,37 +1585,23 @@ sca_frame_process(sca_port_t *scp)
 #ifdef INET
 	case HDLC_PROTOCOL_IP:
 		SCA_DPRINTF(SCA_DEBUG_RX, ("Received IP packet\n"));
-		m->m_pkthdr.rcvif = &scp->sp_if;
+		m_set_rcvif(m, &scp->sp_if);
 		m->m_pkthdr.len -= sizeof(struct hdlc_header);
 		m->m_data += sizeof(struct hdlc_header);
 		m->m_len -= sizeof(struct hdlc_header);
-		ifq = &ipintrq;
-		schednetisr(NETISR_IP);
+		pktq = ip_pktq;
 		break;
 #endif	/* INET */
 #ifdef INET6
 	case HDLC_PROTOCOL_IPV6:
 		SCA_DPRINTF(SCA_DEBUG_RX, ("Received IP packet\n"));
-		m->m_pkthdr.rcvif = &scp->sp_if;
+		m_set_rcvif(m, &scp->sp_if);
 		m->m_pkthdr.len -= sizeof(struct hdlc_header);
 		m->m_data += sizeof(struct hdlc_header);
 		m->m_len -= sizeof(struct hdlc_header);
-		ifq = &ip6intrq;
-		schednetisr(NETISR_IPV6);
+		pktq = ip6_pktq;
 		break;
 #endif	/* INET6 */
-#ifdef ISO
-	case HDLC_PROTOCOL_ISO:
-		if (m->m_pkthdr.len < sizeof(struct hdlc_llc_header))
-                       goto dropit;
-		m->m_pkthdr.rcvif = &scp->sp_if;
-		m->m_pkthdr.len -= sizeof(struct hdlc_llc_header);
-		m->m_data += sizeof(struct hdlc_llc_header);
-		m->m_len -= sizeof(struct hdlc_llc_header);
-		ifq = &clnlintrq;
-		schednetisr(NETISR_ISO);
-		break;
-#endif	/* ISO */
 	case CISCO_KEEPALIVE:
 		SCA_DPRINTF(SCA_DEBUG_CISCO,
 			    ("Received CISCO keepalive packet\n"));
@@ -1668,7 +1622,7 @@ sca_frame_process(sca_port_t *scp)
 
 		cisco = (struct cisco_pkt *)
 		    (mtod(m, u_int8_t *) + HDLC_HDRLEN);
-		m->m_pkthdr.rcvif = &scp->sp_if;
+		m_set_rcvif(m, &scp->sp_if);
 
 		switch (ntohl(cisco->type)) {
 		case CISCO_ADDR_REQ:
@@ -1735,9 +1689,17 @@ sca_frame_process(sca_port_t *scp)
 		goto dropit;
 	}
 
-	/* queue the packet */
+	/* Queue the packet */
+	if (__predict_true(pktq)) {
+		if (__predict_false(!pktq_enqueue(pktq, m, 0))) {
+			scp->sp_if.if_iqdrops++;
+			goto dropit;
+		}
+		return;
+	}
 	if (!IF_QFULL(ifq)) {
 		IF_ENQUEUE(ifq, m);
+		schednetisr(isr);
 	} else {
 		IF_DROP(ifq);
 		scp->sp_if.if_iqdrops++;
@@ -2127,7 +2089,7 @@ sca_print_clock_info(struct sca_softc *sc)
 	u_int32_t mhz, div;
 	int i;
 
-	printf("%s: base clock %d Hz\n", sc->sc_parent->dv_xname,
+	printf("%s: base clock %d Hz\n", device_xname(sc->sc_parent),
 	    sc->sc_baseclock);
 
 	/* print the information about the port clock selection */

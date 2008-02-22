@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.24 2007/02/09 21:55:12 ad Exp $
+#	$NetBSD: Makefile,v 1.28 2018/03/02 23:11:42 uwe Exp $
 
 INCSDIR= /usr/include/sh3
 
 INCS=	ansi.h aout_machdep.h asm.h \
-	bswap.h bus.h byte_swap.h \
+	bswap.h byte_swap.h \
 	cdefs.h coff_machdep.h cpu.h cputypes.h \
 	disklabel.h \
 	elf_machdep.h endian.h endian_machdep.h \
-	float.h frame.h \
+	float.h fenv.h fpreg.h frame.h \
 	ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	intr.h \
@@ -17,9 +17,9 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	pte.h ptrace.h \
 	reg.h rwlock.h \
 	setjmp.h sh_opcode.h \
-	signal.h stdarg.h \
+	signal.h sysarch.h \
 	types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

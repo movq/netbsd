@@ -1,4 +1,4 @@
-.\"	$NetBSD: ossaudio.3,v 1.16 2003/04/16 13:35:12 wiz Exp $
+.\"	$NetBSD: ossaudio.3,v 1.20 2009/03/12 12:33:46 joerg Exp $
 .\"
 .\" Copyright (c) 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 16, 1997
+.Dd February 3, 2009
 .Dt OSSAUDIO 3
 .Os
 .Sh NAME
@@ -52,6 +45,27 @@ interface.
 .Pp
 Use the native interface for new programs and the emulation
 library only for porting programs.
+.Ss Mixer Control Map
+The following table summarizes the mappings from native interface
+device names to OSS mixer controls.
+.Pp
+.Bl -column ".Sy Native Device Name" "SOUND_MIXER_SPEAKER"
+.It Sy "Native Device Name" Ta Sy "OSS Mixer Control"
+.It *.mic Ta SOUND_MIXER_MIC
+.It *.line Ta SOUND_MIXER_LINE
+.It *.cd Ta SOUND_MIXER_CD
+.It *.dac Ta SOUND_MIXER_PCM
+.It *.aux Ta SOUND_MIXER_LINE1
+.It *.record Ta SOUND_MIXER_IMIX
+.It *.master Ta SOUND_MIXER_VOLUME
+.It *.treble Ta SOUND_MIXER_TREBLE
+.It *.bass Ta SOUND_MIXER_BASS
+.It *.speaker Ta SOUND_MIXER_SPEAKER
+.It *.output Ta SOUND_MIXER_OGAIN
+.It *.input Ta SOUND_MIXER_IGAIN
+.It *.fmsynth Ta SOUND_MIXER_SYNTH
+.It *.midi Ta SOUND_MIXER_SYNTH
+.El
 .Sh SEE ALSO
 .Xr audio 4 ,
 .Xr midi 4

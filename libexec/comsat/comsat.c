@@ -1,4 +1,4 @@
-/*	$NetBSD: comsat.c,v 1.36 2007/05/03 15:09:41 christos Exp $	*/
+/*	$NetBSD: comsat.c,v 1.42 2010/05/29 23:12:30 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,12 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "from: @(#)comsat.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: comsat.c,v 1.36 2007/05/03 15:09:41 christos Exp $");
+__RCSID("$NetBSD: comsat.c,v 1.42 2010/05/29 23:12:30 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +82,6 @@ __RCSID("$NetBSD: comsat.c,v 1.36 2007/05/03 15:09:41 christos Exp $");
 static int	logging;
 static int	debug;
 static char	hostname[MAXHOSTNAMELEN + 1];
-static time_t	utmpmtime;		/* last modification time for utmp/x */
 static int	nutmp;
 static struct	utmpentry *utmp = NULL;
 static time_t	lastmsgtime;
@@ -90,7 +89,7 @@ static volatile sig_atomic_t needupdate;
 
 int main(int, char *[]);
 static void jkfprintf(FILE *, const char *, off_t, const char *);
-static void mailfor(const char *);
+static void mailfor(char *);
 static void notify(const struct utmpentry *, off_t);
 static void onalrm(int);
 static void checkutmp(void);
@@ -173,9 +172,6 @@ onalrm(int signo)
 static void
 checkutmp(void)
 {
-	struct stat statbf;
-	time_t newtime = 0;
-
 	if (!needupdate)
 		return;
 	needupdate = 0;
@@ -183,25 +179,11 @@ checkutmp(void)
 	if (time(NULL) - lastmsgtime >= MAXIDLE)
 		exit(0);
 	(void)alarm((u_int)15);
-#ifdef SUPPORT_UTMP
-	if (stat(_PATH_UTMP, &statbf) != -1)
-		if (statbf.st_mtime > newtime)
-			newtime = statbf.st_mtime;
-#endif
-#ifdef SUPPORT_UTMPX
-	if (stat(_PATH_UTMPX, &statbf) != -1)
-		if (statbf.st_mtime > newtime)
-			newtime = statbf.st_mtime;
-#endif
-	if (newtime > utmpmtime) {
-		freeutentries(utmp);
-		nutmp = getutentries(NULL, &utmp);
-		utmpmtime = newtime;
-	}
+	nutmp = getutentries(NULL, &utmp);
 }
 
 static void
-mailfor(const char *name)
+mailfor(char *name)
 {
 	struct utmpentry *ep;
 	char *cp, *fn;
@@ -226,7 +208,7 @@ mailfor(const char *name)
 		char maildir[MAXPATHLEN];
 		int l = snprintf(maildir, sizeof(maildir), ":%s/%s",
 		    _PATH_MAILDIR, name);
-		if (l >= sizeof(maildir) || strcmp(maildir, fn) != 0)
+		if (l >= (int)sizeof(maildir) || strcmp(maildir, fn) != 0)
 			return;
 	}
 	for (ep = utmp; ep != NULL; ep = ep->next)
@@ -268,7 +250,7 @@ notify(const struct utmpentry *ep, off_t offset)
 		return;
 	}
 	(void)signal(SIGALRM, SIG_DFL);
-	(void)alarm((u_int)30);
+	(void)alarm(30);
 	if ((tp = fopen(tty, "w")) == NULL) {
 		dsyslog(LOG_ERR, "open `%s' (%s)", tty, strerror(errno));
 		_exit(1);
@@ -279,7 +261,7 @@ notify(const struct utmpentry *ep, off_t offset)
 	}
 	cr = (ttybuf.c_oflag & ONLCR) && (ttybuf.c_oflag & OPOST) ?
 	    "\n" : "\n\r";
-	/* Set uid/gid/groups to users in case mail drop is on nfs */
+	/* Set uid/gid/groups to user's in case mail drop is on nfs */
 	if ((p = getpwnam(ep->name)) == NULL ||
 	    initgroups(p->pw_name, p->pw_gid) == -1 ||
 	    setgid(p->pw_gid) == -1 ||
@@ -310,7 +292,7 @@ jkfprintf(FILE *tp, const char *name, off_t offset, const char *cr)
 	/*
 	 * Print the first 7 lines or 560 characters of the new mail
 	 * (whichever comes first).  Skip header crap other than
-	 * From, Subject, To, and Date.
+	 * From and Subject.
 	 */
 	linecnt = 7;
 	charcnt = 560;

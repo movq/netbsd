@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlregs.h,v 1.9 2007/12/25 18:33:40 perry Exp $	*/
+/*	$NetBSD: if_tlregs.h,v 1.11 2014/10/18 08:33:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *  This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -186,7 +181,7 @@ struct tl_Tx_list {
 
 struct Rx_list {
 	struct mbuf *m; /* mbuf associated with this list */
-	bus_dmamap_t m_dmamap; /* and it's DMA map */
+	bus_dmamap_t m_dmamap; /* and its DMA map */
 	struct Rx_list *next;
 	bus_addr_t hw_listaddr;
 	struct tl_Rx_list *hw_list;
@@ -194,7 +189,7 @@ struct Rx_list {
 
 struct Tx_list {
 	struct mbuf *m; /* mbuf associated with this list */
-	bus_dmamap_t m_dmamap; /* and it's DMA map */
+	bus_dmamap_t m_dmamap; /* and its DMA map */
 	struct Tx_list *next;
 	bus_addr_t hw_listaddr;
 	struct tl_Tx_list *hw_list;

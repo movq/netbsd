@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.11 2007/12/20 23:46:12 ad Exp $	*/
+/*	$NetBSD: asm.h,v 1.19 2014/05/22 14:59:01 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,7 +37,9 @@
 #ifndef _AMD64_ASM_H_
 #define _AMD64_ASM_H_
 
-#ifdef PIC
+#ifdef __x86_64__
+
+#ifdef __PIC__
 #define PIC_PLT(x)	x@PLT
 #define PIC_GOT(x)	x@GOTPCREL(%rip)
 #else
@@ -45,7 +47,7 @@
 #define PIC_GOT(x)	x
 #endif
 
-# define _C_LABEL(x)	x
+#define _C_LABEL(x)	x
 #define	_ASM_LABEL(x)	x
 
 #define CVAROFF(x,y)		(_C_LABEL(x)+y)(%rip)
@@ -77,9 +79,13 @@
 #ifdef __STDC__
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X ## name; .type X ## name,@function; X ## name:
+#define	IDTVEC_END(name) \
+	.size X ## name, . - X ## name
 #else 
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X/**/name; .type X/**/name,@function; X/**/name:
+#define	IDTVEC_END(name) \
+	.size X/**/name, . - X/**/name
 #endif /* __STDC__ */ 
 #endif /* _KERNEL */
 
@@ -99,12 +105,14 @@
 
 #define	ENTRY(y)	_ENTRY(_C_LABEL(y)); _PROF_PROLOGUE
 #define	NENTRY(y)	_ENTRY(_C_LABEL(y))
+#define	ALTENTRY(x)	NENTRY(x)
 #define	ASENTRY(y)	_ENTRY(_ASM_LABEL(y)); _PROF_PROLOGUE
 #define	LABEL(y)	_LABEL(_C_LABEL(y))
+#define	END(y)		.size y, . - y
 
 #define	ASMSTR		.asciz
 
-#define RCSID(x)	.text; .asciz x
+#define RCSID(x)	.pushsection ".ident"; .asciz x; .popsection
 
 #define	WEAK_ALIAS(alias,sym)						\
 	.weak alias;							\
@@ -117,15 +125,22 @@
 	.globl alias;							\
 	alias = sym
 
-/* XXXfvdl do not use stabs here */
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_C_LABEL(sym)) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(sym),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
+
+#else	/*	__x86_64__	*/
+
+#include <i386/asm.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* !_AMD64_ASM_H_ */

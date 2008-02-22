@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425_mainbus.c,v 1.5 2005/12/11 12:17:09 christos Exp $ */
+/*	$NetBSD: ixdp425_mainbus.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixdp425_mainbus.c,v 1.5 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixdp425_mainbus.c,v 1.9 2012/10/14 14:20:58 msaitoh Exp $");
 
 /*
  * front-end for the ixp425 NetworkProcessor.
@@ -45,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_mainbus.c,v 1.5 2005/12/11 12:17:09 christos
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -54,22 +48,22 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_mainbus.c,v 1.5 2005/12/11 12:17:09 christos
 
 #include "locators.h"
 
-static int	ixp425_mainbus_match(struct device *, struct cfdata *, void *);
-static void	ixp425_mainbus_attach(struct device *, struct device *, void *);
+static int	ixp425_mainbus_match(device_t, cfdata_t, void *);
+static void	ixp425_mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ixpio_mainbus, sizeof(struct ixp425_softc),
+CFATTACH_DECL_NEW(ixpio_mainbus, sizeof(struct ixp425_softc),
     ixp425_mainbus_match, ixp425_mainbus_attach, NULL, NULL);
 
 int
-ixp425_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+ixp425_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-ixp425_mainbus_attach(struct device *parent, struct device *self, void *aux)
+ixp425_mainbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct ixp425_softc *sc = (void *) self;
 
-	ixp425_attach(sc);
+	ixp425_intr_evcnt_attach();
+	ixp425_attach(self);
 }

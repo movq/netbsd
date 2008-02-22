@@ -1,4 +1,4 @@
-/*	$NetBSD: gxiic.c,v 1.2 2007/12/06 17:00:32 ad Exp $ */
+/*	$NetBSD: gxiic.c,v 1.8 2016/02/14 19:54:20 chs Exp $ */
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -25,13 +25,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gxiic.c,v 1.2 2007/12/06 17:00:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gxiic.c,v 1.8 2016/02/14 19:54:20 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 #include <sys/mutex.h>
 
+#include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0_i2c.h>
 
 #include <evbarm/gumstix/gumstixvar.h>
@@ -47,8 +48,8 @@ struct gxiic_softc {
 };
 
 
-static int gxiicmatch(struct device *, struct cfdata *, void *);
-static void gxiicattach(struct device *, struct device *, void *);
+static int gxiicmatch(device_t, cfdata_t, void *);
+static void gxiicattach(device_t, device_t, void *);
 
 /* fuctions for i2c_controller */
 static int gxiic_acquire_bus(void *, int);
@@ -57,33 +58,41 @@ static int gxiic_exec(void *cookie, i2c_op_t, i2c_addr_t, const void *, size_t,
     void *, size_t, int);
 
 
-CFATTACH_DECL(gxiic, sizeof(struct gxiic_softc),
+CFATTACH_DECL_NEW(gxiic, sizeof(struct gxiic_softc),
     gxiicmatch, gxiicattach, NULL, NULL);
 
 
 /* ARGSUSED */
 static int
-gxiicmatch(struct device *parent, struct cfdata *match, void *aux)
+gxiicmatch(device_t parent, cfdata_t match, void *aux)
 {
+	struct pxaip_attach_args *pxa = aux;
 
+	if (strcmp(pxa->pxa_name, match->cf_name) != 0)
+		 return 0;
+
+	pxa->pxa_size = PXA2X0_I2C_SIZE;
 	return 1;
 }
 
 /* ARGSUSED */
 static void
-gxiicattach(struct device *parent, struct device *self, void *aux)
+gxiicattach(device_t parent, device_t self, void *aux)
 {
+	struct pxaip_attach_args *pxa = aux;
 	struct gxiic_softc *sc = device_private(self);
-	struct gxio_attach_args *gxa = aux;
 	struct i2cbus_attach_args iba;
 
 	aprint_normal("\n");
 	aprint_naive("\n");
 
-	sc->sc_pxa_i2c.sc_iot = gxa->gxa_iot;
-	sc->sc_pxa_i2c.sc_size = PXA2X0_I2C_SIZE;
+	sc->sc_pxa_i2c.sc_dev = self;
+	sc->sc_pxa_i2c.sc_iot = pxa->pxa_iot;
+	sc->sc_pxa_i2c.sc_addr = pxa->pxa_addr;
+	sc->sc_pxa_i2c.sc_size = pxa->pxa_size;
+	sc->sc_pxa_i2c.sc_flags = 0;
 	if (pxa2x0_i2c_attach_sub(&sc->sc_pxa_i2c)) {
-		aprint_error(": unable to attach PXA I2C\n");
+		aprint_error_dev(self, "unable to attach PXA I2C\n");
 		return;
 	}
 
@@ -100,9 +109,10 @@ gxiicattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_i2c.ic_write_byte = NULL;
 	sc->sc_i2c.ic_exec = gxiic_exec;
 
+	memset(&iba, 0, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c;
 	pxa2x0_i2c_open(&sc->sc_pxa_i2c);
-	config_found_ia(&sc->sc_pxa_i2c.sc_dev, "i2cbus", &iba, iicbus_print);
+	config_found_ia(sc->sc_pxa_i2c.sc_dev, "i2cbus", &iba, iicbus_print);
 	pxa2x0_i2c_close(&sc->sc_pxa_i2c);
 }
 
@@ -172,6 +182,11 @@ gxiic_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *vcmd,
 			rv = pxa2x0_i2c_write_2(&sc->sc_pxa_i2c,
 			    addr, *(u_short *)vbuf);
 	}
+
+	/* Handle quick_read/quick_write ops - XXX Untested XXX */
+	if ((cmdlen == 0) && (buflen == 0))
+		rv = pxa2x0_i2c_quick(&sc->sc_pxa_i2c, addr,
+			I2C_OP_READ_P(op)?1:0);
 
 	return rv;
 }

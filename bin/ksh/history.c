@@ -1,4 +1,4 @@
-/*	$NetBSD: history.c,v 1.9 2005/06/26 19:09:00 christos Exp $	*/
+/*	$NetBSD: history.c,v 1.19 2018/05/08 16:37:59 kamil Exp $	*/
 
 /*
  * command history
@@ -19,22 +19,18 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: history.c,v 1.9 2005/06/26 19:09:00 christos Exp $");
+__RCSID("$NetBSD: history.c,v 1.19 2018/05/08 16:37:59 kamil Exp $");
 #endif
 
+#include <sys/stat.h>
 
 #include "sh.h"
-#include "ksh_stat.h"
 
 #ifdef HISTORY
 # ifdef EASY_HISTORY
 
 #  ifndef HISTFILE
-#   ifdef OS2
-#    define HISTFILE "history.ksh"
-#   else /* OS2 */
 #    define HISTFILE ".pdksh_history"
-#   endif /* OS2 */
 #  endif
 
 # else
@@ -167,8 +163,8 @@ c_fc(wp)
 			return 1;
 		}
 
-		hp = first ? hist_get(first, FALSE, FALSE)
-			   : hist_get_newest(FALSE);
+		hp = first ? hist_get(first, false, false)
+			   : hist_get_newest(false);
 		if (!hp)
 			return 1;
 		return hist_replace(hp, pat, rep, gflag);
@@ -188,23 +184,23 @@ c_fc(wp)
 		return 1;
 	}
 	if (!first) {
-		hfirst = lflag ? hist_get("-16", TRUE, TRUE)
-			       : hist_get_newest(FALSE);
+		hfirst = lflag ? hist_get("-16", true, true)
+			       : hist_get_newest(false);
 		if (!hfirst)
 			return 1;
 		/* can't fail if hfirst didn't fail */
-		hlast = hist_get_newest(FALSE);
+		hlast = hist_get_newest(false);
 	} else {
 		/* POSIX says not an error if first/last out of bounds
 		 * when range is specified; at&t ksh and pdksh allow out of
 		 * bounds for -l as well.
 		 */
-		hfirst = hist_get(first, (lflag || last) ? TRUE : FALSE,
-				lflag ? TRUE : FALSE);
+		hfirst = hist_get(first, (lflag || last) ? true : false,
+				lflag ? true : false);
 		if (!hfirst)
 			return 1;
-		hlast = last ? hist_get(last, TRUE, lflag ? TRUE : FALSE)
-			    : (lflag ? hist_get_newest(FALSE) : hfirst);
+		hlast = last ? hist_get(last, true, lflag ? true : false)
+			    : (lflag ? hist_get_newest(false) : hfirst);
 		if (!hlast)
 			return 1;
 	}
@@ -251,7 +247,7 @@ c_fc(wp)
 	}
 
 	/* Ignore setstr errors here (arbitrary) */
-	setstr(local("_", FALSE), tf->name, KSH_RETURN_ERROR);
+	setstr(local("_", false), tf->name, KSH_RETURN_ERROR);
 
 	/* XXX: source should not get trashed by this.. */
 	{
@@ -315,7 +311,7 @@ hist_execute(cmd)
 		}
 #ifdef EASY_HISTORY
 		if (p != cmd)
-			histappend(p, TRUE);
+			histappend(p, true);
 		else
 #endif /* EASY_HISTORY */
 			histsave(++(hist_source->line), p, 1);
@@ -604,7 +600,7 @@ sethistfile(name)
 void
 init_histvec()
 {
-	if (histlist == (char **)NULL) {
+	if (histlist == NULL) {
 		histsize = HISTORYSIZE;
 		histlist = (char **)alloc(histsize*sizeof (char *), APERM);
 		histptr = histlist - 1;
@@ -621,7 +617,7 @@ histsave(lno, cmd, dowrite)
 	const char *cmd;
 	int dowrite;	/* ignored (compatibility with COMPLEX_HISTORY) */
 {
-	register char **hp = histptr;
+	char **hp = histptr;
 	char *cp;
 
 	if (++hp >= histlist + histsize) { /* remove oldest command */
@@ -740,23 +736,31 @@ void
 hist_finish()
 {
   static int once;
+  int fd;
   FILE *fh;
-  register int i;
-  register char **hp;
+  int i;
+  char **hp;
 
   if (once++)
     return;
+  if (hname == NULL || hname[0] == 0)
+    return;
+
   /* check how many we have */
   i = histptr - histlist;
   if (i >= histsize)
     hp = &histptr[-histsize];
   else
     hp = histlist;
-  if (hname && (fh = fopen(hname, "w")))
-  {
-    for (i = 0; hp + i <= histptr && hp[i]; i++)
-      fprintf(fh, "%s%c", hp[i], '\0');
-    fclose(fh);
+
+  if ((fd = open(hname, O_WRONLY | O_CREAT | O_TRUNC | O_EXLOCK, 0600)) != -1) {
+    /* Remove anything written before we got the lock */
+    ftruncate(fd, 0);
+    if ((fh = fdopen(fd, "w")) != NULL) {
+      for (i = 0; hp + i <= histptr && hp[i]; i++)
+        fprintf(fh, "%s%c", hp[i], '\0');
+      fclose(fh);
+    }
   }
 }
 
@@ -780,7 +784,7 @@ histsave(lno, cmd, dowrite)
 	const char *cmd;
 	int dowrite;
 {
-	register char **hp;
+	char **hp;
 	char *c, *cp;
 
 	c = str_save(cmd, APERM);
@@ -905,8 +909,8 @@ typedef enum state {
 
 static int
 hist_count_lines(base, bytes)
-	register unsigned char *base;
-	register int bytes;
+	unsigned char *base;
+	int bytes;
 {
 	State state = shdr;
 	int lines = 0;
@@ -998,8 +1002,8 @@ hist_skip_back(base, bytes, no)
 	int *bytes;
 	int no;
 {
-	register int lines = 0;
-	register unsigned char *ep;
+	int lines = 0;
+	unsigned char *ep;
 
 	for (ep = base + *bytes; --ep > base; ) {
 		/* this doesn't really work: the 4 byte line number that is
@@ -1024,8 +1028,8 @@ hist_skip_back(base, bytes, no)
 static void
 histload(s, base, bytes)
 	Source *s;
-	register unsigned char *base;
-	register int bytes;
+	unsigned char *base;
+	int bytes;
 {
 	State state;
 	int	lno = 0;
@@ -1080,7 +1084,7 @@ histinsert(s, lno, line)
 	int lno;
 	unsigned char *line;
 {
-	register char **hp;
+	char **hp;
 
 	if (lno >= s->line-(histptr-histlist) && lno <= s->line) {
 		hp = &histptr[lno-s->line];

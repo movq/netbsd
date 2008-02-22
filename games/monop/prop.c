@@ -1,4 +1,4 @@
-/*	$NetBSD: prop.c,v 1.15 2008/02/20 05:08:46 dholland Exp $	*/
+/*	$NetBSD: prop.c,v 1.20 2012/06/19 05:35:32 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)prop.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: prop.c,v 1.15 2008/02/20 05:08:46 dholland Exp $");
+__RCSID("$NetBSD: prop.c,v 1.20 2012/06/19 05:35:32 dholland Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
-#include "monop.ext"
+
+#include "monop.h"
 
 static int value(SQUARE *);
 
@@ -48,9 +49,7 @@ static int value(SQUARE *);
  * appropriate flags.
  */
 void
-buy(playernum, sqrp)
-	int playernum;
-	SQUARE *sqrp;
+buy(int playernum, SQUARE *sqrp)
 {
 	trading = FALSE;
 	sqrp->owner = playernum;
@@ -61,16 +60,13 @@ buy(playernum, sqrp)
  *	This routine adds an item to the list.
  */
 void
-add_list(plr, head, op_sqr)
-	int plr;
-	OWN **head;
-	int op_sqr;
+add_list(int plr, OWN **head, int op_sqr)
 {
 	int val;
 	OWN *tp, *last_tp;
 	OWN *op;
 
-	op = (OWN *)calloc(1, sizeof (OWN));
+	op = calloc(1, sizeof (OWN));
 	if (op == NULL)
 		errx(1, "out of memory");
 	op->sqr = &board[op_sqr];
@@ -96,10 +92,7 @@ add_list(plr, head, op_sqr)
  *	This routine deletes property from the list.
  */
 void
-del_list(plr, head, op_sqr)
-	int plr;
-	OWN **head;
-	short op_sqr;
+del_list(int plr, OWN **head, short op_sqr)
 {
 	OWN *op, *last_op;
 
@@ -135,8 +128,7 @@ del_list(plr, head, op_sqr)
  * given square.
  */
 static int
-value(sqp)
-	SQUARE *sqp;
+value(SQUARE *sqp)
 {
 	int sqr;
 
@@ -162,11 +154,11 @@ value(sqp)
  * This routine accepts bids for the current piece of property.
  */
 void
-bid()
+bid(void)
 {
 	static bool in[MAX_PL];
 	int i, num_in, cur_max;
-	char buf[80];
+	char buf[257];
 	int cur_bid;
 
 	printf("\nSo it goes up for auction.  Type your bid after your name\n");
@@ -190,6 +182,10 @@ bid()
 					printf("You must bid higher than %d "
 					    "to stay in\n", cur_max);
 					printf("(bid of 0 drops you out)\n");
+				} else if (cur_bid > play[i].money) {
+					printf("You can't bid more than your cash ($%d)\n",
+					    play[i].money);
+					cur_bid = -1;
 				}
 			} while (cur_bid != 0 && cur_bid <= cur_max);
 			cur_max = (cur_bid ? cur_bid : cur_max);
@@ -212,8 +208,7 @@ bid()
  * of given player.
  */
 int
-prop_worth(plp)
-	PLAY *plp;
+prop_worth(PLAY *plp)
 {
 	OWN *op;
 	int worth;

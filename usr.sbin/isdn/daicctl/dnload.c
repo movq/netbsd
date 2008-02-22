@@ -1,4 +1,4 @@
-/* $NetBSD: dnload.c,v 1.5 2003/11/12 13:31:07 grant Exp $ */
+/* $NetBSD: dnload.c,v 1.8 2018/01/23 21:06:24 sevan Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,9 +40,7 @@
 #include "daicctl.h"
 
 void
-download(fd, controller, filename)
-	int fd, controller;
-	char *filename;
+download(int fd, int controller, char *filename)
 {
 	int i, num_ports = 1;
 	struct isdn_download_request dr;
@@ -92,7 +83,7 @@ download(fd, controller, filename)
 		exit(1);
 	}
 	rlen = fread(data, 1, sb.st_size, f);
-	if (rlen != sb.st_size) {
+	if ((off_t)rlen != sb.st_size) {
 		fprintf(stderr, "error reading microcode, read %lu bytes: %s\n",
 			(unsigned long)rlen, strerror(errno));
 		exit(1);

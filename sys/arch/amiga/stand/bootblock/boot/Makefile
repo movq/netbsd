@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile,v 1.38 2006/01/25 13:23:50 is Exp $
+#	$NetBSD: Makefile,v 1.56 2017/04/09 14:51:52 christos Exp $
 
+.include <bsd.init.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 ### what we need:
@@ -26,14 +27,13 @@ DIR_LIBC=	${DIR_TOP}/../common/lib/libc
 
 S=	${DIR_TOP}	# ????
 Z_AS= library
-ZMISCCPPFLAGS=-DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
 .include "${DIR_TOP}/lib/libz/Makefile.inc"
 LIBZ= ${ZLIB}
 
 # prefer our assembler versions over assembler, and assembler over C:
 
 .SUFFIXES:
-.SUFFIXES: .out .o .po .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
+.SUFFIXES: .out .o .po .pico .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
 
 FILES= boot.amiga
 BINDIR=/usr/mdec
@@ -47,11 +47,12 @@ SOBJS = alloc.o ashrdi3.o ashldi3.o bcopy.o muldi3.o printf.o startit.o
 SOBJS += strlen.o memcmp.o memset.o strerror.o strncmp.o
 SOBJS += libstubs.o
 
-OBJS=	$(SOBJS) $(COBJS)
+OBJS+=	$(SOBJS) $(COBJS)
 
-#XX#DEFS = -D_STANDALONE -DINSECURE -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
-DEFS = -D_STANDALONE -DINSECURE 
+#XX#DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
+DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER 
 DEFS += -D__INTERNAL_LIBSA_CREAD
+DEFS += -DSERCONSOLE
 SOBJS += cread.o
 
 #XX#SOBJS += adler32.o crc32.o inflate.o trees.o \
@@ -65,59 +66,68 @@ DEFS+=	-DNETBSD_VERS='"${NETBSD_VERS}"'
 
 ### main target: ###
 
-realall: machine m68k ${FILES}
+realall: ${FILES}
 
-CLEANFILES += boot.amiga x.out xxstart.o libboot.a vers.c machine m68k
+CLEANFILES += boot.amiga x.out xxstart.o libboot.a
+
+VERSIONFLAGS+=-n
+.include "${S}/conf/newvers_stand.mk"
 
 .include <bsd.prog.mk>
+.include <bsd.klinks.mk>
 
 ### special  rules for bootblocks ###
 
-INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa -I${.CURDIR}
+INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa
+INCPATH += -I${DIR_TOP}/../common/dist/zlib
+INCPATH += -I${.CURDIR}
 INCPATH += -I${.CURDIR}/../../.. -I${.OBJDIR}
-INCPATH += -I${.CURDIR}/../aout2bb -I${DESTDIR}/usr/include
+INCPATH += -I${.CURDIR}/../elf2bb
 
-AFLAGS += -m68030 -l
-CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH}
+AFLAGS += -march=68030 -mcpu=68030 -l
+CAFLAGS += -Wa,-l -Wa,-march=68030 -Wa,-mcpu=68030 ${INCPATH}
 
-COPTIM= -Os -fomit-frame-pointer -fcse-follow-jumps -fcse-skip-blocks  -Wa,-l -m68060 -Wa,-m68030
-CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS} -Wall #-Wstrict-prototypes
+COPTIM= -Os -fomit-frame-pointer -fcse-follow-jumps -fcse-skip-blocks
+COPTIM+= -Wa,-l -m68060 -Wa,-march=68030 -Wa,-mcpu=68030 -fno-unwind-tables
+CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS}
+CFLAGS+= -Werror
+CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
+
+# XXX work around a gcc 4.5 bug
+COPTS.cread.c = -O1
 
 .c.o:
-	${CC} ${CFLAGS} -S $< -o $*.s
-	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $*.o
+	${_MKTARGET_COMPILE}
+	${CC} ${CFLAGS} ${COPTS.${.IMPSRC:T}} -S $< -o $*.s
+	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $@
 	rm $*.s
 
-.s.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
+.s.o:
+	${_MKTARGET_COMPILE}
+	${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
 
-.S.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
+.S.o:
+	${_MKTARGET_COMPILE}
+	${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
 
 boot.amiga: x.out
-	${RELOC2BB} -S x.out $@ || ${NM} -u x.out
+	${_MKTARGET_CREATE}
+	${RELOC2BB} -S x.out $@ || (${NM} -u x.out && false)
 
 x.out: xxstart.o libboot.a ${LIBZ}
-	${LD} ${LDFLAGS} -r -dc -e _start -o $@ $>
+	${_MKTARGET_LINK}
+	${LD} ${LDFLAGS} -r -dc -e start -o $@ $>
 	${SIZE} $@
 	${NM} -u $@
 
 xxstart.o: ${.CURDIR}/bbstart.s
+	${_MKTARGET_COMPILE}
 	${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp \
 		-o $@ -c $>
 
 libboot.a: ${OBJS}
-	${AR} r $@ $> && ${RANLIB} $@
-
-.PHONY:	vers.c
-vers.c:	${.CURDIR}/version
-	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh -N ${.CURDIR}/version "amiga"
-
-machine:
-	-rm -f $@
-	ln -s ${DIR_TOP}/arch/amiga/include $@
-
-m68k:
-	-rm -f $@
-	ln -s ${DIR_TOP}/arch/m68k/include $@
+	${_MKTARGET_BUILD}
+	${AR} crs $@ $> && ${RANLIB} $@
 
 # make sure these are built:
 

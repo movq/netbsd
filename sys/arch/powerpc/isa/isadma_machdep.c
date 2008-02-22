@@ -1,4 +1,4 @@
-/*	$NetBSD: isadma_machdep.c,v 1.4 2007/03/07 17:22:27 he Exp $	*/
+/*	$NetBSD: isadma_machdep.c,v 1.11 2016/12/23 07:15:27 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.4 2007/03/07 17:22:27 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.11 2016/12/23 07:15:27 cherry Exp $");
 
 #define ISA_DMA_STATS
 
@@ -46,12 +39,12 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.4 2007/03/07 17:22:27 he Exp $"
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/pio.h>
 
@@ -175,9 +168,11 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	size_t cookiesize;
 	paddr_t avail_end = 0;
 
-	for (bank = 0; bank < vm_nphysseg; bank++) {
-		if (avail_end < vm_physmem[bank].avail_end << PGSHIFT)
-			avail_end = vm_physmem[bank].avail_end << PGSHIFT;
+	for (bank = uvm_physseg_get_first();
+	     uvm_physseg_valid_p(bank);
+	     bank = uvm_physseg_get_next(bank)) {
+		if (avail_end < uvm_physseg_get_avail_end(bank) << PGSHIFT)
+			avail_end = uvm_physseg_get_avail_end(bank) << PGSHIFT;
 	}
 
 	/* Call common function to create the basic map. */
@@ -189,7 +184,7 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	map = *dmamp;
 	map->_dm_cookie = NULL;
 
-	cookiesize = sizeof(struct powerpc_isa_dma_cookie);
+	cookiesize = sizeof(*cookie);
 
 	/*
 	 * ISA only has 24-bits of address space.  This means
@@ -228,8 +223,8 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	/*
 	 * Allocate our cookie.
 	 */
-	if ((cookiestore = malloc(cookiesize, M_DMAMAP,
-	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL) {
+	if ((cookiestore = kmem_intr_alloc(cookiesize,
+	    (flags & BUS_DMA_NOWAIT) ? KM_NOSLEEP : KM_SLEEP)) == NULL) {
 		error = ENOMEM;
 		goto out;
 	}
@@ -252,7 +247,7 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
  out:
 	if (error) {
 		if (map->_dm_cookie != NULL)
-			free(map->_dm_cookie, M_DMAMAP);
+			kmem_intr_free(cookiestore, cookiesize);
 		_bus_dmamap_destroy(t, map);
 	}
 	return (error);
@@ -272,7 +267,11 @@ _isa_bus_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
 	if (cookie->id_flags & ID_HAS_BOUNCE)
 		_isa_dma_free_bouncebuf(t, map);
 
-	free(cookie, M_DMAMAP);
+	size_t cookiesize = sizeof(*cookie);
+	if (cookie->id_flags & ID_MIGHT_NEED_BOUNCE)
+		cookiesize += (sizeof(bus_dma_segment_t) * map->_dm_segcnt);
+
+	kmem_intr_free(cookie, cookiesize);
 	_bus_dmamap_destroy(t, map);
 }
 
@@ -299,8 +298,7 @@ _isa_bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load(t, map, buf, buflen, p, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*
@@ -371,8 +369,7 @@ _isa_bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load_mbuf(t, map, m0, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*
@@ -603,9 +600,11 @@ _isa_bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 	paddr_t high, avail_end = 0;
 	int bank;
 
-	for (bank = 0; bank < vm_nphysseg; bank++) {
-		if (avail_end < vm_physmem[bank].avail_end << PGSHIFT)
-			avail_end = vm_physmem[bank].avail_end << PGSHIFT;
+	for (bank = uvm_physseg_get_first();
+	     uvm_physseg_valid_p(bank);
+	     bank = uvm_physseg_get_next(bank)) {
+		if (avail_end < uvm_physseg_get_avail_end(bank) << PGSHIFT)
+			avail_end = uvm_physseg_get_avail_end(bank) << PGSHIFT;
 	}
 
 	if (avail_end > ISA_DMA_BOUNCE_THRESHOLD)

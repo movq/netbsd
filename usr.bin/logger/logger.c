@@ -1,4 +1,4 @@
-/*	$NetBSD: logger.c,v 1.9 2003/08/07 11:14:23 agc Exp $	*/
+/*	$NetBSD: logger.c,v 1.17 2012/04/27 06:30:48 wiz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)logger.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: logger.c,v 1.9 2003/08/07 11:14:23 agc Exp $");
+__RCSID("$NetBSD: logger.c,v 1.17 2012/04/27 06:30:48 wiz Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -53,10 +53,9 @@ __RCSID("$NetBSD: logger.c,v 1.9 2003/08/07 11:14:23 agc Exp $");
 #define	SYSLOG_NAMES
 #include <syslog.h>
 
-int	decode(const char *, const CODE *);
-int	pencode(char *);
-int	main(int, char **);
-void	usage(void);
+static int	decode(const char *, const CODE *);
+static int	pencode(char *);
+__dead static void	usage(void);
 
 /*
  * logger -- read and log utility
@@ -69,19 +68,33 @@ main(int argc, char *argv[])
 {
 	int ch, logflags, pri;
 	const char *tag;
+	const char *sd = "-";
+	const char *msgid = "-";
 	char buf[1024];
 
 	tag = NULL;
 	pri = LOG_NOTICE;
 	logflags = 0;
-	while ((ch = getopt(argc, argv, "f:ip:st:")) != -1)
+	while ((ch = getopt(argc, argv, "cd:f:im:np:st:")) != -1)
 		switch((char)ch) {
+		case 'c':	/* log to console */
+			logflags |= LOG_CONS;
+			break;
+		case 'd':		/* structured data field */
+			sd = optarg;
+			break;
 		case 'f':		/* file to log */
 			if (freopen(optarg, "r", stdin) == NULL)
 				err(EXIT_FAILURE, "%s", optarg);
 			break;
 		case 'i':		/* log process id also */
 			logflags |= LOG_PID;
+			break;
+		case 'm':		/* msgid field */
+			msgid = optarg;
+			break;
+		case 'n':		/* open log file immediately */
+			logflags |= LOG_NDELAY;
 			break;
 		case 'p':		/* priority */
 			pri = pencode(optarg);
@@ -106,16 +119,16 @@ main(int argc, char *argv[])
 	/* log input line if appropriate */
 	if (argc > 0) {
 		char *p, *endp;
-		int len;
+		size_t len;
 
 		for (p = buf, endp = buf + sizeof(buf) - 2; *argv != NULL;) {
 			len = strlen(*argv);
 			if (p + len > endp && p > buf) {
-				syslog(pri, "%s", buf);
+				syslogp(pri, msgid, sd, "%s", buf);
 				p = buf;
 			}
 			if (len > sizeof(buf) - 1)
-				syslog(pri, "%s", *argv++);
+				syslogp(pri, msgid, sd, "%s", *argv++);
 			else {
 				if (p != buf)
 					*p++ = ' ';
@@ -124,10 +137,13 @@ main(int argc, char *argv[])
 			}
 		}
 		if (p != buf)
-			syslog(pri, "%s", buf);
-	} else
+			syslogp(pri, msgid, sd, "%s", buf);
+	} else	/* TODO: allow syslog-protocol messages from file/stdin
+		 *       but that will require parsing the line to split
+		 *       it into three fields.
+		 */
 		while (fgets(buf, sizeof(buf), stdin) != NULL)
-			syslog(pri, "%s", buf);
+			syslogp(pri, msgid, sd, "%s", buf);
 
 	exit(EXIT_SUCCESS);
 	/* NOTREACHED */
@@ -136,7 +152,7 @@ main(int argc, char *argv[])
 /*
  *  Decode a symbolic name to a numeric value
  */
-int
+static int
 pencode(char *s)
 {
 	char *save;
@@ -160,7 +176,7 @@ pencode(char *s)
 	return ((lev & LOG_PRIMASK) | (fac & LOG_FACMASK));
 }
 
-int
+static int
 decode(const char *name, const CODE *codetab)
 {
 	const CODE *c;
@@ -175,12 +191,13 @@ decode(const char *name, const CODE *codetab)
 	return (-1);
 }
 
-void
+static void
 usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "%s: [-is] [-f file] [-p pri] [-t tag] [ message ... ]\n",
+	    "Usage: %s [-cins] [-d SD] [-f file] [-m msgid] "
+	    "[-p pri] [-t tag] [message ...]\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 }

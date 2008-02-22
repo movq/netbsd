@@ -1,4 +1,4 @@
-/* $NetBSD: key.c,v 1.20 2004/04/01 16:10:03 tsarna Exp $ */
+/* $NetBSD: key.c,v 1.22 2017/01/10 20:44:05 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)key.c	8.4 (Berkeley) 2/20/95";
 #else
-__RCSID("$NetBSD: key.c,v 1.20 2004/04/01 16:10:03 tsarna Exp $");
+__RCSID("$NetBSD: key.c,v 1.22 2017/01/10 20:44:05 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -43,6 +43,7 @@ __RCSID("$NetBSD: key.c,v 1.20 2004/04/01 16:10:03 tsarna Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <time.h>
 #include <paths.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -146,7 +147,7 @@ ksearch(char ***argvp, struct info *ip)
 void
 f_all(struct info *ip)
 {
-	print(&ip->t, &ip->win, ip->ldisc, STTY_BSD);
+	print(&ip->t, &ip->win, ip->queue, ip->ldisc, STTY_BSD);
 }
 
 void
@@ -185,7 +186,7 @@ f_dec(struct info *ip)
 void
 f_everything(struct info *ip)
 {
-	print(&ip->t, &ip->win, ip->ldisc, STTY_BSD);
+	print(&ip->t, &ip->win, ip->queue, ip->ldisc, STTY_BSD);
 }
 
 void

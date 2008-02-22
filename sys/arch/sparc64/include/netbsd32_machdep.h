@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.26 2008/01/27 17:37:40 dsl Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.29 2016/10/19 09:44:00 skrll Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -79,6 +77,9 @@ int netbsd32_md_ioctl(struct file *, netbsd32_u_long, void *, struct lwp *);
 #define NETBSD32_MID_MACHINE MID_SPARC
 
 int netbsd32_process_read_regs(struct lwp *, struct reg32 *);
-int netbsd32_process_read_fpregs(struct lwp *, struct fpreg32 *);
+int netbsd32_process_read_fpregs(struct lwp *, struct fpreg32 *, size_t *);
+
+int netbsd32_process_write_regs(struct lwp *, const struct reg32 *);
+int netbsd32_process_write_fpregs(struct lwp *, const struct fpreg32 *, size_t);
 
 #endif /* _MACHINE_NETBSD32_H_ */

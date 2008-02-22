@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt.h,v 1.20 2005/12/03 15:16:19 yamt Exp $	*/
+/*	$NetBSD: clnt.h,v 1.24 2016/01/23 02:34:09 dholland Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -156,8 +156,8 @@ typedef struct __rpc_client {
 		/* destroy this structure */
 		void		(*cl_destroy)(struct __rpc_client *);
 		/* the ioctl() of rpc */
-		bool_t          (*cl_control)(struct __rpc_client *, u_int,
-				    char *);
+		bool_t          (*cl_control)(struct __rpc_client *,
+				    unsigned int, char *);
 	} *cl_ops;
 	void 			*cl_private;	/* private stuff */
 	char			*cl_netid;	/* network token */
@@ -169,9 +169,9 @@ typedef struct __rpc_client {
  * Timers used for the pseudo-transport protocol when using datagrams
  */
 struct rpc_timers {
-	u_short		rt_srtt;	/* smoothed round-trip time */
-	u_short		rt_deviate;	/* estimated deviation */
-	u_long		rt_rtxcur;	/* current (backed-off) rto */
+	unsigned short	rt_srtt;	/* smoothed round-trip time */
+	unsigned short	rt_deviate;	/* estimated deviation */
+	unsigned long	rt_rtxcur;	/* current (backed-off) rto */
 };
 
 /*      
@@ -206,11 +206,13 @@ struct rpc_timers {
  *	struct timeval timeout;
  */
 #define	CLNT_CALL(rh, proc, xargs, argsp, xres, resp, secs)		\
-	((*(rh)->cl_ops->cl_call)(rh, proc, xargs, 			\
-	(const char *)(const void *)(argsp), xres, (caddr_t)(void *)resp, secs))
+	((*(rh)->cl_ops->cl_call)(rh, proc, (xdrproc_t)xargs,		\
+	(const char *)(const void *)(argsp), (xdrproc_t)xres,		\
+	(caddr_t)(void *)resp, secs))
 #define	clnt_call(rh, proc, xargs, argsp, xres, resp, secs)		\
-	((*(rh)->cl_ops->cl_call)(rh, proc, xargs, 			\
-	(const char *)(const void *)(argsp), xres, (caddr_t)(void *)resp, secs))
+	((*(rh)->cl_ops->cl_call)(rh, proc, (xdrproc_t)xargs,		\
+	(const char *)(const void *)(argsp), (xdrproc_t)xres,		\
+	(caddr_t)(void *)resp, secs))
 
 /*
  * void
@@ -243,7 +245,7 @@ struct rpc_timers {
  * bool_t
  * CLNT_CONTROL(cl, request, info)
  *      CLIENT *cl;
- *      u_int request;
+ *      unsigned request;
  *      char *info;
  */
 #define	CLNT_CONTROL(cl,rq,in) ((*(cl)->cl_ops->cl_control)(cl,rq,in))
@@ -363,15 +365,16 @@ extern CLIENT *clnt_tp_create(const char *, const rpcprog_t,
 
 extern CLIENT *clnt_tli_create(const int, const struct netconfig *,
 				    const struct netbuf *, const rpcprog_t,
-				    const rpcvers_t, const u_int, const u_int);
+				    const rpcvers_t, const unsigned int,
+				    const unsigned int);
 /*
  *	const register int fd;		-- fd
  *	const struct netconfig *nconf;	-- netconfig structure
  *	const struct netbuf *svcaddr;		-- servers address
- *	const u_long prog;			-- program number
- *	const u_long vers;			-- version number
- *	const u_int sendsz;			-- send size
- *	const u_int recvsz;			-- recv size
+ *	const unsigned long prog;		-- program number
+ *	const unsigned long vers;		-- version number
+ *	const unsigned sendsz;			-- send size
+ *	const unsigned recvsz;			-- recv size
  */
 
 /*
@@ -379,14 +382,14 @@ extern CLIENT *clnt_tli_create(const int, const struct netconfig *,
  */
 extern CLIENT *clnt_vc_create(const int, const struct netbuf *,
 				   const rpcprog_t, const rpcvers_t,
-				   const u_int, const u_int);
+				   const unsigned int, const unsigned int);
 /*
  *	const int fd;				-- open file descriptor
  *	const struct netbuf *svcaddr;		-- servers address
  *	const rpcprog_t prog;			-- program number
  *	const rpcvers_t vers;			-- version number
- *	const u_int sendsz;			-- buffer recv size
- *	const u_int recvsz;			-- buffer send size
+ *	const unsigned sendsz;			-- buffer recv size
+ *	const unsigned recvsz;			-- buffer send size
  */
 
 /*
@@ -394,22 +397,22 @@ extern CLIENT *clnt_vc_create(const int, const struct netbuf *,
  */
 extern CLIENT *clnt_dg_create(const int, const struct netbuf *,
 				   const rpcprog_t, const rpcvers_t,
-				   const u_int, const u_int);
+				   const unsigned int, const unsigned int);
 /*
  *	const int fd;				-- open file descriptor
  *	const struct netbuf *svcaddr;		-- servers address
  *	const rpcprog_t program;		-- program number
  *	const rpcvers_t version;		-- version number
- *	const u_int sendsz;			-- buffer recv size
- *	const u_int recvsz;			-- buffer send size
+ *	const unsigned sendsz;			-- buffer recv size
+ *	const unsigned recvsz;			-- buffer send size
  */
 
 /*
  * Memory based rpc (for speed check and testing)
  * CLIENT *
  * clnt_raw_create(prog, vers)
- *	u_long prog;
- *	u_long vers;
+ *	unsigned long prog;
+ *	unsigned long vers;
  */
 extern CLIENT *clnt_raw_create	(rpcprog_t, rpcvers_t);
 
@@ -449,14 +452,10 @@ struct rpc_createerr {
 	struct rpc_err cf_error; /* useful when cf_stat == RPC_PMAPFAILURE */
 };
 
-#ifdef _REENTRANT
 __BEGIN_DECLS
 extern struct rpc_createerr	*__rpc_createerr(void);
 __END_DECLS
 #define rpc_createerr		(*(__rpc_createerr()))
-#else
-extern struct rpc_createerr rpc_createerr;
-#endif /* _REENTRANT */
 
 /*
  * The simplified interface:

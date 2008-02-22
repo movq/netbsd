@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $	*/
+/*	$NetBSD: fb_sbdio.c,v 1.16 2017/06/13 19:13:55 spz Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #define WIRED_FB_TLB
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.16 2017/06/13 19:13:55 spz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,9 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $")
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 
+#include <mips/locore.h>
 #include <mips/pte.h>
 
-#include <machine/locore.h>
 #include <machine/sbdiovar.h>
 
 #include <machine/gareg.h>
@@ -66,16 +59,16 @@ __KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $")
 
 
 struct fb_softc {
-	struct device sc_dv;
+	device_t sc_dev;
 	struct rasops_info *sc_ri;
 	struct ga *sc_ga;
 	int sc_nscreens;
 };
 
-int fb_sbdio_match(struct device *, struct cfdata *, void *);
-void fb_sbdio_attach(struct device *, struct device *, void *);
+int fb_sbdio_match(device_t, cfdata_t, void *);
+void fb_sbdio_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(fb_sbdio, sizeof(struct fb_softc),
+CFATTACH_DECL_NEW(fb_sbdio, sizeof(struct fb_softc),
     fb_sbdio_match, fb_sbdio_attach, NULL, NULL);
 
 int _fb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
@@ -123,7 +116,7 @@ static paddr_t fb_consaddr;
 
 
 int
-fb_sbdio_match(struct device *parent, struct cfdata *match, void *aux)
+fb_sbdio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbdio_attach_args *sa = aux;
 
@@ -131,22 +124,24 @@ fb_sbdio_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-fb_sbdio_attach(struct device *parent, struct device *self, void *aux)
+fb_sbdio_attach(device_t parent, device_t self, void *aux)
 {
+	struct fb_softc *sc = device_private(self);
 	struct sbdio_attach_args *sa = aux;
 	struct wsemuldisplaydev_attach_args wa;
-	struct fb_softc *sc = (void *)self;
 	struct rasops_info *ri;
 	struct ga *ga;
 	vaddr_t memva, regva;
 	int console;
 
-	printf(" at %p, %p\n", (void *)sa->sa_addr1, (void *)sa->sa_addr2);
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	console = (sa->sa_addr1 == fb_consaddr);
 	if (console) {
 		/* already initialized in fb_cnattach() */
 		sc->sc_ri = ri = &fb_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->sc_ga = &fb_console_ga;
 		sc->sc_nscreens = 1;
 	} else {
@@ -159,6 +154,7 @@ fb_sbdio_attach(struct device *parent, struct device *self, void *aux)
 		ga = malloc(sizeof(struct ga), M_DEVBUF, M_NOWAIT | M_ZERO);
 		if (ga == NULL) {
 			printf(":can't allocate ga memory\n");
+			free(ri, M_DEVBUF);
 			return;
 		}
 		ga->reg_paddr = sa->sa_addr2;
@@ -208,6 +204,8 @@ fb_common_init(struct rasops_info *ri, struct ga *ga)
 	ri->ri_flg = RI_CENTER | RI_CLEAR;
 	if (!ga_active)
 		ri->ri_flg |= RI_FORCEMONO;
+	if (ri == &fb_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 
 	ri->ri_depth = 8;
 	ri->ri_width = 1280;
@@ -217,9 +215,9 @@ fb_common_init(struct rasops_info *ri, struct ga *ga)
 
 	wsfont_init();
 	/* prefer 12 pixel wide font */
-	cookie = wsfont_find(NULL, 12, 0, 0, 0, 0);
+	cookie = wsfont_find(NULL, 12, 0, 0, 0, 0, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
-		cookie = wsfont_find(NULL, 0, 0, 0, 0, 0);
+		cookie = wsfont_find(NULL, 0, 0, 0, 0, 0, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("sfb: font table is empty\n");
 		return;
@@ -297,16 +295,16 @@ _fb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 		fbinfo->cmsize = 256;
 		return 0;
 
-#if 1
 	case WSDISPLAYIO_LINEBYTES:
 		*(u_int *)data = ri->ri_stride;
 		return 0;
 
-#endif
 	case WSDISPLAYIO_GETCMAP:
 		if (ri->ri_flg == RI_FORCEMONO)
 			break;
 		ga_clut_get(ga);
+		if (cmap->index >= 256 || cmap->count > 256 - cmap->index)
+			return (EINVAL);
 		for (i = 0; i < cmap->count; i++) {
 			cmap->red[i] = ga->clut[cmap->index + i][0];
 			cmap->green[i] = ga->clut[cmap->index + i][1];
@@ -317,6 +315,8 @@ _fb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 	case WSDISPLAYIO_PUTCMAP:
 		if (ri->ri_flg == RI_FORCEMONO)
 			break;
+		if (cmap->index >= 256 || cmap->count > 256 - cmap->index)
+			return (EINVAL);
 		for (i = 0; i < cmap->count; i++) {
 			ga->clut[cmap->index + i][0] = cmap->red[i];
 			ga->clut[cmap->index + i][1] = cmap->green[i];
@@ -424,7 +424,7 @@ fb_pmap_enter(paddr_t fb_paddr, paddr_t reg_paddr,
 			ROM_MONITOR();
 
 	for (tva = va; pa < epa; pa += PAGE_SIZE, tva += PAGE_SIZE)
-		pmap_kenter_pa(tva, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(tva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 
 	pmap_update(pmap_kernel());
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_trantcp.h,v 1.5 2005/12/11 00:06:21 elad Exp $	*/
+/*	$NetBSD: smb_trantcp.h,v 1.7 2014/04/25 15:52:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -43,10 +43,9 @@
 #ifdef _KERNEL
 
 #ifdef NB_DEBUG
-#define NBDEBUG(format, args...)	 printf("%s(%d): "format,	\
-					    __func__ , __LINE__ ,## args)
+#define NBDEBUG(x)	aprint_debug x
 #else
-#define NBDEBUG(format, args...)
+#define NBDEBUG(x)	/* nothing */
 #endif
 
 enum nbstate {
@@ -83,10 +82,10 @@ struct nbpcb {
 #define	NB_RCVQ		(64 * 1024)
 
 /*
- * Timeouts used for send/receive. XXX Sysctl this?
+ * Timeouts (s) used for send/receive. XXX Sysctl this?
  */
-#define NB_SNDTIMEO	(5 * hz)
-#define NB_RCVTIMEO	(5 * hz)
+#define NB_SNDTIMEO	(5)
+#define NB_RCVTIMEO	(5)
 
 /*
  * TCP slowstart presents a problem in conjunction with large

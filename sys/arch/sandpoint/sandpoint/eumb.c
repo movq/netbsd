@@ -1,4 +1,4 @@
-/* $NetBSD: eumb.c,v 1.2 2007/10/17 19:56:59 garbled Exp $ */
+/* $NetBSD: eumb.c,v 1.6 2011/12/18 14:28:59 phx Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,60 +30,61 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eumb.c,v 1.2 2007/10/17 19:56:59 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eumb.c,v 1.6 2011/12/18 14:28:59 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/tty.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <machine/autoconf.h>
 #include <machine/intr.h>
 
 #include <sandpoint/sandpoint/eumbvar.h>
 #include "locators.h"
 
-static int  eumb_match(struct device *, struct cfdata *, void *);
-static void eumb_attach(struct device *, struct device *, void *);
+static int  eumb_match(device_t, cfdata_t, void *);
+static void eumb_attach(device_t, device_t, void *);
 static int  eumb_print(void *, const char *);
-static int  eumb_search(struct device *, struct cfdata *, const int *, void *);
+static int  eumb_search(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(eumb, sizeof(struct device),
+CFATTACH_DECL_NEW(eumb, 0,
     eumb_match, eumb_attach, NULL, NULL);
 
 extern struct cfdriver eumb_cd;
 
 static int
-eumb_match(struct device *parent, struct cfdata *cf, void *aux)
+eumb_match(device_t parent, cfdata_t cf, void *aux)
 {
-	const char **ca_name = aux; /* XXX */
+	struct mainbus_attach_args *ma = aux;
 
-	if (strcmp(*ca_name, eumb_cd.cd_name) != 0)
-		return (0);
-	return (1);
+	if (strcmp(ma->ma_name, eumb_cd.cd_name) != 0)
+		return 0;
+	return 1;
 }
 
 static void
-eumb_attach(struct device *parent, struct device *self, void *aux)
+eumb_attach(device_t parent, device_t self, void *aux)
 {
 
-	printf("\n");
-	config_search_ia(eumb_search, self, "eumb", NULL);
+	aprint_naive("\n");
+	aprint_normal("\n");
+	config_search_ia(eumb_search, self, "eumb", aux);
 }
 
 static int
-eumb_search(struct device *parent, struct cfdata *cf,
-    const int *ldesc, void *aux)
+eumb_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
+	struct mainbus_attach_args *ma = aux;
 	struct eumb_attach_args eaa;
 
 	eaa.eumb_name = cf->cf_name;
-	eaa.eumb_bt = &sandpoint_eumb_space_tag;
+	eaa.eumb_bt = ma->ma_bst;
 	eaa.eumb_unit = cf->cf_loc[EUMBCF_UNIT];
         if (config_match(parent, cf, &eaa) > 0)
                 config_attach(parent, cf, &eaa, eumb_print);
 
-	return (0);
+	return 0;
 }
 
 static int
@@ -102,5 +96,5 @@ eumb_print(void *aux, const char *pnp)
 		printf("%s at %s", eaa->eumb_name, pnp);
 	if (eaa->eumb_unit != EUMBCF_UNIT_DEFAULT)
 		printf(" unit %d", eaa->eumb_unit);
-	return (UNCONF);
+	return UNCONF;
 }

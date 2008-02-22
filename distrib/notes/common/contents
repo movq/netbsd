@@ -1,4 +1,4 @@
-.\"	$NetBSD: contents,v 1.136 2008/01/09 11:25:58 simonb Exp $
+.\"	$NetBSD: contents,v 1.174 2018/06/24 09:38:46 leot Exp $
 .\"
 .\" Copyright (c) 1999-2005 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@ subdirectory of the distribution:
 .el .Pa Pf \&.../arch/\*M/snapshot/ Ar yyyymmdd/ .
 It contains the following files and directories:
 .Pp
-.(tag INSTALL.html -compact
+.(tag INSTALL.html -compact \" top level
 .	It Pa INSTALL.html
 .	It Pa INSTALL.ps
 .	It Pa INSTALL.txt
@@ -53,42 +46,31 @@ file contains underlined text using the
 .Xr more 1
 conventions for indicating italic and bold display.
 .	It Pa binary/
-.	(tag kernel/ -compact
+.	(tag kernel/ -compact \" binary/
 .		It Pa kernel/
-.		(tag netbsd.gz -compact
-.if !\n[atari]:\n[mac68k]:\n[sgimips]:\n[evbppc] \{\
+.		(tag netbsd.gz -compact \" binary/kernel
+.if !\n[atari]:\n[mac68k]:\n[sgimips]:\n[evbppc]:\n[sandpoint] \{\
 .			It Pa netbsd-GENERIC.gz
 A gzipped
 .Nx
 kernel containing code for everything supported in this release.
+.if \n[amd64] \{\
+.			It Pa netbsd-INSTALL.gz
+The installation kernel.
+.			It Pa netbsd-INSTALL_XEN3_DOMU.gz
+.			It Pa netbsd-XEN3_DOM0.gz
+.			It Pa netbsd-XEN3_DOMU.gz
+.\} \" amd64
 .if \n[hpcmips] \{\
 This kernel runs on Vr41xx and TX3922 CPUs only.
 .\} \" hpcmips
-.\} \" !atari/mac68k/sgimips/evgppc
-.if \n[macppc]:\n[sparc]:\n[i386]:\n[amd64] \{\
+.\} \" !atari/mac68k/sgimips/evbppc/sandpoint
+.if \n[alpha]:\n[macppc]:\n[sparc]:\n[sparc64]:\n[vax] \{\
 .			It Pa netbsd-GENERIC.MP.gz
 A gzipped
 .Nx
 kernel containing code for everything supported in this release.  This 
-kernel also supports SMP on systems with more than one CPU.
-.\}
-.if \n[i386] \{\
-.			It Pa netbsd-GENERIC.NOACPI.gz
-A gzipped
-.Nx
-kernel containing code for everything supported in this release but without
-ACPI support, for use on legacy hardware.
-.\}
-.
-.if \n[amd64] \{\
-.			It Pa netbsd-INSTALL.gz
-A gzipped
-.Nx
-kernel which is somewhat smaller.
-This is the kernel on the install floppies and CD-ROMs.
-.			It Pa netbsd-INSTALL.symbols.gz
-Symbols for
-.Pa netbsd-INSTALL.gz .
+kernel supports SMP on systems with more than one CPU.
 .\}
 .
 .if \n[hp300] \{\
@@ -105,29 +87,15 @@ Symbols for
 .\}
 .
 .if \n[i386] \{\
-.			It Pa netbsd-GENERIC_LAPTOP.gz
-A version of
-.Li GENERIC
-that has USB, PCMCIA and CardBus enabled to allow
-installing on laptop machines.
-.
+.			It Pa netbsd-MONOLITHIC.gz
+The monolithic kernel which doesn't use kernel modules.
 .			It Pa netbsd-INSTALL.gz
-A somewhat smaller installation kernel, which you can use to boot the system
-on memory-tight systems.
-This is the same kernel as present on the miniroot and on many
-install floppies.
-.
-.			It Pa netbsd-INSTALL_LAPTOP.gz
-A version of
-.Li INSTALL
-that has USB, PCMCIA and CardBus enabled to allow
-installing on laptop machines.
-.			It Pa netbsd-INSTALL_LARGE.gz
-A version of
-.Li INSTALL
-that has ACPI and some large disk and network driver, to allow installing
-on the newest machines.
-This is the default boot kernel from the ISO images.
+The installation kernel.
+.			It Pa netbsd-INSTALL_XEN3PAE_DOMU.gz
+.			It Pa netbsd-INSTALL_XEN3_DOMU.gz
+.			It Pa netbsd-XEN3PAE_DOMU.gz
+.			It Pa netbsd-XEN3_DOM0.gz
+.			It Pa netbsd-XEN3_DOMU.gz
 .\}
 .if \n[mac68k] \{\
 .			It Pa netbsd-GENERIC.gz
@@ -153,36 +121,28 @@ and 2.4 systems (i.e. those that have floppy drives).
 It has a RAM-disk installer.
 .\}
 .
-.if \n[acorn26] \{\
-.			It Pa netbsd-FOURMEG.gz
-A somewhat smaller kernel, intended to be usable on systems with
-four megabytes of RAM.
-.\}
-.
 .if \n[acorn32] \{\
 .			It Pa netbsd-NC.gz
 A kernel intended for Acorn Network Computers.
 .\}
 .
 .if \n[atari] \{\
-.			It Pa netbsd-ATARITT.gz
-A kernel specifically tuned for the Atari TT030.
-.			It Pa netbsd-BOOT.gz
-A kernel for both the Falcon and TT030.
-It is kept pretty small, so you
-can use it to boot the system for installation on memory-tight systems.
+.			It Pa netbsd-SMALL030.gz
+A kernel for memory-tight 68030 Falcon and TT030 machines.
 This is the kernel supplied on the boot.fs floppy.
-.			It Pa netbsd-BOOTX.gz
-Same as the BOOT kernel, but it has slightly more features.
-You can run X11 with it.
+.			It Pa netbsd-ATARITT.gz
+A kernel for the Atari TT030.
 .			It Pa netbsd-FALCON.gz
-A kernel specifically tuned for the Atari Falcon.
+A kernel for the Atari Falcon, including support for 68060
+processor cards.
 .			It Pa netbsd-HADES.gz
-A kernel specifically tuned for the Hades.
+A kernel for 68040 or 68060 Hades.
 .			It Pa netbsd-MILAN-ISAIDE.gz
-A kernel specifically tuned for the MILAN using IDE in ISA mode.
+A kernel for 68040 or 68060 MILAN using IDE in ISA mode - for
+use with disks not marked byteswapped by HDDRIVER.
 .			It Pa netbsd-MILAN-PCIIDE.gz
-A kernel specifically tuned for the MILAN using IDE in PCI mode.
+A kernel for 68040 or 68060 MILAN using IDE in PCI mode - for
+use with disks marked byteswapped by HDDRIVER.
 .\}
 .
 .if \n[hpcmips] \{\
@@ -201,6 +161,16 @@ A kernel for MVME167 boards.
 A kernel for MVME172 boards.
 .			It Pa netbsd-VME177.gz
 A kernel for MVME177 boards.
+.\}
+.if \n[sandpoint] \{\
+.			It Pa netbsd-GENERIC.gz
+A generic kernel suitable for most Sandpoint-based NAS products.
+.			It Pa netbsd-INSTALL.gz
+An install kernel for most Sandpoint-based NAS products.
+.			It Pa netbsd-INSTALL_KURO.gz
+An install kernel for KuroBox / LinkStation NAS boards.
+.			It Pa netbsd-KUROBOX.gz
+A kernel for KuroBox / LinkStation NAS boards.
 .\}
 .if \n[sparc] \{\
 .			It Pa netbsd-GENERIC_SCSI3.gz
@@ -225,12 +195,12 @@ The install kernel.
 .if \n[sgimips] \{\
 .			It Pa netbsd-GENERIC32_IP12.gz
 A kernel suitable for booting on R3000 Indigo, IRIS 4D/3x and similar machines.
-.			It Pa netbsd.ecoff-GENERIC32_IP12.gz
+.			It Pa netbsd-GENERIC32_IP12.ecoff.gz
 GENERIC32_IP2x targeted for being bootable on the above machines
 with PROMs that do not understand the ELF binary format.
 .			It Pa netbsd-GENERIC32_IP2x.gz
 A kernel suitable for booting on Indy, Indigo 2 and similar machines.
-.			It Pa netbsd.ecoff-GENERIC32_IP2x.gz
+.			It Pa netbsd-GENERIC32_IP2x.ecoff.gz
 GENERIC32_IP2x targeted for being bootable on older Indigo 2 and possibly
 Indy machines with PROMs that do not understand the ELF binary format.
 .			It Pa netbsd-GENERIC32_IP3x.gz
@@ -238,63 +208,77 @@ A kernel suitable for booting on O2.
 .\}
 .
 .if \n[evbppc] \{\
-.			It Pa netbsd-WALNUT.gz
-A gzipped
-.Nx
-kernel (in ELF format) containing code for everything supported
-in this release.
-.			It Pa netbsd.img-WALNUT.gz
+.			It Pa netbsd-EV64260.gz
+A gzipped kernel (in ELF format) for the Marvell EV-64260.
+.			It Pa netbsd.img-EV64260.gz
 Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-EXPLORA451.gz
+A gzipped kernel (in ELF format) for the NCD Explora451 NC.
+.			It Pa netbsd.img-EXPLORA451.gz
+Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-INSTALL_OPENBLOCKS266.gz
+A gzipped install kernel (in ELF format) for the Plat'Home OpenBlockS266
+microserver.
+.			It Pa netbsd-INSTALL_OPENBLOCKS266.img.gz
+Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-INSTALL_OPENBLOCKS266.symbols.gz
+Symbols for
+.Pa netbsd-INSTALL_OPENBLOCKS266.gz .
 .			It Pa netbsd-INSTALL_WALNUT.gz
-A gzipped
-.Nx
-kernel (ELF format) containing code for everything supported in this
-release.
-It also includes a RAM-disk installer with
-.Ic sysinst .
+A gzipped install kernel (in ELF format) for the IBM PowerPC 405GP Walnut
+evaluation board.
 .			It Pa netbsd-INSTALL_WALNUT.img.gz
+Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-INSTALL_WALNUT.symbols.gz
+Symbols for
+.Pa netbsd-INSTALL_WALNUT.gz .
+.			It Pa netbsd-OPENBLOCKS200.gz
+A gzipped kernel (in ELF format) for the Plat'Home OpenBlockS200.
+.			It Pa netbsd.img-OPENBLOCKS200.gz
+Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-OPENBLOCKS266.gz
+A gzipped kernel (in ELF format) for the Plat'Home OpenBlockS266 microserver.
+.			It Pa netbsd.img-OPENBLOCKS266.gz
+Same as the above, but in the format expected by the firmware.
+.			It Pa netbsd-PMPPC.gz
+A gzipped kernel (in ELF format) for Artesyn PM/PPC boards.
+.			It Pa netbsd-WALNUT.gz
+A gzipped kernel (in ELF format) for the IBM PowerPC 405GP Walnut
+evaluation board.
+.			It Pa netbsd.img-WALNUT.gz
 Same as the above, but in the format expected by the firmware.
 .\}
 .
-.		tag)
+.		tag) \" binary/kernel/
 .		It Pa sets/
 \*M binary distribution sets;
 see below.
-.	tag)
+.	tag) \" binary/
 .	It Pa installation/
 .
-.	(tag kernel/ -compact
+.	(tag miniroot/ -compact \" installation/
 .
-.if \n[sparc] \{\
-.		It Pa bootfs/
-Netbootable RAM disk kernel and the file system in the RAM disk; see below.
-.\}
-.if \n[alpha]:\n[amd64]:\n[amiga]:\n[atari]:\n[bebox]:\n[ews4800mips]:\
-\n[i386]:\n[news68k]:\n[newsmips]:\n[sparc]:\n[x68k]:\n[prep]:\
-\n[sandpoint] \{\
-.		It Pa floppy/
-\*M boot and installation floppies; see below.
-.\}
 .if \n[i386]:\n[amd64] \{\
 .		It Pa cdrom/
 \*M bootable cdrom images; see below.
 .\}
+.if \n[sparc] \{\
+.		It Pa bootfs/
+Netbootable RAM disk kernel and the file system in the RAM disk; see below.
+.\}
+.if \n[alpha]:\n[amiga]:\n[atari]:\n[bebox]:\n[ews4800mips]:\
+\n[i386]:\n[news68k]:\n[newsmips]:\n[sparc]:\n[x68k]:\n[prep] \{\
+.		It Pa floppy/
+\*M boot and installation floppies; see below.
+.\}
 .
 .if \n[alpha] \{\
 .		It Pa diskimage/
-.		It Pa tapeimage/
 an image file
 .Pa cdhdtape
 is included for the case where the installer is written to
 a CD, hard drive, or tape.
-This image file is the same for the CD, HD, and tape cases, but a separate
-.Pa tapeimage/
-directory exists to hold a copy of the
-.Pa README
-file and to meet the
-.Nx
-.Xr release 7
-standard.
+This image file is the same for the CD, HD, and tape cases.
 .		It Pa instkernel/
 contains a
 .Pa netbsd.gz
@@ -307,6 +291,14 @@ no need to
 this image.
 .\}
 .
+.if \n[bebox] \{\
+.		It Pa floppy/boot.fs
+.		It Pa floppy/kernel1.fs
+.		It Pa floppy/kernel2.fs
+\*M boot and installation floppy images.  The first is the bootloader on
+old BeFS.  The other images contain the kernel and an embedded ramdisk.
+.\}
+.
 .if \n[cats] \{\
 .		It Pa kernel/
 \*M installation kernels.
@@ -317,29 +309,21 @@ this image.
 \*M boot and installation kernels; see installation section (Sysinst
 Method), below.
 .\}
-.if \n[amiga]:\n[atari]:\n[hp300]:\n[mvme68k]:\n[sparc]:\n[sparc64]:\n[sun2]:\n[sun3] \{\
+.if \n[amiga]:\n[atari]:\n[hp300]:\n[mvme68k]:\n[sparc]:\n[sparc64]:\
+\n[sun2]:\n[sun3] \{\
 .		It Pa miniroot/
 \*M miniroot file system image; see below.
 .\}
 .
-.if !\n[cats]:\n[evbppc]:\n[mvme68k]:\n[macppc]:\n[sgimips]:\n[sparc]:\n[xen] \{\
+.if !\n[alpha]:\n[bebox]:\n[cats]:\n[evbppc]:\n[mvme68k]:\n[macppc]:\
+\n[sgimips]:\n[sandpoint]:\n[sparc]:\n[xen] \{\
 .		It Pa misc/
 .
-.ie \n[alpha] \{\
-contains
-.Pa GENERIC.fs ,
-a
-.Li GENERIC
-kernel in a bootable file system image.
-This is used in some unusual installations as described in the next section.
-.\}
-.el \{\
 Miscellaneous \*M installation utilities; see
 .if \n[mac68k] \{\
 the Traditional method
 .\}
-installation section, below.
-.\}
+installation section below.
 .\}
 .
 .if \n[hp300] \{\
@@ -376,6 +360,15 @@ Two programs needed to boot \*M kernels over the network; see below.
 Tape boot programs, and a RAMDISK kernel; see below.
 .\}
 .
+.if \n[sandpoint] \{\
+.		It Pa altboot
+\*M bootloader in ELF format; see below
+.		It Pa altboot.bin
+\*M bootloader in binary format; see below
+.		It Pa altboot.img
+\*M bootloader as an U-Boot/PPCBoot image, suitable for bootm; see below
+.\}
+.
 .if \n[sgimips] \{\
 .		It Pa netboot/
 NFS-root images
@@ -406,19 +399,9 @@ Two programs needed to boot \*M kernels over the network.
 Tape boot programs, and a RAMDISK kernel.
 .\}
 .
-.if \n[xen-i386] \{\
-.		It Pa xen12load/
-.		(tag xen12load.gz -compact
-.			It Pa xen12load.gz
-The kernel loader needed to boot
-.Nx*M
-as domain-0.
-.		tag)
-.\}
+.	tag) \" installation/
 .
-.	tag)
-.
-.tag)
+.tag) \" top level
 .
 .
 .if \n[alpha] \{\
@@ -427,7 +410,7 @@ as domain-0.
 There are three bootable images in the
 .Nx
 \*M distribution.
-One is for a dual-floppy boot and is split into two separate files.
+One is for a floppy boot and is split into three separate files.
 The other is a single-file image containing the same install kernel,
 but intended to be written to a CD, tape, or hard drive.
 The third image is a
@@ -499,7 +482,7 @@ The
 binary distribution sets contain the binaries which
 comprise the
 .Nx
-\*V release for the \*M.
+\*V release for \*M.
 The binary distribution sets can be found in the
 .Pa \*M/binary/sets
 subdirectory
@@ -510,9 +493,9 @@ of the
 distribution tree.  
 .(Note
 If you want to install 32-bit only binaries, you will 
-still need to boot using the sparc64 installation tools.  When it 
+still need to boot using the sparc64 installation tools.  When sysinst
 asks you for the distribution set to install, provide the
-.Nx /sparc
+.Nx Ns /sparc
 .Pa binary/sets .
 Be sure to use the 32 bit sparc
 .Pa kern-GENERIC_SUN4U.tgz 
@@ -522,7 +505,7 @@ procedure, not the sparc instructions.
 Most people will want the 64-bit \*M distribution tree:
 .\}
 .el distribution tree, and are as follows:
-.(tag xserver
+.(tag xserver \" sets
 .
 .It Sy base
 The
@@ -538,61 +521,6 @@ It contains the base
 .Nx
 utilities that are necessary for the
 system to run and be minimally functional.
-It includes shared library support, and excludes
-everything described below.
-.\"
-.\" XXX set sizes can be calculated using list-setsizes.sh
-.\"
-.if \n[acorn26] .setsize 26 73
-.if \n[acorn32] .setsize 26 73
-.if \n[algor] .setsize 28 90
-.if \n[alpha] .setsize 32 94
-.if \n[amd64] .setsize 27 79
-.if \n[amiga] .setsize 24 68
-.if \n[arc] .setsize 28 90
-.if \n[atari] .setsize 24 68
-.if \n[cats] .setsize 26 73
-.if \n[cesfic] .setsize 24 68
-.if \n[cobalt] .setsize 28 90
-.if \n[dreamcast] .setsize 25 67
-.if \n[evbarm] .setsize 26 73
-.if \n[evbmips] .setsize 28 90
-.if \n[evbppc] .setsize 26 75
-.if \n[evbsh3] .setsize 25 67
-.if \n[hp300] .setsize 24 68
-.if \n[hp700] .setsize 29 78
-.if \n[hpcarm] .setsize 26 73
-.if \n[hpcmips] .setsize 28 90
-.if \n[hpcsh] .setsize 25 67
-.if \n[i386] .setsize 24 69
-.if \n[ibmnws] .setsize 27 76
-.if \n[iyonix] .setsize 26 73
-.if \n[landisk] .setsize 25 67
-.if \n[luna68k] .setsize 24 68
-.if \n[mac68k] .setsize 24 68
-.if \n[macppc] .setsize 27 77
-.if \n[mipsco] .setsize 28 90
-.if \n[mmeye] .setsize 26 67
-.if \n[mvme68k] .setsize 24 68
-.if \n[mvmeppc] .setsize 27 76
-.if \n[netwinder] .setsize 26 73
-.if \n[news68k] .setsize 24 68
-.if \n[newsmips] .setsize 28 89
-.if \n[next68k] .setsize 24 68
-.if \n[ofppc] .setsize 27 76
-.if \n[pmax] .setsize 29 90
-.if \n[prep] .setsize 27 76
-.if \n[sandpoint] .setsize 27 76
-.if \n[sbmips] .setsize 28 90
-.if \n[sgimips] .setsize 28 90
-.if \n[shark] .setsize 26 73
-.if \n[sparc] .setsize 25 73
-.if \n[sparc64] .setsize 26 81
-.if \n[sun2] .setsize 104 257
-.if \n[sun3] .setsize 24 68
-.if \n[vax] .setsize 108 239
-.if \n[x68k] .setsize 24 68
-.showsize
 .
 .It Sy comp
 Things needed for compiling programs.
@@ -605,56 +533,13 @@ set).
 This set also includes the manual pages for
 all of the utilities it contains, as well as the
 system call and library manual pages.
-.if \n[acorn26] .setsize 28 94
-.if \n[acorn32] .setsize 28 94
-.if \n[algor] .setsize 25 93
-.if \n[alpha] .setsize 31 125
-.if \n[amd64] .setsize 28 106
-.if \n[amiga] .setsize 23 83
-.if \n[arc] .setsize 25 93
-.if \n[atari] .setsize 23 83
-.if \n[cats] .setsize 28 94
-.if \n[cesfic] .setsize 23 83
-.if \n[cobalt] .setsize 25 93
-.if \n[dreamcast] .setsize 25 83
-.if \n[evbarm] .setsize 28 94
-.if \n[evbmips] .setsize 25 93
-.if \n[evbppc] .setsize 31 106
-.if \n[evbsh3] .setsize 25 83
-.if \n[hp300] .setsize 23 83
-.if \n[hp700] .setsize 28 94
-.if \n[hpcarm] .setsize 28 94
-.if \n[hpcmips] .setsize 25 93
-.if \n[hpcsh] .setsize 25 83
-.if \n[i386] .setsize 26 89
-.if \n[ibmnws] .setsize 31 106
-.if \n[iyonix] .setsize 28 94
-.if \n[landisk] .setsize 25 83
-.if \n[luna68k] .setsize 23 83
-.if \n[mac68k] .setsize 23 83
-.if \n[macppc] .setsize 31 106
-.if \n[mipsco] .setsize 25 93
-.if \n[mmeye] .setsize 25 83
-.if \n[mvme68k] .setsize 23 83
-.if \n[mvmeppc] .setsize 31 106
-.if \n[netwinder] .setsize 28 94
-.if \n[news68k] .setsize 23 83
-.if \n[newsmips] .setsize 25 93
-.if \n[next68k] .setsize 23 83
-.if \n[ofppc] .setsize 31 106
-.if \n[pmax] .setsize 25 93
-.if \n[prep] .setsize 31 106
-.if \n[sandpoint] .setsize 31 106
-.if \n[sbmips] .setsize 25 93
-.if \n[sgimips] .setsize 25 93
-.if \n[shark] .setsize 28 94
-.if \n[sparc] .setsize 25 90
-.if \n[sparc64] .setsize 28 106
-.if \n[sun2] .setsize 22 75
-.if \n[sun3] .setsize 23 84
-.if \n[vax] .setsize 25 81
-.if \n[x68k] .setsize 23 83
-.showsize
+.
+.It Sy debug
+This distribution set contains debug information for
+all base system utilities.
+It is useful when reporting issues with binaries or during
+developement.
+This set is huge, if the target disk is small, do not install it.
 .
 .It Sy etc
 This distribution set contains the system
@@ -666,68 +551,14 @@ This set
 be installed if you are installing the system from scratch, but should
 .Em not
 be used if you are upgrading.
-.\" Not MI, but close enough to the same size on all ports...
-.showsize 1 1
 .
 .It Sy games
 This set includes the games and their manual pages.
-.\" Shareable within MACHINE_ARCH (NIH)
-.setsize -unknown-machine-arch- -unknown-machine-arch-
-.if \n[acorn26] .setsize 4 8
-.if \n[acorn32] .setsize 4 8
-.if \n[algor] .setsize 4 8
-.if \n[alpha] .setsize 4 9
-.if \n[amd64] .setsize 4 8
-.if \n[amiga] .setsize 3 8
-.if \n[arc] .setsize 4 8
-.if \n[atari] .setsize 3 8
-.if \n[cats] .setsize 4 8
-.if \n[cesfic] .setsize 3 8
-.if \n[cobalt] .setsize 4 8
-.if \n[dreamcast] .setsize 3 8
-.if \n[evbarm] .setsize 4 8
-.if \n[evbmips] .setsize 4 8
-.if \n[evbppc] .setsize 4 8
-.if \n[evbsh3] .setsize 3 8
-.if \n[hp300] .setsize 3 8
-.if \n[hp700] .setsize 4 8
-.if \n[hpcarm] .setsize 4 8
-.if \n[hpcmips] .setsize 4 8
-.if \n[hpcsh] .setsize 3 8
-.if \n[i386] .setsize 3 8
-.if \n[ibmnws] .setsize 4 8
-.if \n[iyonix] .setsize 4 8
-.if \n[landisk] .setsize 3 8
-.if \n[luna68k] .setsize 3 8
-.if \n[mac68k] .setsize 3 8
-.if \n[macppc] .setsize 4 8
-.if \n[mipsco] .setsize 4 8
-.if \n[mmeye] .setsize 4 8
-.if \n[mvme68k] .setsize 3 8
-.if \n[mvmeppc] .setsize 4 8
-.if \n[netwinder] .setsize 4 8
-.if \n[news68k] .setsize 3 8
-.if \n[newsmips] .setsize 4 8
-.if \n[next68k] .setsize 3 8
-.if \n[ofppc] .setsize 4 8
-.if \n[pmax] .setsize 4 8
-.if \n[prep] .setsize 4 8
-.if \n[sandpoint] .setsize 4 8
-.if \n[sbmips] .setsize 4 8
-.if \n[sgimips] .setsize 4 8
-.if \n[shark] .setsize 4 8
-.if \n[sparc] .setsize 4 8
-.if \n[sparc64] .setsize 4 8
-.if \n[sun2] .setsize 8 17
-.if \n[sun3] .setsize 3 8
-.if \n[vax] .setsize 8 16
-.if \n[x68k] .setsize 3 8
-.showsize
 .
 .\" Kernel set(s)
 .
 .ie \n[atari] \{\
-.It Sy kern-BOOT , kern-HADES , kern-MILAN-ISAIDE , kern-MILAN-PCIIDE
+.It Sy kern-SMALL030, kern-ATARITT, kern-FALCON, kern-HADES , kern-MILAN-ISAIDE , kern-MILAN-PCIIDE
 These sets contain a
 .Nx*M
 \*V
@@ -736,21 +567,20 @@ kernel, named
 You
 .Em must
 install the kernel that matches your hardware.
-.showsize 2 4
 .\}
 .el \{\
 .ie \n[evbarm] \{\
 .It Sy kern-INTEGRATOR
 (see below)
-.showsize 13 35
 .It Sy kern-IQ80310
 (see below)
-.showsize 23 60
 .It Sy kern-IQ80321
 (see below)
-.showsize 23 62
+.It Sy kern-MV2120
+(see below)
+.It Sy kern-SHEEVAPLUG
+(see below)
 .It Sy kern-TEAMASA_NPWR
-.showsize 14 39
 .Pp
 These sets contain a
 .Nx*M
@@ -778,7 +608,6 @@ kernel, named
 You
 .Em must
 install either this distribution set or kern-GENERICSBC.
-.showsize 2 3
 .It Sy kern-GENERICSBC
 This set contains a
 .Nx*M
@@ -789,7 +618,6 @@ kernel, named
 You
 .Em must
 install either this distribution set or kern-GENERIC.
-.showsize 2 4
 .\}
 .el \{\
 .ie \n[macppc] \{\
@@ -803,7 +631,6 @@ kernel named
 You
 .Em must
 install this distribution set.
-.showsize 4 7
 .It Sy kern-GENERIC.MP
 This set contains a
 .Nx*M
@@ -811,7 +638,27 @@ This set contains a
 .Li GENERIC.MP
 kernel, which will use multiple processors (if present), named
 .Pa /netbsd .
-.showsize 4 7
+.\}
+.el \{\
+.ie \n[sandpoint] \{\
+.It Sy kern-GENERIC
+This set contains a
+.Nx*M
+\*V
+.Li GENERIC
+kernel for most Sandpoint-based NAS products, named
+.Pa /netbsd .
+.It Sy kern-KUROBOX
+This set contains a
+.Nx*M
+\*V
+.Li KUROBOX
+kernel for KuroBox / LinkStation boards, named
+.Pa /netbsd .
+.Pp
+You
+.Em must
+install one of these distribution sets for your machine.
 .\}
 .el \{\
 .ie \n[sgimips] \{\
@@ -842,10 +689,10 @@ This set contains a
 .Li GENERIC32_IP3x
 kernel (for O2), named
 .Pa /netbsd .
+.Pp
 You
 .Em must
 install one of these distribution sets for your machine.
-.showsize 4 8				\" XXX old
 .\}
 .el \{\
 .ie \n[sparc] \{\
@@ -859,7 +706,6 @@ kernel named
 You
 .Em must
 install this distribution set.
-.showsize 2 4
 .It Sy kern-GENERIC.MP
 This set contains a
 .Nx*M
@@ -867,7 +713,6 @@ This set contains a
 .Li GENERIC.MP
 kernel, which will use multiple processors (if present), named
 .Pa /netbsd .
-.showsize 2 4
 .It Sy kern-GENERIC_SCSI3
 This set contains a
 .Nx*M
@@ -877,7 +722,6 @@ kernel, which will set SCSI ID 3 to
 .Li sd0 ,
 named
 .Pa /netbsd .
-.showsize 2 4
 .It Sy kern-GENERIC_SUN4U
 This set contains a
 .Nx*M
@@ -885,7 +729,6 @@ This set contains a
 .Li GENERIC_SUN4U
 kernel, which supports only UltraSPARC systems in 32 bit mode, named
 .Pa /netbsd .
-.showsize 4 8
 .It Sy kern-KRUPS
 This set contains a
 .Nx*M
@@ -893,7 +736,6 @@ This set contains a
 .Li GENERIC-KRUPS
 kernel, which supports the JavaStation-NC, named
 .Pa /netbsd .
-.showsize 2 3
 .It Sy kern-MRCOFFEE
 This set contains a
 .Nx*M
@@ -901,7 +743,6 @@ This set contains a
 .Li MRCOFFE
 kernel, which which supports the OpenBOOT PROM 2 JavaStation-1, named
 .Pa /netbsd .
-.showsize 1 3
 .It Sy kern-MRCOFFEE_OFW
 This set contains a
 .Nx*M
@@ -909,10 +750,65 @@ This set contains a
 .Li MRCOFFE_OFW
 kernel, which which supports the OpenFirmware JavaStation-1, named
 .Pa /netbsd .
-.showsize 1 3
+.\}
+.el \{\
+.ie \n[sparc64] \{\
+.It Sy kern-GENERIC
+This set contains a
+.Nx*M
+\*V
+.Li GENERIC
+kernel named
+.Pa /netbsd .
+You
+.Em must
+install this or the kern-GENERIC.MP distribution set.
+.It Sy kern-GENERIC.MP
+This set contains a
+.Nx*M
+\*V
+.Li GENERIC.MP
+kernel, which will use multiple processors (if present), named
+.Pa /netbsd .
 .\}
 .el \{\
 .ie \n[evbppc] \{\
+.It Sy kern-EV64260
+This set contains a
+.Nx*M
+\*V
+kernel in ELF format named
+.Pa /netbsd
+and the same kernel in the format needed by the bootloader as
+.Pa /netbsd.img .
+These kernels are specific to the Marvell EV-64260.
+.It Sy kern-EXPLORA451
+This set contains a
+.Nx*M
+\*V
+kernel in ELF format named
+.Pa /netbsd
+and the same kernel in the format needed by the bootloader as
+.Pa /netbsd.img .
+These kernels are specific to the NCD Explora451 NC.
+.It Sy kern-OPENBLOCKS266
+This set contains a
+.Nx*M
+\*V
+kernel in ELF format named
+.Pa /netbsd
+and the same kernel in the format needed by the bootloader as
+.Pa /netbsd.img .
+These kernels are specific to the Plat'Home OpenBlockS266 microserver.
+.It Sy kern-PMPPC
+This set contains a
+.Nx*M
+\*V
+kernel in ELF format named
+.Pa /netbsd
+and the same kernel in the format needed by the bootloader as
+.Pa /netbsd.img .
+These kernels are specific to Artesyn PM/PPC boards.
 .It Sy kern-WALNUT
 This set contains a
 .Nx*M
@@ -922,10 +818,6 @@ kernel in ELF format named
 and the same kernel in the format needed by the bootloader as
 .Pa /netbsd.img .
 These kernels are specific to the IBM 405GP based Walnut evaluation board.
-You
-.Em must
-install this distribution set.
-.showsize 5 9
 .\}
 .el \{\
 .ie \n[xen] \{\
@@ -946,48 +838,9 @@ This set also contains an a.out kernel named
 .Pa /netbsd.aout
 that your system may need to boot.
 .\}
-.if \n[acorn26] .setsize 2 3
-.if \n[acorn32] .setsize 2 3
-.if \n[alpha] .setsize 4 10
-.if \n[amd64] .setsize 5 11
-.if \n[amiga] .setsize 2 4
-.if \n[arc] .setsize 2 5
-.if \n[cats] .setsize 5 10
-.if \n[cobalt] .setsize 2 4
-.if \n[dreamcast] .setsize 1 2
-.if \n[hp300] .setsize 2 4
-.if \n[hp700] .setsize 3 10
-.if \n[hpcmips] .setsize 2 4
-.if \n[hpcsh] .setsize 2 2
-.if \n[i386] .setsize 5 10
-.if \n[ibmnws] .setsize 1 4
-.if \n[iyonix] .setsize 2 3
-.if \n[landisk] .setsize 3 4
-.if \n[luna68k] .setsize 1 2
-.if \n[mac68k] .setsize 2 4
-.if \n[macppc] .setsize 4 7
-.if \n[mipsco] .setsize 1 3
-.if \n[mmeye] .setsize 2 3
-.if \n[mvme68k] .setsize 1 3
-.if \n[netwinder] .setsize 2 4
-.if \n[news68k] .setsize 2 3
-.if \n[newsmips] .setsize 2 4
-.if \n[next68k] .setsize 2 3
-.if \n[ofppc] .setsize 2 3
-.if \n[pmax] .setsize 2 4
-.if \n[prep] .setsize 2 4
-.if \n[sandpoint] .setsize 4 10
-.if \n[sbmips] .setsize 2 3
-.if \n[shark] .setsize 3 6
-.if \n[sparc] .setsize 2 4
-.if \n[sparc64] .setsize 4 8
-.if \n[sun2] .setsize 1 2
-.if \n[sun3] .setsize 1 3
-.if \n[vax] .setsize 2 3
-.if \n[x68k] .setsize 2 3
-.showsize
 .\} \" !\n[xen]
 .\} \" !\n[evbppc]
+.\} \" !\n[sparc64]
 .\} \" !\n[sparc]
 .\} \" !\n[sgimips]
 .\} \" !\n[macppc]
@@ -1002,15 +855,11 @@ binaries and other software contained in the
 set.
 Note that it does not include any of the manual pages
 that are included in the other sets.
-.\" MI
-.showsize 8 33
 .
 .It Sy misc
-This set includes the (rather large) system dictionaries,
+This set includes the system dictionaries,
 the typesettable document set, and other files from
 .Pa /usr/share .
-.\" MI
-.showsize 4 12
 .
 .It Sy text
 This set includes
@@ -1018,59 +867,8 @@ This set includes
 text processing tools, including
 .Xr groff 1 ,
 all related programs, and their manual pages.
-.\" Shareable within MACHINE_ARCH (NIH)
-.if \n[acorn26] .setsize 3 11
-.if \n[acorn32] .setsize 3 11
-.if \n[algor] .setsize 4 13
-.if \n[alpha] .setsize 4 12
-.if \n[amd64] .setsize 4 11
-.if \n[amiga] .setsize 3 11
-.if \n[arc] .setsize 4 13
-.if \n[atari] .setsize 3 11
-.if \n[cats] .setsize 3 11
-.if \n[cesfic] .setsize 3 11
-.if \n[cobalt] .setsize 4 13
-.if \n[dreamcast] .setsize 3 11
-.if \n[evbarm] .setsize 3 11
-.if \n[evbmips] .setsize 4 13
-.if \n[evbppc] .setsize 4 11
-.if \n[evbsh3] .setsize 3 11
-.if \n[hp300] .setsize 3 11
-.if \n[hp700] .setsize 4 12
-.if \n[hpcarm] .setsize 3 11
-.if \n[hpcmips] .setsize 4 13
-.if \n[hpcsh] .setsize 3 11
-.if \n[i386] .setsize 3 11
-.if \n[ibmnws] .setsize 4 11
-.if \n[iyonix] .setsize 3 11
-.if \n[landisk] .setsize 3 11
-.if \n[luna68k] .setsize 3 11
-.if \n[mac68k] .setsize 3 11
-.if \n[macppc] .setsize 4 11
-.if \n[mipsco] .setsize 4 13
-.if \n[mmeye] .setsize 4 11
-.if \n[mvme68k] .setsize 3 11
-.if \n[mvmeppc] .setsize 4 11
-.if \n[netwinder] .setsize 3 11
-.if \n[news68k] .setsize 3 11
-.if \n[newsmips] .setsize 4 13
-.if \n[next68k] .setsize 3 11
-.if \n[ofppc] .setsize 4 11
-.if \n[pmax] .setsize 4 13
-.if \n[prep] .setsize 4 11
-.if \n[sandpoint] .setsize 4 11
-.if \n[sbmips] .setsize 4 13
-.if \n[sgimips] .setsize 4 13
-.if \n[shark] .setsize 3 11
-.if \n[sparc] .setsize 4 11
-.if \n[sparc64] .setsize 4 11
-.if \n[sun2] .setsize 5 14
-.if \n[sun3] .setsize 3 11
-.if \n[vax] .setsize 5 13
-.if \n[x68k] .setsize 3 11
-.showsize
 .
-.tag)
+.tag) \" sets
 .
 .
 .\" ---------------------------- X SETS
@@ -1078,186 +876,43 @@ all related programs, and their manual pages.
 .Nx
 maintains its own set of sources for the X Window System in order to
 assure tight integration and compatibility.
-.ie \n[hp700]:\n[hpcsh]:\n[next68k]:\n[sun2] \{\
+.ie \n[sun2] \{\
 .Nx*M
 currently does not ship with an X server or X clients.
 .\}
 .el \{\
-These sources are based on XFree86, and tightly track XFree86 releases.
-They are currently equivalent to XFree86 4.5.0.
+These sources are based on
+.ie \n[i386]:\n[amd64]:\n[macppc]:\n[sgimips]:\n[sparc64]:\n[shark] \{\
+X.Org.
+.\}
+.el \{\
+XFree86 4.5.0.
 .\}
 Binary sets for the X Window System are distributed with
 .Nx .
 The sets are:
-.(tag xserver
+.(tag xserver \" x sets
 .
 .It Sy xbase
 The basic files needed for a complete X
 client environment.
 This does not include the X servers.
-.\" Shareable within MACHINE_ARCH, except atari (NIH)
-.if \n[acorn26] .setsize 7 19
-.if \n[acorn32] .setsize 7 19
-.if \n[algor] .setsize 7 22
-.if \n[alpha] .setsize 8 23
-.if \n[amd64] .setsize 7 21
-.if \n[amiga] .setsize 6 18
-.if \n[arc] .setsize 7 22
-.if \n[atari] .setsize 6 18
-.if \n[cats] .setsize 7 19
-.if \n[cesfic] .setsize 6 18
-.if \n[cobalt] .setsize 7 22
-.if \n[dreamcast] .setsize 7 18
-.if \n[evbarm] .setsize 7 19
-.if \n[evbmips] .setsize 7 22
-.if \n[evbppc] .setsize 7 20
-.if \n[evbsh3] .setsize 7 18
-.if \n[hp300] .setsize 6 18
-.if \n[hp700] .setsize 7 21
-.if \n[hpcarm] .setsize 7 19
-.if \n[hpcmips] .setsize 7 22
-.if \n[hpcsh] .setsize 7 18
-.if \n[i386] .setsize 6 18
-.if \n[ibmnws] .setsize 7 20
-.if \n[iyonix] .setsize 7 19
-.if \n[landisk] .setsize 7 18
-.if \n[luna68k] .setsize 6 18
-.if \n[mac68k] .setsize 6 18
-.if \n[macppc] .setsize 7 20
-.if \n[mipsco] .setsize 7 22
-.if \n[mmeye] .setsize 7 18
-.if \n[mvme68k] .setsize 6 18
-.if \n[mvmeppc] .setsize 7 20
-.if \n[netwinder] .setsize 7 19
-.if \n[news68k] .setsize 6 18
-.if \n[newsmips] .setsize 7 22
-.if \n[next68k] .setsize 6 18
-.if \n[ofppc] .setsize 7 20
-.if \n[pmax] .setsize 7 22
-.if \n[prep] .setsize 7 20
-.if \n[sandpoint] .setsize 7 20
-.if \n[sbmips] .setsize 7 22
-.if \n[sgimips] .setsize 7 22
-.if \n[shark] .setsize 7 19
-.if \n[sparc] .setsize 6 19
-.if \n[sparc64] .setsize 7 21
-.if \n[sun2] .setsize -unknown- -unknown-
-.if \n[sun3] .setsize 6 18
-.if \n[vax] .setsize 65 121
-.if \n[x68k] .setsize 6 18
-.showsize
 .
 .It Sy xcomp
 The extra libraries and include files needed to compile X source code.
-.\" Shareable within MACHINE_ARCH (NIH)
-.if \n[acorn26] .setsize 13 45
-.if \n[acorn32] .setsize 13 45
-.if \n[algor] .setsize 10 39
-.if \n[alpha] .setsize 16 67
-.if \n[amd64] .setsize 13 50
-.if \n[amiga] .setsize 11 39
-.if \n[arc] .setsize 10 39
-.if \n[atari] .setsize 11 39
-.if \n[cats] .setsize 13 45
-.if \n[cesfic] .setsize 11 39
-.if \n[cobalt] .setsize 10 39
-.if \n[dreamcast] .setsize 12 40
-.if \n[evbarm] .setsize 13 45
-.if \n[evbmips] .setsize 10 39
-.if \n[evbppc] .setsize 13 44
-.if \n[evbsh3] .setsize 12 40
-.if \n[hp300] .setsize 11 39
-.if \n[hp700] .setsize 14 48
-.if \n[hpcarm] .setsize 13 45
-.if \n[hpcmips] .setsize 10 39
-.if \n[hpcsh] .setsize 12 40
-.if \n[i386] .setsize 11 39
-.if \n[ibmnws] .setsize 13 44
-.if \n[iyonix] .setsize 13 45
-.if \n[landisk] .setsize 12 40
-.if \n[luna68k] .setsize 11 39
-.if \n[mac68k] .setsize 11 39
-.if \n[macppc] .setsize 13 45
-.if \n[mipsco] .setsize 10 39
-.if \n[mmeye] .setsize 12 40
-.if \n[mvme68k] .setsize 11 39
-.if \n[mvmeppc] .setsize 13 44
-.if \n[netwinder] .setsize 13 45
-.if \n[news68k] .setsize 11 39
-.if \n[newsmips] .setsize 10 39
-.if \n[next68k] .setsize 11 39
-.if \n[ofppc] .setsize 13 44
-.if \n[pmax] .setsize 10 39
-.if \n[prep] .setsize 13 44
-.if \n[sandpoint] .setsize 13 44
-.if \n[sbmips] .setsize 10 39
-.if \n[sgimips] .setsize 10 39
-.if \n[shark] .setsize 13 45
-.if \n[sparc] .setsize 12 44
-.if \n[sparc64] .setsize 13 52
-.if \n[sun2] .setsize -unknown- -unknown-
-.if \n[sun3] .setsize 11 39
-.if \n[vax] .setsize 8 30
-.if \n[x68k] .setsize 11 39
-.showsize
+.
+.It Sy xdebug
+This distribution set contains debug information for
+all X11 binaries.
+It is useful when reporting issues with these binaries or during
+developement.
+This set is huge, if the target disk is small, do not install it.
 .
 .It Sy xfont
 Fonts needed by the X server and by X clients.
-.if \n[acorn26] .setsize 31 39
-.if \n[acorn32] .setsize 31 39
-.if \n[algor] .setsize 31 39
-.if \n[alpha] .setsize 31 39
-.if \n[amd64] .setsize 31 39
-.if \n[amiga] .setsize 31 39
-.if \n[arc] .setsize 31 39
-.if \n[atari] .setsize 31 39
-.if \n[cats] .setsize 31 39
-.if \n[cesfic] .setsize 31 39
-.if \n[cobalt] .setsize 31 39
-.if \n[dreamcast] .setsize 31 39
-.if \n[evbarm] .setsize 31 39
-.if \n[evbmips] .setsize 31 39
-.if \n[evbppc] .setsize 31 39
-.if \n[evbsh3] .setsize 31 39
-.if \n[hp300] .setsize 31 39
-.if \n[hp700] .setsize 31 39
-.if \n[hpcarm] .setsize 31 39
-.if \n[hpcmips] .setsize 31 39
-.if \n[hpcsh] .setsize 31 39
-.if \n[i386] .setsize 31 39
-.if \n[ibmnws] .setsize 31 39
-.if \n[iyonix] .setsize 31 39
-.if \n[landisk] .setsize 31 39
-.if \n[luna68k] .setsize 31 39
-.if \n[mac68k] .setsize 31 39
-.if \n[macppc] .setsize 31 39
-.if \n[mipsco] .setsize 31 39
-.if \n[mmeye] .setsize 31 39
-.if \n[mvme68k] .setsize 31 39
-.if \n[mvmeppc] .setsize 31 39
-.if \n[netwinder] .setsize 31 39
-.if \n[news68k] .setsize 31 39
-.if \n[newsmips] .setsize 31 39
-.if \n[next68k] .setsize 31 39
-.if \n[ofppc] .setsize 31 39
-.if \n[pmax] .setsize 31 39
-.if \n[prep] .setsize 31 39
-.if \n[sandpoint] .setsize 31 39
-.if \n[sbmips] .setsize 31 39
-.if \n[sgimips] .setsize 31 39
-.if \n[shark] .setsize 31 39
-.if \n[sparc] .setsize 31 39
-.if \n[sparc64] .setsize 31 39
-.if \n[sun2] .setsize -unknown- -unknown-
-.if \n[sun3] .setsize 31 39
-.if \n[vax] .setsize 31 39
-.if \n[x68k] .setsize 31 39
-.showsize
 .
 .It Sy xetc
 Configuration files for X which could be locally modified.
-.setsize 0.03 0.17
-.showsize
 .
 .It Sy xserver
 The X server. 
@@ -1268,15 +923,14 @@ This includes Xarm32VIDC and Xprt servers.
 Please consult the X specific section in the atari FAQ as to which server
 you should use.
 .\}
+.if \n[bebox] \{\
+This includes the modular Xorg server.
+.\}
 .if \n[hpcmips] \{\
 This includes the Xhpc server which supports 256 and 65536 colors, with man pages.
 .\}
 .if \n[i386] \{\
-This includes all XFree86 X servers.
-Because all of them are included, this set is large.
-However, you will only need one of the servers provided in this set.
-(Typically,
-.Ic XFree86 ) .
+This includes the modular Xorg server.
 .\}
 .if \n[mac68k] \{\
 This includes the Xmac68k
@@ -1284,86 +938,26 @@ This includes the Xmac68k
 server with man pages.
 .\}
 .if \n[macppc] \{\
-This includes both the XFree86 and Xmacppc servers.
-.br
-The XFree86 server supports acceleration, switchable resolutions and 
-bit-depths.  This server supports only known video cards, such as
-ATI and Nvidia and can be difficult to configure.
-.br
-The Xmacppc server supports all on-board video and Open 
-Firmware-compatible video cards.  Acceleration and depths 
-greater than 256 colors are not supported.  
-.Pp
-See the X11 FAQ for help using X on macppc systems.
-.Lk http://www.NetBSD.org/ports/macppc/x11.html
+This includes the modular Xorg server.
 .\}
 .if \n[pmax] \{\
 This includes the Xpmax server with man page.
+.\}
+.if \n[shark] \{\
+This includes the modular Xorg and Xvfb servers.
 .\}
 .if \n[sparc] \{\
 This includes Xsun, Xsun24, XsunMono and Xvfb servers with man pages.
 .\}
 .if \n[sparc64] \{\
-This includes Xsun, Xsun24, XsunMono and Xvfb
-servers with man pages.
+This includes the modular Xorg and Xvfb servers.
 .\}
 .if \n[x68k] \{\
 This includes the X68k and Xprt
 servers with man pages and the runtime configuration file.
 .\}
 .
-.if \n[acorn26] .setsize 5 11
-.if \n[acorn32] .setsize 6 13
-.if \n[algor] .setsize 5 15
-.if \n[alpha] .setsize 8 19
-.if \n[amd64] .setsize 10 31
-.if \n[amiga] .setsize 5 11
-.if \n[arc] .setsize 5 15
-.if \n[atari] .setsize 4 10
-.if \n[cats] .setsize 11 28
-.if \n[cesfic] .setsize 4 10
-.if \n[cobalt] .setsize 5 15
-.if \n[dreamcast] .setsize 5 11
-.if \n[evbarm] .setsize 5 11
-.if \n[evbmips] .setsize 5 15
-.if \n[evbppc] .setsize 5 11
-.if \n[evbsh3] .setsize 4 10
-.if \n[hp300] .setsize 4 10
-.if \n[hp700] .setsize 5 13
-.if \n[hpcarm] .setsize 6 13
-.if \n[hpcmips] .setsize 6 17
-.if \n[hpcsh] .setsize 5 11
-.if \n[i386] .setsize 9 25
-.if \n[ibmnws] .setsize 5 11
-.if \n[iyonix] .setsize 5 11
-.if \n[landisk] .setsize 4 10
-.if \n[luna68k] .setsize 4 10
-.if \n[mac68k] .setsize 5 13
-.if \n[macppc] .setsize 11 28
-.if \n[mipsco] .setsize 5 15
-.if \n[mmeye] .setsize 5 10
-.if \n[mvme68k] .setsize 4 10
-.if \n[mvmeppc] .setsize 5 11
-.if \n[netwinder] .setsize 9 25
-.if \n[news68k] .setsize 4 10
-.if \n[newsmips] .setsize 6 16
-.if \n[next68k] .setsize 4 10
-.if \n[ofppc] .setsize 5 11
-.if \n[pmax] .setsize 6 16
-.if \n[prep] .setsize 5 11
-.if \n[sandpoint] .setsize 5 11
-.if \n[sbmips] .setsize 5 15
-.if \n[sgimips] .setsize 12 35
-.if \n[shark] .setsize 10 25
-.if \n[sparc] .setsize 13 35
-.if \n[sparc64] .setsize 14 41
-.if \n[sun2] .setsize -unknown- -unknown-
-.if \n[sun3] .setsize 6 16
-.if \n[vax] .setsize 15 29
-.if \n[x68k] .setsize 3 8
-.showsize
-.
-.tag)
+.tag) \" x sets
 .
 .\} \" !\n[sun2]
 .
@@ -1387,7 +981,7 @@ the files are extracted
 .Em below the current directory .
 Therefore, if you want to extract the binaries into your system, i.e.
 replace the system binaries with them, you have to run the
-.Ic "tar -xpf"
+.Ic "tar -xzpf"
 command from the root directory (
 .Pa / 
 ) of your system.
@@ -1395,19 +989,6 @@ command from the root directory (
 .
 .\" ---------------------------- MD DISCUSSION
 .
-.
-.if \n[acorn26] \{\
-.Pp
-There is a copy of the
-.Nx Ns /acorn26
-bootloader,
-.Ic boot26 ,
-in the
-.Pa installation/misc
-subdirectory.
-This is a RISC OS relocatable module, and should have its file
-type set to ffa (Module) once it's been copied to a RISC OS system.
-.\}
 .
 .
 .if \n[atari] \{\
@@ -1437,7 +1018,7 @@ There are gzipped versions of each available, for easier downloading.
 (The gzipped versions have the
 .Pa \&.gz
 extension added to their names.)
-.(tag indent
+.(tag indent \" atari
 .It Em Bootable\ Kernel\ floppies
 These
 .Tn TOS
@@ -1491,7 +1072,7 @@ and
 .Pa miniroot.fs.2 .
 There is also an image for an 1.44 MB disk:
 .Pa miniroot.fs .
-.tag)
+.tag) \" atari
 .Pp
 There are also
 .Tn TOS
@@ -1730,7 +1311,6 @@ If you need them, the sources for these utilities are in the
 .Pa src
 subdirectory.
 .\}
-This utility is used only in a Traditional method installation.
 .
 .if \n[mvme68k] \{\
 .Pp
@@ -1768,7 +1348,7 @@ Keep this in mind if doing a Traditional method
 installation with these utilities.
 .It
 The Booter is known to have problems booting from a NetBSD file system
-if the inode of the kernel file is to large.
+if the inode of the kernel file is too large.
 For large disks it is advisable to have a small root partition and one or
 more usr-type partitions for other files.
 This ensures the inode of the kernel in the root file system will be small.
@@ -1843,7 +1423,7 @@ to it and make the disk bootable.
 This must be the third file written to the tape.
 .	tag)
 .tag)
-.\}
+.\} \" \n[mvme68k]
 .
 .
 .if \n[sgimips] \{\
@@ -1873,7 +1453,7 @@ The following are included in the
 directory:
 .
 .(tag netbsd-INSTALL32_IPxx.symbols.gz
-.It Pa netbsd.ecoff-GENERIC32_IPxx.gz
+.It Pa netbsd-GENERIC32_IPxx.ecoff.gz
 An ECOFF
 version of the 
 .Li GENERIC32_IPxx

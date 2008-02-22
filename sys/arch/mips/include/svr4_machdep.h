@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.h,v 1.4 2006/08/17 17:11:27 christos Exp $ */
+/*	$NetBSD: svr4_machdep.h,v 1.6 2017/07/30 16:13:24 maxv Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,7 @@
  */
 
 /* 
- * This does not implement COMPAT_SVR4 for MIPS yet. For now we only 
- * have enough definitions to get some svr4_* files needed by COMPAT_IRIX 
- * to build.
+ * This does not implement COMPAT_SVR4 for MIPS. XXX: should be removed.
  */
 
 #ifndef _MIPS_SVR4_MACHDEP_H_

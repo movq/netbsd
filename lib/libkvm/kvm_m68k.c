@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_m68k.c,v 1.15 2001/05/21 14:56:29 fredette Exp $	*/
+/*	$NetBSD: kvm_m68k.c,v 1.19 2014/01/27 21:00:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,7 @@
 #include <sys/exec.h>
 #include <sys/kcore.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -64,6 +58,8 @@
 
 #include "kvm_private.h"
 #include "kvm_m68k.h"
+
+__RCSID("$NetBSD: kvm_m68k.c,v 1.19 2014/01/27 21:00:01 matt Exp $");
 
 struct name_ops {
 	const char *name;
@@ -85,8 +81,7 @@ static struct name_ops optbl[] = {
  * into crash dump files.  This is where we do the dispatch work.
  */
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 	cpu_kcore_hdr_t *h;
 	struct name_ops *nop;
@@ -132,26 +127,20 @@ _kvm_initvtop(kd)
 }
 
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 	(kd->vmst->ops->freevtop)(kd);
 	free(kd->vmst);
 }
 
 int
-_kvm_kvatop(kd, va, pap)
-	kvm_t *kd;
-	u_long va;
-	u_long *pap;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pap)
 {
 	return ((kd->vmst->ops->kvatop)(kd, va, pap));
 }
 
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t	*kd;
-	u_long	pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	return ((kd->vmst->ops->pa2off)(kd, pa));
 }
@@ -162,8 +151,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 	u_long max_uva;
 	extern struct ps_strings *__ps_strings;

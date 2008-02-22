@@ -1,4 +1,4 @@
-/*	$NetBSD: stic.c,v 1.42 2007/10/19 12:01:20 ad Exp $	*/
+/*	$NetBSD: stic.c,v 1.53 2018/03/30 22:54:36 maya Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,43 +30,13 @@
  */
 
 /*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
  * Driver for the DEC PixelStamp interface chip (STIC).
  *
  * XXX The bt459 interface shouldn't be replicated here.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.42 2007/10/19 12:01:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.53 2018/03/30 22:54:36 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,8 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.42 2007/10/19 12:01:20 ad Exp $");
 #include <sys/kauth.h>
 #include <sys/lwp.h>
 #include <sys/event.h>
-
-#include <uvm/uvm_extern.h>
 
 #if defined(pmax)
 #include <mips/cpuregs.h>
@@ -130,19 +91,19 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.42 2007/10/19 12:01:20 ad Exp $");
  * adjacent each other in a word, i.e.,
  *	struct bt459triplet {
  * 		struct {
- *			u_int8_t u0;
- *			u_int8_t u1;
- *			u_int8_t u2;
+ *			uint8_t u0;
+ *			uint8_t u1;
+ *			uint8_t u2;
  *			unsigned :8;
  *		} bt_lo;
  *		struct {
  *
  * Although HX has single Bt459, 32bit R/W can be done w/o any trouble.
  *	struct bt459reg {
- *		   u_int32_t	   bt_lo;
- *		   u_int32_t	   bt_hi;
- *		   u_int32_t	   bt_reg;
- *		   u_int32_t	   bt_cmap;
+ *		   uint32_t	   bt_lo;
+ *		   uint32_t	   bt_hi;
+ *		   uint32_t	   bt_reg;
+ *		   uint32_t	   bt_cmap;
  *	};
  *
  */
@@ -153,7 +114,7 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.42 2007/10/19 12:01:20 ad Exp $");
 #define bt_reg	2
 #define bt_cmap 3
 
-#define REG(base, index)	*((volatile u_int32_t *)(base) + (index))
+#define REG(base, index)	*((volatile uint32_t *)(base) + (index))
 #define SELECT(vdac, regno) do {		\
 	REG(vdac, bt_lo) = DUPBYTE0(regno);	\
 	REG(vdac, bt_hi) = DUPBYTE1(regno);	\
@@ -193,12 +154,22 @@ static dev_type_close(sticclose);
 static dev_type_mmap(sticmmap);
 
 const struct cdevsw stic_cdevsw = {
-	sticopen, sticclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, sticmmap, nokqfilter,
+	.d_open = sticopen,
+	.d_close = sticclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = sticmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /* Colormap for wscons, matching WSCOL_*. Upper 8 are high-intensity. */
-static const u_int8_t stic_cmap[16*3] = {
+static const uint8_t stic_cmap[16*3] = {
 	0x00, 0x00, 0x00, /* black */
 	0x7f, 0x00, 0x00, /* red */
 	0x00, 0x7f, 0x00, /* green */
@@ -225,7 +196,7 @@ static const u_int8_t stic_cmap[16*3] = {
  *   3 2 1 0 3 2 1 0		0 0 1 1 2 2 3 3
  *   7 6 5 4 7 6 5 4		4 4 5 5 6 6 7 7
  */
-static const u_int8_t shuffle[256] = {
+static const uint8_t shuffle[256] = {
 	0x00, 0x40, 0x10, 0x50, 0x04, 0x44, 0x14, 0x54,
 	0x01, 0x41, 0x11, 0x51, 0x05, 0x45, 0x15, 0x55,
 	0x80, 0xc0, 0x90, 0xd0, 0x84, 0xc4, 0x94, 0xd4,
@@ -304,7 +275,7 @@ static int	stic_unit;
 void
 stic_init(struct stic_info *si)
 {
-	volatile u_int32_t *vdac;
+	volatile uint32_t *vdac;
 	int i, cookie;
 
 	/* Reset the STIC & stamp(s). */
@@ -348,10 +319,10 @@ stic_init(struct stic_info *si)
 	wsfont_init();
 
 	cookie = wsfont_find(NULL, 12, 0, 2, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 2, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		panic("stic_init: font table is empty");
 
@@ -436,7 +407,7 @@ stic_reset(struct stic_info *si)
 }
 
 void
-stic_attach(struct device *self, struct stic_info *si, int console)
+stic_attach(device_t self, struct stic_info *si, int console)
 {
 	struct wsemuldisplaydev_attach_args waa;
 
@@ -450,7 +421,7 @@ stic_attach(struct device *self, struct stic_info *si, int console)
 
 	/*
 	 * Allocate backing for the console.  We could trawl back through
-	 * msgbuf and and fill the backing, but it's not worth the hassle.
+	 * msgbuf and fill the backing, but it's not worth the hassle.
 	 * We could also grab backing using pmap_steal_memory() early on,
 	 * but that's a little ugly.
 	 */
@@ -487,13 +458,13 @@ stic_cnattach(struct stic_info *si)
 static void
 stic_setup_vdac(struct stic_info *si)
 {
-	u_int8_t *ip, *mp;
+	uint8_t *ip, *mp;
 	int r, c, o, b, i, s;
 
 	s = spltty();
 
-	ip = (u_int8_t *)si->si_cursor.cc_image;
-	mp = (u_int8_t *)si->si_cursor.cc_mask;
+	ip = (uint8_t *)si->si_cursor.cc_image;
+	mp = (uint8_t *)si->si_cursor.cc_mask;
 	memset(ip, 0, sizeof(si->si_cursor.cc_image));
 	memset(mp, 0, sizeof(si->si_cursor.cc_mask));
 
@@ -537,7 +508,7 @@ stic_setup_vdac(struct stic_info *si)
 static void
 stic_clear_screen(struct stic_info *si)
 {
-	u_int32_t *pb;
+	uint32_t *pb;
 	int i;
 
 	/*
@@ -728,7 +699,7 @@ stic_do_switch(void *cookie)
 	struct stic_screen *ss;
 	struct stic_info *si;
 	u_int r, c, nr, nc;
-	u_int16_t *p, *sp;
+	uint16_t *p, *sp;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -777,7 +748,7 @@ stic_do_switch(void *cookie)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the
-	 * PXG, we must flush immediatley.
+	 * PXG, we must flush immediately.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -816,9 +787,9 @@ stic_erasecols(void *cookie, int row, int col, int num, long attr)
 {
 	struct stic_info *si;
 	struct stic_screen *ss;
-	u_int32_t *pb;
+	uint32_t *pb;
 	u_int i, linewidth;
-	u_int16_t *p;
+	uint16_t *p;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -826,7 +797,7 @@ stic_erasecols(void *cookie, int row, int col, int num, long attr)
 	if (ss->ss_backing != NULL) {
 		p = ss->ss_backing + row * si->si_consw + col;
 		for (i = num; i != 0; i--)
-			*p++ = (u_int16_t)attr;
+			*p++ = (uint16_t)attr;
 	}
 	if ((ss->ss_flags & SS_ACTIVE) == 0)
 		return;
@@ -858,15 +829,15 @@ stic_eraserows(void *cookie, int row, int num, long attr)
 	struct stic_info *si;
 	struct stic_screen *ss;
 	u_int linewidth, i;
-	u_int32_t *pb;
+	uint32_t *pb;
 
 	ss = cookie;
 	si = ss->ss_si;
 
 	if (ss->ss_backing != NULL) {
-		pb = (u_int32_t *)(ss->ss_backing + row * si->si_consw);
+		pb = (uint32_t *)(ss->ss_backing + row * si->si_consw);
 		for (i = si->si_consw * num; i > 0; i -= 2)
-			*pb++ = (u_int32_t)attr;
+			*pb++ = (uint32_t)attr;
 	}
 	if ((ss->ss_flags & SS_ACTIVE) == 0)
 		return;
@@ -896,7 +867,7 @@ stic_copyrows(void *cookie, int src, int dst, int height)
 {
 	struct stic_info *si;
 	struct stic_screen *ss;
-	u_int32_t *pb, *pbs;
+	uint32_t *pb, *pbs;
 	u_int num, inc, adj;
 
 	ss = cookie;
@@ -957,7 +928,7 @@ stic_copycols(void *cookie, int row, int src, int dst, int num)
 	struct stic_info *si;
 	struct stic_screen *ss;
 	u_int height, updword;
-	u_int32_t *pb, *pbs;
+	uint32_t *pb, *pbs;
 
 	ss = cookie;
 	si = ss->ss_si;
@@ -1172,7 +1143,7 @@ stic_cursor(void *cookie, int on, int row, int col)
 
 		/*
 		 * XXX Since we don't yet receive vblank interrupts from the
-		 * PXG, we must flush immediatley.
+		 * PXG, we must flush immediately.
 		 */
 		if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 			stic_flush(si);
@@ -1184,7 +1155,7 @@ stic_cursor(void *cookie, int on, int row, int col)
 void
 stic_flush(struct stic_info *si)
 {
-	volatile u_int32_t *vdac;
+	volatile uint32_t *vdac;
 	int v;
 
 	if ((si->si_flags & SI_ALL_CHANGED) == 0)
@@ -1204,7 +1175,7 @@ stic_flush(struct stic_info *si)
 	}
 
 	if ((v & SI_CURCMAP_CHANGED) != 0) {
-		u_int8_t *cp;
+		uint8_t *cp;
 
 		cp = si->si_cursor.cc_color;
 
@@ -1218,12 +1189,12 @@ stic_flush(struct stic_info *si)
 	}
 
 	if ((v & SI_CURSHAPE_CHANGED) != 0) {
-		u_int8_t *ip, *mp, img, msk;
-		u_int8_t u;
+		uint8_t *ip, *mp, img, msk;
+		uint8_t u;
 		int bcnt;
 
-		ip = (u_int8_t *)si->si_cursor.cc_image;
-		mp = (u_int8_t *)si->si_cursor.cc_mask;
+		ip = (uint8_t *)si->si_cursor.cc_image;
+		mp = (uint8_t *)si->si_cursor.cc_mask;
 
 		bcnt = 0;
 		SELECT(vdac, BT459_IREG_CRAM_BASE);
@@ -1312,7 +1283,7 @@ stic_set_cmap(struct stic_info *si, struct wsdisplay_cmap *p)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the PXG, we
-	 * must flush immediatley.
+	 * must flush immediately.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -1334,7 +1305,7 @@ stic_set_cursor(struct stic_info *si, struct wsdisplay_cursor *p)
 	if ((v & WSDISPLAY_CURSOR_DOCMAP) != 0) {
 		index = p->cmap.index;
 		count = p->cmap.count;
-		if (index >= 2 || (index + count) > 2)
+		if (index >= 2 || count > 2 - index)
 			return (EINVAL);
 		error = copyin(p->cmap.red, &r[index], count);
 		if (error)
@@ -1389,7 +1360,7 @@ stic_set_cursor(struct stic_info *si, struct wsdisplay_cursor *p)
 
 	/*
 	 * XXX Since we don't yet receive vblank interrupts from the PXG, we
-	 * must flush immediatley.
+	 * must flush immediately.
 	 */
 	if (si->si_disptype == WSDISPLAY_TYPE_PXG)
 		stic_flush(si);
@@ -1431,7 +1402,7 @@ stic_set_curpos(struct stic_info *si, struct wsdisplay_curpos *curpos)
 static void
 stic_set_hwcurpos(struct stic_info *si)
 {
-	volatile u_int32_t *vdac;
+	volatile uint32_t *vdac;
 	int x, y, s;
 
 	vdac = si->si_vdac;

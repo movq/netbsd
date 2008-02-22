@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2003/04/28 12:19:06 dsl Exp $
+#	$NetBSD: Makefile,v 1.3 2009/11/18 21:04:12 dsl Exp $
 
 PROG= mbr
 

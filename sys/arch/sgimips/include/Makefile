@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.17 2007/02/18 16:25:44 ad Exp $
+#	$NetBSD: Makefile,v 1.24 2015/12/21 17:02:34 christos Exp $
 
 INCSDIR= /usr/include/sgimips
 
-INCS=	asm.h ansi.h aout_machdep.h autoconf.h \
-	bsd-aout.h bswap.h \
+INCS=	asm.h ansi.h autoconf.h \
+	bswap.h \
 	cdefs.h cpu.h \
 	disklabel.h \
 	ecoff_machdep.h elf_machdep.h endian.h endian_machdep.h \
-	float.h \
+	fenv.h float.h \
 	ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	intr.h \
@@ -17,10 +17,10 @@ INCS=	asm.h ansi.h aout_machdep.h autoconf.h \
 	param.h pci_machdep.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h \
 	ptrace.h \
 	reg.h regdef.h regnum.h reloc.h rwlock.h \
-	setjmp.h signal.h stdarg.h \
+	setjmp.h signal.h sljit_machdep.h \
 	trap.h types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h \
-	z8530var.h
+	z8530var.h \
 
 .include <bsd.kinc.mk>

@@ -1,4 +1,4 @@
-.\"	$NetBSD: envsys.4,v 1.40 2007/12/17 17:52:37 rumble Exp $
+.\"	$NetBSD: envsys.4,v 1.53 2018/05/31 07:37:45 wiz Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 13, 2007
+.Dd January 10, 2013
 .Dt ENVSYS 4
 .Os
 .Sh NAME
@@ -59,7 +52,7 @@ the userland part, to receive the current sensor data and
 to set some properties on sensors:
 .Xr envstat 8 .
 .It
-The kernel part that is able to talk to the drivers providing sensor
+The kernel part that is able to talk to the devices providing sensor
 data:
 .Xr sysmon_envsys 9 .
 .El
@@ -72,8 +65,7 @@ for communication between kernel and user space.
 The following
 .Xr ioctl 2
 types are available:
-.Pp
-.Bl -tag -width XX -compact
+.Bl -tag -width XX
 .It Dv ENVSYS_GETDICTIONARY Pq prop_dictionary_t
 .Pp
 This
@@ -85,72 +77,80 @@ framework.
 It will contain an array of dictionaries per device
 and one dictionary per sensor plus another special dictionary that
 contains the properties for a device.
-Each sensor dictionary will have their own characteristics and values.
+Each sensor dictionary will have its own characteristics and values.
 .Pp
 The following XML property list represents a virtual device
 .Dq device0
-with one sensor
+with one entry for sensor
 .Dq sensor0
-and all available properties set on it, plus another sensor for
-the
+and all available properties set on it, plus another entry for the
 .Dq device-properties
 dictionary (which contains specific properties for a device):
-.Pp
 .Bd -literal
-\&\*[Lt]key\&\*[Gt]device0\&\*[Lt]\&/key\&\*[Gt]
-\&\*[Lt]array\&\*[Gt]
-	\&\*[Lt]dict\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]allow-rfact\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]avg-value\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]36400\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]battery-capacity\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]NORMAL\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]critical-capacity\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]21417\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]critical-max\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]343150000\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]critical-min\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]288150000\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]cur-value\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]406000\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]description\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]CPU Temp\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]index\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]sensor0\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]max-value\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]3894000\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]min-value\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]2894000\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-critical\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-critover\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-critunder\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-state-changed\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-warnover\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-state-warnunder\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]monitoring-supported\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]state\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]valid\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]type\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]string\&\*[Gt]Ampere hour\&\*[Lt]\&/string\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]want-percentage\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]true\&/\&\*[Gt]
-	\&\*[Lt]\&/dict\&\*[Gt]
-	\&\*[Lt]dict\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]device-properties\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]dict\&\*[Gt]
-			\&\*[Lt]key\&\*[Gt]refresh-timeout\&\*[Lt]\&/key\&\*[Gt]
-			\&\*[Lt]integer\&\*[Gt]0xa\&\*[Lt]\&/integer\&\*[Gt]
-		\&\*[Lt]\&/dict\&\*[Gt]
-	\&\*[Lt]\&/dict\&\*[Gt]
-\&\*[Lt]\&/array\&\*[Gt]
+\&<key\&>device0\&<\&/key\&>
+\&<array\&>
+	\&<dict\&>
+		\&<key\&>allow-rfact\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>avg-value\&<\&/key\&>
+		\&<integer\&>36400\&<\&/integer\&>
+		\&<key\&>battery-capacity\&<\&/key\&>
+		\&<string\&>NORMAL\&<\&/string\&>
+		\&<key\&>critical-capacity\&<\&/key\&>
+		\&<integer\&>21417\&<\&/integer\&>
+		\&<key\&>critical-max\&<\&/key\&>
+		\&<integer\&>343150000\&<\&/integer\&>
+		\&<key\&>critical-min\&<\&/key\&>
+		\&<integer\&>288150000\&<\&/integer\&>
+		\&<key\&>cur-value\&<\&/key\&>
+		\&<integer\&>406000\&<\&/integer\&>
+		\&<key\&>description\&<\&/key\&>
+		\&<string\&>CPU Temp\&<\&/string\&>
+		\&<key\&>high-capacity\&<\&/key\&>
+		\&<integer\&>21417\&<\&/integer\&>
+		\&<key\&>index\&<\&/key\&>
+		\&<string\&>sensor0\&<\&/string\&>
+		\&<key\&>max-value\&<\&/key\&>
+		\&<integer\&>3894000\&<\&/integer\&>
+		\&<key\&>maximum-capacity\&<\&/key\&>
+		\&<integer\&>21417\&<\&/integer\&>
+		\&<key\&>min-value\&<\&/key\&>
+		\&<integer\&>2894000\&<\&/integer\&>
+		\&<key\&>monitoring-state-critical\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-state-critover\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-state-critunder\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-state-state-changed\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-state-warnover\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-state-warnunder\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>monitoring-supported\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>state\&<\&/key\&>
+		\&<string\&>valid\&<\&/string\&>
+		\&<key\&>type\&<\&/key\&>
+		\&<string\&>Ampere hour\&<\&/string\&>
+		\&<key\&>want-percentage\&<\&/key\&>
+		\&<true\&/\&>
+		\&<key\&>warning-capacity\&<\&/key\&>
+		\&<integer\&>19234\&<\&/integer\&>
+		\&<key\&>warning-max\&<\&/key\&>
+		\&<integer\&>323150000\&<\&/integer\&>
+		\&<key\&>warning-min\&<\&/key\&>
+		\&<integer\&>298150000\&<\&/integer\&>
+	\&<\&/dict\&>
+	\&<dict\&>
+		\&<key\&>device-properties\&<\&/key\&>
+		\&<dict\&>
+			\&<key\&>refresh-timeout\&<\&/key\&>
+			\&<integer\&>0xa\&<\&/integer\&>
+		\&<\&/dict\&>
+	\&<\&/dict\&>
+\&<\&/array\&>
 .Ed
 .Pp
 Let's explain some more about those objects:
@@ -158,7 +158,7 @@ Let's explain some more about those objects:
 .It Fa allow-rfact
 Set to
 .Em true
-mean that the sensor is able to change the resistor factor,
+means that the sensor is able to change the resistor factor,
 only used in Voltage sensors.
 .It Fa avg-value
 Current average value in the sensor.
@@ -183,27 +183,38 @@ Critical min limit set previously by the
 Current value in the sensor.
 .It Fa description
 Description of the sensor.
+.It Fa high-capacity
+High capacity set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+Only available on sensors with the
+.Em want-percentage
+object enabled.
+Used to monitor possible over-charging of batteries.
 .It Fa index
 Index position of the sensor.
 .It Fa max-value
 Current max value in the sensor.
+.It Fa maximum-capacity
+Maximum capacity set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+Only available on sensors with the
+.Em want-percentage
+object enabled.
+Used to monitor possible over-charging of batteries.
 .It Fa min-value
 Current min value in the sensor.
 .It Fa monitoring-state-critical
-If true, the driver has enabled the flag to monitor a critical state.
-.It Fa monitoring-state-critical-over
-If true, the driver has enabled the flag to monitor a critical over state.
-.It Fa monitoring-state-critical-under
-If true, the driver has enabled the flag to monitor a critical under state.
+If true, the device has enabled the flag to monitor a critical state.
+.It Fa monitoring-state-hw-range-limits
+If true, the device has enabled the flag to monitor warning or critical
+limits.
 .It Fa monitoring-state-state-changed
-If true, the driver has enabled the flag to monitor for state changes in
+If true, the device has enabled the flag to monitor for state changes in
 a drive or Battery state sensor.
-.It Fa monitoring-state-warning-over
-If true, the driver has enabled the flag to monitor a warning over state.
-.It Fa monitoring-state-warning-under
-If true, the driver has enabled the flag to monitor a warning under state.
 .It Fa monitoring-supported
-If true, critical capacity/max/min limits may be set by the
+If true, critical/warning capacity/max/min limits may be set by the
 .Dv ENVSYS_SETDICTIONARY
 .Xr ioctl 2 .
 .It Fa state
@@ -216,10 +227,22 @@ If true,
 and
 .Em cur-value
 are valid and a percentage may be computed from them.
+.It Fa warning-capacity
+Warning capacity set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+Only available on sensors with the
+.Em want-percentage
+object enabled.
+.It Fa warning-max
+Warning max limit set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+.It Fa warning-min
+Warning min limit set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
 .El
-.El
-.Pp
-.Bl -tag -width XX -compact
 .It Dv ENVSYS_REMOVEPROPS Pq prop_dictionary_t
 .Pp
 This
@@ -227,22 +250,18 @@ This
 is used to remove all properties that are currently set via the
 .Dv ENVSYS_SETDICTIONARY
 ioctl.
-The values will be set to defaults, the ones that the driver uses.
+The values will be set to defaults, the ones that the device uses.
 .Pp
 Only one object is allowed on this dictionary:
-.Bd -literal -offset -ident
-	\*[Lt]key\*[Gt]envsys-remove-props\*[Lt]/key\*[Gt]
-	\*[Lt]true/\*[Gt]
+.Bd -literal -offset ident
+<key>envsys-remove-props</key>
+<true/>
 .Ed
 .Pp
 It is a boolean object and must be set to
 .Em true
 to be effective.
-.El
-.Bl -tag -width XX -compact
-.Pp
 .It Dv ENVSYS_SETDICTIONARY Pq prop_dictionary_t
-.Pp
 This
 .Xr ioctl 2
 is used to send a dictionary with new properties that should be
@@ -254,18 +273,28 @@ The following is the property list representation
 of a dictionary with all recognized and required keywords that
 a sensor understands:
 .Bd -literal
-\&\*[Lt]dict\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]description\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]string\&\*[Gt]cpu temp\&\*[Lt]\&/string\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]rfact\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]integer\&\*[Gt]56000\&\*[Lt]\&/integer\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]critical-capacity\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]integer\&\*[Gt]10\&\*[Lt]\&/integer\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]critical-max\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]integer\&\*[Gt]3400\&\*[Lt]\&/integer\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]critical-min\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]integer\&\*[Gt]2800\&\*[Lt]\&/integer\&\*[Gt]
-\&\*[Lt]\&/dict\&\*[Gt]
+\&<dict\&>
+	\&<key\&>description\&<\&/key\&>
+	\&<string\&>cpu temp\&<\&/string\&>
+	\&<key\&>rfact\&<\&/key\&>
+	\&<integer\&>56000\&<\&/integer\&>
+	\&<key\&>critical-capacity\&<\&/key\&>
+	\&<integer\&>10\&<\&/integer\&>
+	\&<key\&>critical-max\&<\&/key\&>
+	\&<integer\&>3400\&<\&/integer\&>
+	\&<key\&>critical-min\&<\&/key\&>
+	\&<integer\&>2800\&<\&/integer\&>
+	\&<key\&>high-capacity\&<\&/key\&>
+	\&<integer\&>95\&<\&/integer\&>
+	\&<key\&>maximum-capacity\&<\&/key\&>
+	\&<integer\&>100\&<\&/integer\&>
+	\&<key\&>warning-capacity\&<\&/key\&>
+	\&<integer\&>15\&<\&/integer\&>
+	\&<key\&>warning-max\&<\&/key\&>
+	\&<integer\&>3200\&<\&/integer\&>
+	\&<key\&>warning-min\&<\&/key\&>
+	\&<integer\&>2900\&<\&/integer\&>
+\&<\&/dict\&>
 .Ed
 .Pp
 Also if some properties in a device need to be changed, the
@@ -276,39 +305,39 @@ At this moment only the
 property is understood.
 This has the following structure:
 .Bd -literal
-\&\*[Lt]dict\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]device-properties\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]dict\&\*[Gt]
-		\&\*[Lt]key\&\*[Gt]refresh-timeout\&\*[Lt]\&/key\&\*[Gt]
-		\&\*[Lt]integer\&\*[Gt]0xa\&\*[Lt]\&/integer\&\*[Gt]
-	\&\*[Lt]\&/dict\&\*[Gt]
-\&\*[Lt]\&/dict\&\*[Gt]
+\&<dict\&>
+	\&<key\&>device-properties\&<\&/key\&>
+	\&<dict\&>
+		\&<key\&>refresh-timeout\&<\&/key\&>
+		\&<integer\&>0xa\&<\&/integer\&>
+	\&<\&/dict\&>
+\&<\&/dict\&>
 .Ed
 .Pp
 A dictionary sent to the kernel with this
 .Xr ioctl 2
 should have the following structure:
 .Bd -literal
-\&\*[Lt]dict\&\*[Gt]
-	\&\*[Lt]key\&\*[Gt]device_name\&\*[Lt]\&/key\&\*[Gt]
-	\&\*[Lt]array\&\*[Gt]
-		\&\*[Lt]dict\&\*[Gt]
-			\&\*[Lt]key\&\*[Gt]index\&\*[Lt]\&/key\&\*[Gt]
-			\&\*[Lt]string\&\*[Gt]sensor0\&\*[Lt]\&/string\&\*[Gt]
-			\&\*[Lt]key\&\*[Gt]description\&\*[Lt]\&/key\&\*[Gt]
-			\&\*[Lt]string\&\*[Gt]cpu temp\&\*[Lt]\&/string\&\*[Gt]
+\&<dict\&>
+	\&<key\&>device_name\&<\&/key\&>
+	\&<array\&>
+		\&<dict\&>
+			\&<key\&>index\&<\&/key\&>
+			\&<string\&>sensor0\&<\&/string\&>
+			\&<key\&>description\&<\&/key\&>
+			\&<string\&>cpu temp\&<\&/string\&>
 			...
 			Another property for this sensor
 			...
-		\&\*[Lt]\&/dict\&\*[Gt]
+		\&<\&/dict\&>
 		...
 		Another dictionary for device-properties or sensor
 		...
-	\&\*[Lt]\&/array\&\*[Gt]
+	\&<\&/array\&>
 	...
 	Another device as above
 	...
-\&\*[Lt]\&/dict\&\*[Gt]
+\&<\&/dict\&>
 .Ed
 .Pp
 The named device will be an array and will contain dictionaries,
@@ -319,12 +348,12 @@ object specifying the sensor that is required for the new properties.
 If an unknown object was sent with the dictionary,
 .Er EINVAL
 will be returned, or if the sensor does not support changing
-rfact (voltage sensors) or critical/capacity limits,
+rfact (voltage sensors) or critical/warning/capacity limits,
 .Er ENOTSUP
 will be returned.
 .El
 .Sh NOTES
-When setting a critical max or min limit with the
+When setting a critical/warning max or min limit with the
 .Dv ENVSYS_SETDICTIONARY
 .Xr ioctl 2 ,
 the user must be aware that
@@ -334,7 +363,7 @@ Please see
 .Xr sysmon_envsys 9
 for more information.
 .Pp
-Also when setting a critical capacity limit, the formula to send a
+Also when setting a critical or warning capacity limit, the formula to send a
 proper value to
 .Xr sysmon_envsys 9
 is the following:
@@ -345,7 +374,7 @@ The following example shows how to change the description
 of
 .Ql sensor0
 in the
-.Ql aiboost0
+.Ql aibs0
 device with the
 .Dv ENVSYS_SETDICTIONARY
 .Xr ioctl 2 :
@@ -356,26 +385,26 @@ main(void)
 	prop_dictionary_t global_dict, sensor_dict;
 	prop_array_t array;
 	prop_object_t obj;
-	int fd;
+	int fd, error;
 
 	global_dict = prop_dictionary_create();
 	sensor_dict = prop_dictionary_create();
 	array = prop_array_create();
 
-	if (!prop_dictionary_set(global_dict, "aiboost0", array))
+	if (!prop_dictionary_set(global_dict, "aibs0", array))
 		err(EINVAL, "prop_dictionary_set global");
 
 	obj = prop_string_create_cstring_nocopy("sensor0");
 	if (obj == NULL ||
-	    !prop_dictionary_set(dict, "index", obj))
+	    !prop_dictionary_set(sensor_dict, "index", obj))
 		err(EINVAL, "sensor index");
 
 	prop_object_release(obj);
 
 	/* new description */
-	obj = prop_string_create_cstring_nocopy("CPU temp");
+	obj = prop_string_create_cstring_nocopy("CPU core voltage");
 	if (obj == NULL ||
-	    !prop_dictionary_set(dict, "description", obj))
+	    !prop_dictionary_set(sensor_dict, "description", obj))
 		err(EINVAL, "new description");
 
 	prop_object_release(obj);
@@ -384,7 +413,7 @@ main(void)
 		err(EINVAL, "prop_array_add");
 
 	if ((fd = open(_DEV_SYSMON, O_RDWR)) == \-1)
-		err(EXIT_FAILURE, "open")
+		err(EXIT_FAILURE, "open");
 
 	/* we are done, send the dictionary */
 	error = prop_dictionary_send_ioctl(global_dict,
@@ -397,6 +426,7 @@ main(void)
 }
 .Ed
 .Sh SEE ALSO
+.Xr envsys.conf 5 ,
 .Xr envstat 8 ,
 .Xr powerd 8 ,
 .Xr sysmon_envsys 9

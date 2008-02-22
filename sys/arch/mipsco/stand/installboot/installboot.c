@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.3 2001/07/08 04:25:37 wdk Exp $	*/
+/*	$NetBSD: installboot.c,v 1.10 2016/01/21 16:58:36 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,20 +51,20 @@
 #define	BOOTBLOCK_OFFSET	BOOTBLOCK_NUMBER*DEV_BSIZE
 #define	DEFAULT_BOOTFILE	"boot"
 
-static void	usage __P((void));
-static void	do_list __P((const char *));
-static void	do_remove __P((const char *, const char *));
-static void	do_install __P((const char *, const char *, const char *));
-static int	mipsvh_cksum __P((struct mips_volheader *));
-static void	read_volheader __P((const char *, struct mips_volheader *));
-static void	write_volheader __P((const char *, struct mips_volheader *));
-static struct mips_voldir *voldir_findfile __P((struct mips_volheader *, 
-						const char *, int));
+static void	usage(void);
+static void	do_list(const char *);
+static void	do_remove(const char *, const char *);
+static void	do_install(const char *, const char *, const char *);
+static int	mipsvh_cksum(struct mips_volheader *);
+static void	read_volheader(const char *, struct mips_volheader *);
+static void	write_volheader(const char *, struct mips_volheader *);
+static struct mips_voldir *voldir_findfile(struct mips_volheader *, 
+						const char *, int);
 
 int verbose, nowrite;
 
 static void
-usage()
+usage(void)
 {
 
 	fprintf(stderr, "usage:\n");
@@ -132,8 +125,7 @@ main(int argc, char *argv[])
 }
 
 static void
-do_list(disk)
-	const char *disk;
+do_list(const char *disk)
 {
 	struct mips_volheader vh;
 	struct mips_voldir *vdp;
@@ -150,9 +142,7 @@ do_list(disk)
 }
 
 static void
-do_remove(disk, filename)
-	const char *disk;
-	const char *filename;
+do_remove(const char *disk, const char *filename)
 {
 	struct mips_volheader vh;
 	struct mips_voldir *vdp;
@@ -169,10 +159,7 @@ do_remove(disk, filename)
 }
 
 static void
-do_install(disk, bootstrap, bootname)
-	const char *disk;
-	const char *bootstrap;
-	const char *bootname;
+do_install(const char *disk, const char *bootstrap, const char *bootname)
 {
 	struct stat bootstrapsb;
 	struct mips_volheader vh;
@@ -221,6 +208,7 @@ do_install(disk, bootstrap, bootname)
 	if (nowrite) {
 	    if (verbose)
 		    fprintf(stderr, "not writing\n");
+	    free(boot_code);
 	    return;
 	}
 
@@ -232,6 +220,7 @@ do_install(disk, bootstrap, bootname)
 	if ((fd = open(disk, O_WRONLY)) == -1)
 		FATALIO("open %s", bootstrap);
 	len = pwrite(fd, boot_code, boot_size, BOOTBLOCK_OFFSET);
+	free(boot_code);
 	if (len == -1)
 		FATAL("write %s", disk);
 	if (len != boot_size)
@@ -243,9 +232,7 @@ do_install(disk, bootstrap, bootname)
 }
 
 static void
-read_volheader(disk, vhp)
-     const char *disk;
-     struct mips_volheader *vhp;
+read_volheader(const char *disk, struct mips_volheader *vhp)
 {
 	int vfd;
 	ssize_t len;
@@ -272,9 +259,7 @@ read_volheader(disk, vhp)
 }
 
 static void
-write_volheader(disk, vhp)
-	const char *disk;
-	struct mips_volheader *vhp;
+write_volheader(const char *disk, struct mips_volheader *vhp)
 {
 	int vfd;
 	ssize_t len;
@@ -305,8 +290,7 @@ write_volheader(disk, vhp)
  * of the entire volume header structure
  */
 int
-mipsvh_cksum(vhp)
-	struct mips_volheader *vhp;
+mipsvh_cksum(struct mips_volheader *vhp)
 {
 	int i, *ptr;
 	int cksum = 0;
@@ -326,10 +310,8 @@ mipsvh_cksum(vhp)
  * empty slot is returned, otherwise return NULL 
  */
 static struct mips_voldir *
-voldir_findfile(vhp, file, create)
-	struct mips_volheader *vhp;
-	const char *file;
-	int create;		/* return unused entry if not found */
+voldir_findfile(struct mips_volheader *vhp, const char *file, int create)
+	/* create:		 return unused entry if not found */
 {
 	struct mips_voldir *vdp = vhp->vh_voldir;
 	int i;

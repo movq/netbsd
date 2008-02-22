@@ -1,4 +1,4 @@
-/*	$NetBSD: if_re_pci.c,v 1.32 2007/12/11 11:25:52 lukem Exp $	*/
+/*	$NetBSD: if_re_pci.c,v 1.48 2017/05/18 18:33:48 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -46,29 +46,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_re_pci.c,v 1.32 2007/12/11 11:25:52 lukem Exp $");
-
-#include "bpfilter.h"
-#include "vlan.h"
+__KERNEL_RCSID(0, "$NetBSD: if_re_pci.c,v 1.48 2017/05/18 18:33:48 jakllsch Exp $");
 
 #include <sys/types.h>
 
 #include <sys/param.h>
-#include <sys/endian.h>
 #include <sys/systm.h>
-#include <sys/sockio.h>
-#include <sys/mbuf.h>
-#include <sys/malloc.h>
-#include <sys/kernel.h>
-#include <sys/socket.h>
 #include <sys/device.h>
 
 #include <net/if.h>
-#include <net/if_arp.h>
-#include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
-#include <net/if_vlanvar.h>
 
 #include <sys/bus.h>
 
@@ -87,12 +75,16 @@ struct re_pci_softc {
 	struct rtk_softc sc_rtk;
 
 	void *sc_ih;
+	pci_intr_handle_t *sc_pihp;
 	pci_chipset_tag_t sc_pc;
-	pcitag_t sc_pcitag;
 };
 
-static int	re_pci_match(struct device *, struct cfdata *, void *);
-static void	re_pci_attach(struct device *, struct device *, void *);
+static int	re_pci_match(device_t, cfdata_t, void *);
+static void	re_pci_attach(device_t, device_t, void *);
+static int	re_pci_detach(device_t, int);
+
+CFATTACH_DECL_NEW(re_pci, sizeof(struct re_pci_softc),
+    re_pci_match, re_pci_attach, re_pci_detach, NULL);
 
 /*
  * Various supported device vendors/types and their names.
@@ -103,10 +95,10 @@ static const struct rtk_type re_devs[] = {
 	    "RealTek 8139C+ 10/100BaseTX" },
 	{ PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8101E,
 	    RTK_8101E,
-	    "RealTek 8100E/8101E PCIe 10/100BaseTX" },
+	    "RealTek 8100E/8101E/8102E/8102EL PCIe 10/100BaseTX" },
 	{ PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8168,
 	    RTK_8168,
-	    "RealTek 8168B/8111B PCIe Gigabit Ethernet" },
+	    "RealTek 8168/8111 PCIe Gigabit Ethernet" },
 	{ PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8169,
 	    RTK_8169,
 	    "RealTek 8169/8110 Gigabit Ethernet" },
@@ -125,23 +117,33 @@ static const struct rtk_type re_devs[] = {
 	{ PCI_VENDOR_LINKSYS, PCI_PRODUCT_LINKSYS_EG1032,
 	    RTK_8169,
 	    "Linksys EG1032 rev. 3 Gigabit Ethernet" },
-	{ 0, 0, 0, NULL }
 };
 
-#define RE_LINKSYS_EG1032_SUBID	0x00241737
+static const struct rtk_type *
+re_pci_lookup(const struct pci_attach_args * pa)
+{
+	int i;
 
-CFATTACH_DECL(re_pci, sizeof(struct re_pci_softc), re_pci_match, re_pci_attach,
-	      NULL, NULL);
+	for(i = 0; i < __arraycount(re_devs); i++) {
+		if (PCI_VENDOR(pa->pa_id) != re_devs[i].rtk_vid)
+			continue;
+		if (PCI_PRODUCT(pa->pa_id) == re_devs[i].rtk_did)
+			return &re_devs[i];
+	}
+
+	return NULL;
+}
+
+#define RE_LINKSYS_EG1032_SUBID	0x00241737
 
 /*
  * Probe for a RealTek 8139C+/8169/8110 chip. Check the PCI vendor and device
  * IDs against our list and return a device name if we find a match.
  */
 static int
-re_pci_match(struct device *parent, struct cfdata *match, void *aux)
+re_pci_match(device_t parent, cfdata_t cf, void *aux)
 {
-	const struct rtk_type	*t;
-	struct pci_attach_args	*pa = aux;
+	struct pci_attach_args *pa = aux;
 	pcireg_t subid;
 
 	subid = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
@@ -152,6 +154,7 @@ re_pci_match(struct device *parent, struct cfdata *match, void *aux)
 		if (subid != RE_LINKSYS_EG1032_SUBID)
 			return 0;
 	}
+
 	/* Don't match 8139 other than C-PLUS */
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_REALTEK &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_REALTEK_RT8139) {
@@ -159,53 +162,51 @@ re_pci_match(struct device *parent, struct cfdata *match, void *aux)
 			return 0;
 	}
 
-	t = re_devs;
-
-	while (t->rtk_name != NULL) {
-		if ((PCI_VENDOR(pa->pa_id) == t->rtk_vid) &&
-		    (PCI_PRODUCT(pa->pa_id) == t->rtk_did)) {
-			return 2;	/* defect rtk(4) */
-		}
-		t++;
-	}
+	if (re_pci_lookup(pa) != NULL)
+		return 2;	/* defeat rtk(4) */
 
 	return 0;
 }
 
 static void
-re_pci_attach(struct device *parent, struct device *self, void *aux)
+re_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct re_pci_softc	*psc = (void *)self;
-	struct rtk_softc	*sc = &psc->sc_rtk;
-	struct pci_attach_args 	*pa = aux;
+	struct re_pci_softc *psc = device_private(self);
+	struct rtk_softc *sc = &psc->sc_rtk;
+	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
-	pci_intr_handle_t ih;
 	const char *intrstr = NULL;
-	const struct rtk_type	*t;
-	uint32_t		hwrev;
-	int			error = 0;
-	pcireg_t		memtype;
-	bool			ioh_valid, memh_valid;
-	pcireg_t		command;
-	bus_space_tag_t		iot, memt;
-	bus_space_handle_t	ioh, memh;
-	bus_size_t		iosize, memsize, bsize;
+	const struct rtk_type *t;
+	uint32_t hwrev;
+	pcireg_t command, memtype;
+	bool ioh_valid, memh_valid;
+	bus_space_tag_t iot, memt;
+	bus_space_handle_t ioh, memh;
+	bus_size_t iosize, memsize;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	/*
-	 * Map control/status registers.
-	 */
+	sc->sc_dev = self;
+	psc->sc_pc = pa->pa_pc;
+
 	command = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
 	command |= PCI_COMMAND_MASTER_ENABLE;
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, command);
 
+	/*
+	 * Map control/status registers.
+	 */
 	ioh_valid = (pci_mapreg_map(pa, RTK_PCI_LOIO, PCI_MAPREG_TYPE_IO, 0,
 	    &iot, &ioh, NULL, &iosize) == 0);
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, RTK_PCI_LOMEM);
 	switch (memtype) {
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT:
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_64BIT:
-		memh_valid = (pci_mapreg_map(pa, RTK_PCI_LOMEM,
-		    memtype, 0, &memt, &memh, NULL, &memsize) == 0);
+		memh_valid =
+		    (pci_mapreg_map(pa, RTK_PCI_LOMEM,
+		        memtype, 0, &memt, &memh, NULL, &memsize) == 0) ||
+		    (pci_mapreg_map(pa, RTK_PCI_LOMEM + 4,
+			PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_64BIT,
+			0, &memt, &memh, NULL, &memsize) == 0);
 		break;
 	default:
 		memh_valid = 0;
@@ -215,26 +216,22 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (ioh_valid) {
 		sc->rtk_btag = iot;
 		sc->rtk_bhandle = ioh;
-		bsize = iosize;
+		sc->rtk_bsize = iosize;
+		if (memh_valid)
+			bus_space_unmap(memt, memh, memsize);
 	} else if (memh_valid) {
 		sc->rtk_btag = memt;
 		sc->rtk_bhandle = memh;
-		bsize = memsize;
+		sc->rtk_bsize = memsize;
 	} else {
-		aprint_error("%s: can't map registers\n", sc->sc_dev.dv_xname);
+		aprint_error(": can't map registers\n");
 		return;
 	}
 
-	t = re_devs;
-	hwrev = CSR_READ_4(sc, RTK_TXCFG) & RTK_TXCFG_HWREV;
+	t = re_pci_lookup(pa);
+	KASSERT(t != NULL);
 
-	while (t->rtk_name != NULL) {
-		if ((PCI_VENDOR(pa->pa_id) == t->rtk_vid) &&
-		    (PCI_PRODUCT(pa->pa_id) == t->rtk_did)) {
-			break;
-		}
-		t++;
-	}
+	pci_aprint_devinfo_fancy(pa, NULL, t->rtk_name, 1);
 
 	if (t->rtk_basetype == RTK_8139CPLUS)
 		sc->sc_quirk |= RTKQ_8139CPLUS;
@@ -243,10 +240,13 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	    t->rtk_basetype == RTK_8101E)
 		sc->sc_quirk |= RTKQ_PCIE;
 
-	aprint_normal(": %s (rev. 0x%02x)\n",
-	    t->rtk_name, PCI_REVISION(pa->pa_class));
+	if (t->rtk_basetype == RTK_8168)
+		sc->sc_quirk |= RTKQ_IM_HW;
 
-	sc->sc_dmat = pa->pa_dmat;
+	if (pci_dma64_available(pa) && (sc->sc_quirk & RTKQ_PCIE))
+		sc->sc_dmat = pa->pa_dmat64;
+	else
+		sc->sc_dmat = pa->pa_dmat;
 
 	/*
 	 * No power/enable/disable machinery for PCI attach;
@@ -256,24 +256,26 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Hook interrupt last to avoid having to lock softc */
 	/* Allocate interrupt */
-	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+	if (pci_intr_alloc(pa, &psc->sc_pihp, NULL, 0)) {
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
-	psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, re_intr, sc);
+	intrstr = pci_intr_string(pc, psc->sc_pihp[0], intrbuf,
+	    sizeof(intrbuf));
+	psc->sc_ih = pci_intr_establish(pc, psc->sc_pihp[0], IPL_NET,
+	    re_intr, sc);
 	if (psc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	re_attach(sc);
+
+	hwrev = CSR_READ_4(sc, RTK_TXCFG) & RTK_TXCFG_HWREV;
 
 	/*
 	 * Perform hardware diagnostic on the original RTL8169.
@@ -281,28 +283,42 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * malfunction if plugged into a 64-bit slot.
 	 */
 	if (hwrev == RTK_HWREV_8169) {
-		error = re_diag(sc);
-		if (error) {
-			aprint_error(
-			    "%s: attach aborted due to hardware diag failure\n",
-			    sc->sc_dev.dv_xname);
-
-			re_detach(sc);
-
-			if (psc->sc_ih != NULL) {
-				pci_intr_disestablish(pc, psc->sc_ih);
-				psc->sc_ih = NULL;
-			}
-
-			if (ioh_valid)
-				bus_space_unmap(iot, ioh, iosize);
-			if (memh_valid)
-				bus_space_unmap(memt, memh, memsize);
+		if (re_diag(sc)) {
+			re_pci_detach(self, 0);
+			aprint_error_dev(self, "disabled\n");
 		}
 	}
+}
 
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-	else
-		pmf_class_network_register(self, &sc->ethercom.ec_if);
+static int
+re_pci_detach(device_t self, int flags)
+{
+	struct re_pci_softc *psc = device_private(self);
+	struct rtk_softc *sc = &psc->sc_rtk;
+	int rv;
+
+	if ((sc->sc_flags & RTK_ATTACHED) != 0)
+		/* re_stop() */
+		sc->ethercom.ec_if.if_stop(&sc->ethercom.ec_if, 0);
+
+	rv = re_detach(sc);
+	if (rv)
+		return rv;
+
+	if (psc->sc_ih != NULL) {
+		pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
+		psc->sc_ih = NULL;
+	}
+
+	if (psc->sc_pihp != NULL) {
+		pci_intr_release(psc->sc_pc, psc->sc_pihp, 1);
+		psc->sc_pihp = NULL;
+	}
+
+	if (sc->rtk_bsize != 0) {
+		bus_space_unmap(sc->rtk_btag, sc->rtk_bhandle, sc->rtk_bsize);
+		sc->rtk_bsize = 0;
+	}
+
+	return 0;
 }

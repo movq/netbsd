@@ -1,4 +1,4 @@
-/*	$NetBSD: grutil.c,v 1.1 2007/10/27 15:36:21 christos Exp $	*/
+/*	$NetBSD: grutil.c,v 1.4 2014/06/23 06:57:31 shm Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: grutil.c,v 1.1 2007/10/27 15:36:21 christos Exp $");
+__RCSID("$NetBSD: grutil.c,v 1.4 2014/06/23 06:57:31 shm Exp $");
 
 #include <sys/param.h>
 #include <err.h>
@@ -144,7 +137,8 @@ addgid(gid_t *groups, int ngroups, int ngroupsmax, gid_t gid, int makespace)
 static addgrp_ret_t
 addgrp(gid_t newgid, int makespace)
 {
-	int ngroups, ngroupsmax, rval;
+	int ngroups, ngroupsmax;
+	addgrp_ret_t rval;
 	gid_t *groups;
 	gid_t oldgid;
 
@@ -153,7 +147,7 @@ addgrp(gid_t newgid, int makespace)
 		return ADDGRP_NOERROR;
 
 	rval = alloc_groups(&ngroups, &groups, &ngroupsmax);
-	if (rval != 0)
+	if (rval != ADDGRP_NOERROR)
 		return rval;
 
 	/*
@@ -241,7 +235,7 @@ newgrp(const char *gname, struct passwd *pwd, uid_t ruid, const char *prompt)
 	if (ruid == 0 || pwd->pw_gid == grp->gr_gid)
 		return grp->gr_gid;
 
-	if (alloc_groups(&ngroups, &groups, &ngroupsmax) == 0) {
+	if (alloc_groups(&ngroups, &groups, &ngroupsmax) == ADDGRP_NOERROR) {
 		int i;
 		for (i = 0; i < ngroups; i++)
 			if (groups[i] == grp->gr_gid) {

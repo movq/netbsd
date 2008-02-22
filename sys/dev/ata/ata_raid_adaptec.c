@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid_adaptec.c,v 1.7 2008/02/02 16:15:01 mjf Exp $	*/
+/*	$NetBSD: ata_raid_adaptec.c,v 1.10 2017/11/01 19:34:46 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2000,2001,2002 Søren Schmidt <sos@FreeBSD.org>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid_adaptec.c,v 1.7 2008/02/02 16:15:01 mjf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid_adaptec.c,v 1.10 2017/11/01 19:34:46 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: ata_raid_adaptec.c,v 1.7 2008/02/02 16:15:01 mjf Exp
 int
 ata_raid_read_config_adaptec(struct wd_softc *sc)
 {
+	struct dk_softc *dksc = &sc->sc_dksc;
 	struct adaptec_raid_conf *info;
 	struct atabus_softc *atabus;
 	struct vnode *vp;
@@ -78,10 +79,10 @@ ata_raid_read_config_adaptec(struct wd_softc *sc)
 
 	info = malloc(sizeof(*info), M_DEVBUF, M_WAITOK);
 
-	bmajor = devsw_name2blk(sc->sc_dev.dv_xname, NULL, 0);
+	bmajor = devsw_name2blk(dksc->sc_xname, NULL, 0);
 
 	/* Get a vnode for the raw partition of this disk. */
-	dev = MAKEDISKDEV(bmajor, device_unit(&sc->sc_dev), RAW_PART);
+	dev = MAKEDISKDEV(bmajor, device_unit(dksc->sc_dev), RAW_PART);
 	error = bdevvp(dev, &vp);
 	if (error)
 		goto out;
@@ -97,8 +98,8 @@ ata_raid_read_config_adaptec(struct wd_softc *sc)
 	VOP_CLOSE(vp, FREAD, NOCRED);
 	vput(vp);
 	if (error) {
-		printf("%s: error %d reading Adaptec config block\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(dksc->sc_dev,
+		    "error %d reading Adaptec config block\n", error);
 		goto out;
 	}
 
@@ -110,7 +111,7 @@ ata_raid_read_config_adaptec(struct wd_softc *sc)
 	/* Check the signature. */
 	if (info->magic_0 != ADP_MAGIC_0 || info->magic_3 != ADP_MAGIC_3) {
 		DPRINTF(("%s: Adaptec signature check failed\n",
-		    sc->sc_dev.dv_xname));
+		    dksc->sc_xname));
 		error = ESRCH;
 		goto out;
 	}
@@ -145,8 +146,9 @@ ata_raid_read_config_adaptec(struct wd_softc *sc)
 			break;
 
 		default:
-			aprint_error("%s: unknown Adaptec RAID type 0x%02x\n",
-			    sc->sc_dev.dv_xname, info->configs[0].type);
+			aprint_error_dev(dksc->sc_dev,
+			    "unknown Adaptec RAID type 0x%02x\n",
+			    info->configs[0].type);
 			error = EINVAL;
 			goto out;
 		}
@@ -159,24 +161,27 @@ ata_raid_read_config_adaptec(struct wd_softc *sc)
 		aai->aai_cylinders = aai->aai_capacity / (63 * 255);
 		aai->aai_offset = 0;
 		aai->aai_reserved = 17;
+		if (info->configs[0].name)
+			strlcpy(aai->aai_name, info->configs[0].name,
+			    sizeof(aai->aai_name));
 
 		/* XXX - bogus.  RAID1 shouldn't really have an interleave */
 		if (aai->aai_interleave == 0)
 			aai->aai_interleave = aai->aai_capacity;
 	}
 
-	atabus = (struct atabus_softc *) device_parent(&sc->sc_dev);
+	atabus = device_private(device_parent(dksc->sc_dev));
 	drive = atabus->sc_chan->ch_channel;
 	if (drive >= aai->aai_ndisks) {
-		aprint_error("%s: drive number %d doesn't make sense within "
-		    "%d-disk array\n",
-		    sc->sc_dev.dv_xname, drive, aai->aai_ndisks);
+		aprint_error_dev(dksc->sc_dev,
+		    "drive number %d doesn't make sense within %d-disk "
+		    "array\n", drive, aai->aai_ndisks);
 		error = EINVAL;
 		goto out;
 	}
 
 	adi = &aai->aai_disks[drive];
-	adi->adi_dev = &sc->sc_dev;
+	adi->adi_dev = dksc->sc_dev;
 	adi->adi_status = ADI_S_ONLINE | ADI_S_ASSIGNED;
 	adi->adi_sectors = aai->aai_capacity;
 	adi->adi_compsize = be32toh(info->configs[drive+1].sectors);

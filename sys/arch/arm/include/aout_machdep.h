@@ -1,4 +1,4 @@
-/*	$NetBSD: aout_machdep.h,v 1.5 2005/12/11 12:16:46 christos Exp $	*/
+/*	$NetBSD: aout_machdep.h,v 1.8 2018/03/17 04:16:09 ryo Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -32,8 +32,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_ARM32_AOUT_MACHDEP_H_
-#define	_ARM32_AOUT_MACHDEP_H_
+#ifndef _ARM_AOUT_MACHDEP_H_
+#define _ARM_AOUT_MACHDEP_H_
 
 #define	AOUT_LDPGSZ	4096
 
@@ -52,8 +52,8 @@ struct relocation_info_arm6 {
 };
 
 #define relocation_info relocation_info_arm6
-                                                                                                                                                                                       
+
 /* No special executable format */
 #define	cpu_exec_aout_makecmds(a, b)	ENOEXEC
 
-#endif	/* _ARM32_AOUT_MACHDEP_H_ */
+#endif	/* _ARM_AOUT_MACHDEP_H_ */

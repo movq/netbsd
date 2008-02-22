@@ -1,4 +1,4 @@
-/*	$NetBSD: power.h,v 1.11 2007/12/22 18:35:13 jmcneill Exp $	*/
+/*	$NetBSD: power.h,v 1.20 2015/01/06 15:39:54 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -44,6 +44,10 @@
 
 #include <sys/ioccom.h>
 
+#ifndef _KERNEL
+#include <stdint.h>
+#endif
+
 /*
  * Power Switches:
  *
@@ -79,6 +83,10 @@
  *				of switch has state.  We know if it is open
  *				or closed.
  *
+ *	Radio switch		This is e.g. the switch of the transmitter
+ * 				of a wifi interface. We know if it is
+ *				on or off.
+ *
  */
 
 #define	PSWITCH_TYPE_POWER	0	/* power button */
@@ -93,6 +101,21 @@
 #define		PSWITCH_HK_EJECT_BUTTON		"eject-button"
 #define		PSWITCH_HK_ZOOM_BUTTON		"zoom-button"
 #define		PSWITCH_HK_VENDOR_BUTTON	"vendor-button"
+#ifndef THINKPAD_NORMAL_HOTKEYS
+#define		PSWITCH_HK_FNF1_BUTTON		"fnf1-button"
+#define		PSWITCH_HK_WIRELESS_BUTTON	"wireless-button"
+#define		PSWITCH_HK_WWAN_BUTTON		"wWAN-button"
+#define		PSWITCH_HK_POINTER_BUTTON	"pointer-button"
+#define		PSWITCH_HK_FNF10_BUTTON		"fnf10-button"
+#define		PSWITCH_HK_FNF11_BUTTON		"fnf11-button"
+#define		PSWITCH_HK_BRIGHTNESS_UP	"brightness-up"
+#define		PSWITCH_HK_BRIGHTNESS_DOWN	"brightness-down"
+#define		PSWITCH_HK_THINKLIGHT		"thinklight"
+#define		PSWITCH_HK_VOLUME_UP		"volume-up"
+#define		PSWITCH_HK_VOLUME_DOWN		"volume-down"
+#define		PSWITCH_HK_VOLUME_MUTE		"volume-mute"
+#endif /* THINKPAD_NORMAL_HOTKEYS */
+#define	PSWITCH_TYPE_RADIO	6	/* radio switch */
 
 #define	PSWITCH_EVENT_PRESSED	0	/* button pressed, lid closed, AC off */
 #define	PSWITCH_EVENT_RELEASED	1	/* button released, lid open, AC on */
@@ -110,7 +133,7 @@ struct pswitch_state {
  * envsys(4) events:
  *
  * envsys events are sent by the sysmon envsys framework when
- * a critical condition happens in a sensor.
+ * a warning or critical condition happens in a sensor.
  *
  * We define the folowing types of envsys events:
  *
@@ -141,7 +164,7 @@ struct pswitch_state {
 #define PENVSYS_TYPE_INDICATOR		17
 
 /*
- * The following events apply for temperatures, power, resistance, 
+ * The following events apply for temperatures, power, resistance,
  * voltages, battery and fan sensors:
  *
  * 	PENVSYS_EVENT_CRITICAL		A critical limit.
@@ -154,14 +177,8 @@ struct pswitch_state {
  *
  * 	PENVSYS_EVENT_WARNUNDER		A warning over limit.
  *
- * The following events apply to the same except for batteries:
- *
- * 	PENVSYS_EVENT_USER_CRITMAX	User critical max limit.
- *
- * 	PENVSYS_EVENT_USER_CRITMIN	User critical min limit.
- *
- * The folowing event apply to all sensors, when the state is
- * valid or the critical limit is not valid anymore:
+ * The folowing event applies to all sensors, when the state is
+ * valid or the warning or critical limit is not valid anymore:
  *
  * 	PENVSYS_EVENT_NORMAL		Normal state in the sensor.
  */
@@ -172,20 +189,27 @@ struct pswitch_state {
 #define PENVSYS_EVENT_CRITUNDER 	120
 #define PENVSYS_EVENT_WARNOVER 		130
 #define PENVSYS_EVENT_WARNUNDER 	140
-#define PENVSYS_EVENT_USER_CRITMAX 	150
-#define PENVSYS_EVENT_USER_CRITMIN  	160
 
 /*
  * The following events apply for battery sensors:
  *
- * 	PENVSYS_EVENT_BATT_USERCAP	User capacity.
+ * 	PENVSYS_EVENT_BATT_CRIT		User critical capacity.
+ *
+ *	PENVSYS_EVENT_BATT_WARN		User warning capacity.
+ *
+ *	PENVSYS_EVENT_BATT_HIGH		User high capacity.
+ *
+ *	PENVSYS_EVENT_BATT_MAX		User maximum capacity.
  *
  * 	PENVSYS_EVENT_LOW_POWER		AC Adapter is OFF and all batteries
  * 					are discharged.
  */
 
-#define PENVSYS_EVENT_BATT_USERCAP 	170
-#define PENVSYS_EVENT_LOW_POWER 	180
+#define PENVSYS_EVENT_BATT_CRIT		170
+#define PENVSYS_EVENT_BATT_WARN		175
+#define PENVSYS_EVENT_BATT_HIGH		177
+#define PENVSYS_EVENT_BATT_MAX		178
+#define PENVSYS_EVENT_LOW_POWER		180
 
 /*
  * The following event apply for battery state and drive sensors:
@@ -195,6 +219,19 @@ struct pswitch_state {
  */
 #define PENVSYS_EVENT_STATE_CHANGED 	190
 
+/*
+ * The following events are used internally to associate multiple
+ * external states with a single event monitor
+ */
+#define PENVSYS_EVENT_LIMITS		200
+#define PENVSYS_EVENT_CAPACITY		210
+
+/*
+ * The following pseudo-event is used to force refreshing of a
+ * sensor that provides rnd(4) entropy, even if the sensor is not
+ * otherwise being monitored.
+ */
+#define PENVSYS_EVENT_NULL		220
 
 /*
  * This structure defines the properties of an envsys event.
@@ -244,6 +281,7 @@ typedef struct power_event {
 struct power_type {
 	char	power_type[32];
 };
-#define	POWER_IOC_GET_TYPE	 _IOR('P', 0, sizeof(struct power_type))
+#define	POWER_IOC_GET_TYPE	_IOR('P', 0, struct power_type)
+#define	POWER_IOC_GET_TYPE_WITH_LOSSAGE _IOR('P', 0, sizeof(struct power_type))
 
 #endif /* _SYS_POWER_H_ */

@@ -1,4 +1,4 @@
-# $NetBSD: md.hpcsh,v 1.21 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.hpcsh,v 1.28 2016/08/25 12:17:26 christos Exp $
 ./usr/include/hpcsh				comp-c-include
 ./usr/include/hpcsh/_G_config.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/ansi.h			comp-c-include
@@ -7,7 +7,7 @@
 ./usr/include/hpcsh/asm.h			comp-c-include
 ./usr/include/hpcsh/bootinfo.h			comp-c-include
 ./usr/include/hpcsh/bswap.h			comp-c-include
-./usr/include/hpcsh/bus.h			comp-c-include
+./usr/include/hpcsh/bus.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/cdefs.h			comp-c-include
 ./usr/include/hpcsh/coff_machdep.h		comp-c-include
 ./usr/include/hpcsh/conf.h			comp-obsolete		obsolete
@@ -19,6 +19,7 @@
 ./usr/include/hpcsh/elf_machdep.h		comp-c-include
 ./usr/include/hpcsh/endian.h			comp-c-include
 ./usr/include/hpcsh/endian_machdep.h		comp-c-include
+./usr/include/hpcsh/fenv.h			comp-c-include
 ./usr/include/hpcsh/float.h			comp-c-include
 ./usr/include/hpcsh/frame.h			comp-c-include
 ./usr/include/hpcsh/ieee.h			comp-c-include
@@ -50,10 +51,10 @@
 ./usr/include/hpcsh/setjmp.h			comp-c-include
 ./usr/include/hpcsh/shbvar.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/signal.h			comp-c-include
-./usr/include/hpcsh/stdarg.h			comp-c-include
+./usr/include/hpcsh/stdarg.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/trap.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/types.h			comp-c-include
-./usr/include/hpcsh/varargs.h			comp-c-include
+./usr/include/hpcsh/varargs.h			comp-obsolete		obsolete
 ./usr/include/hpcsh/vmparam.h			comp-c-include
 ./usr/include/hpcsh/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.16 2006/08/05 21:26:49 sanjayl Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.25 2014/02/28 05:44:39 matt Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.16 2006/08/05 21:26:49 sanjayl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.25 2014/02/28 05:44:39 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -42,13 +42,19 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.16 2006/08/05 21:26:49 sanjayl Exp
 #include <sys/disklabel.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/malloc.h>
 #include <sys/stat.h>
 #include <sys/systm.h>
 
 #include <dev/ofw/openfirm.h>
 
 #include <machine/powerpc.h>
+#include <machine/autoconf.h>
+
+#ifdef DEBUG
+#define DPRINTF aprint_error
+#else
+#define DPRINTF while(0) printf
+#endif
 
 #define	OFMEM_REGIONS	32
 static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
@@ -63,74 +69,160 @@ static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
 void
 mem_regions(struct mem_region **memp, struct mem_region **availp)
 {
-	int phandle, i, cnt;
-	struct mem_region_avail {
-		paddr_t start;
-		paddr_t size;
-	} OFavail_G5[OFMEM_REGIONS + 3] __attribute((unused));
+	const char *macrisc[] = {"MacRISC", "MacRISC2", "MacRISC4", NULL};
+	int hroot, hmem, i, cnt, memcnt, regcnt, acells, scells;
+	int numregs;
+	uint32_t regs[OFMEM_REGIONS * 4]; /* 2 values + 2 for 64bit */
+
+	DPRINTF("calling mem_regions\n");
+	/* determine acell size */
+	if ((hroot = OF_finddevice("/")) == -1)
+		goto error;
+	cnt = OF_getprop(hroot, "#address-cells", &acells, sizeof(int));
+	if (cnt <= 0)
+		acells = 1;
+
+	/* determine scell size */
+	cnt = OF_getprop(hroot, "#size-cells", &scells, sizeof(int));
+	if (cnt <= 0)
+		scells = 1;
+
+	/* Get memory */
+	memset(regs, 0, sizeof(regs));
+	if ((hmem = OF_finddevice("/memory")) == -1)
+		goto error;
+	regcnt = OF_getprop(hmem, "reg", regs,
+	    sizeof(regs[0]) * OFMEM_REGIONS * 4);
+	if (regcnt <= 0)
+		goto error;
+
+	/* how many mem regions did we get? */
+	numregs = regcnt / (sizeof(uint32_t) * (acells + scells));
+	DPRINTF("regcnt=%d num=%d acell=%d scell=%d\n",
+	    regcnt, numregs, acells, scells);
+
+	/* move the data into OFmem */
+	memset(OFmem, 0, sizeof(OFmem));
+	for (i = 0, memcnt = 0; i < numregs; i++) {
+		uint64_t addr, size;
+
+		if (acells > 1)
+			memcpy(&addr, &regs[i * (acells + scells)],
+			    sizeof(int32_t) * acells);
+		else
+			addr = regs[i * (acells + scells)];
+
+		if (scells > 1)
+			memcpy(&size, &regs[i * (acells + scells) + acells],
+			    sizeof(int32_t) * scells);
+		else
+			size = regs[i * (acells + scells) + acells];
+
+		/* skip entry of 0 size */
+		if (size == 0)
+			continue;
+#ifndef _LP64
+		if (addr > 0xFFFFFFFF || size > 0xFFFFFFFF ||
+			(addr + size) > 0xFFFFFFFF) {
+			aprint_error("Base addr of %llx or size of %llx too"
+			    " large for 32 bit OS. Skipping.", addr, size);
+			continue;
+		}
+#endif
+		OFmem[memcnt].start = addr;
+		OFmem[memcnt].size = size;
+		aprint_normal("mem region %d start=%"PRIx64" size=%"PRIx64"\n",
+		    memcnt, addr, size);
+		memcnt++;
+	}
+
+	DPRINTF("available\n");
+
+	/* now do the same thing again, for the available counts */
+	memset(regs, 0, sizeof(regs));
+	regcnt = OF_getprop(hmem, "available", regs,
+	    sizeof(regs[0]) * OFMEM_REGIONS * 4);
+	if (regcnt <= 0)
+		goto error;
+
+	DPRINTF("%08x %08x %08x %08x\n", regs[0], regs[1], regs[2], regs[3]);
 
 	/*
-	 * Get memory.
+	 * according to comments in FreeBSD all Apple OF has 32bit values in
+	 * "available", no matter what the cell sizes are
 	 */
-	if ((phandle = OF_finddevice("/memory")) == -1)
-		goto error;
-
-	memset(OFmem, 0, sizeof OFmem);
-	cnt = OF_getprop(phandle, "reg",
-		OFmem, sizeof OFmem[0] * OFMEM_REGIONS);
-	if (cnt <= 0)
-		goto error;
-
-	/* Remove zero sized entry in the returned data. */
-	cnt /= sizeof OFmem[0];
-	for (i = 0; i < cnt; )
-		if (OFmem[i].size == 0) {
-			memmove(&OFmem[i], &OFmem[i + 1],
-				(cnt - i) * sizeof OFmem[0]);
-			cnt--;
-		} else
-			i++;
-
-#if defined (PMAC_G5)
-	/* XXXSL: the G5 implementation of OFW is defines the /memory reg/available
-	 * properties differently. Try to fix it up here with minimal damage to the
-	 * rest of the code
- 	 */
-	{
-		int count;
-		memset(OFavail_G5, 0, sizeof OFavail_G5);
-		count = OF_getprop(phandle, "available",
-			OFavail_G5, sizeof OFavail_G5[0] * OFMEM_REGIONS);
-
-		if (count <= 0)
-			goto error;
-
-		count /= sizeof OFavail_G5[0];
-		cnt = count * sizeof(OFavail[0]);
-
-		for (i = 0; i < count; i++ )
-		{
-			OFavail[i].start_hi = 0;
-			OFavail[i].start = OFavail_G5[i].start;
-			OFavail[i].size = OFavail_G5[i].size;
-		}
+	if (of_compatible(hroot, macrisc) != -1) {
+		DPRINTF("this appears to be a mac...\n");
+		acells = 1;
+		scells = 1;
 	}
-#else
-	memset(OFavail, 0, sizeof OFavail);
-	cnt = OF_getprop(phandle, "available",
-		OFavail, sizeof OFavail[0] * OFMEM_REGIONS);
-#endif
-	if (cnt <= 0)
-		goto error;
+		
+	/* how many mem regions did we get? */
+	numregs = regcnt / (sizeof(uint32_t) * (acells + scells));
+	DPRINTF("regcnt=%d num=%d acell=%d scell=%d\n",
+	    regcnt, numregs, acells, scells);
 
-	cnt /= sizeof OFavail[0];
-	for (i = 0; i < cnt; ) {
-		if (OFavail[i].size == 0) {
-			memmove(&OFavail[i], &OFavail[i + 1],
-				(cnt - i) * sizeof OFavail[0]);
-			cnt--;
-		} else
-			i++;
+	DPRINTF("to OF_avail\n");
+
+	/* move the data into OFavail */
+	memset(OFavail, 0, sizeof(OFavail));
+	for (i = 0, cnt = 0; i < numregs; i++) {
+		uint64_t addr, size;
+
+		DPRINTF("%d\n", i);
+		if (acells > 1)
+			memcpy(&addr, &regs[i * (acells + scells)],
+			    sizeof(int32_t) * acells);
+		else
+			addr = regs[i * (acells + scells)];
+
+		if (scells > 1)
+			memcpy(&size, &regs[i * (acells + scells) + acells],
+			    sizeof(int32_t) * scells);
+		else
+			size = regs[i * (acells + scells) + acells];
+		/* skip entry of 0 size */
+		if (size == 0)
+			continue;
+#ifndef _LP64
+		if (addr > 0xFFFFFFFF || size > 0xFFFFFFFF ||
+			(addr + size) > 0xFFFFFFFF) {
+			aprint_verbose("Base addr of %llx or size of %llx too"
+			    " large for 32 bit OS. Skipping.", addr, size);
+			continue;
+		}
+#endif
+		OFavail[cnt].start = addr;
+		OFavail[cnt].size = size;
+		aprint_normal("avail region %d start=%#"PRIx64" size=%#"PRIx64"\n",
+		    cnt, addr, size);
+		cnt++;
+	}
+
+	if (strncmp(model_name, "Pegasos", 7) == 0) {
+		/*
+		 * Some versions of SmartFirmware, only recognize the first
+		 * 256MB segment as available. Work around it and add an
+		 * extra entry to OFavail[] to account for this.
+		 */
+#define AVAIL_THRESH (0x10000000-1)
+		if (((OFavail[cnt-1].start + OFavail[cnt-1].size +
+		    AVAIL_THRESH) & ~AVAIL_THRESH) <
+		    (OFmem[memcnt-1].start + OFmem[memcnt-1].size)) {
+
+			OFavail[cnt].start =
+			    (OFavail[cnt-1].start + OFavail[cnt-1].size +
+			    AVAIL_THRESH) & ~AVAIL_THRESH;
+			OFavail[cnt].size =
+			    OFmem[memcnt-1].size - OFavail[cnt].start;
+			aprint_normal("WARNING: add memory segment %lx - %lx,"
+			    "\nWARNING: which was not recognized by "
+			    "the Firmware.\n",
+			    (unsigned long)OFavail[cnt].start,
+			    (unsigned long)OFavail[cnt].start +
+			    OFavail[cnt].size);
+			cnt++;
+		}
 	}
 
 	*memp = OFmem;

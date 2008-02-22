@@ -1,4 +1,4 @@
-/*	$NetBSD: mkclock_isa.c,v 1.10 2008/01/10 15:31:27 tsutsui Exp $	*/
+/*	$NetBSD: mkclock_isa.c,v 1.15 2014/11/20 16:34:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,14 +35,14 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: mkclock_isa.c,v 1.10 2008/01/10 15:31:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mkclock_isa.c,v 1.15 2014/11/20 16:34:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/clock_subr.h>
 #include <dev/ic/mk48txxreg.h>
@@ -67,10 +60,10 @@ __KERNEL_RCSID(0, "$NetBSD: mkclock_isa.c,v 1.10 2008/01/10 15:31:27 tsutsui Exp
 
 
 /* Autoconfiguration interface */
-int	mkclock_isa_match(struct device *, struct cfdata *, void *);
-void	mkclock_isa_attach(struct device *, struct device *, void *);
+int	mkclock_isa_match(device_t, cfdata_t, void *);
+void	mkclock_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mkclock_isa, sizeof (struct mk48txx_softc),
+CFATTACH_DECL_NEW(mkclock_isa, sizeof(struct mk48txx_softc),
     mkclock_isa_match, mkclock_isa_attach, NULL, NULL);
 
 
@@ -80,7 +73,7 @@ void	mkclock_isa_nvwr(struct mk48txx_softc *, int, uint8_t);
 
 
 int
-mkclock_isa_match(struct device *parent, struct cfdata *match, void *aux)
+mkclock_isa_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	struct mk48txx_softc mk48txx, *sc;
@@ -128,7 +121,7 @@ mkclock_isa_match(struct device *parent, struct cfdata *match, void *aux)
 		goto restore;
 
 	/* Read from the seconds counter. */
-	t1 = FROMBCD(mkclock_isa_nvrd(sc, MK48T18_CLKOFF + MK48TXX_ISEC));
+	t1 = bcdtobin(mkclock_isa_nvrd(sc, MK48T18_CLKOFF + MK48TXX_ISEC));
 	if (t1 > 59)
 		goto restore;
 
@@ -136,7 +129,7 @@ mkclock_isa_match(struct device *parent, struct cfdata *match, void *aux)
 	mkclock_isa_nvwr(sc, MK48T18_CLKOFF + MK48TXX_ICSR, ocsr);
 	DELAY(1100000);
 	mkclock_isa_nvwr(sc, MK48T18_CLKOFF + MK48TXX_ICSR, csr);
-	t2 = FROMBCD(mkclock_isa_nvrd(sc, MK48T18_CLKOFF + MK48TXX_ISEC));
+	t2 = bcdtobin(mkclock_isa_nvrd(sc, MK48T18_CLKOFF + MK48TXX_ISEC));
 	if (t2 > 59)
 		goto restore;
 
@@ -163,10 +156,12 @@ mkclock_isa_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-mkclock_isa_attach(struct device *parent, struct device *self, void *aux)
+mkclock_isa_attach(device_t parent, device_t self, void *aux)
 {
+	struct mk48txx_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
-	struct mk48txx_softc *sc = (void *)self;
+
+	sc->sc_dev = self;
 
 	/* Map I/O space. */
 	sc->sc_bst = ia->ia_iot;
@@ -182,7 +177,7 @@ mkclock_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	mk48txx_attach(sc);
 
-	printf(" Timekeeper NVRAM/RTC\n");
+	aprint_normal(" Timekeeper NVRAM/RTC\n");
 }
 
 /*

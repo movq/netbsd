@@ -1,4 +1,4 @@
-.\"	$NetBSD: mount_portal.8,v 1.20 2005/01/31 05:19:19 erh Exp $
+.\"	$NetBSD: mount_portal.8,v 1.22 2017/07/03 21:33:41 wiz Exp $
 .\"
 .\" Copyright (c) 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)mount_portal.8	8.3 (Berkeley) 3/27/94
 .\"
-.Dd March 27, 1994
+.Dd December 5, 2009
 .Dt MOUNT_PORTAL 8
 .Os
 .Sh NAME
@@ -169,8 +169,8 @@ echo/		rfilter	echo/	echo %s
 echo_nostrip/	rfilter	nostrip	echo %s
 echo_noslash    rfilter echo_noslash    echo %s
 gzcat/		rfilter gzcat/ gzcat %s
-gzip/		wfilter	gzip/	gzip \*[Gt] %s
-gzip9/		wfilter	gzip9/	gzip -9 \*[Gt] %s
+gzip/		wfilter	gzip/	gzip > %s
+gzip9/		wfilter	gzip9/	gzip -9 > %s
 ftp/		rfilter	ftp/	ftp -Vo - %s
 ftp://		rfilter	nostrip	ftp -Vo - %s
 http://		rfilter	nostrip	ftp -Vo - %s
@@ -215,5 +215,11 @@ and
 .Pa wfilter
 capabilities first appeared in
 .Nx 1.5 .
+The portal kernel driver was removed and
+.Nm
+was converted to use
+.Xr puffs 3
+in
+.Nx 6.0 .
 .Sh BUGS
 This filesystem may not be NFS-exported.

@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfour.c,v 1.43 2007/03/04 06:00:43 christos Exp $	*/
+/*	$NetBSD: cgfour.c,v 1.50 2014/10/18 08:33:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -109,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.43 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.50 2014/10/18 08:33:26 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,7 +125,6 @@ __KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.43 2007/03/04 06:00:43 christos Exp $")
 
 /* per-display variables */
 struct cgfour_softc {
-	struct device	sc_dev;		/* base device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 	bus_space_tag_t	sc_bustag;
 	bus_addr_t	sc_paddr;	/* phys address for device mmap() */
@@ -142,16 +134,16 @@ struct cgfour_softc {
 };
 
 /* autoconfiguration driver */
-static int	cgfourmatch(struct device *, struct cfdata *, void *);
-static void	cgfourattach(struct device *, struct device *, void *);
+static int	cgfourmatch(device_t, cfdata_t, void *);
+static void	cgfourattach(device_t, device_t, void *);
 
 #if defined(SUN4)
-static void	cgfourunblank(struct device *);
+static void	cgfourunblank(device_t);
 #endif
 
 static int	cg4_pfour_probe(void *, void *);
 
-CFATTACH_DECL(cgfour, sizeof(struct cgfour_softc),
+CFATTACH_DECL_NEW(cgfour, sizeof(struct cgfour_softc),
     cgfourmatch, cgfourattach, NULL, NULL);
 
 extern struct cfdriver cgfour_cd;
@@ -161,8 +153,18 @@ dev_type_ioctl(cgfourioctl);
 dev_type_mmap(cgfourmmap);
 
 const struct cdevsw cgfour_cdevsw = {
-	cgfouropen, nullclose, noread, nowrite, cgfourioctl,
-	nostop, notty, nopoll, cgfourmmap, nokqfilter,
+	.d_open = cgfouropen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = cgfourioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = cgfourmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 #if defined(SUN4)
@@ -181,7 +183,7 @@ static void cgfour_set_video(struct cgfour_softc *, int);
  * Match a cgfour.
  */
 static int
-cgfourmatch(struct device *parent, struct cfdata *cf, void *aux)
+cgfourmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -208,10 +210,10 @@ cg4_pfour_probe(void *vaddr, void *arg)
  * Attach a display.  We need to notice if it is the console, too.
  */
 static void
-cgfourattach(struct device *parent, struct device *self, void *aux)
+cgfourattach(device_t parent, device_t self, void *aux)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = (struct cgfour_softc *)self;
+	struct cgfour_softc *sc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
 	bus_space_handle_t bh;
@@ -227,15 +229,16 @@ cgfourattach(struct device *parent, struct device *self, void *aux)
 			  sizeof(uint32_t),
 			  BUS_SPACE_MAP_LINEAR,
 			  &bh) != 0) {
-		printf("%s: cannot map control registers\n", self->dv_xname);
+		printf("%s: cannot map control registers\n",
+			device_xname(self));
 		return;
 	}
 	fb->fb_pfour = (volatile uint32_t *)bh;
 
 	fb->fb_driver = &cgfourfbdriver;
-	fb->fb_device = &sc->sc_dev;
+	fb->fb_device = self;
 	fb->fb_type.fb_type = FBTYPE_SUN4COLOR;
-	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags & FB_USERMASK;
+	fb->fb_flags = device_cfdata(self)->cf_flags & FB_USERMASK;
 	fb->fb_flags |= FB_PFOUR;
 
 	ramsize = PFOUR_COLOR_OFF_END - PFOUR_COLOR_OFF_OVERLAY;
@@ -290,7 +293,8 @@ cgfourattach(struct device *parent, struct device *self, void *aux)
 			  sizeof(struct fbcontrol),
 			  BUS_SPACE_MAP_LINEAR,
 			  &bh) != 0) {
-		printf("%s: cannot map control registers\n", self->dv_xname);
+		printf("%s: cannot map control registers\n",
+			device_xname(self));
 		return;
 	}
 	sc->sc_fbc = (volatile struct fbcontrol *)bh;
@@ -326,7 +330,7 @@ cgfouropen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = minor(dev);
 
-	if (unit >= cgfour_cd.cd_ndevs || cgfour_cd.cd_devs[unit] == NULL)
+	if (device_lookup(&cgfour_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
 }
@@ -335,7 +339,7 @@ int
 cgfourioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
 	struct fbgattr *fba;
 	int error;
 
@@ -392,17 +396,17 @@ cgfourioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
  * Return the address that would map the given device at the given
  * offset, allowing for the given protection, or return -1 for error.
  *
- * the cg4 maps it's overlay plane for 128K, followed by the enable
+ * the cg4 maps its overlay plane for 128K, followed by the enable
  * plane for 128K, followed by the colour plane (for as much colour
  * as their is.)
  *
  * As well, mapping at an offset of 0x04000000 causes the cg4 to map
- * only it's colour plane, at 0.
+ * only its colour plane, at 0.
  */
 paddr_t
 cgfourmmap(dev_t dev, off_t off, int prot)
 {
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
 	off_t poff;
 
 #define START_ENABLE	(128*1024)
@@ -457,10 +461,10 @@ cgfourmmap(dev_t dev, off_t off, int prot)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-cgfourunblank(struct device *dev)
+cgfourunblank(device_t dev)
 {
 
-	cgfour_set_video((struct cgfour_softc *)dev, 1);
+	cgfour_set_video(device_private(dev), 1);
 }
 
 static int

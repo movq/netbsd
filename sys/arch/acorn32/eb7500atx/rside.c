@@ -1,4 +1,4 @@
-/*	$NetBSD: rside.c,v 1.8 2006/01/16 20:30:18 bouyer Exp $	*/
+/*	$NetBSD: rside.c,v 1.16 2017/10/20 07:06:05 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher Gilbert
@@ -56,17 +56,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rside.c,v 1.8 2006/01/16 20:30:18 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rside.c,v 1.16 2017/10/20 07:06:05 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
-#include <machine/bus.h>
 #include <acorn32/eb7500atx/rsidereg.h>
 #include <machine/irqhandler.h>
 
@@ -115,16 +115,15 @@ struct rside_softc {
 	struct bus_space        sc_tag;			/* custom tag */
 	struct rside_channel {
 		struct ata_channel rc_channel;		/* generic part */
-		struct ata_queue rc_chqueue;		/* channel queue */
 		irqhandler_t *rc_ih;			/* irq handler */
 	} rside_channels[2];
 	struct wdc_regs sc_wdc_regs[2];
 };
 
-static int	rside_probe	(struct device *, struct cfdata *, void *);
-static void	rside_attach	(struct device *, struct device *, void *);
+static int	rside_probe	(device_t, cfdata_t, void *);
+static void	rside_attach	(device_t, device_t, void *);
 
-CFATTACH_DECL(rside, sizeof(struct rside_softc),
+CFATTACH_DECL_NEW(rside, sizeof(struct rside_softc),
 		rside_probe, rside_attach, NULL, NULL);
 
 /*
@@ -147,7 +146,7 @@ const struct {
  */
 
 static int
-rside_probe(struct device *parent, struct cfdata *cf, void *aux)
+rside_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	/* if we're including this, then for now assume it exists */
 	return 1;
@@ -159,16 +158,16 @@ rside_probe(struct device *parent, struct cfdata *cf, void *aux)
  */
 
 static void
-rside_attach(struct device *parent, struct device *self, void *aux)
+rside_attach(device_t parent, device_t self, void *aux)
 {
-	struct rside_softc *sc = (void *)self;
+	struct rside_softc *sc = device_private(self);
 	struct rsbus_attach_args *rs = aux;
 	int channel, i;
 	struct rside_channel *scp;
 	struct ata_channel *cp;
 	struct wdc_regs *wdr;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/*
 	 * we need our own bus tag as the register spacing
@@ -180,6 +179,7 @@ rside_attach(struct device *parent, struct device *self, void *aux)
 	 * cookie.
 	 */
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = sc->sc_wdc_regs;
 	sc->sc_tag = *rs->sa_iot;
 	sc->sc_tag.bs_cookie = (void *) DRIVE_REGISTER_SPACING_SHIFT;
@@ -187,10 +187,9 @@ rside_attach(struct device *parent, struct device *self, void *aux)
 	/* Fill in wdc and channel infos */
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
-	sc->sc_wdcdev.sc_atac.atac_dma_cap = 0;
-	sc->sc_wdcdev.sc_atac.atac_udma_cap = 0;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 2;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	for (channel = 0 ; channel < 2; channel++) {
 		scp = &sc->rside_channels[channel];
 		sc->sc_chanarray[channel] = &scp->rc_channel;
@@ -199,8 +198,6 @@ rside_attach(struct device *parent, struct device *self, void *aux)
 
 		cp->ch_channel = channel;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
-		cp->ch_queue = &scp->rc_chqueue;
-		cp->ch_ndrive = 2;
 		wdr->cmd_iot = wdr->ctl_iot = &sc->sc_tag;
 		if (bus_space_map(wdr->cmd_iot,
 		    rside_info[channel].drive_registers,
@@ -219,7 +216,7 @@ rside_attach(struct device *parent, struct device *self, void *aux)
 				continue;
 			}
 		}
-		wdc_init_shadow_regs(cp);
+		wdc_init_shadow_regs(wdr);
 
 		if (bus_space_map(wdr->ctl_iot,
 		    rside_info[channel].aux_register, 0x4, 0, &wdr->ctl_ioh))
@@ -233,7 +230,8 @@ rside_attach(struct device *parent, struct device *self, void *aux)
 		if ((scp->rc_ih = intr_claim((channel == 0 ? IRQ_NEVENT1 : IRQ_NEVENT2),
 						IPL_BIO, "rside", wdcintr, cp)) == NULL)
 			panic("%s: Cannot claim interrupt %d\n",
-			    self->dv_xname, (channel == 0 ? IRQ_NEVENT1 : IRQ_NEVENT2));
+			    device_xname(self),
+			    (channel == 0 ? IRQ_NEVENT1 : IRQ_NEVENT2));
 
 		wdcattach(cp);
 	}

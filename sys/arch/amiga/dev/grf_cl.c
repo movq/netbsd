@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cl.c,v 1.41 2007/10/17 19:53:15 garbled Exp $ */
+/*	$NetBSD: grf_cl.c,v 1.50 2015/11/16 21:25:34 phx Exp $ */
 
 /*
  * Copyright (c) 1997 Klaus Burkert
@@ -36,9 +36,11 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_cl.c,v 1.41 2007/10/17 19:53:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_cl.c,v 1.50 2015/11/16 21:25:34 phx Exp $");
 
 #include "grfcl.h"
+#include "ite.h"
+#include "wsdisplay.h"
 #if NGRFCL > 0
 
 /*
@@ -80,6 +82,12 @@ __KERNEL_RCSID(0, "$NetBSD: grf_cl.c,v 1.41 2007/10/17 19:53:15 garbled Exp $");
 
 #include <machine/cpu.h>
 #include <dev/cons.h>
+#if NWSDISPLAY > 0
+#include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplayvar.h>
+#include <dev/rasops/rasops.h>
+#include <dev/wscons/wsdisplay_vconsvar.h>
+#endif
 #include <amiga/dev/itevar.h>
 #include <amiga/amiga/device.h>
 #include <amiga/dev/grfioctl.h>
@@ -105,7 +113,8 @@ int	cl_setmousepos(struct grf_softc *, struct grf_position *);
 static int cl_setspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
 int	cl_getspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
 static int cl_getspritemax(struct grf_softc *, struct grf_position *);
-int	cl_blank(struct grf_softc *, int *);
+int	cl_blank(struct grf_softc *, int);
+int	cl_isblank(struct grf_softc *);
 int	cl_setmonitor(struct grf_softc *, struct grfvideo_mode *);
 void	cl_writesprpos(volatile char *, short, short);
 void	writeshifted(volatile char *, signed char, signed char);
@@ -114,10 +123,25 @@ static void	RegWakeup(volatile void *);
 static void	RegOnpass(volatile void *);
 static void	RegOffpass(volatile void *);
 
-void	grfclattach(struct device *, struct device *, void *);
+void	grfclattach(device_t, device_t, void *);
 int	grfclprint(void *, const char *);
-int	grfclmatch(struct device *, struct cfdata *, void *);
+int	grfclmatch(device_t, cfdata_t, void *);
 void	cl_memset(unsigned char *, unsigned char, int);
+
+#if NWSDISPLAY > 0
+/* wsdisplay acessops, emulops */
+static int	cl_wsioctl(void *, void *, u_long, void *, int, struct lwp *);
+static int	cl_get_fbinfo(struct grf_softc *, struct wsdisplayio_fbinfo *);
+
+static void	cl_wscursor(void *, int, int, int);
+static void	cl_wsputchar(void *, int, int, u_int, long);
+static void	cl_wscopycols(void *, int, int, int, int);
+static void	cl_wserasecols(void *, int, int, int, long);
+static void	cl_wscopyrows(void *, int, int, int);
+static void	cl_wseraserows(void *, int, int, long);
+static int	cl_wsallocattr(void *, int, int, int, long *);
+static int	cl_wsmapchar(void *, int, unsigned int *);
+#endif  /* NWSDISPLAY > 0 */
 
 /* Graphics display definitions.
  * These are filled by 'grfconfig' using GRFIOCSETMON.
@@ -161,6 +185,7 @@ unsigned char clconscolors[3][3] = {	/* background, foreground, hilite */
 int	cltype = 0;		/* Picasso, Spectrum or Piccolo */
 int	cl_64bit = 0;		/* PiccoloSD64 or PicassoIV */
 unsigned char cl_pass_toggle;	/* passthru status tracker */
+static int cl_blanked;		/* true when video is currently blanked out */
 
 /*
  * because all 542x-boards have 2 configdev entries, one for
@@ -187,24 +212,55 @@ struct grf_spriteinfo cl_cursprite;
 static unsigned char cl_imageptr[8 * 64], cl_maskptr[8 * 64];
 static unsigned char cl_sprred[2], cl_sprgreen[2], cl_sprblue[2];
 
+#if NWSDISPLAY > 0
+static struct wsdisplay_accessops cl_accessops = {
+	.ioctl		= cl_wsioctl,
+	.mmap		= grf_wsmmap
+};
+
+static struct wsdisplay_emulops cl_textops = {
+	.cursor		= cl_wscursor,
+	.mapchar	= cl_wsmapchar,
+	.putchar	= cl_wsputchar,
+	.copycols	= cl_wscopycols,
+	.erasecols	= cl_wserasecols,
+	.copyrows	= cl_wscopyrows,
+	.eraserows	= cl_wseraserows,
+	.allocattr	= cl_wsallocattr
+};
+
+static struct wsscreen_descr cl_defaultscreen = {
+	.name		= "default",
+	.textops	= &cl_textops,
+	.fontwidth	= 8,
+	.fontheight	= CIRRUSFONTY,
+	.capabilities	= WSSCREEN_HILIT | WSSCREEN_BLINK |
+			  WSSCREEN_REVERSE | WSSCREEN_UNDERLINE
+};
+
+static const struct wsscreen_descr *cl_screens[] = {
+	&cl_defaultscreen,
+};
+
+static struct wsscreen_list cl_screenlist = {
+	sizeof(cl_screens) / sizeof(struct wsscreen_descr *), cl_screens
+};
+#endif  /* NWSDISPLAY > 0 */
+
 /* standard driver stuff */
-CFATTACH_DECL(grfcl, sizeof(struct grf_softc),
+CFATTACH_DECL_NEW(grfcl, sizeof(struct grf_softc),
     grfclmatch, grfclattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfclmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void   *auxp;
+grfclmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
-	static int regprod, fbprod, fbprod2;
+	static int regprod, fbprod;
 	int error;
 
-	fbprod2 = 0;
-	zap = auxp;
+	zap = aux;
 
 #ifndef CL5426CONSOLE
 	if (amiga_realconfig == 0)
@@ -225,7 +281,6 @@ grfclmatch(pdp, cfp, auxp)
 				error = 0;
 				break;
 			    case 22:
-				fbprod2 = 22;
 				error = 0;
 				break;
 			    case 21:
@@ -328,7 +383,7 @@ grfclmatch(pdp, cfp, auxp)
 
 #ifdef CL5426CONSOLE
 		if (amiga_realconfig == 0) {
-			cfdata = cfp;
+			cfdata = cf;
 		}
 #endif
 
@@ -336,16 +391,15 @@ grfclmatch(pdp, cfp, auxp)
 }
 
 void
-grfclattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void   *auxp;
+grfclattach(device_t parent, device_t self, void *aux)
 {
 	static struct grf_softc congrf;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
+	struct device temp;
 	static char attachflag = 0;
 
-	zap = auxp;
+	zap = aux;
 
 	printf("\n");
 
@@ -354,16 +408,20 @@ grfclattach(pdp, dp, auxp)
 		return;
 
 	/* do all that messy console/grf stuff */
-	if (dp == NULL)
+	if (self == NULL) {
 		gp = &congrf;
-	else
-		gp = (struct grf_softc *) dp;
+		gp->g_device = &temp;
+		temp.dv_private = gp;
+	} else {
+		gp = device_private(self);
+		gp->g_device = self;
+	}
 
-	if (dp != NULL && congrf.g_regkva != 0) {
+	if (self != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		bcopy(&congrf.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.g_display,
 		    (char *) &gp[1] - (char *) &gp->g_display);
 	} else {
 		gp->g_regkva = (volatile void *) cl_regaddr;
@@ -371,22 +429,33 @@ grfclattach(pdp, dp, auxp)
 
 		gp->g_unit = GRF_CL5426_UNIT;
 		gp->g_mode = cl_mode;
+#if NITE > 0
 		gp->g_conpri = grfcl_cnprobe();
+#endif
 		gp->g_flags = GF_ALIVE;
 
 		/* wakeup the board */
 		cl_boardinit(gp);
+
 #ifdef CL5426CONSOLE
+#if NWSDISPLAY > 0
+		gp->g_accessops = &cl_accessops;
+		gp->g_emulops = &cl_textops;
+		gp->g_defaultscr = &cl_defaultscreen;
+		gp->g_scrlist = &cl_screenlist;
+#else
+#if NITE > 0
 		grfcl_iteinit(gp);
+#endif
+#endif  /* NWSDISPLAY > 0 */
 		(void) cl_load_mon(gp, &clconsole_mode);
 #endif
-
 	}
 
 	/*
 	 * attach grf (once)
 	 */
-	if (amiga_config_found(cfdata, &gp->g_device, gp, grfclprint)) {
+	if (amiga_config_found(cfdata, gp->g_device, gp, grfclprint)) {
 		attachflag = 1;
 		printf("grfcl: %dMB ", cl_fbsize / 0x100000);
 		switch (cltype) {
@@ -449,9 +518,7 @@ grfclattach(pdp, dp, auxp)
 }
 
 int
-grfclprint(auxp, pnp)
-	void   *auxp;
-	const char *pnp;
+grfclprint(void *aux, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);
@@ -459,8 +526,7 @@ grfclprint(auxp, pnp)
 }
 
 void
-cl_boardinit(gp)
-	struct grf_softc *gp;
+cl_boardinit(struct grf_softc *gp)
 {
 	volatile unsigned char *ba = gp->g_regkva;
 	int     x;
@@ -488,6 +554,7 @@ cl_boardinit(gp)
 
 		/* setup initial unchanging parameters */
 
+		cl_blanked = 1;
 		WSeq(ba, SEQ_ID_CLOCKING_MODE, 0x21);	/* 8 dot - display off */
 		vgaw(ba, GREG_MISC_OUTPUT_W, 0xed);	/* mem disable */
 
@@ -599,16 +666,14 @@ cl_boardinit(gp)
 
 
 int
-cl_getvmode(gp, vm)
-	struct grf_softc *gp;
-	struct grfvideo_mode *vm;
+cl_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 {
 	struct grfvideo_mode *gv;
 
 #ifdef CL5426CONSOLE
 	/* Handle grabbing console mode */
 	if (vm->mode_num == 255) {
-		bcopy(&clconsole_mode, vm, sizeof(struct grfvideo_mode));
+		memcpy(vm, &clconsole_mode, sizeof(struct grfvideo_mode));
 		/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = clconsole_mode.fy;
 	} else
@@ -622,7 +687,7 @@ cl_getvmode(gp, vm)
                 if (gv->mode_num == 0)
                         return (EINVAL);
 
-                bcopy(gv, vm, sizeof(struct grfvideo_mode));
+                memcpy(vm, gv, sizeof(struct grfvideo_mode));
         }
 
         /* adjust internal values to pixel values */
@@ -637,9 +702,7 @@ cl_getvmode(gp, vm)
 
 
 int
-cl_setvmode(gp, mode)
-	struct grf_softc *gp;
-	unsigned mode;
+cl_setvmode(struct grf_softc *gp, unsigned mode)
 {
 	if (!mode || (mode > monitor_def_max) ||
 	    monitor_def[mode - 1].mode_num == 0)
@@ -652,8 +715,7 @@ cl_setvmode(gp, mode)
 
 #ifndef CL5426CONSOLE
 void
-cl_off(gp)
-	struct grf_softc *gp;
+cl_off(struct grf_softc *gp)
 {
 	char   *ba = gp->g_regkva;
 
@@ -665,16 +727,24 @@ cl_off(gp)
 	RegOnpass(ba);
 	vgaw(ba, SEQ_ADDRESS, SEQ_ID_CLOCKING_MODE);
 	vgaw(ba, SEQ_ADDRESS_W, vgar(ba, SEQ_ADDRESS_W) | 0x20);
+	cl_blanked = 1;
 }
 #endif
 
 int
-cl_blank(gp, on)
-        struct grf_softc *gp;
-        int *on;
+cl_blank(struct grf_softc *gp, int on)
 {
-        WSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE, *on > 0 ? 0x01 : 0x21);
-        return(0);
+
+	WSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE, on ? 0x01 : 0x21);
+	cl_blanked = !on;
+	return 0;
+}
+
+int
+cl_isblank(struct grf_softc *gp)
+{
+
+	return cl_blanked;
 }
 
 /*
@@ -682,12 +752,7 @@ cl_blank(gp, on)
  * Return a UNIX error number or 0 for success.
  */
 int
-cl_mode(gp, cmd, arg, a2, a3)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *arg;
-	u_long a2;
-	int a3;
+cl_mode(register struct grf_softc *gp, u_long cmd, void *arg, u_long a2, int a3)
 {
 	int     error;
 
@@ -733,10 +798,7 @@ cl_mode(gp, cmd, arg, a2, a3)
 }
 
 int
-cl_ioctl(gp, cmd, data)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void   *data;
+cl_ioctl(register struct grf_softc *gp, u_long cmd, void *data)
 {
 	switch (cmd) {
 	    case GRFIOCGSPRITEPOS:
@@ -770,16 +832,14 @@ cl_ioctl(gp, cmd, data)
 		return (cl_setmonitor(gp, (struct grfvideo_mode *) data));
 
             case GRFIOCBLANK:
-                return (cl_blank(gp, (int *)data));
+                return (cl_blank(gp, *(int *)data));
 
 	}
 	return (EPASSTHROUGH);
 }
 
 int
-cl_getmousepos(gp, data)
-	struct grf_softc *gp;
-	struct grf_position *data;
+cl_getmousepos(struct grf_softc *gp, struct grf_position *data)
 {
 	data->x = cl_cursprite.pos.x;
 	data->y = cl_cursprite.pos.y;
@@ -787,10 +847,7 @@ cl_getmousepos(gp, data)
 }
 
 void
-cl_writesprpos(ba, x, y)
-	volatile char *ba;
-	short   x;
-	short   y;
+cl_writesprpos(volatile char *ba, short x, short y)
 {
 	/* we want to use a 16-bit write to 3c4 so no macros used */
 	volatile unsigned char *cwp;
@@ -810,10 +867,7 @@ cl_writesprpos(ba, x, y)
 }
 
 void
-writeshifted(to, shiftx, shifty)
-	volatile char *to;
-	signed char shiftx;
-	signed char shifty;
+writeshifted(volatile char *to, signed char shiftx, signed char shifty)
 {
 	int y;
 	unsigned long long *tptr, *iptr, *mptr, line;
@@ -847,12 +901,10 @@ writeshifted(to, shiftx, shifty)
 }
 
 int
-cl_setmousepos(gp, data)
-	struct grf_softc *gp;
-	struct grf_position *data;
+cl_setmousepos(struct grf_softc *gp, struct grf_position *data)
 {
 	volatile char *ba = gp->g_regkva;
-        short rx, ry, prx, pry;
+        short rx, ry;
 #ifdef CL_SHIFTSPRITE
 	volatile char *fb = gp->g_fbkva;
         volatile char *sprite = fb + (cl_fbsize - 1024);
@@ -865,8 +917,6 @@ cl_setmousepos(gp, data)
         /* current and previous real coordinates */
 	rx = data->x - cl_cursprite.hot.x;
 	ry = data->y - cl_cursprite.hot.y;
-	prx = cl_cursprite.pos.x - cl_cursprite.hot.x;
-	pry = cl_cursprite.pos.y - cl_cursprite.hot.y;
 
         /*
 	 * if we are/were on an edge, create (un)shifted bitmap --
@@ -888,9 +938,7 @@ cl_setmousepos(gp, data)
 }
 
 int
-cl_getspriteinfo(gp, data)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *data;
+cl_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *data)
 {
 	copyout(&cl_cursprite, data, sizeof(struct grf_spriteinfo));
 	copyout(cl_cursprite.image, data->image, 64 * 8);
@@ -899,9 +947,7 @@ cl_getspriteinfo(gp, data)
 }
 
 static int
-cl_setspriteinfo(gp, data)
-	struct grf_softc *gp;
-	struct grf_spriteinfo *data;
+cl_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *data)
 {
 	volatile unsigned char *ba = gp->g_regkva, *fb = gp->g_fbkva;
         volatile char *sprite = fb + (cl_fbsize - 1024);
@@ -971,9 +1017,9 @@ cl_setspriteinfo(gp, data)
 		copyin(data->cmap.red, red, 2);
 		copyin(data->cmap.green, green, 2);
 		copyin(data->cmap.blue, blue, 2);
-		bcopy(red, cl_cursprite.cmap.red, 2);
-		bcopy(green, cl_cursprite.cmap.green, 2);
-		bcopy(blue, cl_cursprite.cmap.blue, 2);
+		memcpy(cl_cursprite.cmap.red, red, 2);
+		memcpy(cl_cursprite.cmap.green, green, 2);
+		memcpy(cl_cursprite.cmap.blue, blue, 2);
 
                 /* enable and load colors 256 & 257 */
 		WSeq(ba, SEQ_ID_CURSOR_ATTR, 0x06);
@@ -1035,9 +1081,7 @@ cl_setspriteinfo(gp, data)
 }
 
 static int
-cl_getspritemax(gp, data)
-	struct grf_softc *gp;
-	struct grf_position *data;
+cl_getspritemax(struct grf_softc *gp, struct grf_position *data)
 {
 	if (gp->g_display.gd_planes == 24)
 		return (EINVAL);
@@ -1047,9 +1091,7 @@ cl_getspritemax(gp, data)
 }
 
 int
-cl_setmonitor(gp, gv)
-	struct grf_softc *gp;
-	struct grfvideo_mode *gv;
+cl_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 {
 	struct grfvideo_mode *md;
 
@@ -1059,7 +1101,7 @@ cl_setmonitor(gp, gv)
 #ifdef CL5426CONSOLE
 	/* handle interactive setting of console mode */
 	if (gv->mode_num == 255) {
-		bcopy(gv, &clconsole_mode.gv, sizeof(struct grfvideo_mode));
+		memcpy(&clconsole_mode.gv, gv, sizeof(struct grfvideo_mode));
 		clconsole_mode.gv.hblank_start /= 8;
 		clconsole_mode.gv.hsync_start /= 8;
 		clconsole_mode.gv.hsync_stop /= 8;
@@ -1068,13 +1110,15 @@ cl_setmonitor(gp, gv)
 		clconsole_mode.cols = gv->disp_width / clconsole_mode.fx;
 		if (!(gp->g_flags & GF_GRFON))
 			cl_load_mon(gp, &clconsole_mode);
+#if NITE > 0
 		ite_reinit(gp->g_itedev);
+#endif
 		return (0);
 	}
 #endif
 
 	md = monitor_def + (gv->mode_num - 1);
-	bcopy(gv, md, sizeof(struct grfvideo_mode));
+	memcpy(md, gv, sizeof(struct grfvideo_mode));
 
 	/* adjust pixel oriented values to internal rep. */
 
@@ -1087,9 +1131,7 @@ cl_setmonitor(gp, gv)
 }
 
 int
-cl_getcmap(gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+cl_getcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
 	volatile unsigned char *ba;
 	u_char  red[256], green[256], blue[256], *rp, *gp, *bp;
@@ -1155,9 +1197,7 @@ cl_getcmap(gfp, cmap)
 }
 
 int
-cl_putcmap(gfp, cmap)
-	struct grf_softc *gfp;
-	struct grf_colormap *cmap;
+cl_putcmap(struct grf_softc *gfp, struct grf_colormap *cmap)
 {
 	volatile unsigned char *ba;
 	u_char  red[256], green[256], blue[256], *rp, *gp, *bp;
@@ -1207,9 +1247,8 @@ cl_putcmap(gfp, cmap)
 
 
 int
-cl_toggle(gp, wopp)
-	struct grf_softc *gp;
-	unsigned short wopp;	/* don't need that one yet, ill */
+cl_toggle(struct grf_softc *gp, unsigned short wopp)
+	/* wopp:	 don't need that one yet, ill */
 {
 	volatile void *ba;
 
@@ -1224,11 +1263,7 @@ cl_toggle(gp, wopp)
 }
 
 static void
-cl_CompFQ(fq, num, denom, clkdoub)
-	u_int   fq;
-	u_char *num;
-	u_char *denom;
-	u_char *clkdoub;
+cl_CompFQ(u_int fq, u_char *num, u_char *denom, u_char *clkdoub)
 {
 #define OSC     14318180
 /* OK, here's what we're doing here:
@@ -1306,8 +1341,7 @@ denom = 0x00 - 0x1f (1) 0x20 - 0x3e (even)
 }
 
 int
-cl_mondefok(gv)
-	struct grfvideo_mode *gv;
+cl_mondefok(struct grfvideo_mode *gv)
 {
         unsigned long maxpix;
 
@@ -1370,9 +1404,7 @@ cl_mondefok(gv)
 }
 
 int
-cl_load_mon(gp, md)
-	struct grf_softc *gp;
-	struct grfcltext_mode *md;
+cl_load_mon(struct grf_softc *gp, struct grfcltext_mode *md)
 {
 	struct grfvideo_mode *gv;
 	struct grfinfo *gi;
@@ -1380,7 +1412,7 @@ cl_load_mon(gp, md)
 	unsigned char num0, denom0, clkdoub;
 	unsigned short HT, HDE, HBS, HBE, HSS, HSE, VDE, VBS, VBE, VSS,
 	        VSE, VT;
-	int	clkmul, offsmul, clkmode;
+	int	clkmul, clkmode;
 	int	vmul;
 	int	sr15;
 	unsigned char hvsync_pulse;
@@ -1444,13 +1476,11 @@ cl_load_mon(gp, md)
 	switch (gv->depth) {
 	    case 8:
 		clkmul = 1;
-		offsmul = 1;
 		clkmode = 0x0;
 		break;
 	    case 15:
 	    case 16:
 		clkmul = 1;
-		offsmul = 2;
 		clkmode = 0x6;
 		break;
 	    case 24:
@@ -1458,17 +1488,14 @@ cl_load_mon(gp, md)
 			clkmul = 1;
 		else
 			clkmul = 3;
-		offsmul = 3;
 		clkmode = 0x4;
 		break;
 	    case 32:
 		clkmul = 1;
-		offsmul = 2;
 		clkmode = 0x8;
 		break;
 	    default:
 		clkmul = 1;
-		offsmul = 1;
 		clkmode = 0x0;
 		break;
 	}
@@ -1676,6 +1703,7 @@ cl_load_mon(gp, md)
 	}
 	WSeq(ba, SEQ_ID_CURSOR_ATTR, 0x14);
 	WSeq(ba, SEQ_ID_CLOCKING_MODE, 0x01);
+	cl_blanked = 0;
 
 	/* Pass-through */
 
@@ -1685,8 +1713,7 @@ cl_load_mon(gp, md)
 }
 
 void
-cl_inittextmode(gp)
-	struct grf_softc *gp;
+cl_inittextmode(struct grf_softc *gp)
 {
 	struct grfcltext_mode *tm = (struct grfcltext_mode *) gp->g_data;
 	volatile unsigned char *ba = gp->g_regkva;
@@ -1743,10 +1770,7 @@ cl_inittextmode(gp)
 }
 
 void
-cl_memset(d, c, l)
-	unsigned char *d;
-	unsigned char c;
-	int     l;
+cl_memset(unsigned char *d, unsigned char c, int l)
 {
 	for (; l > 0; l--)
 		*d++ = c;
@@ -1760,8 +1784,7 @@ cl_memset(d, c, l)
  * inline functions.
  */
 static void
-RegWakeup(ba)
-	volatile void *ba;
+RegWakeup(volatile void *ba)
 {
 
 	switch (cltype) {
@@ -1782,8 +1805,7 @@ RegWakeup(ba)
 }
 
 static void
-RegOnpass(ba)
-	volatile void *ba;
+RegOnpass(volatile void *ba)
 {
 
 	switch (cltype) {
@@ -1806,8 +1828,7 @@ RegOnpass(ba)
 }
 
 static void
-RegOffpass(ba)
-	volatile void *ba;
+RegOffpass(volatile void *ba)
 {
 
 	switch (cltype) {
@@ -1828,5 +1849,342 @@ RegOffpass(ba)
 	cl_pass_toggle = 0;
 	delay(200000);
 }
+
+#if NWSDISPLAY > 0
+static void
+cl_wscursor(void *c, int on, int row, int col) 
+{
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	volatile void *ba;
+	int offs;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+
+	if ((ri->ri_flg & RI_CURSOR) && !on) {
+		/* cursor was visible, but we want to remove it */
+		/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
+		ri->ri_flg &= ~RI_CURSOR;
+	}
+
+	ri->ri_crow = row;
+	ri->ri_ccol = col;
+
+	if (on) {
+		/* move cursor to new location */
+		if (!(ri->ri_flg & RI_CURSOR)) {
+			/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
+			ri->ri_flg |= RI_CURSOR;
+		}
+		offs = gp->g_rowoffset[row] + col;
+		WCrt(ba, CRT_ID_CURSOR_LOC_LOW, offs & 0xff);
+		WCrt(ba, CRT_ID_CURSOR_LOC_HIGH, offs >> 8);
+	}
+}
+
+static void
+cl_wsputchar(void *c, int row, int col, u_int ch, long attr)
+{
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	volatile unsigned char *ba, *cp;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row] + col;
+	SetTextPlane(ba, 0x00);
+	*cp = ch;
+	SetTextPlane(ba, 0x01);
+	*cp = attr;
+}
+
+static void     
+cl_wscopycols(void *c, int row, int srccol, int dstcol, int ncols) 
+{
+	volatile unsigned char *ba, *dst, *src;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i;
+
+	KASSERT(ncols > 0);
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	src = gp->g_fbkva;
+
+	src += gp->g_rowoffset[row];
+	dst = src;
+	src += srccol;
+	dst += dstcol;
+	if (srccol < dstcol) {
+		/* need to copy backwards */
+		src += ncols;
+		dst += ncols;
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < ncols; i++)
+			*(--dst) = *(--src);
+		src += ncols;
+		dst += ncols;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < ncols; i++)
+			*(--dst) = *(--src);
+	} else {
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < ncols; i++)
+			*dst++ = *src++;
+		src -= ncols;
+		dst -= ncols;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < ncols; i++)
+			*dst++ = *src++;
+	}
+}
+
+static void     
+cl_wserasecols(void *c, int row, int startcol, int ncols, long fillattr)
+{
+	volatile unsigned char *ba, *cp;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row] + startcol;
+	SetTextPlane(ba, 0x00);
+	for (i = 0; i < ncols; i++)
+		*cp++ = 0x20;
+	cp -= ncols;
+	SetTextPlane(ba, 0x01);
+	for (i = 0; i < ncols; i++)
+		*cp++ = 0x07;
+}
+
+static void     
+cl_wscopyrows(void *c, int srcrow, int dstrow, int nrows) 
+{
+	volatile unsigned char *ba, *dst, *src;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i, n;
+
+	KASSERT(nrows > 0);
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	src = dst = gp->g_fbkva;
+	n = ri->ri_cols * nrows;
+
+	if (srcrow < dstrow) {
+		/* need to copy backwards */
+		src += gp->g_rowoffset[srcrow + nrows];
+		dst += gp->g_rowoffset[dstrow + nrows];
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < n; i++)
+			*(--dst) = *(--src);
+		src += n;
+		dst += n;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < n; i++)
+			*(--dst) = *(--src);
+	} else {
+		src += gp->g_rowoffset[srcrow];
+		dst += gp->g_rowoffset[dstrow];
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < n; i++)
+			*dst++ = *src++;
+		src -= n;
+		dst -= n;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < n; i++)
+			*dst++ = *src++;
+	}
+}
+
+static void     
+cl_wseraserows(void *c, int row, int nrows, long fillattr) 
+{
+	volatile unsigned char *ba, *cp;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i, n;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row];
+	n = ri->ri_cols * nrows;
+	SetTextPlane(ba, 0x00);
+	for (i = 0; i < n; i++)
+		*cp++ = 0x20;
+	cp -= n;
+	SetTextPlane(ba, 0x01);
+	for (i = 0; i < n; i++)
+		*cp++ = 0x07;
+}
+
+static int
+cl_wsallocattr(void *c, int fg, int bg, int flg, long *attr)
+{
+
+	/* XXX color support? */
+	*attr = (flg & WSATTR_REVERSE) ? 0x70 : 0x07;
+	if (flg & WSATTR_UNDERLINE)	*attr = 0x01;
+	if (flg & WSATTR_HILIT)		*attr |= 0x08;
+	if (flg & WSATTR_BLINK)		*attr |= 0x80;
+	return 0;
+}
+
+/* our font does not support unicode extensions */
+static int      
+cl_wsmapchar(void *c, int ch, unsigned int *cp)
+{
+
+	if (ch > 0 && ch < 256) {
+		*cp = ch;
+		return 5;
+	}
+	*cp = ' ';
+	return 0;
+}
+
+static int
+cl_wsioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
+{
+	struct vcons_data *vd;
+	struct grf_softc *gp;
+
+	vd = v;
+	gp = vd->cookie;
+
+	switch (cmd) {
+	case WSDISPLAYIO_GETCMAP:
+		/* Note: wsdisplay_cmap and grf_colormap have same format */
+		if (gp->g_display.gd_planes == 8)
+			return cl_getcmap(gp, (struct grf_colormap *)data);
+		return EINVAL;
+
+	case WSDISPLAYIO_PUTCMAP:
+		/* Note: wsdisplay_cmap and grf_colormap have same format */
+		if (gp->g_display.gd_planes == 8)
+			return cl_putcmap(gp, (struct grf_colormap *)data);
+		return EINVAL;
+
+	case WSDISPLAYIO_GVIDEO:
+		if (cl_isblank(gp))
+			*(u_int *)data = WSDISPLAYIO_VIDEO_OFF;
+		else
+			*(u_int *)data = WSDISPLAYIO_VIDEO_ON;
+		return 0;
+
+	case WSDISPLAYIO_SVIDEO:
+		return cl_blank(gp, *(u_int *)data == WSDISPLAYIO_VIDEO_ON);
+
+	case WSDISPLAYIO_SMODE:
+		if ((*(int *)data) != gp->g_wsmode) {
+			if (*(int *)data == WSDISPLAYIO_MODE_EMUL) {
+				/* load console text mode, redraw screen */
+				(void)cl_load_mon(gp, &clconsole_mode);
+				if (vd->active != NULL)
+					vcons_redraw_screen(vd->active);
+			} else {
+				/* switch to current graphics mode */
+				if (!cl_load_mon(gp,
+				    (struct grfcltext_mode *)monitor_current))
+					return EINVAL;
+			}
+			gp->g_wsmode = *(int *)data;
+		} 
+		return 0;
+
+	case WSDISPLAYIO_GET_FBINFO:
+		return cl_get_fbinfo(gp, data);
+	}
+
+	/* handle this command hw-independant in grf(4) */
+	return grf_wsioctl(v, vs, cmd, data, flag, l);
+}
+
+/*
+ * Fill the wsdisplayio_fbinfo structure with information from the current
+ * graphics mode. Even when text mode is active.
+ */
+static int
+cl_get_fbinfo(struct grf_softc *gp, struct wsdisplayio_fbinfo *fbi)
+{
+	struct grfvideo_mode *md;
+	uint32_t rbits, gbits, bbits;
+
+	md = monitor_current;
+
+	switch (md->depth) {
+	case 8:
+		fbi->fbi_bitsperpixel = 8;
+		rbits = gbits = bbits = 6;  /* keep gcc happy */
+		break;
+	case 15:
+		fbi->fbi_bitsperpixel = 16;
+		rbits = gbits = bbits = 5;
+		break;
+	case 16:
+		fbi->fbi_bitsperpixel = 16;
+		rbits = bbits = 5;
+		gbits = 6;
+		break;
+	case 24:
+		fbi->fbi_bitsperpixel = 24;
+		rbits = gbits = bbits = 8;
+		break;
+	default:
+		return EINVAL;
+	}
+
+	fbi->fbi_stride = (fbi->fbi_bitsperpixel / 8) * md->disp_width;
+	fbi->fbi_width = md->disp_width;
+	fbi->fbi_height = md->disp_height;
+
+	if (md->depth > 8) {
+		fbi->fbi_pixeltype = WSFB_RGB;
+		fbi->fbi_subtype.fbi_rgbmasks.red_offset = bbits + gbits;
+		fbi->fbi_subtype.fbi_rgbmasks.red_size = rbits;
+		fbi->fbi_subtype.fbi_rgbmasks.green_offset = bbits;
+		fbi->fbi_subtype.fbi_rgbmasks.green_size = gbits;
+		fbi->fbi_subtype.fbi_rgbmasks.blue_offset = 0;
+		fbi->fbi_subtype.fbi_rgbmasks.blue_size = bbits;
+		fbi->fbi_subtype.fbi_rgbmasks.alpha_offset = 0;
+		fbi->fbi_subtype.fbi_rgbmasks.alpha_size = 0;
+	} else {
+		fbi->fbi_pixeltype = WSFB_CI;
+		fbi->fbi_subtype.fbi_cmapinfo.cmap_entries = 1 << md->depth;
+	}
+
+	fbi->fbi_flags = 0;
+	fbi->fbi_fbsize = fbi->fbi_stride * fbi->fbi_height;
+	fbi->fbi_fboffset = 0;
+	return 0;
+}
+#endif	/* NWSDISPLAY > 0 */
 
 #endif /* NGRFCL */

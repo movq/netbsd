@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_machdep.S,v 1.14 2005/12/11 12:18:25 christos Exp $	*/
+/*	$NetBSD: locore_machdep.S,v 1.16 2011/02/20 07:56:31 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -59,6 +59,8 @@
 #include <mips/cpuregs.h>
 #include <machine/machConst.h>
 #include <machine/param.h>
+
+#include "assym.h"
 
 	.set	noreorder
 
@@ -131,9 +133,7 @@ outofworld:
 /*
  * Interrupt counters for vmstat.
  */
-	.data
-	.globl _C_LABEL(intrcnt)
-	.globl _C_LABEL(eintrcnt)
+	.rdata
 	.globl _C_LABEL(intrnames)
 	.globl _C_LABEL(eintrnames)
 _C_LABEL(intrnames):
@@ -153,7 +153,11 @@ _C_LABEL(intrnames):
 	.asciiz	"nmi"
 	.asciiz	"lostclock"
 _C_LABEL(eintrnames):
-	.align	2
+
+	.data
+	.globl _C_LABEL(intrcnt)
+	.globl _C_LABEL(eintrcnt)
+	.p2align 2
 _C_LABEL(intrcnt):
 	.word	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0
 _C_LABEL(eintrcnt):

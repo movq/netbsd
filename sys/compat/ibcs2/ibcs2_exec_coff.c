@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_exec_coff.c,v 1.23 2007/12/08 19:29:38 pooka Exp $	*/
+/*	$NetBSD: ibcs2_exec_coff.c,v 1.29 2017/07/28 15:51:35 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1998 Scott Bartram
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec_coff.c,v 1.23 2007/12/08 19:29:38 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec_coff.c,v 1.29 2017/07/28 15:51:35 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,11 +120,15 @@ exec_ibcs2_coff_makecmds(struct lwp *l, struct exec_package *epp)
 		error = exec_ibcs2_coff_prep_zmagic(l, epp, fp, ap);
 		break;
 	default:
+		DPRINTF(("ibcs2: bad coff magic %x\n", ap->a_magic));
 		return ENOEXEC;
 	}
 
-	if (error)
+	if (error) {
 		kill_vmcmds(&epp->ep_vmcmds);
+		DPRINTF(("ibcs2: error loading magic %x (%d)\n", ap->a_magic,
+		    error));
+	}
 
 	return error;
 }
@@ -427,7 +431,7 @@ exec_ibcs2_coff_prep_zmagic(struct lwp *l, struct exec_package *epp, struct coff
 		size_t resid;
 		struct coff_slhdr *slhdr;
 		char *tbuf, *bufp;
-		size_t len = sh.s_size, path_index, entry_len;
+		size_t len = sh.s_size, /* path_index, */ entry_len;
 
 		if (len > 64 * 1024)
 			return ENOEXEC;
@@ -450,6 +454,10 @@ exec_ibcs2_coff_prep_zmagic(struct lwp *l, struct exec_package *epp, struct coff
 		}
 		bufp = tbuf;
 		while (len) {
+			if (len < sizeof(struct coff_slhdr)) {
+				free(tbuf, M_TEMP);
+				return ENOEXEC;
+			}
 			slhdr = (struct coff_slhdr *)bufp;
 
 			if (slhdr->path_index > LONG_MAX / sizeof(long) ||
@@ -458,10 +466,12 @@ exec_ibcs2_coff_prep_zmagic(struct lwp *l, struct exec_package *epp, struct coff
 				return ENOEXEC;
 			}
 
-			path_index = slhdr->path_index * sizeof(long);
+			/* path_index = slhdr->path_index * sizeof(long); */
 			entry_len = slhdr->entry_len * sizeof(long);
 
-			if (entry_len > len) {
+			if (entry_len < sizeof(struct coff_slhdr) ||
+			    entry_len > len ||
+			    strnlen(slhdr->sl_name, entry_len) == entry_len) {
 				free(tbuf, M_TEMP);
 				return ENOEXEC;
 			}
@@ -509,7 +519,7 @@ coff_load_shlib(struct lwp *l, const char *path, struct exec_package *epp)
 	int error, siz;
 	int taddr, tsize, daddr, dsize, offset;
 	size_t resid;
-	struct nameidata nd;
+	struct vnode *vp;
 	struct coff_filehdr fh, *fhp = &fh;
 	struct coff_scnhdr sh, *shp = &sh;
 
@@ -518,34 +528,34 @@ coff_load_shlib(struct lwp *l, const char *path, struct exec_package *epp)
 	 * 2. read filehdr
 	 * 3. map text, data, and bss out of it using VM_*
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_SYSSPACE, path);
 	/* first get the vnode */
-	if ((error = namei(&nd)) != 0) {
+	error = namei_simple_kernel(path, NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0) {
 		DPRINTF(("coff_load_shlib: can't find library %s\n", path));
 		return error;
 	}
 
 	siz = sizeof(struct coff_filehdr);
-	error = vn_rdwr(UIO_READ, nd.ni_vp, (void *) fhp, siz, 0,
+	error = vn_rdwr(UIO_READ, vp, (void *) fhp, siz, 0,
 	    UIO_SYSSPACE, IO_NODELOCKED, l->l_cred, &resid, l);
 	if (error) {
 	    DPRINTF(("filehdr read error %d\n", error));
-	    vrele(nd.ni_vp);
+	    vrele(vp);
 	    return error;
 	}
 	siz -= resid;
 	if (siz != sizeof(struct coff_filehdr)) {
 	    DPRINTF(("coff_load_shlib: incomplete read: ask=%d, rem=%lu got %d\n",
 		     sizeof(struct coff_filehdr), (u_long) resid, siz));
-	    vrele(nd.ni_vp);
+	    vrele(vp);
 	    return ENOEXEC;
 	}
 
 	/* load text */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_TEXT);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_TEXT);
 	if (error) {
 	    DPRINTF(("can't find shlib text section\n"));
-	    vrele(nd.ni_vp);
+	    vrele(vp);
 	    return error;
 	}
 	/* DPRINTF(("COFF text addr %x size %d offset %d\n", sh.s_vaddr,
@@ -555,14 +565,14 @@ coff_load_shlib(struct lwp *l, const char *path, struct exec_package *epp)
 	tsize = shp->s_size + (shp->s_vaddr - taddr);
 	/* DPRINTF(("VMCMD: addr %x size %d offset %d\n", taddr, tsize, offset)); */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, tsize, taddr,
-		  nd.ni_vp, offset,
+		  vp, offset,
 		  VM_PROT_READ|VM_PROT_EXECUTE);
 
 	/* load data */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_DATA);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_DATA);
 	if (error) {
 	    DPRINTF(("can't find shlib data section\n"));
-	    vrele(nd.ni_vp);
+	    vrele(vp);
 	    return error;
 	}
 	/* DPRINTF(("COFF data addr %x size %d offset %d\n", shp->s_vaddr,
@@ -574,11 +584,11 @@ coff_load_shlib(struct lwp *l, const char *path, struct exec_package *epp)
 
 	/* DPRINTF(("VMCMD: addr %x size %d offset %d\n", daddr, dsize, offset)); */
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn,
-		  dsize, daddr, nd.ni_vp, offset,
+		  dsize, daddr, vp, offset,
 		  VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* load bss */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_BSS);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_BSS);
 	if (!error) {
 		int baddr = round_page(daddr + dsize);
 		int bsize = daddr + dsize + shp->s_size - baddr;
@@ -590,7 +600,7 @@ coff_load_shlib(struct lwp *l, const char *path, struct exec_package *epp)
 				  VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 	    }
 	}
-	vrele(nd.ni_vp);
+	vrele(vp);
 
 	return 0;
 }

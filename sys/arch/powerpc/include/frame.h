@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.19 2007/02/09 21:55:10 ad Exp $	*/
+/*	$NetBSD: frame.h,v 1.27 2016/01/24 19:49:35 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -35,6 +35,12 @@
 
 #include <machine/types.h>
 
+#ifdef _KERNEL
+#ifdef _KERNEL_OPT
+#include "opt_ppcarch.h"
+#endif
+#endif
+
 /*
  * We have to save all registers on every trap, because
  *	1. user could attach this process every time
@@ -45,50 +51,124 @@
  *
  * Change ordering to cluster together these register_t's.		XXX
  */
+struct reg_sans_pc {
+	__register_t r_fixreg[32];
+	__register_t r_lr;
+	uint32_t r_cr;
+	uint32_t r_xer;
+	__register_t r_ctr;
+};
+
+#ifdef _LP64
+struct reg_sans_pc32 {
+	__register32_t r_fixreg[32];
+	__register32_t r_lr;
+	uint32_t r_cr;
+	uint32_t r_xer;
+	__register32_t r_ctr;
+};
+#endif
+
 struct utrapframe {
-	register_t fixreg[32];
-	register_t lr;
+	__register_t fixreg[32];
+	__register_t lr;
 	int cr;
 	int xer;
-	register_t ctr;
-	register_t srr0;
-	register_t srr1;
+	__register_t ctr;
+	__register_t srr0;
+	__register_t srr1;
 	int vrsave;
 	int mq;
 	int spare;
 };
 
-struct trapframe {
-	register_t fixreg[32];
-	register_t lr;
-	int cr;
-	int xer;
-	register_t ctr;
-	register_t srr0;
-	register_t srr1;
-	/*
-	 * DAR is the OEA name.  On IBM4xx is DAR is really DEAR.
-	 */
-	register_t dar;		/* dar & dsisr are only filled on a DSI trap */
-	int dsisr;
-	int exc;
-	int tf_xtra[2];
+struct clockframe {
+	__register_t cf_srr0;
+	__register_t cf_srr1;
+	int cf_idepth;
 };
-#define	TF_VRSAVE	0
-#define	TF_MQ		1
-#define	TF_ESR		0
-#define	TF_PID		1
+
+#ifdef _LP64
+struct clockframe32 {
+	__register32_t cf_srr0;
+	__register32_t cf_srr1;
+	int cf_idepth;
+};
+#endif
+
+struct trapframe {
+	struct reg_sans_pc tf_ureg;
+	struct clockframe tf_cf;
+	uint32_t tf_exc;
+#if defined(PPC_OEA) || defined(PPC_OEA64) || defined(PPC_OEA64_BRIDGE)
+	__register_t tf_dar;
+	__register_t tf_pad0[2];
+	uint32_t tf_dsisr;
+	uint32_t tf_vrsave;
+	uint32_t tf_mq;
+	uint32_t tf_pad1[1];
+#endif
+#if defined(PPC_BOOKE) || defined(PPC_IBM4XX)
+	__register_t tf_dear;
+	__register_t tf_mcar;
+	__register_t tf_sprg1;
+	uint32_t tf_esr;
+	uint32_t tf_mcsr;
+	uint32_t tf_pid;
+	uint32_t tf_spefscr;
+#endif
+};
+
+#ifdef _LP64
+struct trapframe32 {
+	struct reg_sans_pc32 tf_ureg;
+	struct clockframe32 tf_cf;
+	uint32_t tf_exc;
+#if defined(PPC_OEA) || defined(PPC_OEA64) || defined(PPC_OEA64_BRIDGE)
+	__register32_t tf_dar;
+	__register32_t tf_pad0[2];
+	uint32_t tf_dsisr;
+	uint32_t tf_vrsave;
+	uint32_t tf_mq;
+	uint32_t tf_pad1[1];
+#endif
+#if defined(PPC_BOOKE) || defined(PPC_IBM4XX)
+	__register32_t tf_dear;
+	__register32_t tf_mcar;
+	__register32_t tf_sprg1;
+	uint32_t tf_esr;
+	uint32_t tf_mcsr;
+	uint32_t tf_pid;
+	uint32_t tf_spefscr;
+#endif
+};
+#endif /* _LP64 */
+#define tf_fixreg	tf_ureg.r_fixreg
+#define tf_lr		tf_ureg.r_lr
+#define tf_cr		tf_ureg.r_cr
+#define tf_xer		tf_ureg.r_xer
+#define tf_ctr		tf_ureg.r_ctr
+#define tf_srr0		tf_cf.cf_srr0
+#define tf_srr1		tf_cf.cf_srr1
+#define tf_idepth	tf_cf.cf_idepth
+
+struct ktrapframe {
+	__register_t ktf_sp;
+	__register_t ktf_lr;
+	struct trapframe ktf_tf;
+	__register_t ktf_cframe_lr;	/* for DDB */
+};
 
 #if defined(_KERNEL) || defined(_LKM)
 #ifdef _LP64
 struct utrapframe32 {
-	register32_t fixreg[32];
-	register32_t lr;
+	__register32_t fixreg[32];
+	__register32_t lr;
 	int cr;
 	int xer;
-	register32_t ctr;
-	register32_t srr0;
-	register32_t srr1;
+	__register32_t ctr;
+	__register32_t srr0;
+	__register32_t srr1;
 	int vrsave;
 	int mq;
 	int spare;
@@ -99,24 +179,18 @@ struct utrapframe32 {
 /*
  * This is to ensure alignment of the stackpointer
  */
-#define	FRAMELEN	roundup(sizeof(struct trapframe) + 2*sizeof(register_t), CALLFRAMELEN)
-#define	trapframe(l)	((struct trapframe *)((char *)(l)->l_addr + USPACE - FRAMELEN + 2*sizeof(register_t)))
+#define	FRAMELEN	roundup(sizeof(struct ktrapframe), CALLFRAMELEN)
+#define	ktrapframe(l)	((struct ktrapframe *)(uvm_lwp_getuarea(l) + USPACE - CALLFRAMELEN - FRAMELEN))
+#define	trapframe(l)	(&(ktrapframe(l)->ktf_tf))
 
 #define	SFRAMELEN	roundup(sizeof(struct switchframe), CALLFRAMELEN)
 struct switchframe {
-	register_t sp;
-	register_t lr;
-	register_t user_sr;		/* VSID on IBM4XX */
-	register_t cr;			/* why?  CR is volatile. */
-	register_t fixreg2;
-	register_t fixreg[19];		/* R13-R31 */
-};
-
-struct clockframe {
-	register_t srr1;
-	register_t srr0;
-	int pri;
-	int depth;
+	__register_t sf_sp;
+	__register_t sf_lr;
+	__register_t sf_user_sr;		/* VSID on IBM4XX */
+	__register_t sf_cr;		/* why?  CR is volatile. */
+	__register_t sf_fixreg2;
+	__register_t sf_fixreg[19];	/* R13-R31 */
 };
 
 /*
@@ -124,39 +198,10 @@ struct clockframe {
  */
 #define	CALLFRAMELEN	sizeof(struct callframe)
 struct callframe {
-	register_t sp;
-	register_t lr;
-	register_t r30;
-	register_t r31;
-};
-
-#define	IFRAMELEN	roundup(sizeof(struct intrframe), CALLFRAMELEN)
-struct intrframe {
-	register_t r1;			/*  0 */
-	register_t _pad4;		/*  4 */
-	/*
-	 * The next 4 fields are "clockframe"
-	 */
-	register_t srr1;		/*  8 */
-	register_t srr0;		/* 12 */
-	int pri;			/* 16 */
-	int intrdepth;			/* 20 */
-	register_t pid;			/* 24 */
-	register_t ctr;			/* 28 */
-	register_t xer;			/* 32 */
-	register_t cr;			/* 36 */
-	register_t lr;			/* 40 */
-	register_t r12;			/* 44 */
-	register_t r11;			/* 48 */
-	register_t r10;			/* 52 */
-	register_t r9;			/* 56 */
-	register_t r8;			/* 60 */
-	register_t r7;			/* 64 */
-	register_t r6;			/* 68 */
-	register_t r5;			/* 72 */
-	register_t r4;			/* 76 */
-	register_t r3;			/* 80 */
-	register_t r0;			/* 84 */
+	__register_t cf_sp;
+	__register_t cf_lr;
+	__register_t cf_r30;
+	__register_t cf_r31;
 };
 
 #endif	/* _POWERPC_FRAME_H_ */

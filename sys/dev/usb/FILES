@@ -55,8 +55,6 @@ umassvar.h		definitions for umass.c
 umidi.c			USB MIDI driver
 umidi_quirks.c		Strange MIDI devices
 umidi_quirks.h		  and definitions for it
-umidireg.h		Protocol definitions for umidi.c
-umidivar.h		definitions for umidi.c
 umodem.c		USB modem (CDC ACM) driver
 ums.c			USB mouse driver
 urio.c			USB Diamond Rio500 driver
@@ -65,7 +63,6 @@ usb.c			usb (bus) device driver
 usb.h			general USB defines
 usb_mem.c		memory allocation for DMAable memory
 usb_mem.h		API for usb_mem.c
-usb_port.h		compatibility defines for different OSs
 usb_quirks.c		table of non-conforming USB devices and their problems
 usb_quirks.h		API for usb_quirks.c
 usb_subr.c		various subroutines used by USB code
@@ -81,6 +78,7 @@ usbdivar.h		internal defines and structures for usbdi.c
 uscanner.c		minimal USB scanner driver
 usscanner.c		driver for some SCSI-over-USB scanners
 usbhid.h		USB HID class definitions
+uts.c			USB touchscreen driver
 uvisor.c		USB Handsping Visor driver
 uyap.c			Initial firmware downloader for Y@P phones
 uyap_firmware.h		Firmware for the Y@P phone

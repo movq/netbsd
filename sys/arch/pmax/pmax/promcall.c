@@ -1,6 +1,7 @@
-/*	$NetBSD: promcall.c,v 1.12 2006/09/09 08:27:13 tsutsui Exp $	*/
+/*	$NetBSD: promcall.c,v 1.21 2011/07/09 17:32:31 matt Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,48 +37,9 @@
  *
  *	@(#)cons.c	8.2 (Berkeley) 1/11/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah Hdr: cons.c 1.1 90/07/09
- *
- *	@(#)cons.c	8.2 (Berkeley) 1/11/94
- */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: promcall.c,v 1.12 2006/09/09 08:27:13 tsutsui Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: promcall.c,v 1.21 2011/07/09 17:32:31 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -86,12 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: promcall.c,v 1.12 2006/09/09 08:27:13 tsutsui Exp $"
 
 #include <dev/cons.h>
 
-#include <machine/dec_prom.h>
+#include <pmax/dec_prom.h>
 #include <pmax/pmax/pmaxtype.h>
 #include <pmax/pmax/machdep.h>
 
-static int  romgetc __P((dev_t));
-static void romputc __P((dev_t, int));
+static int  romgetc(dev_t);
+static void romputc(dev_t, int);
 
 #define DEFAULT_SCSIID	7    /* XXX - this should really live somewhere else */
 
@@ -114,13 +76,12 @@ struct consdev promcd = {
  * Get character from PROM console.
  */
 static int
-romgetc(dev)
-	dev_t dev;
+romgetc(dev_t dev)
 {
 	int chr, s;
 
 	s  = splhigh();
-	chr = (*callv->_getchar)();
+	chr = promcall(callv->_getchar);
 	splx(s);
 	return chr;
 }
@@ -129,14 +90,12 @@ romgetc(dev)
  * Print a character on PROM console.
  */
 static void
-romputc(dev, c)
-	dev_t dev;
-	int c;
+romputc(dev_t dev, int c)
 {
 	int s;
 
 	s = splhigh();
-	(*callv->_printf)("%c", c);
+	promcall(callv->_printf, "%c", c);
 	splx(s);
 }
 
@@ -146,10 +105,7 @@ romputc(dev, c)
  * Encoding is idiosyncratic; see DECstation Owners Guide.
  */
 void
-prom_findcons(kbdslot, crtslot, prom_using_screen)
-	int *kbdslot;
-	int *crtslot;
-	int *prom_using_screen;
+prom_findcons(int *kbdslot, int *crtslot, int *prom_using_screen)
 {
 	char *oscon = 0;	/* PROM osconsole string */
 
@@ -198,51 +154,55 @@ prom_findcons(kbdslot, crtslot, prom_using_screen)
  * Get a prom environment variable.
  */
 char *
-prom_getenv(name)
-	const char *name;
+prom_getenv(const char *name)
 {
-	return (*callv->_getenv)(name);
+
+	return (void *)promcall(callv->_getenv, name);
 }
 
 /*
  * Get 32bit system type of Digital hardware.
- *	cputype,		u_int8_t [3]
- *	systype,		u_int8_t [2]
- *	firmware revision,	u_int8_t [1]
- *	hardware revision.	u_int8_t [0]
+ *	cputype,		uint8_t [3]
+ *	systype,		uint8_t [2]
+ *	firmware revision,	uint8_t [1]
+ *	hardware revision.	uint8_t [0]
  */
 int
-prom_systype()
+prom_systype(void)
 {
+#ifndef _LP64
 	char *cp;
 
 	if (callv != &callvec)
-		return (*callv->_getsysid)();
+#endif
+		return promcall(callv->_getsysid);
+#ifndef _LP64
 	cp = prom_getenv("systype");
 	return (cp != NULL) ? strtoul(cp, NULL, 0) : 0;
+#endif
 }
 
 /*
  * Reset machine by haltbutton.
  */
 void
-prom_haltbutton()
+prom_haltbutton(void)
 {
-	(*callv->_halt)((int *)0, 0);
+
+	promcall(callv->_halt, (int *)0, 0);
 }
 
 /*
  * Halt/reboot machine.
  */
-void __attribute__((__noreturn__))
-prom_halt(howto, bootstr)
-	int howto;
-	char *bootstr;
+void __dead
+prom_halt(int howto, char *bootstr)
 {
+
 	if (callv != &callvec)
-		(*callv->_rex)((howto & RB_HALT) ? 'h' : 'b');
+		promcall(callv->_rex, (howto & RB_HALT) ? 'h' : 'b');
 	else {
-		void __attribute__((__noreturn__)) (*f) __P((void));
+		void __dead (*f)(void);
 
 		f = (howto & RB_HALT)
 			? (void *)DEC_PROM_REINIT
@@ -258,8 +218,7 @@ prom_halt(howto, bootstr)
  * Get the host SCSI ID from the PROM.
  */
 int
-prom_scsiid(cnum)
-	int cnum;
+prom_scsiid(int cnum)
 {
 	char scsiid_var[8];	/* strlen("scsiidX") + NULL */
 	char *cp;
@@ -273,25 +232,25 @@ prom_scsiid(cnum)
  * Get the memory bitmap from the PROM if we can
  */
 int
-prom_getbitmap(map)
-	struct memmap *map;
+prom_getbitmap(struct memmap *map)
 {
 	char *cp;
 	int len;
 
 	if (callv->_getbitmap != NULL)
-		return (callv->_getbitmap(map));
+		return promcall(callv->_getbitmap, map);
+
 	/*
 	 * See if we can get the bitmap from the environment variables
 	 */
 	cp = prom_getenv("bitmaplen");
 	if (cp == NULL)
-		return (0);
+		return 0;
 	len = (int)strtoul(cp, NULL, 0) * 4;
 	cp = prom_getenv("bitmap");
 	if (cp == NULL)
-		return (0);
-	bcopy((char *)strtoul(cp, NULL, 0), &map->bitmap, len);
+		return 0;
+	memcpy(&map->bitmap, (char *)strtoul(cp, NULL, 0), len);
 	map->pagesize = 4096;
-	return (len);
+	return len;
 }

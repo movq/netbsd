@@ -1,4 +1,4 @@
-/*	$NetBSD: sgivol.c,v 1.15 2006/12/30 18:25:30 rumble Exp $	*/
+/*	$NetBSD: sgivol.c,v 1.21 2014/03/28 15:00:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,6 +53,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <util.h>
+#include <err.h>
 #ifndef HAVE_NBTOOL_CONFIG_H
 #include <sys/endian.h>
 #endif
@@ -69,6 +63,7 @@ int	opt_i;			/* Initialize volume header */
 int	opt_r;			/* Read a file from volume header */
 int	opt_w;			/* Write a file to volume header */
 int	opt_d;			/* Delete a file from volume header */
+int	opt_m;			/* Move (rename) a file in the volume header */
 int	opt_p;			/* Modify a partition */
 int	opt_q;			/* quiet mode */
 int	opt_f;			/* Don't ask, just do what you're told */
@@ -86,7 +81,7 @@ struct stat st;
 struct disklabel lbl;
 #endif
 
-unsigned char buf[512];
+char buf[512];
 
 const char *sgi_types[] = {
 	"Volume Header",
@@ -105,26 +100,28 @@ const char *sgi_types[] = {
 	"XVM"
 };
 
-int	main(int, char *[]);
-
 void	display_vol(void);
-void	init_volhdr(void);
+void	init_volhdr(const char *);
 void	read_file(void);
-void	write_file(void);
-void	delete_file(void);
-void	modify_partition(void);
-void	write_volhdr(void);
+void	write_file(const char *);
+void	delete_file(const char *);
+void	move_file(const char *);
+void	modify_partition(const char *);
+void	write_volhdr(const char *);
 int	allocate_space(int);
 void	checksum_vol(void);
-void	usage(void);
+int	names_match(int, const char *);
+void	usage(void) __dead;
 
 int
 main(int argc, char *argv[])
 {
+#define RESET_OPTS()	opt_i = opt_m = opt_r = opt_w = opt_d = opt_p = 0
+
 	int ch;
-	while ((ch = getopt(argc, argv, "irwpdqfh:")) != -1) {
+	while ((ch = getopt(argc, argv, "qfih:rwdmp?")) != -1) {
 		switch (ch) {
-		/* -i, -r, -w, -d and -p override each other */
+		/* -i, -r, -w, -d, -m and -p override each other */
 		/* -q implies -f */
 		case 'q':
 			++opt_q;
@@ -134,27 +131,31 @@ main(int argc, char *argv[])
 			++opt_f;
 			break;
 		case 'i':
+			RESET_OPTS();
 			++opt_i;
-			opt_r = opt_w = opt_d = opt_p = 0;
 			break;
 		case 'h':
 			volhdr_size = atoi(optarg);
 			break;
 		case 'r':
+			RESET_OPTS();
 			++opt_r;
-			opt_i = opt_w = opt_d = opt_p = 0;
 			break;
 		case 'w':
+			RESET_OPTS();
 			++opt_w;
-			opt_i = opt_r = opt_d = opt_p = 0;
 			break;
 		case 'd':
+			RESET_OPTS();
 			++opt_d;
-			opt_i = opt_r = opt_w = opt_p = 0;
+			break;
+		case 'm':
+			RESET_OPTS();
+			++opt_m;
 			break;
 		case 'p':
+			RESET_OPTS();
 			++opt_p;
-			opt_i = opt_r = opt_w = opt_d = 0;
 			partno = atoi(argv[0]);
 			partfirst = atoi(argv[1]);
 			partblocks = atoi(argv[2]);
@@ -168,7 +169,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (opt_r || opt_w) {
+	if (opt_m || opt_r || opt_w) {
 		if (argc != 3)
 			usage();
 		vfilename = argv[0];
@@ -197,82 +198,93 @@ main(int argc, char *argv[])
 	if (argc != 1)
 		usage();
 	
-	fd = open(argv[0], (opt_i | opt_w | opt_d | opt_p) ? O_RDWR : O_RDONLY);
-	if (fd < 0) {
-#if HAVE_NBTOOL_CONFIG_H
-		perror("File open");
-		exit(1);
-#else
-		sprintf((char *)buf, "/dev/r%s%c", argv[0], 'a' + getrawpartition());
-		fd = open((char *)buf, (opt_i | opt_w | opt_d | opt_p) 
-				? O_RDWR : O_RDONLY);
-		if (fd < 0) {
-			printf("Error opening device %s: %s\n",
-				argv[0], strerror(errno));
-			exit(1);
-		}
+	fd = open(argv[0],
+	    (opt_i | opt_m | opt_w | opt_d | opt_p) ? O_RDWR : O_RDONLY);
+	if (fd == -1) {
+#ifndef HAVE_NBTOOL_CONFIG_H
+		snprintf(buf, sizeof(buf), "/dev/r%s%c", argv[0],
+		    'a' + getrawpartition());
+		fd = open(buf, (opt_i | opt_w | opt_d | opt_p) 
+		    ? O_RDWR : O_RDONLY);
+		if (fd == -1)
 #endif
+		err(EXIT_FAILURE, "Error opening device `%s'", argv[0]);
 	}
-	if (read(fd, buf, sizeof(buf)) != sizeof(buf)) {
-		perror("read volhdr");
-		exit(1);
-	}
+
+	if (read(fd, buf, sizeof(buf)) != sizeof(buf))
+		err(EXIT_FAILURE, "Can't read volhdr from `%s'", argv[0]);
+
 #if HAVE_NBTOOL_CONFIG_H
-	if (fstat(fd, &st) < 0) {
-		perror("stat error");
-		exit(1);
-	}
-	if (!S_ISREG(st.st_mode)) {
-		printf("Must be regular file\n");
-		exit(1);
-	}
-	if (st.st_size % SGI_BOOT_BLOCK_BLOCKSIZE) {
-		printf("Size must be multiple of %d\n", 
+	if (fstat(fd, &st) == -1)
+		err(EXIT_FAILURE, "Can't stat `%s'", argv[0]);
+	if (!S_ISREG(st.st_mode))
+		errx(EXIT_FAILURE, "Not a regular file `%s'", argv[0]);
+
+	if (st.st_size % SGI_BOOT_BLOCK_BLOCKSIZE)
+		errx(EXIT_FAILURE, "Size must be multiple of %d", 
 		    SGI_BOOT_BLOCK_BLOCKSIZE);
-		exit(1);
-	}
-	if (st.st_size < (SGIVOL_NBTOOL_NSECS * SGIVOL_NBTOOL_NTRACKS)) {
-		printf("Minimum size of %d required\n",
+	if (st.st_size < (SGIVOL_NBTOOL_NSECS * SGIVOL_NBTOOL_NTRACKS))
+		errx(EXIT_FAILURE, "Minimum size of %d required",
 		    SGIVOL_NBTOOL_NSECS * SGIVOL_NBTOOL_NTRACKS);
-		exit(1);
-	}
 #else
-	if (ioctl(fd, DIOCGDINFO, &lbl) < 0) {
-		perror("DIOCGDINFO");
-		exit(1);
-	}
+	if (ioctl(fd, DIOCGDINFO, &lbl) == -1)
+		err(EXIT_FAILURE, "ioctl DIOCGDINFO failed");
 #endif
 	volhdr = (struct sgi_boot_block *) buf;
 	if (opt_i) {
-		init_volhdr();
-		exit(0);
+		init_volhdr(argv[0]);
+		return 0;
 	}
-	if (be32toh(volhdr->magic) != SGI_BOOT_BLOCK_MAGIC) {
-		printf("No Volume Header found, magic=%x.  Use -i first.\n", 
-		       be32toh(volhdr->magic));
-		exit(1);
-	}
+	if (be32toh(volhdr->magic) != SGI_BOOT_BLOCK_MAGIC)
+		errx(EXIT_FAILURE, "No Volume Header found, magic=%x. "
+		    "Use -i first.\n", be32toh(volhdr->magic));
 	if (opt_r) {
 		read_file();
-		exit(0);
+		return 0;
 	}
 	if (opt_w) {
-		write_file();
-		exit(0);
+		write_file(argv[0]);
+		return 0;
 	}
 	if (opt_d) {
-		delete_file();
-		exit(0);
+		delete_file(argv[0]);
+		return 0;
+	}
+	if (opt_m) {
+		move_file(argv[0]);
+		return 0;
 	}
 	if (opt_p) {
-		modify_partition();
-		exit(0);
+		modify_partition(argv[0]);
+		return 0;
 	}
 
 	if (!opt_q)
 		display_vol();
 
 	return 0;
+}
+
+/*
+ * Compare the name in `slot' of voldir to `b'. Be careful, as the
+ * name in voldir need not be nul-terminated and `b' may be longer
+ * than the maximum (in which case it will never match).
+ *
+ * Returns non-0 if names are equal.
+ */
+int
+names_match(int slot, const char *b)
+{
+	int cmp;
+
+	if (slot < 0 || slot >= SGI_BOOT_BLOCK_MAXVOLDIRS)
+		errx(EXIT_FAILURE, "Internal error: bad slot in %s()",
+		    __func__);
+
+	cmp = strncmp(volhdr->voldir[slot].name, b,
+	    sizeof(volhdr->voldir[slot].name));
+
+	return cmp == 0 && strlen(b) <= sizeof(volhdr->voldir[slot].name);
 }
 
 void
@@ -297,7 +309,7 @@ display_vol(void)
 	printf("bootfile: %s\n", volhdr->bootfile);
 	/* volhdr->devparams[0..47] */
 	printf("\nVolume header files:\n");
-	for (i = 0; i < 15; ++i)
+	for (i = 0; i < SGI_BOOT_BLOCK_MAXVOLDIRS; ++i)
 		if (volhdr->voldir[i].name[0])
 			printf("%-8s offset %4d blocks, length %8d bytes "
 			    "(%d blocks)\n",
@@ -319,7 +331,7 @@ display_vol(void)
 }
 
 void
-init_volhdr(void)
+init_volhdr(const char *fname)
 {
 	memset(buf, 0, sizeof(buf));
 	volhdr->magic = htobe32(SGI_BOOT_BLOCK_MAGIC);
@@ -371,7 +383,7 @@ init_volhdr(void)
 #endif
 	volhdr->partitions[0].first = htobe32(volhdr_size);
 	volhdr->partitions[0].type = htobe32(SGI_PTYPE_BSD);
-	write_volhdr();
+	write_volhdr(fname);
 }
 
 void
@@ -382,28 +394,22 @@ read_file(void)
 
 	if (!opt_q)
 		printf("Reading file %s\n", vfilename);
-	for (i = 0; i < 15; ++i) {
+	for (i = 0; i < SGI_BOOT_BLOCK_MAXVOLDIRS; ++i) {
 		if (strncmp(vfilename, volhdr->voldir[i].name,
 			    strlen(volhdr->voldir[i].name)) == 0)
 			break;
 	}
-	if (i >= 15) {
-		printf("file %s not found\n", vfilename);
-		exit(1);
-	}
+	if (i >= SGI_BOOT_BLOCK_MAXVOLDIRS)
+		errx(EXIT_FAILURE, "File `%s' not found", vfilename);
 	/* XXX assumes volume header starts at 0? */
 	lseek(fd, be32toh(volhdr->voldir[i].block) * 512, SEEK_SET);
 	fp = fopen(ufilename, "w");
-	if (fp == NULL) {
-		perror("open write");
-		exit(1);
-	}
+	if (fp == NULL)
+		err(EXIT_FAILURE, "Can't open `%s'", ufilename);
 	i = be32toh(volhdr->voldir[i].bytes);
 	while (i > 0) {
-		if (read(fd, buf, sizeof(buf)) != sizeof(buf)) {
-			perror("read file");
-			exit(1);
-		}
+		if (read(fd, buf, sizeof(buf)) != sizeof(buf))
+			err(EXIT_FAILURE, "Error reading from `%s'", ufilename);
 		fwrite(buf, 1, i > sizeof(buf) ? sizeof(buf) : i, fp);
 		i -= i > sizeof(buf) ? sizeof(buf) : i;
 	}
@@ -411,36 +417,34 @@ read_file(void)
 }
 
 void
-write_file(void)
+write_file(const char *fname)
 {
 	FILE *fp;
 	int slot;
 	size_t namelen;
 	int block, i;
+	off_t off;
 	struct stat st;
 	char fbuf[512];
 
 	if (!opt_q)
 		printf("Writing file %s\n", ufilename);
-	if (stat(ufilename, &st) < 0) {
-		perror("stat");
-		exit(1);
-	}
+	if (stat(ufilename, &st) == -1)
+		err(EXIT_FAILURE, "Can't stat `%s'", ufilename);
 	if (!opt_q)
-		printf("File %s has %lld bytes\n", ufilename, st.st_size);
+		printf("File %s has %ju bytes\n", ufilename,
+		    (uintmax_t)st.st_size);
 	slot = -1;
-	for (i = 0; i < 15; ++i) {
+	for (i = 0; i < SGI_BOOT_BLOCK_MAXVOLDIRS; ++i) {
 		if (volhdr->voldir[i].name[0] == '\0' && slot < 0)
 			slot = i;
-		if (strcmp(vfilename, volhdr->voldir[i].name) == 0) {
+		if (names_match(i, vfilename)) {
 			slot = i;
 			break;
 		}
 	}
-	if (slot == -1) {
-		printf("No directory space for file %s\n", vfilename);
-		exit(1);
-	}
+	if (slot == -1)
+		errx(EXIT_FAILURE, "No directory space for file %s", vfilename);
 	/* -w can overwrite, -a won't overwrite */
 	if (be32toh(volhdr->voldir[slot].block) > 0) {
 		if (!opt_q)
@@ -450,15 +454,13 @@ write_file(void)
 		volhdr->voldir[slot].block = volhdr->voldir[slot].bytes = 0;
 	}
 	if (st.st_size == 0) {
-		printf("bad file size\n");
+		errx(EXIT_FAILURE, "Empty file `%s'", ufilename);
 		exit(1);
 	}
 	/* XXX assumes volume header starts at 0? */
 	block = allocate_space((int)st.st_size);
-	if (block < 0) {
-		printf("No space for file\n");
-		exit(1);
-	}
+	if (block < 0)
+		errx(EXIT_FAILURE, "No space for file `%s'", vfilename);
 
 	/*
 	 * Make sure the name in the volume header is max. 8 chars,
@@ -469,7 +471,7 @@ write_file(void)
 		printf("Warning: '%s' is too long for volume header, ",
 		       vfilename);
 		namelen = sizeof(volhdr->voldir[slot].name);
-		printf("truncating to '%-8s'\n", vfilename);
+		printf("truncating to '%.8s'\n", vfilename);
 	}
 
 	/* Populate it w/ NULs */
@@ -481,65 +483,108 @@ write_file(void)
 	volhdr->voldir[slot].block = htobe32(block);
 	volhdr->voldir[slot].bytes = htobe32(st.st_size);
 
-	write_volhdr();
+	write_volhdr(fname);
 
 	/* write the file itself */
-	i = lseek(fd, block * 512, SEEK_SET);
-	if (i < 0) {
-		perror("lseek write");
-		exit(1);
-	}
+	off = lseek(fd, block * 512, SEEK_SET);
+	if (off == -1)
+		err(EXIT_FAILURE, "Seek failed `%s'", fname);
 	i = st.st_size;
 	fp = fopen(ufilename, "r");
+	if (fp == NULL)
+		err(EXIT_FAILURE, "Can't open `%s'", ufilename);
 	while (i > 0) {
-		fread(fbuf, 1, i > 512 ? 512 : i, fp);
-		if (write(fd, fbuf, 512) != 512) {
-			perror("write file");
-			exit(1);
-		}
-		i -= i > 512 ? 512 : i;
+		int j = i > 512 ? 512 : i;
+		if (fread(fbuf, 1, j, fp) != j)
+			err(EXIT_FAILURE, "Can't read `%s'", ufilename);
+		if (write(fd, fbuf, 512) != 512)
+			err(EXIT_FAILURE, "Can't write `%s'", fname);
+		i -= j;
 	}
+	fclose(fp);
 }
 
 void
-delete_file(void)
+delete_file(const char *fname)
 {
 	int i;
 
-	for (i = 0; i < 15; ++i) {
-		if (strcmp(vfilename, volhdr->voldir[i].name) == 0) {
+	for (i = 0; i < SGI_BOOT_BLOCK_MAXVOLDIRS; ++i) {
+		if (names_match(i, vfilename)) {
 			break;
 		}
 	}
-	if (i >= 15) {
-		printf("File %s not found\n", vfilename);
-		exit(1);
-	}
+	if (i >= SGI_BOOT_BLOCK_MAXVOLDIRS)
+		errx(EXIT_FAILURE, "File `%s' not found", vfilename);
 
 	/* XXX: we don't compact the file space, so get fragmentation */
 	volhdr->voldir[i].name[0] = '\0';
 	volhdr->voldir[i].block = volhdr->voldir[i].bytes = 0;
-	write_volhdr();
+	write_volhdr(fname);
 }
 
 void
-modify_partition(void)
+move_file(const char *fname)
+{
+	char dstfile[sizeof(volhdr->voldir[0].name) + 1];
+	size_t namelen;
+	int i, slot = -1;
+
+	/*
+	 * Make sure the name in the volume header is max. 8 chars,
+	 * NOT including NUL.
+	 */
+	namelen = strlen(ufilename);
+	if (namelen > sizeof(volhdr->voldir[0].name)) {
+		printf("Warning: '%s' is too long for volume header, ",
+		       ufilename);
+		namelen = sizeof(volhdr->voldir[0].name);
+		printf("truncating to '%.8s'\n", ufilename);
+	}
+	memset(dstfile, 0, sizeof(dstfile));
+	memcpy(dstfile, ufilename, namelen);
+
+	for (i = 0; i < SGI_BOOT_BLOCK_MAXVOLDIRS; i++) {
+		if (names_match(i, vfilename)) {
+			if (slot != -1)
+				errx(EXIT_FAILURE,
+				    "Error: Cannot move '%s' to '%s' - "
+				    "duplicate source files exist!",
+				    vfilename, dstfile);
+			slot = i;
+		}
+		if (names_match(i, dstfile))
+			errx(EXIT_FAILURE, "Error: Cannot move '%s' to '%s' - "
+			    "destination file already exists!",
+			    vfilename, dstfile);
+	}
+	if (slot == -1)
+		errx(EXIT_FAILURE, "File `%s' not found", vfilename);
+
+	/* `dstfile' is already padded with NULs */ 
+	memcpy(volhdr->voldir[slot].name, dstfile,
+	    sizeof(volhdr->voldir[slot].name));
+	
+	write_volhdr(fname);
+}
+
+void
+modify_partition(const char *fname)
 {
 	if (!opt_q)
 		printf("Modify partition %d start %d length %d\n", 
 			partno, partfirst, partblocks);
-	if (partno < 0 || partno > 15) {
-		printf("Invalid partition number: %d\n", partno);
-		exit(1);
-	}
+	if (partno < 0 || partno >= SGI_BOOT_BLOCK_MAXPARTITIONS)
+		errx(EXIT_FAILURE, "Invalid partition number: %d", partno);
+
 	volhdr->partitions[partno].blocks = htobe32(partblocks);
 	volhdr->partitions[partno].first = htobe32(partfirst);
 	volhdr->partitions[partno].type = htobe32(parttype);
-	write_volhdr();
+	write_volhdr(fname);
 }
 
 void
-write_volhdr(void)
+write_volhdr(const char *fname)
 {
 	int i;
 
@@ -560,7 +605,7 @@ write_volhdr(void)
 	}
 	i = write(fd, buf, 512);
 	if (i < 0)
-		perror("write volhdr");
+		errx(EXIT_FAILURE, "write volhdr `%s'", fname);
 }
 
 int
@@ -572,7 +617,7 @@ allocate_space(int size)
 	blocks = (size + 511) / 512;
 	first = 2;
 	n = 0;
-	while (n < 15) {
+	while (n < SGI_BOOT_BLOCK_MAXVOLDIRS) {
 		if (volhdr->voldir[n].name[0]) {
 			if (first < (be32toh(volhdr->voldir[n].block) +
 			  (be32toh(volhdr->voldir[n].bytes) + 511) / 512) &&
@@ -620,12 +665,13 @@ checksum_vol(void)
 void
 usage(void)
 {
-	printf("Usage:	sgivol [-qf] -i [-h vhsize] device\n"
-	       "	sgivol [-qf] -r vhfilename diskfilename device\n"
-	       "	sgivol [-qf] -w vhfilename diskfilename device\n"
-	       "	sgivol [-qf] -d vhfilename device\n"
-	       "	sgivol [-qf] -p partno partfirst partblocks "
-	       "parttype device\n"
-	       );
+	const char *p = getprogname();
+	printf("Usage:\t%s [-qf] -i [-h vhsize] device\n"
+	       "\t%s [-qf] -r vhfilename diskfilename device\n"
+	       "\t%s [-qf] -w vhfilename diskfilename device\n"
+	       "\t%s [-qf] -d vhfilename device\n"
+	       "\t%s [-qf] -m vhfilename vhfilename device\n"
+	       "\t%s [-qf] -p partno partfirst partblocks "
+	       "parttype device\n", p, p, p, p, p, p);
 	exit(0);
 }

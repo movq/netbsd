@@ -1,4 +1,4 @@
-.\" $NetBSD: isdnd.rc.5,v 1.17 2003/09/25 09:37:32 wiz Exp $
+.\" $NetBSD: isdnd.rc.5,v 1.21 2017/07/03 21:35:30 wiz Exp $
 .\"
 .\" Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
 .\"
@@ -23,7 +23,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	$Id: isdnd.rc.5,v 1.17 2003/09/25 09:37:32 wiz Exp $
+.\"	$Id: isdnd.rc.5,v 1.21 2017/07/03 21:35:30 wiz Exp $
 .\"
 .\" $FreeBSD$
 .\"
@@ -289,7 +289,7 @@ This keyword is used to set the D-channel protocol for the S0-bus a
 controller is connected to.
 The following parameters are currently supported:
 .Pp
-.Bl -tag -width calledback -compact -offset
+.Bl -tag -width calledback -compact -offset xxxx
 .It Ar dss1
 The DSS1 or so-called "Euro-ISDN" D-channel protocol according to
 ITU Recommendations Q.921 and Q.931.
@@ -302,7 +302,7 @@ This keyword starts one configuration entry.
 It must not have a parameter.
 This keyword must be used at least once.
 The following keywords are valid in an entry section:
-.Bl -tag -width unitlengthsrc -compact
+.Bl -tag -width downtime
 .It Li answerprog
 This keyword is used to specify the name of a program which is run in
 case an incoming telephone connection specified
@@ -421,7 +421,7 @@ Used to specify what to do when an incoming connection request is received.
 The keyword is mandatory.
 The currently supported parameters are:
 .Pp
-.Bl -tag -width calledback -compact -offset
+.Bl -tag -width calledback -compact -offset xxxx
 .It Ar accept
 Accept an incoming call.
 .It Ar reject
@@ -505,7 +505,7 @@ The algorithm used to determine when to hang up an outgoing call when the
 line becomes idle.
 The current algorithms are:
 .Pp
-.Bl -tag -width calledback -compact -offset
+.Bl -tag -width calledback -compact -offset xxxx
 .It Ar fix-unit-size
 idle algorithm which assumes fixed sized changing units during the whole call.
 .It Ar var-unit-size
@@ -702,10 +702,10 @@ PPP interface.
 .It Li ratetype
 The rate entry used from the rates file.
 (optional)
-.br
+.Pp
 For example, ratetype=0 selects lines beginning "ra0" in /etc/isdn/isdnd.rates;
 (typically ra0 lines are a set of tables for local call rates on different
-days of the week \*[Am] times per day).
+days of the week & times per day).
 .It Li recoverytime
 The time in seconds to wait between dial retries.
 (optional)
@@ -907,12 +907,12 @@ must be greater than 0 (zero);
 .Em earlyhangup
 must be \*[Ge] 0 (zero).
 .Bd -literal
-|\*[Lt]unchecked-window\*[Gt]|\*[Lt]checkwindow\*[Gt]|\*[Lt]safetywindow\*[Gt]|
+|<unchecked-window>|<checkwindow>|<safetywindow>|
 |                  |             |              |
 +------------------+-------------+--------------+
 |                  |             |              |
-|                  |\*[Lt]-idle-time-\*[Gt]|\*[Lt]earlyhangup-\*[Gt]|
-|\*[Lt]--------------unitlength---------------------\*[Gt]|
+|                  |<-idle-time->|<earlyhangup->|
+|<--------------unitlength--------------------->|
 .Ed
 .Pp
 During the unchecked window which is (unitlength - (idle-time+earlyhangup))
@@ -961,10 +961,10 @@ period if there is no traffic for
 seconds the call is disconnected.
 .Pp
 .Bd -literal
-|\*[Lt]---unchecked------------------\*[Gt]|\*[Lt]------checked------\*[Gt]
+|<---unchecked------------------>|<------checked------>
 +------------------+-------------+
-|                  |\*[Lt]-idle-time-\*[Gt]|
-|\*[Lt]--------------unitlength-------\*[Gt]|
+|                  |<-idle-time->|
+|<--------------unitlength------->|
 .Ed
 .Pp
 Experience shows that useful values for idle-time are from 15 to 30 seconds.
@@ -990,7 +990,7 @@ ISDN daemon.
 The
 .Xr isdnd 8
 daemon and this manual page were written by
-.An Hellmuth Michaelis Aq hm@kts.org .
+.An Hellmuth Michaelis Aq Mt hm@kts.org .
 .Pp
 Additions to this manual page by
-.An Barry Scott Aq barry@scottb.demon.co.uk .
+.An Barry Scott Aq Mt barry@scottb.demon.co.uk .

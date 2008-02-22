@@ -1,4 +1,4 @@
-/*	$NetBSD: mkclock.c,v 1.7 2006/09/15 16:37:19 gdamore Exp $	*/
+/*	$NetBSD: mkclock.c,v 1.12 2014/11/20 16:34:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mkclock.c,v 1.7 2006/09/15 16:37:19 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mkclock.c,v 1.12 2014/11/20 16:34:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -55,16 +48,15 @@ __KERNEL_RCSID(0, "$NetBSD: mkclock.c,v 1.7 2006/09/15 16:37:19 gdamore Exp $");
 #include <mipsco/obio/clockreg.h>
 
 struct	mkclock_softc {
-        struct  device dev; 
 	bus_space_tag_t	sc_bst;
 	bus_space_handle_t sc_bsh;
 	struct todr_chip_handle sc_todr;
 };
 
-static int mkclock_match (struct device *, struct cfdata *, void *);
-static void mkclock_attach (struct device *, struct device *, void *);
+static int mkclock_match (device_t, cfdata_t, void *);
+static void mkclock_attach (device_t, device_t, void *);
 
-CFATTACH_DECL(mkclock, sizeof(struct mkclock_softc),
+CFATTACH_DECL_NEW(mkclock, sizeof(struct mkclock_softc),
     mkclock_match, mkclock_attach, NULL, NULL);
 
 int mkclock_read (todr_chip_handle_t, struct clock_ymdhms *);
@@ -74,20 +66,15 @@ static int mk_read (struct mkclock_softc *, int);
 static void mk_write (struct mkclock_softc *, int, int);
 
 int
-mkclock_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mkclock_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return 1;
 }
 
 void
-mkclock_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mkclock_attach(device_t parent, device_t self, void *aux)
 {
-        struct mkclock_softc *sc = (void *)self;
+        struct mkclock_softc *sc = device_private(self);
 	struct confargs *ca = aux;
 
 	sc->sc_bst = ca->ca_bustag;
@@ -108,23 +95,19 @@ mkclock_attach(parent, self, aux)
 }
 
 static int
-mk_read(sc, reg)
-	struct mkclock_softc *sc;
-	int reg;
+mk_read(struct mkclock_softc *sc, int reg)
 {
 	u_int8_t val;
 
 	val = bus_space_read_1(sc->sc_bst, sc->sc_bsh, DATA_PORT + reg*4);
-	return FROMBCD(val);
+	return bcdtobin(val);
 }
 
 static void
-mk_write(sc, reg, val)
-	struct mkclock_softc *sc;
-	int reg, val;
+mk_write(struct mkclock_softc *sc, int reg, int val)
 {
 	bus_space_write_1(sc->sc_bst, sc->sc_bsh,
-			  DATA_PORT + reg*4, TOBCD(val));
+			  DATA_PORT + reg*4, bintobcd(val));
 }
 
 int

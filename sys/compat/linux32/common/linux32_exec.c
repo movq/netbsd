@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_exec.c,v 1.9 2007/12/08 18:36:11 dsl Exp $ */
+/*	$NetBSD: linux32_exec.c,v 1.23 2018/05/06 13:40:51 kamil Exp $ */
 
 /*-
  * Copyright (c) 1994-2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,30 +31,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_exec.c,v 1.9 2007/12/08 18:36:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_exec.c,v 1.23 2018/05/06 13:40:51 kamil Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/namei.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
 
 #include <sys/mman.h>
 #include <sys/syscallargs.h>
-#include <sys/ptrace.h>		/* For proc_reparent() */
-
-#include <uvm/uvm_extern.h>
-
-#include <sys/cpu.h>
-#include <machine/reg.h>
 
 #include <compat/linux/common/linux_types.h>
-#include <compat/linux/common/linux_emuldata.h>
+#include <compat/linux/common/linux_exec.h>
 
 #include <compat/linux32/common/linux32_exec.h>
 #include <compat/linux32/common/linux32_types.h>
@@ -71,24 +54,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_exec.c,v 1.9 2007/12/08 18:36:11 dsl Exp $")
 #include <compat/linux32/linux32_syscallargs.h>
 #include <compat/linux32/linux32_syscall.h>
 
-extern char linux32_sigcode[1];
-extern char linux32_rt_sigcode[1];
-extern char linux32_esigcode[1];
-
 extern struct sysent linux32_sysent[];
 extern const char * const linux32_syscallnames[];
-
-static void linux32_e_proc_exec(struct proc *, struct exec_package *);
-static void linux32_e_proc_fork(struct proc *, struct proc *, int);
-static void linux32_e_proc_exit(struct proc *);
-static void linux32_e_proc_init(struct proc *, struct proc *, int);
-
-#ifdef LINUX32_NPTL
-void linux32_userret(void);
-void linux_nptl_proc_fork(struct proc *, struct proc *, void (*luserret)(void));
-void linux_nptl_proc_exit(struct proc *);
-void linux_nptl_proc_init(struct proc *, struct proc *);
-#endif
+extern char linux32_sigcode[], linux32_esigcode[];
 
 /*
  * Emulation switch.
@@ -96,201 +64,32 @@ void linux_nptl_proc_init(struct proc *, struct proc *);
 
 struct uvm_object *emul_linux32_object;
 
-const struct emul emul_linux32 = {
-	"linux32",
-	"/emul/linux32",
+struct emul emul_linux32 = {
+	.e_name =		"linux32",
+	.e_path =		"/emul/linux32",
 #ifndef __HAVE_MINIMAL_EMUL
-	0,
-	NULL,
-	LINUX32_SYS_syscall,
-	LINUX32_SYS_NSYSENT,
+	.e_flags =		0,
+	.e_errno =		NULL,
+	.e_nosys =		LINUX32_SYS_syscall,
+	.e_nsysent =		LINUX32_SYS_NSYSENT,
 #endif
-	linux32_sysent,
-	linux32_syscallnames,
-	linux32_sendsig,
-	trapsignal,
-	NULL,
-	linux32_sigcode,
-	linux32_esigcode,
-	&emul_linux32_object,
-	linux32_setregs,
-	linux32_e_proc_exec,
-	linux32_e_proc_fork,
-	linux32_e_proc_exit,
-	NULL,
-	NULL,
-	linux32_syscall_intern,
-	NULL,
-	NULL,
-	netbsd32_vm_default_addr,
+	.e_sysent =		linux32_sysent,
+	.e_syscallnames =	linux32_syscallnames,
+	.e_sendsig =		linux32_sendsig,
+	.e_trapsignal =		linux_trapsignal,
+	.e_sigcode =		linux32_sigcode,
+	.e_esigcode =		linux32_esigcode,
+	.e_sigobject =		&emul_linux32_object,
+	.e_setregs =		linux32_setregs,
+	.e_proc_exec =		linux_e_proc_exec,
+	.e_proc_fork =		linux_e_proc_fork,
+	.e_proc_exit =		linux_e_proc_exit,
+	.e_lwp_fork =		linux_e_lwp_fork,
+	.e_lwp_exit =		linux_e_lwp_exit,
+	.e_syscall_intern =	linux32_syscall_intern,
+	.e_sysctlovly =		NULL,
+	.e_vm_default_addr =	netbsd32_vm_default_addr,
+	.e_usertrap =		NULL,
+	.e_ucsize =		0,
+	.e_startlwp =		NULL
 };
-
-static void
-linux32_e_proc_init(p, parent, forkflags)
-	struct proc *p, *parent;
-	int forkflags;
-{
-	struct linux_emuldata *e = p->p_emuldata;
-	struct linux_emuldata_shared *s;
-	struct linux_emuldata *ep = NULL;
-
-	if (!e) {
-		/* allocate new Linux emuldata */
-		MALLOC(e, void *, sizeof(struct linux_emuldata),
-			M_EMULDATA, M_WAITOK);
-	} else  {
-		e->s->refs--;
-		if (e->s->refs == 0)
-			FREE(e->s, M_EMULDATA);
-	}
-
-	memset(e, '\0', sizeof(struct linux_emuldata));
-
-	e->proc = p;
-
-	if (parent)
-		ep = parent->p_emuldata;
-
-	if (forkflags & FORK_SHAREVM) {
-#ifdef DIAGNOSTIC
-		if (ep == NULL) {
-			killproc(p, "FORK_SHAREVM while emuldata is NULL\n");
-			return;
-		}
-#endif
-		s = ep->s;
-		s->refs++;
-	} else {
-		struct vmspace *vm;
-
-		MALLOC(s, void *, sizeof(struct linux_emuldata_shared),
-			M_EMULDATA, M_WAITOK);
-		s->refs = 1;
-
-		/*
-		 * Set the process idea of the break to the real value.
-		 * For fork, we use parent's vmspace since our's
-		 * is not setup at the time of this call and is going
-		 * to be copy of parent's anyway. For exec, just
-		 * use our own vmspace.
-		 */
-		vm = (parent) ? parent->p_vmspace : p->p_vmspace;
-		s->p_break = (char *)vm->vm_daddr + ctob(vm->vm_dsize);
-
-		/*
-		 * Linux threads are emulated as NetBSD processes (not lwp)
-		 * We use native PID for Linux TID. The Linux TID is the
-		 * PID of the first process in the group. It is stored
-		 * here
-		 */
-		s->group_pid = p->p_pid;
-
-		/*
-		 * Initialize the list of threads in the group
-		 */
-		LIST_INIT(&s->threads);	
-
-		s->xstat = 0;
-		s->flags = 0;
-	}
-
-	e->s = s;
-
-	/*
-	 * Add this thread in the group thread list
-	 */
-	LIST_INSERT_HEAD(&s->threads, e, threads);
-
-#ifdef LINUX32_NPTL
-	linux_nptl_proc_init(p, parent);
-#endif /* LINUX32_NPTL */
-
-	p->p_emuldata = e;
-}
-
-/*
- * Allocate new per-process structures. Called when executing Linux
- * process. We can reuse the old emuldata - if it's not null,
- * the executed process is of same emulation as original forked one.
- */
-static void
-linux32_e_proc_exec(struct proc *p, struct exec_package *epp)
-{
-	/* exec, use our vmspace */
-	linux32_e_proc_init(p, NULL, 0);
-}
-
-/*
- * Emulation per-process exit hook.
- */
-static void
-linux32_e_proc_exit(struct proc *p)
-{
-	struct linux_emuldata *e = p->p_emuldata;
-
-#ifdef LINUX32_NPTL
-	linux_nptl_proc_exit(p);
-#endif /* LINUX32_NPTL */
-
-	/* Remove the thread for the group thread list */
-	LIST_REMOVE(e, threads);
-
-	/* free Linux emuldata and set the pointer to null */
-	e->s->refs--;
-	if (e->s->refs == 0)
-		FREE(e->s, M_EMULDATA);
-	FREE(e, M_EMULDATA);
-	p->p_emuldata = NULL;
-}
-
-/*
- * Emulation fork hook.
- */
-static void
-linux32_e_proc_fork(p, parent, forkflags)
-	struct proc *p, *parent;
-	int forkflags;
-{
-	/*
-	 * The new process might share some vmspace-related stuff
-	 * with parent, depending on fork flags (CLONE_VM et.al).
-	 * Force allocation of new base emuldata, and share the
-	 * VM-related parts only if necessary.
-	 */
-	p->p_emuldata = NULL;
-	linux32_e_proc_init(p, parent, forkflags);
-
-#ifdef LINUX32_NPTL
-	linux_nptl_proc_fork(p, parent, linux32_userret);
-#endif
-
-	return;
-}
-
-#ifdef LINUX32_NPTL
-void
-linux32_userret(void)
-{
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	struct linux_emuldata *led = p->p_emuldata;
-	int error;
-
-	/* LINUX_CLONE_CHILD_SETTID: copy child's TID to child's memory  */
-	if (led->clone_flags & LINUX_CLONE_CHILD_SETTID) {
-		if ((error = copyout(&l->l_proc->p_pid,
-		    led->child_tidptr,  sizeof(l->l_proc->p_pid))) != 0)
-			printf("linux32_userret: LINUX_CLONE_CHILD_SETTID "
-			    "failed (led->child_tidptr = %p, p->p_pid = %d)\n",
-			    led->child_tidptr, p->p_pid);
-	}
-
-	/* LINUX_CLONE_SETTLS: allocate a new TLS */
-	if (led->clone_flags & LINUX_CLONE_SETTLS) {
-		if (linux32_set_newtls(l, linux32_get_newtls(l)) != 0)
-			printf("linux32_userret: linux32_set_tls failed");
-	}
-
-	return;	
-}
-#endif /* LINUX32_NPTL */

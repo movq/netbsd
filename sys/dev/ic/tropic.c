@@ -1,4 +1,4 @@
-/*	$NetBSD: tropic.c,v 1.33 2008/02/07 01:21:54 dyoung Exp $	*/
+/*	$NetBSD: tropic.c,v 1.50 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*
  * Ported to NetBSD by Onno van der Linden
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tropic.c,v 1.33 2008/02/07 01:21:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tropic.c,v 1.50 2018/06/26 06:48:00 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: tropic.c,v 1.33 2008/02/07 01:21:54 dyoung Exp $");
 #include <net/netisr.h>
 #include <net/route.h>
 #include <net/if_token.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -66,12 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: tropic.c,v 1.33 2008/02/07 01:21:54 dyoung Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/in_var.h>
-#endif
-
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <sys/cpu.h>
@@ -120,8 +114,7 @@ static	int media[] = {
 };
 
 int
-tropic_mediachange(sc)
-	struct tr_softc *sc;
+tropic_mediachange(struct tr_softc *sc)
 {
 	if (IFM_TYPE(sc->sc_media.ifm_media) != IFM_TOKEN)
 		return EINVAL;
@@ -159,9 +152,7 @@ tropic_mediachange(sc)
 }
 
 void
-tropic_mediastatus(sc, ifmr)
-	struct tr_softc *sc;
-	struct ifmediareq *ifmr;
+tropic_mediastatus(struct tr_softc *sc, struct ifmediareq *ifmr)
 {
 	struct ifmedia	*ifm = &sc->sc_media;
 
@@ -169,8 +160,7 @@ tropic_mediastatus(sc, ifmr)
 }
 
 int
-tr_config(sc)
-	struct tr_softc *sc;
+tr_config(struct tr_softc *sc)
 {
 	if (sc->sc_init_status & FAST_PATH_TRANSMIT) {
 		int i;
@@ -194,8 +184,8 @@ tr_config(sc)
 		}
 
 		if (i == 30000 && sc->sc_srb == ACA_RDW(sc, ACA_WRBR)) {
-			printf("%s: no response for fast path cfg\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "no response for fast path cfg\n");
 			return 1;
 		}
 
@@ -203,15 +193,14 @@ tr_config(sc)
 
 		if ((SRB_INB(sc, sc->sc_srb, SRB_RETCODE) != 0)) {
 			printf("%s: cfg fast path returned: 0x%02x\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    SRB_INB(sc, sc->sc_srb, SRB_RETCODE));
 			return 1;
 		}
 
 		sc->sc_txca = SRB_INW(sc, sc->sc_srb, SRB_CFPRESP_FPXMIT);
 		sc->sc_srb = SRB_INW(sc, sc->sc_srb, SRB_CFPRESP_SRBADDR);
-	}
-	else {
+	} else {
 		if (sc->sc_init_status & RSP_16)
 			sc->sc_maxmtu = sc->sc_dhb16maxsz;
 		else
@@ -219,7 +208,7 @@ tr_config(sc)
 /*
  * XXX Not completely true because Fast Path Transmit has 514 byte buffers
  * XXX and TR_MAX_LINK_HDR is only correct when source-routing is used.
- * XXX depending on wether source routing is used change the calculation
+ * XXX depending on whether source routing is used change the calculation
  * XXX use IFM_TOK_SRCRT (IFF_LINK0)
  * XXX recompute sc_minbuf !!
  */
@@ -229,8 +218,7 @@ tr_config(sc)
 }
 
 int
-tr_attach(sc)
-	struct tr_softc *sc;
+tr_attach(struct tr_softc *sc)
 {
 	int	nmedia, *mediaptr, *defmediaptr;
 	int	i, temp;
@@ -264,8 +252,7 @@ tr_attach(sc)
 /*
  *  Create circular queues caching the buffer pointers ?
  */
-	}
-	else {
+	} else {
 /*
  * MAX_MACFRAME_SIZE = DHB_SIZE - 6
  * IPMTU = MAX_MACFRAME_SIZE - (14 + 18 + 8)
@@ -335,7 +322,7 @@ tr_attach(sc)
 	/*
 	 * init network-visible interface
 	 */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = tr_ioctl;
 	if (sc->sc_init_status & FAST_PATH_TRANSMIT)
@@ -417,8 +404,7 @@ tr_attach(sc)
 			ifmedia_set(&sc->sc_media, *defmediaptr);
 		else
 			ifmedia_set(&sc->sc_media, 0);
-	}
-	else {
+	} else {
 		ifmedia_add(&sc->sc_media, IFM_TOKEN | IFM_MANUAL, 0, NULL);
 		ifmedia_set(&sc->sc_media, IFM_TOKEN | IFM_MANUAL);
 	}
@@ -432,7 +418,7 @@ tr_attach(sc)
 
 	token_ifattach(ifp, myaddr);
 
-	printf("%s: address %s ring speed %d Mbps\n", sc->sc_dev.dv_xname,
+	aprint_error_dev(sc->sc_dev, "address %s ring speed %d Mbps\n",
 	    token_sprintf(myaddr), (sc->sc_init_status & RSP_16) ? 16 : 4);
 
 	callout_init(&sc->sc_init_callout, 0);
@@ -443,9 +429,7 @@ tr_attach(sc)
 }
 
 int
-tr_setspeed(sc, speed)
-struct tr_softc *sc;
-u_int8_t speed;
+tr_setspeed(struct tr_softc *sc, u_int8_t speed)
 {
 	SRB_OUTB(sc, sc->sc_srb, SRB_CMD, DIR_SET_DEFAULT_RING_SPEED);
 	SRB_OUTB(sc, sc->sc_srb, CMD_RETCODE, 0xfe);
@@ -458,15 +442,15 @@ u_int8_t speed;
 
 	if ((SRB_INB(sc, sc->sc_srb, SRB_RETCODE) != 0)) {
 		printf("%s: set default ringspeed returned: 0x%02x\n",
-		    sc->sc_dev.dv_xname, SRB_INB(sc, sc->sc_srb, SRB_RETCODE));
+		    device_xname(sc->sc_dev),
+		    SRB_INB(sc, sc->sc_srb, SRB_RETCODE));
 		return 1;
 	}
 	return 0;
 }
 
 int
-tr_mediachange(ifp)
-	struct ifnet *ifp;
+tr_mediachange(struct ifnet *ifp)
 {
 	struct tr_softc *sc = ifp->if_softc;
 
@@ -476,9 +460,7 @@ tr_mediachange(ifp)
 }
 
 void
-tr_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
+tr_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct tr_softc *sc = ifp->if_softc;
 
@@ -488,8 +470,7 @@ tr_mediastatus(ifp, ifmr)
 }
 
 int
-tr_reset(sc)
-struct tr_softc *sc;
+tr_reset(struct tr_softc *sc)
 {
 	int i;
 
@@ -520,8 +501,8 @@ struct tr_softc *sc;
 	}
 
 	if (i == 35000 && sc->sc_srb == 0) {
-		printf("%s: no response from adapter after reset\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "no response from adapter after reset\n");
 		return 1;
 	}
 
@@ -530,12 +511,13 @@ struct tr_softc *sc;
 	ACA_OUTB(sc, ACA_RRR_e, (sc->sc_maddr >> 12));
 	sc->sc_srb = ACA_RDW(sc, ACA_WRBR);
 	if (SRB_INB(sc, sc->sc_srb, SRB_CMD) != 0x80) {
-		printf("%s: initialization incomplete, status: 0x%02x\n",
-		    sc->sc_dev.dv_xname, SRB_INB(sc, sc->sc_srb, SRB_CMD));
+		aprint_error_dev(sc->sc_dev,
+		    "initialization incomplete, status: 0x%02x\n",
+		    SRB_INB(sc, sc->sc_srb, SRB_CMD));
 		return 1;
 	}
 	if (SRB_INB(sc, sc->sc_srb, SRB_INIT_BUC) != 0) {
-		printf("%s: Bring Up Code %02x\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "Bring Up Code %02x\n",
 		    SRB_INB(sc, sc->sc_srb, SRB_INIT_BUC));
 		return 1;
 	}
@@ -555,8 +537,7 @@ struct tr_softc *sc;
  * tr_stop - stop interface (issue a DIR.CLOSE.ADAPTER command)
  */
 void
-tr_stop(sc)
-struct tr_softc *sc;
+tr_stop(struct tr_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -578,8 +559,7 @@ struct tr_softc *sc;
 }
 
 static void
-tr_shutdown(arg)
-	void *arg;
+tr_shutdown(void *arg)
 {
 	struct tr_softc *sc = arg;
 
@@ -587,8 +567,7 @@ tr_shutdown(arg)
 }
 
 void
-tr_reinit(arg)
-	void *arg;
+tr_reinit(void *arg)
 {
 	struct tr_softc *sc = arg;
 	int	s;
@@ -602,8 +581,7 @@ tr_reinit(arg)
 }
 
 static void
-tr_reopen(arg)
-	void *arg;
+tr_reopen(void *arg)
 {
 	int	s;
 
@@ -618,8 +596,7 @@ tr_reopen(arg)
  *          - must be called at splnet
  */
 void
-tr_init(arg)
-	void *arg;
+tr_init(void *arg)
 {
 	struct tr_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -662,8 +639,7 @@ tr_init(arg)
 
 		if (sc->sc_init_status & RSP_16) {
 			dhbsize = sc->sc_dhb16maxsz;
-		}
-		else {
+		} else {
 			dhbsize = sc->sc_dhb4maxsz;
 		}
 #if 0	/* XXXchb unneeded? */
@@ -682,8 +658,7 @@ tr_init(arg)
 			num_dhb = 2;	/* firmware can't cope with more DHBs */
 		if (num_dhb < 1)
 			num_dhb = 1;	/* we need at least one */
-	}
-	else
+	} else
 		SRB_OUTW(sc, open_srb, SRB_OPEN_DHBLEN, DHB_LENGTH);
 
 	SRB_OUTB(sc, open_srb, SRB_OPEN_NUMDHB, num_dhb);
@@ -699,8 +674,7 @@ tr_init(arg)
  *  tr_oldstart - Present transmit request to adapter
  */
 void
-tr_oldstart(ifp)
-struct ifnet *ifp;
+tr_oldstart(struct ifnet *ifp)
 {
 	struct tr_softc *sc = ifp->if_softc;
 	bus_size_t srb = sc->sc_srb;
@@ -717,8 +691,7 @@ struct ifnet *ifp;
 }
 
 void
-tr_start(ifp)
-struct ifnet *ifp;
+tr_start(struct ifnet *ifp)
 {
 	struct tr_softc *sc = ifp->if_softc;
 	bus_size_t first_txbuf, txbuf;
@@ -739,10 +712,7 @@ next:
 
 	if (m0 == 0)
 		return;
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0, BPF_D_OUT);
 	first_txbuf = txbuf = TXCA_INW(sc, TXCA_FREE_QUEUE_HEAD) - XMIT_NEXTBUF;
 	framedata = txbuf + XMIT_FP_DATA;
 	size = 0;
@@ -811,8 +781,7 @@ next:
  *  service it.
  */
 int
-tr_intr(arg)
-	void *arg;
+tr_intr(void *arg)
 {
 	struct tr_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -827,7 +796,7 @@ tr_intr(arg)
 		/* Is this interrupt caused by an adapter check? */
 		if (status & ADAP_CHK_INT) {
 			printf("%s: adapter check 0x%04x\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    (unsigned int)ntohs(ACA_RDW(sc, ACA_WWCR)));
 
 			/* Clear this interrupt bit */
@@ -835,8 +804,7 @@ tr_intr(arg)
 
 			rc = 1;		/* Claim interrupt. */
 			break;		/* Terminate loop. */
-		}
-		else if (status & XMIT_COMPLETE) {
+		} else if (status & XMIT_COMPLETE) {
 			ACA_RSTB(sc, ACA_ISRP_o, ~(XMIT_COMPLETE));
 			tr_xint(sc);
 			rc = 1;
@@ -865,8 +833,8 @@ tr_intr(arg)
 			case XMIT_UI_FRM:	/* Response to xmit request */
 				/* Response not valid? */
 				if (retcode != 0xff)
-					printf("%s: error on xmit request = "
-					    "0x%x\n", sc->sc_dev.dv_xname,
+					aprint_error_dev(sc->sc_dev, "error "
+					    "on xmit request = 0x%x\n",
 					    retcode);
 				break;
 
@@ -897,18 +865,16 @@ tr_intr(arg)
 						    sc->sc_xmit_buffers;
 #ifdef TROPICDEBUG
 						printf("%s: %d buffers\n",
-						    sc->sc_dev.dv_xname,
+						    device_xname(sc->sc_dev),
 						    sc->sc_xmit_buffers);
 #endif
 						sc->sc_xmit_correlator = 0;
 						wakeup(&sc->tr_sleepevent);
-					}
-					else
+					} else
 						tr_opensap(sc, LLC_SNAP_LSAP);
-				}
-				else {
-					printf("%s: open error = 0x%x\n",
-					    sc->sc_dev.dv_xname,
+				} else {
+					aprint_error_dev(sc->sc_dev,
+					    "open error = 0x%x\n",
 					    SRB_INB(sc, srb, SRB_RETCODE));
 					ifp->if_flags &= ~IFF_RUNNING;
 					ifp->if_flags &= ~IFF_UP;
@@ -924,8 +890,8 @@ tr_intr(arg)
 			case DIR_CLOSE:	/* Response to close adapter command */
 				/* Close not successful? */
 				if (retcode != 0)
-					printf("%s: close error = 0x%x\n",
-					    sc->sc_dev.dv_xname, retcode);
+					aprint_error_dev(sc->sc_dev,
+					    "close error = 0x%x\n", retcode);
 				else {
 					ifp->if_flags &= ~IFF_RUNNING;
 					ifp->if_flags &= ~IFF_UP;
@@ -945,7 +911,7 @@ tr_intr(arg)
 					    SRB_INW(sc, sap_srb,
 					        SRB_OPNSAP_STATIONID);
 				printf("%s: Token Ring opened\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				wakeup(&sc->tr_sleepevent);
 				break;
 /* XXX DLC_CLOSE_SAP not needed ? */
@@ -954,35 +920,38 @@ tr_intr(arg)
 			case DIR_READ_LOG:   /* Response to read log */
 				/* Cmd not successful? */
 				if (retcode != 0)
-					printf("%s: read error log cmd err = "
-					    "0x%x\n", sc->sc_dev.dv_xname,
+					aprint_error_dev(sc->sc_dev, "read "
+					    "error log cmd err = 0x%x\n",
 					    retcode);
 #ifdef TROPICDEBUG
 				log_srb = sc->sc_srb;
-				printf("%s: ERROR LOG:\n",sc->sc_dev.dv_xname);
+				printf("%s: ERROR LOG:\n",
+				    device_xname(sc->sc_dev));
 				printf("%s: Line=%d, Internal=%d, Burst=%d\n",
-				    sc->sc_dev.dv_xname,
+				    device_xname(sc->sc_dev),
 				    (SRB_INB(sc, log_srb, SRB_LOG_LINEERRS)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_INTERRS)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_BRSTERRS)));
 				printf("%s: A/C=%d, Abort=%d, Lost frames=%d\n",
-				    sc->sc_dev.dv_xname,
+				    device_xname(sc->sc_dev),
 				    (SRB_INB(sc, log_srb, SRB_LOG_ACERRS)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_ABRTERRS)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_LOSTFRMS)));
-				printf("%s: Receive congestion=%d, Frame copied=%d, Frequency=%d\n",
-				    sc->sc_dev.dv_xname,
+				printf("%s: Receive congestion=%d, "
+				    "Frame copied=%d, Frequency=%d\n",
+				    device_xname(sc->sc_dev),
 				    (SRB_INB(sc, log_srb, SRB_LOG_RCVCONG)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_FCPYERRS)),
 				    (SRB_INB(sc, log_srb, SRB_LOG_FREQERRS)));
-				printf("%s: Token=%d\n",sc->sc_dev.dv_xname,
+				printf("%s: Token=%d\n",
+				    device_xname(sc->sc_dev),
 				    (SRB_INB(sc, log_srb, SRB_LOG_TOKENERRS)));
 #endif /* TROPICDEBUG */
 				ifp->if_flags &= ~IFF_OACTIVE;
 				break;
 			default:
 				printf("%s: bad SRB command encountered 0x%x\n",
-				    sc->sc_dev.dv_xname, command);
+				    device_xname(sc->sc_dev), command);
 				break;
 			}
 			/* clear the SRB-response interrupt bit */
@@ -1005,32 +974,33 @@ tr_intr(arg)
 			case REC_DATA:		/* Receive */
 				/* Response not valid? */
 				if (retcode != 0xff)
-				printf("%s: ASB bad receive response = 0x%x\n",
-				    sc->sc_dev.dv_xname, retcode);
+					aprint_error_dev(sc->sc_dev, "ASB bad "
+					    "receive response = 0x%x\n",
+					    retcode);
 				break;
 			case XMIT_DIR_FRAME:	/* Transmit */
 			case XMIT_UI_FRM:   	/* Transmit */
 				/* Response not valid? */
 				if (retcode != 0xff)
-				printf("%s: ASB response err on xmit = 0x%x\n",
-				    sc->sc_dev.dv_xname, retcode);
+					aprint_error_dev(sc->sc_dev,
+					    "ASB response err on xmit = "
+					    "0x%x\n", retcode);
 				break;
 			default:
-				printf("%s: invalid command in ASB = 0x%x\n",
-				    sc->sc_dev.dv_xname, command);
+				aprint_error_dev(sc->sc_dev,
+				    "invalid command in ASB = 0x%x\n",command);
 				break;
 			}
 			/* Clear this interrupt bit */
 			ACA_RSTB(sc, ACA_ISRP_o, ~(ASB_FREE_INT));
-		}
-		else if (status & ARB_CMD_INT) { /* Command for PC to handle? */
+		} else if (status & ARB_CMD_INT) { /* Command for PC to handle? */
 			bus_size_t arb = sc->sc_arb;
 
 			command = ARB_INB(sc, arb, ARB_CMD);
 			switch (command) {
 			case DLC_STATUS:    /* DLC status change */
 				printf("%s: ARB new DLC status = 0x%x\n",
-				    sc->sc_dev.dv_xname,
+				    device_xname(sc->sc_dev),
 				    ARB_INW(sc, arb, ARB_DLCSTAT_STATUS));
 				break;
 			case REC_DATA:		/* Adapter has data for PC */
@@ -1041,21 +1011,20 @@ tr_intr(arg)
 			case RING_STAT_CHANGE:	/* Ring status change */
 				if (ARB_INW(sc, arb, ARB_RINGSTATUS) &
 				    (SIGNAL_LOSS + LOBE_FAULT)){
-					printf("%s: signal loss / lobe fault\n",
-					    sc->sc_dev.dv_xname);
+					aprint_error_dev(sc->sc_dev,
+					    "signal loss / lobe fault\n");
 					ifp->if_flags &= ~IFF_RUNNING;
 					ifp->if_flags &= ~IFF_UP;
 					IFQ_PURGE(&ifp->if_snd);
 					callout_reset(&sc->sc_reinit_callout,
 					    hz * 30, tr_reinit, sc);
-				}
-				else {
+				} else {
 #ifdef TROPICDEBUG
 					if (ARB_INW(sc, arb, ARB_RINGSTATUS) &
 					    ~(SOFT_ERR))
 						printf("%s: ARB new ring status"
 						    " = 0x%x\n",
-						    sc->sc_dev.dv_xname,
+						    device_xname(sc->sc_dev),
 						    ARB_INW(sc, arb,
 							ARB_RINGSTATUS));
 #endif /* TROPICDEBUG */
@@ -1079,8 +1048,8 @@ tr_intr(arg)
 				break;
 
 			default:
-				printf("%s: invalid command in ARB = 0x%x\n",
-				    sc->sc_dev.dv_xname, command);
+				aprint_error_dev(sc->sc_dev,
+				    "invalid command in ARB = 0x%x\n",command);
 				break;
 			}
 
@@ -1103,17 +1072,16 @@ tr_intr(arg)
 				/* collect status on last packet */
 				if (retcode != 0) {
 					printf("%s: xmit return code = 0x%x\n",
-					    sc->sc_dev.dv_xname, retcode);
+					    device_xname(sc->sc_dev), retcode);
 					/* XXXchb */
 					if (retcode == 0x22) {
 						printf("%s: FS = 0x%2x\n",
-						    sc->sc_dev.dv_xname,
+						    device_xname(sc->sc_dev),
 						    SSB_INB(sc, ssb,
 							SSB_XMITERR));
 					}
 					ifp->if_oerrors++;
-				}
-				else
+				} else
 					ifp->if_opackets++;
 
 				ifp->if_flags &= ~IFF_OACTIVE;
@@ -1130,8 +1098,9 @@ tr_intr(arg)
 				    retcode);
 				break;
 			default:
-				printf("%s: SSB error, invalid command =%x\n",
-				    sc->sc_dev.dv_xname, command);
+				aprint_error_dev(sc->sc_dev,
+				    "SSB error, invalid command =%x\n",
+				    command);
 			}
 			/* clear this interrupt bit */
 			ACA_RSTB(sc, ACA_ISRP_o, ~(SSB_RESP_INT));
@@ -1145,7 +1114,7 @@ tr_intr(arg)
 	/* Is this interrupt caused by an adapter error or access violation? */
 	if (ACA_RDB(sc, ACA_ISRP_e) & (TCR_INT | ERR_INT | ACCESS_INT)) {
 		printf("%s: adapter error, ISRP_e = 0x%x\n",
-		    sc->sc_dev.dv_xname, ACA_RDB(sc, ACA_ISRP_e));
+		    device_xname(sc->sc_dev), ACA_RDB(sc, ACA_ISRP_e));
 
 		/* Clear these interrupt bits */
 		ACA_RSTB(sc, ACA_ISRP_e, ~(TCR_INT | ERR_INT | ACCESS_INT));
@@ -1159,20 +1128,22 @@ tr_intr(arg)
 }
 
 #ifdef notyet
-int asb_reply_rcv()
+int
+asb_reply_rcv(void)
 {
 }
 
-int asb_reply_xmit()
+int
+asb_reply_xmit(void)
 {
 }
 
-int asb_response(bus_size_t asb, size_t len)
+int
+asb_response(bus_size_t asb, size_t len)
 {
 	if (empty_queue) {
 		answer with RESP_IN_ASB | ASB_FREE
-	}
-	else {
+	} else {
 		put asb in queue
 	}
 }
@@ -1194,8 +1165,7 @@ int asb_response(bus_size_t asb, size_t len)
  *
  */
 void
-tr_rint(sc)
-struct tr_softc *sc;
+tr_rint(struct tr_softc *sc)
 {
 	bus_size_t arb = sc->sc_arb;
 	bus_size_t asb = sc->sc_asb;
@@ -1279,20 +1249,14 @@ struct tr_softc *sc;
 #ifdef TROPICDEBUG
 		printf("tr_rint: packet dropped\n");
 #endif /* TROPICDEBUG */
-	}
-	else {
+	} else {
 		/*
 		 * Indicate successful receive.
 		 */
 		ASB_OUTB(sc, asb, RECV_RETCODE, 0);
 		ACA_SETB(sc, ACA_ISRA_o, RESP_IN_ASB);
-		++ifp->if_ipackets;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 	}
 }
 
@@ -1300,8 +1264,7 @@ struct tr_softc *sc;
  *  Interrupt handler for old style "adapter requires data to transmit".
  */
 void
-tr_oldxint(sc)
-struct tr_softc *sc;
+tr_oldxint(struct tr_softc *sc)
 {
 	bus_size_t arb = sc->sc_arb;	/* pointer to ARB */
 	bus_size_t asb = sc->sc_asb;	/* pointer to ASB */
@@ -1349,18 +1312,14 @@ struct tr_softc *sc;
 			SR_OUTB(sc, (dhb + 2 + i), 0xff);
 			SR_OUTB(sc, (dhb + 8 + i), 0x00);
 		}
-	}
-	else {
+	} else {
 /*
  * XXX what's command here ?  command = 0x0d (always ?)
  */
 		/* if data in queue, copy mbuf chain to DHB */
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		if (m0 != 0) {
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0, BPF_D_OUT);
 			/* Pull packet off interface send queue, fill DHB. */
 			trh = mtod(m0, struct token_header *);
 			hlen = sizeof(struct token_header);
@@ -1381,10 +1340,9 @@ struct tr_softc *sc;
 
 			/* Set size of transmission frame in ASB. */
 			ASB_OUTW(sc, asb, XMIT_FRAMELEN, size);
-		}
-		else {
-			printf("%s: unexpected empty mbuf send queue\n",
-				sc->sc_dev.dv_xname);
+		} else {
+			aprint_error_dev(sc->sc_dev,
+			    "unexpected empty mbuf send queue\n");
 
 			/* Set size of transmission frame in ASB to zero. */
 			ASB_OUTW(sc, asb, XMIT_FRAMELEN, 0);
@@ -1401,8 +1359,7 @@ struct tr_softc *sc;
  *  Interrupt handler for fast path transmit complete
  */
 void
-tr_xint(sc)
-struct tr_softc *sc;
+tr_xint(struct tr_softc *sc)
 {
 	u_short	tail;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -1421,7 +1378,7 @@ struct tr_softc *sc;
 		txbuf = TXB_INW(sc, txbuf, XMIT_NEXTBUF) - XMIT_NEXTBUF;
 		if (TXB_INB(sc, txbuf, XMIT_RETCODE) != 0) {
 			ifp->if_oerrors++;
-			printf("%s: xmit error = 0x%x\n", sc->sc_dev.dv_xname,
+			aprint_error_dev(sc->sc_dev, "xmit error = 0x%x\n",
 			    TXB_INB(sc, txbuf, XMIT_RETCODE));
 		}
 		sc->sc_xmit_buffers +=
@@ -1443,10 +1400,7 @@ struct tr_softc *sc;
  * copy out the packet byte-by-byte in reasonably optimal fashion
  */
 int
-tr_mbcopy(sc, dhb, m0)
-struct tr_softc *sc;
-bus_size_t dhb;
-struct mbuf *m0;
+tr_mbcopy(struct tr_softc *sc, bus_size_t dhb, struct mbuf *m0)
 {
 	bus_size_t addr = dhb;
 	int len, size = 0;
@@ -1477,10 +1431,7 @@ struct mbuf *m0;
  * called from tr_rint - receive interrupt routine
  */
 struct mbuf *
-tr_get(sc, totlen, ifp)
-struct tr_softc *sc;
-int totlen;
-struct ifnet *ifp;
+tr_get(struct tr_softc *sc, int totlen, struct ifnet *ifp)
 {
 	int len;
 	struct mbuf *m, *m0, *newm;
@@ -1489,7 +1440,7 @@ struct ifnet *ifp;
 	if (m0 == 0)
 		return (0);
 
-	m0->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m0, ifp);
 	m0->m_pkthdr.len = totlen;
 	len = MHLEN;
 
@@ -1538,10 +1489,7 @@ struct ifnet *ifp;
  *  tr_ioctl - process an ioctl request
  */
 int
-tr_ioctl(ifp, cmd, data)
-struct ifnet *ifp;
-u_long cmd;
-void *data;
+tr_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct tr_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -1552,68 +1500,65 @@ void *data;
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		if ((error = tr_enable(sc)) != 0)
 			break;
 
+		/* XXX if not running  */
+		if ((ifp->if_flags & IFF_RUNNING) == 0) {
+			tr_init(sc);   /* before arp_ifinit/arpwhohas */
+			tr_sleep(sc);
+		}
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-		/* XXX if not running  */
-			if ((ifp->if_flags & IFF_RUNNING) == 0) {
-				tr_init(sc);   /* before arp_ifinit */
-				tr_sleep(sc);
-			}
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /*INET*/
 		default:
-			/* XXX if not running */
-			if ((ifp->if_flags & IFF_RUNNING) == 0) {
-				tr_init(sc);   /* before arpwhohas */
-				tr_sleep(sc);
-			}
 			break;
 		}
 		break;
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		/*
 		 * 1- If the adapter is DOWN , turn the device off
 		 *       ie. adapter down but still running
 		 * 2- If the adapter is UP, turn the device on
 		 *       ie. adapter up but not running yet
 		 */
-		if ((ifp->if_flags & (IFF_RUNNING | IFF_UP)) == IFF_RUNNING) {
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			tr_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 			tr_disable(sc);
-		}
-		else if ((ifp->if_flags & (IFF_RUNNING | IFF_UP)) == IFF_UP) {
+			break;
+		case IFF_UP:
 			if ((error = tr_enable(sc)) != 0)
 				break;
 			tr_init(sc);
 			tr_sleep(sc);
-		}
-		else {
-/*
- * XXX handle other flag changes
- */
+			break;
+		default:
+			/*
+			 * XXX handle other flag changes
+			 */
+			break;
 		}
 		break;
 	case SIOCGIFMEDIA:
 	case SIOCSIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
 		break;
-#ifdef SIOCSIFMTU
 	case SIOCSIFMTU:
 		if (ifr->ifr_mtu > sc->sc_maxmtu)
 			error = EINVAL;
 		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
 			error = 0;
 		break;
-#endif
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 	splx(s);
 	return (error);
@@ -1625,10 +1570,10 @@ void *data;
  *	      adapter receive buffers.
  */
 void
-tr_bcopy(sc, dest, len)
-struct tr_softc *sc;	/* pointer to softc struct for this adapter */
-u_char *dest;		/* destination address */
-int len;		/* number of bytes to copy */
+tr_bcopy(struct tr_softc *sc, u_char *dest, int len)
+	/* sc:	 pointer to softc struct for this adapter */
+	/* dest:		 destination address */
+	/* len:		 number of bytes to copy */
 {
 	struct rbcb *rbc = &sc->rbc;	/* pointer to rec buf ctl blk */
 
@@ -1655,8 +1600,7 @@ int len;		/* number of bytes to copy */
 
 			/* Get length of data in current receive buffer. */
 			rbc->data_len = RB_INW(sc, rbc->rbufp, RB_BUFLEN);
-		}
-		else {
+		} else {
 			if (len != 0)	/* len should equal zero. */
 				printf("tr_bcopy: residual data not copied\n");
 			return;
@@ -1675,9 +1619,7 @@ int len;		/* number of bytes to copy */
  *  tr_opensap - open the token ring SAP interface
  */
 void
-tr_opensap(sc, type)
-struct tr_softc *sc;
-u_char type;
+tr_opensap(struct tr_softc *sc, u_char type)
 {
 	bus_size_t srb = sc->sc_srb;
 
@@ -1724,36 +1666,32 @@ u_char type;
  *  tr_sleep - sleep to wait for adapter to open
  */
 void
-tr_sleep(sc)
-struct tr_softc *sc;
+tr_sleep(struct tr_softc *sc)
 {
 	int error;
 
 	error = tsleep(&sc->tr_sleepevent, 1, "trsleep", hz * 30);
 	if (error == EWOULDBLOCK)
-		printf("%s: sleep event timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: sleep event timeout\n", device_xname(sc->sc_dev));
 }
 
 void
-tr_watchdog(ifp)
-struct ifnet	*ifp;
+tr_watchdog(struct ifnet *ifp)
 {
 	struct tr_softc	*sc = ifp->if_softc;
 
-	log(LOG_ERR,"%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR,"%s: device timeout\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 
 	tr_reset(sc);
 }
 
 int
-tr_enable(sc)
-	struct tr_softc *sc;
+tr_enable(struct tr_softc *sc)
 {
 	if (sc->sc_enabled == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
 			return (EIO);
 		}
 	}
@@ -1763,8 +1701,7 @@ tr_enable(sc)
 }
 
 void
-tr_disable(sc)
-	struct tr_softc *sc;
+tr_disable(struct tr_softc *sc)
 {
 	if (sc->sc_enabled != 0 && sc->sc_disable != NULL) {
 		(*sc->sc_disable)(sc);
@@ -1773,32 +1710,23 @@ tr_disable(sc)
 }
 
 int
-tr_activate(self, act)
-	struct device *self;
-	enum devact act;
+tr_activate(device_t self, enum devact act)
 {
-	struct tr_softc *sc = (struct tr_softc *)self;
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	int rv = 0, s;
+	struct tr_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		if_deactivate(ifp);
-		break;
+		if_deactivate(&sc->sc_ethercom.ec_if);
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (rv);
 }
 
 int
-tr_detach(struct device *self, int flags)
+tr_detach(device_t self, int flags)
 {
-	struct tr_softc *sc = (struct tr_softc *)self;
+	struct tr_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	tr_disable(sc);

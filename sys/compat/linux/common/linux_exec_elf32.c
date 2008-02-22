@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.94 2017/02/06 23:45:49 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.94 2017/02/06 23:45:49 uwe Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -61,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp
 #include <sys/exec_elf.h>
 #include <sys/stat.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #include <sys/mman.h>
 #include <sys/syscallargs.h>
@@ -73,6 +67,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_exec.h>
 #include <compat/linux/common/linux_machdep.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/linux_syscall.h>
@@ -91,55 +87,48 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp
  * have a Linux binary if we find this section.
  */
 int
-ELFNAME2(linux,atexit_signature)(l, epp, eh)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
+ELFNAME2(linux,atexit_signature)(
+	struct lwp *l,
+	struct exec_package *epp,
+	Elf_Ehdr *eh)
 {
+	Elf_Shdr *sh;
 	size_t shsize;
-	int strndx;
+	u_int shstrndx;
 	size_t i;
 	static const char signature[] = "__libc_atexit";
-	char *strtable = NULL;
-	Elf_Shdr *sh;
-
+	const size_t sigsz = sizeof(signature);
+	char tbuf[sizeof(signature)];
 	int error;
 
-	/*
-	 * load the section header table
-	 */
+	/* Load the section header table. */
 	shsize = eh->e_shnum * sizeof(Elf_Shdr);
 	sh = (Elf_Shdr *) malloc(shsize, M_TEMP, M_WAITOK);
 	error = exec_read_from(l, epp->ep_vp, eh->e_shoff, sh, shsize);
 	if (error)
 		goto out;
 
-	/*
-	 * Now let's find the string table. If it does not exists, give up.
-	 */
-	strndx = (int)(eh->e_shstrndx);
-	if (strndx == SHN_UNDEF) {
+	/* Now let's find the string table. If it does not exist, give up. */
+	shstrndx = eh->e_shstrndx;
+	if (shstrndx == SHN_UNDEF || shstrndx >= eh->e_shnum) {
 		error = ENOEXEC;
 		goto out;
 	}
 
-	/*
-	 * strndx is the index in section header table of the string table
-	 * section get the whole string table in strtable, and then we get access to the names
-	 * s->sh_name is the offset of the section name in strtable.
-	 */
-	strtable = malloc(sh[strndx].sh_size, M_TEMP, M_WAITOK);
-	error = exec_read_from(l, epp->ep_vp, sh[strndx].sh_offset, strtable,
-	    sh[strndx].sh_size);
-	if (error)
-		goto out;
-
+	/* Check if any section has the name we're looking for. */
+	const off_t stroff = sh[shstrndx].sh_offset;
 	for (i = 0; i < eh->e_shnum; i++) {
 		Elf_Shdr *s = &sh[i];
-		if (!memcmp((void*)(&(strtable[s->sh_name])), signature,
-				sizeof(signature))) {
-			DPRINTF(("linux_atexit_sig=%s\n",
-			    &(strtable[s->sh_name])));
+
+		if (s->sh_name + sigsz > sh[shstrndx].sh_size)
+			continue;
+
+		error = exec_read_from(l, epp->ep_vp, stroff + s->sh_name, tbuf,
+		    sigsz);
+		if (error)
+			goto out;
+		if (!memcmp(tbuf, signature, sigsz)) {
+			DPRINTF(("linux_atexit_sig=%s\n", tbuf));
 			error = 0;
 			goto out;
 		}
@@ -148,8 +137,6 @@ ELFNAME2(linux,atexit_signature)(l, epp, eh)
 
 out:
 	free(sh, M_TEMP);
-	if (strtable)
-		free(strtable, M_TEMP);
 	return (error);
 }
 #endif
@@ -167,10 +154,10 @@ out:
  * XXX NetBSD binaries as Linux.
  */
 int
-ELFNAME2(linux,gcc_signature)(l, epp, eh)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
+ELFNAME2(linux,gcc_signature)(
+	struct lwp *l,
+	struct exec_package *epp,
+	Elf_Ehdr *eh)
 {
 	size_t shsize;
 	size_t i;
@@ -223,59 +210,48 @@ out:
 
 #ifdef LINUX_DEBUGLINK_SIGNATURE
 /*
- * Look for a .gnu_debuglink, specific to x86_64 interpeter
+ * Look for a .gnu_debuglink, specific to x86_64 interpreter
  */
 int
-ELFNAME2(linux,debuglink_signature)(l, epp, eh)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
+ELFNAME2(linux,debuglink_signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh)
 {
+	Elf_Shdr *sh;
 	size_t shsize;
-	int strndx;
+	u_int shstrndx;
 	size_t i;
 	static const char signature[] = ".gnu_debuglink";
-	char *strtable = NULL;
-	Elf_Shdr *sh;
-
+	const size_t sigsz = sizeof(signature);
+	char tbuf[sizeof(signature)];
 	int error;
 
-	/*
-	 * load the section header table
-	 */
+	/* Load the section header table. */
 	shsize = eh->e_shnum * sizeof(Elf_Shdr);
 	sh = (Elf_Shdr *) malloc(shsize, M_TEMP, M_WAITOK);
 	error = exec_read_from(l, epp->ep_vp, eh->e_shoff, sh, shsize);
 	if (error)
 		goto out;
 
-	/*
-	 * Now let's find the string table. If it does not exists, give up.
-	 */
-	strndx = (int)(eh->e_shstrndx);
-	if (strndx == SHN_UNDEF) {
+	/* Now let's find the string table. If it does not exist, give up. */
+	shstrndx = eh->e_shstrndx;
+	if (shstrndx == SHN_UNDEF || shstrndx >= eh->e_shnum) {
 		error = ENOEXEC;
 		goto out;
 	}
 
-	/*
-	 * strndx is the index in section header table of the string table
-	 * section get the whole string table in strtable, and then we get access to the names
-	 * s->sh_name is the offset of the section name in strtable.
-	 */
-	strtable = malloc(sh[strndx].sh_size, M_TEMP, M_WAITOK);
-	error = exec_read_from(l, epp->ep_vp, sh[strndx].sh_offset, strtable,
-	    sh[strndx].sh_size);
-	if (error)
-		goto out;
-
+	/* Check if any section has the name we're looking for. */
+	const off_t stroff = sh[shstrndx].sh_offset;
 	for (i = 0; i < eh->e_shnum; i++) {
 		Elf_Shdr *s = &sh[i];
 
-		if (!memcmp((void*)(&(strtable[s->sh_name])), signature,
-				sizeof(signature))) {
-			DPRINTF(("linux_debuglink_sig=%s\n",
-			    &(strtable[s->sh_name])));
+		if (s->sh_name + sigsz > sh[shstrndx].sh_size)
+			continue;
+
+		error = exec_read_from(l, epp->ep_vp, stroff + s->sh_name, tbuf,
+		    sigsz);
+		if (error)
+			goto out;
+		if (!memcmp(tbuf, signature, sigsz)) {
+			DPRINTF(("linux_debuglink_sig=%s\n", tbuf));
 			error = 0;
 			goto out;
 		}
@@ -284,18 +260,12 @@ ELFNAME2(linux,debuglink_signature)(l, epp, eh)
 
 out:
 	free(sh, M_TEMP);
-	if (strtable)
-		free(strtable, M_TEMP);
 	return (error);
 }
 #endif
 
 int
-ELFNAME2(linux,signature)(l, epp, eh, itp)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
-	char *itp;
+ELFNAME2(linux,signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh, char *itp)
 {
 	size_t i;
 	Elf_Phdr *ph;
@@ -303,7 +273,7 @@ ELFNAME2(linux,signature)(l, epp, eh, itp)
 	int error;
 	static const char linux[] = "Linux";
 
-	if (eh->e_ident[EI_OSABI] == 3 ||
+	if (eh->e_ident[EI_OSABI] == ELFOSABI_LINUX ||
 	    memcmp(&eh->e_ident[EI_ABIVERSION], linux, sizeof(linux)) == 0)
 		return 0;
 
@@ -351,7 +321,7 @@ ELFNAME2(linux,signature)(l, epp, eh, itp)
 		continue;
 	}
 
-	/* Check for certain intepreter names. */
+	/* Check for certain interpreter names. */
 	if (itp) {
 		if (!strncmp(itp, "/lib/ld-linux", 13) ||
 #if (ELFSIZE == 64)
@@ -395,6 +365,7 @@ ELFNAME2(linux,probe)(struct lwp *l, struct exec_package *epp, void *eh,
 		if ((error = emul_find_interp(l, epp, itp)))
 			return (error);
 	}
+	epp->ep_flags |= EXEC_FORCEAUX;
 	DPRINTF(("linux_probe: returning 0\n"));
 	return 0;
 }
@@ -413,11 +384,14 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 	struct elf_args *ap;
 	int error;
 	struct vattr *vap;
+	uint32_t randbytes[4];
 
 	if ((error = copyargs(l, pack, arginfo, stackp, argp)) != 0)
 		return error;
 
 	a = ai;
+
+	memset(ai, 0, sizeof(ai));
 
 	/*
 	 * Push extra arguments used by glibc on the stack.
@@ -453,8 +427,7 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 		a->a_v = ap->arg_entry;
 		a++;
 
-		free(pack->ep_emul_arg, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	/* Linux-specific items */
@@ -486,11 +459,26 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 		a->a_v = kauth_cred_getegid(l->l_cred);
 	a++;
 
+	a->a_type = LINUX_AT_RANDOM;
+	a->a_v = (Elf_Addr)(uintptr_t)*stackp;
+	a++;
+
 	a->a_type = AT_NULL;
 	a->a_v = 0;
 	a++;
 
+	randbytes[0] = cprng_strong32();
+	randbytes[1] = cprng_strong32();
+	randbytes[2] = cprng_strong32();
+	randbytes[3] = cprng_strong32();
+
+	len = sizeof(randbytes);
+	if ((error = copyout(randbytes, *stackp, len)) != 0)
+		return error;
+	*stackp += len;
+
 	len = (a - ai) * sizeof(AuxInfo);
+	KASSERT(len <= LINUX_ELF_AUX_ENTRIES * sizeof(AuxInfo));
 	if ((error = copyout(ai, *stackp, len)) != 0)
 		return error;
 	*stackp += len;

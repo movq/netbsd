@@ -1,4 +1,4 @@
-/*	$NetBSD: nonints.h,v 1.48 2008/02/15 21:29:50 christos Exp $	*/
+/*	$NetBSD: nonints.h,v 1.74 2016/09/05 00:40:29 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -72,11 +72,6 @@
  *	from: @(#)nonints.h	8.3 (Berkeley) 3/19/94
  */
 
-#ifndef MAKE_NATIVE
-#undef __attribute__
-#define __attribute__(x)
-#endif
-
 /* arch.c */
 ReturnStatus Arch_ParseArchive(char **, Lst, GNode *);
 void Arch_Touch(GNode *);
@@ -90,48 +85,44 @@ void Arch_End(void);
 int Arch_IsLib(GNode *);
 
 /* compat.c */
-int CompatRunCommand(ClientData, ClientData);
+int CompatRunCommand(void *, void *);
 void Compat_Run(Lst);
-int Compat_Make(ClientData, ClientData);
+int Compat_Make(void *, void *);
 
 /* cond.c */
-int Cond_EvalExpression(int, char *, Boolean *, int);
+struct If;
+int Cond_EvalExpression(const struct If *, char *, Boolean *, int, Boolean);
 int Cond_Eval(char *);
 void Cond_restore_depth(unsigned int);
 unsigned int Cond_save_depth(void);
 
 /* for.c */
 int For_Eval(char *);
+int For_Accum(char *);
 void For_Run(int);
 
+/* job.c */
+void JobReapChild(pid_t, int, Boolean);
+
 /* main.c */
-void Main_ParseArgLine(char *);
-int main(int, char **);
+void Main_ParseArgLine(const char *);
+void MakeMode(const char *);
 char *Cmd_Exec(const char *, const char **);
-void Error(const char *, ...) __attribute__((__format__(__printf__, 1, 2)));
-void Fatal(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2),__noreturn__));
-void Punt(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2),__noreturn__));
-void DieHorribly(void) __attribute__((__noreturn__));
-int PrintAddr(ClientData, ClientData);
-void Finish(int);
-#ifndef HAVE_EMALLOC
-char *estrdup(const char *);
-char *strndup(const char *, size_t);
-char *estrndup(const char *, size_t);
-void *emalloc(size_t);
-void *erealloc(void *, size_t);
-void enomem(void);
-#else
-#include <util.h>
-#endif
+void Error(const char *, ...) MAKE_ATTR_PRINTFLIKE(1, 2);
+void Fatal(const char *, ...) MAKE_ATTR_PRINTFLIKE(1, 2) MAKE_ATTR_DEAD;
+void Punt(const char *, ...) MAKE_ATTR_PRINTFLIKE(1, 2) MAKE_ATTR_DEAD;
+void DieHorribly(void) MAKE_ATTR_DEAD;
+int PrintAddr(void *, void *);
+void Finish(int) MAKE_ATTR_DEAD;
 int eunlink(const char *);
 void execError(const char *, const char *);
+char *getTmpdir(void);
+Boolean s2Boolean(const char *, Boolean);
+Boolean getBoolean(const char *, Boolean);
+char *cached_realpath(const char *, char *);
 
 /* parse.c */
-void Parse_Error(int, const char *, ...)
-     __attribute__((__format__(__printf__, 2, 3)));
+void Parse_Error(int, const char *, ...) MAKE_ATTR_PRINTFLIKE(2, 3);
 Boolean Parse_AnyExport(void);
 Boolean Parse_IsVar(char *);
 void Parse_DoVar(char *, GNode *);
@@ -139,7 +130,7 @@ void Parse_AddIncludeDir(char *);
 void Parse_File(const char *, int);
 void Parse_Init(void);
 void Parse_End(void);
-void Parse_SetInput(const char *, int, int, char *);
+void Parse_SetInput(const char *, int, int, char *(*)(void *, size_t *), void *);
 Lst Parse_MainName(void);
 
 /* str.c */
@@ -148,13 +139,13 @@ char **brk_string(const char *, int *, Boolean, char **);
 char *Str_FindSubstring(const char *, const char *);
 int Str_Match(const char *, const char *);
 char *Str_SYSVMatch(const char *, const char *, int *len);
-void Str_SYSVSubst(Buffer, char *, char *, int);
+void Str_SYSVSubst(Buffer *, char *, char *, int);
 
 /* suff.c */
 void Suff_ClearSuffixes(void);
 Boolean Suff_IsTransform(char *);
 GNode *Suff_AddTransform(char *);
-int Suff_EndTransform(ClientData, ClientData);
+int Suff_EndTransform(void *, void *);
 void Suff_AddSuffix(char *, GNode **);
 Lst Suff_GetPath(char *);
 void Suff_DoPaths(void);
@@ -178,8 +169,8 @@ Boolean Targ_Ignore(GNode *);
 Boolean Targ_Silent(GNode *);
 Boolean Targ_Precious(GNode *);
 void Targ_SetMain(GNode *);
-int Targ_PrintCmd(ClientData, ClientData);
-int Targ_PrintNode(ClientData, ClientData);
+int Targ_PrintCmd(void *, void *);
+int Targ_PrintNode(void *, void *);
 char *Targ_FmtTime(time_t);
 void Targ_PrintType(int);
 void Targ_PrintGraph(int);
@@ -192,8 +183,8 @@ void Var_Set(const char *, const char *, GNode *, int);
 void Var_Append(const char *, const char *, GNode *);
 Boolean Var_Exists(const char *, GNode *);
 char *Var_Value(const char *, GNode *, char **);
-char *Var_Parse(const char *, GNode *, Boolean, int *, void **);
-char *Var_Subst(const char *, const char *, GNode *, Boolean);
+char *Var_Parse(const char *, GNode *, int, int *, void **);
+char *Var_Subst(const char *, const char *, GNode *, int);
 char *Var_GetTail(const char *);
 char *Var_GetHead(const char *);
 void Var_Init(void);
@@ -201,3 +192,7 @@ void Var_End(void);
 void Var_Dump(GNode *);
 void Var_ExportVars(void);
 void Var_Export(char *, int);
+void Var_UnExport(char *);
+
+/* util.c */
+void (*bmake_signal(int, void (*)(int)))(int);

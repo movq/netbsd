@@ -1,4 +1,4 @@
-/*	$NetBSD: eshconfig.c,v 1.6 2003/09/19 06:22:03 itojun Exp $	*/
+/*	$NetBSD: eshconfig.c,v 1.10 2011/08/30 18:28:59 joerg Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: eshconfig.c,v 1.6 2003/09/19 06:22:03 itojun Exp $");
+__RCSID("$NetBSD: eshconfig.c,v 1.10 2011/08/30 18:28:59 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -75,7 +68,7 @@ struct map_dma {
 	u_int32_t rr_value;
 };
 
-struct map_dma read_dma_map[] =  {{0,    RR_PS_READ_DISABLE},
+static struct map_dma read_dma_map[] =  {{0,    RR_PS_READ_DISABLE},
 				  {4,    RR_PS_READ_4},
 				  {16,   RR_PS_READ_16},
 				  {32,   RR_PS_READ_32},
@@ -85,7 +78,7 @@ struct map_dma read_dma_map[] =  {{0,    RR_PS_READ_DISABLE},
 				  {1024, RR_PS_READ_1024},
 				  {-1,    0}};
 
-struct map_dma write_dma_map[] = {{0,    RR_PS_WRITE_DISABLE},
+static struct map_dma write_dma_map[] = {{0,    RR_PS_WRITE_DISABLE},
 				  {4,    RR_PS_WRITE_4},
 				  {16,   RR_PS_WRITE_16},
 				  {32,   RR_PS_WRITE_32},
@@ -108,29 +101,26 @@ struct rr_seg_descr {
 	u_int32_t	ee_addr;
 };
 
-static u_int32_t	do_map __P((int, struct map_dma *));
-static void 		eeprom_upload __P((const char *));
-static void 		eeprom_download __P((const char *));
-static u_int32_t 	rr_checksum __P((const u_int32_t *, int));
-static void 		esh_tune __P((void));
-static void 		esh_tune_eeprom __P((void));
-static void 		esh_tuning_stats __P((void));
-static void 		esh_stats __P((int));
-static void 		esh_reset __P((void));
-static int 		drvspec_ioctl __P((char *, int, int, int, caddr_t));
-static void		usage __P((void));
-int			main __P((int, char *[]));
+static u_int32_t	do_map(int, struct map_dma *);
+static void 		eeprom_upload(const char *);
+static void 		eeprom_download(const char *);
+static u_int32_t 	rr_checksum(const u_int32_t *, int);
+static void 		esh_tune(void);
+static void 		esh_tune_eeprom(void);
+static void 		esh_tuning_stats(void);
+static void 		esh_stats(int);
+static void 		esh_reset(void);
+static int 		drvspec_ioctl(char *, int, int, int, caddr_t);
+__dead static void		usage(void);
 
-
-struct	ifreq ifr;
-char name[30] = "esh0";
-int s;
+static char name[30] = "esh0";
+static int s;
 
 #define RR_EE_SIZE 8192
-u_int32_t eeprom[RR_EE_SIZE];
-u_int32_t runcode[RR_EE_SIZE];
+static u_int32_t eeprom[RR_EE_SIZE];
+static u_int32_t runcode[RR_EE_SIZE];
 
-struct ifdrv ifd;
+static struct ifdrv ifd;
 
 /* drvspec_ioctl
  * 
@@ -141,9 +131,9 @@ struct ifdrv ifd;
  */
 
 static int
-drvspec_ioctl(char *name, int fd, int cmd, int len, caddr_t data)
+drvspec_ioctl(char *lname, int fd, int cmd, int len, caddr_t data)
 {
-	strcpy(ifd.ifd_name, name);
+	strcpy(ifd.ifd_name, lname);
 	ifd.ifd_cmd = cmd;
 	ifd.ifd_len = len;
 	ifd.ifd_data = data;
@@ -152,7 +142,7 @@ drvspec_ioctl(char *name, int fd, int cmd, int len, caddr_t data)
 }
 
 static void
-usage()
+usage(void)
 {
 	fprintf(stderr, "eshconfig -- configure Essential Communications "
 		"HIPPI driver\n");
@@ -196,7 +186,7 @@ do_map(int value, struct map_dma *map)
  */
  
 static int
-do_map_dma(int value, struct map_dma *map)
+do_map_dma(uint32_t value, struct map_dma *map)
 {
 	int i;
 
@@ -208,29 +198,27 @@ do_map_dma(int value, struct map_dma *map)
 }
 
 
-int dma_thresh_read = -1;
-int dma_thresh_write = -1;
-int dma_min_grab = -1;
-int dma_max_read = -1;
-int dma_max_write = -1;
+static int dma_thresh_read = -1;
+static int dma_thresh_write = -1;
+static int dma_min_grab = -1;
+static int dma_max_read = -1;
+static int dma_max_write = -1;
 
-int interrupt_delay = -1;
+static int interrupt_delay = -1;
 
-int get_stats = 0;
-int get_tuning_stats = 0;
-int eeprom_write = 0;
-char *eeprom_download_filename = NULL;
-char *eeprom_upload_filename = NULL;
-int reset = 0;
+static int get_stats = 0;
+static int get_tuning_stats = 0;
+static int eeprom_write = 0;
+static char *eeprom_download_filename = NULL;
+static char *eeprom_upload_filename = NULL;
+static int reset = 0;
 
-struct rr_tuning rr_tune;
+static struct rr_tuning rr_tune;
 struct rr_eeprom rr_eeprom;
 struct rr_stats rr_stats;
 
 int
-main(argc, argv)
-     int argc;
-     char *argv[];
+main(int argc, char *argv[])
 {
 	int ch;
 
@@ -333,7 +321,7 @@ main(argc, argv)
 }
 
 static void
-esh_tune()
+esh_tune(void)
 {
 	dma_max_read = do_map(dma_max_read, read_dma_map);
 	if (dma_max_read != -1) {
@@ -388,7 +376,7 @@ esh_tune()
  */
 
 static void
-esh_tune_eeprom()
+esh_tune_eeprom(void)
 {
 #define LAST (RR_EE_HEADER_CHECKSUM / RR_EE_WORD_LEN)
 #define FIRST (RR_EE_HEADER_CHECKSUM / RR_EE_WORD_LEN)
@@ -639,12 +627,10 @@ rr_checksum(const u_int32_t *data, int length)
 	return checksum;
 }
 
-struct stats_values {
+static struct stats_values {
 	int	 offset;
-	char *name;
-};
-
-struct stats_values stats_values[] = {
+	const char *name;
+} stats_values[] = {
 	{0x04, "receive rings created"},
 	{0x08, "receive rings deleted"},
 	{0x0c, "interrupts"},
@@ -700,14 +686,14 @@ struct stats_values stats_values[] = {
 };
 
 static void
-esh_reset()
+esh_reset(void)
 {
 	if (drvspec_ioctl(name, s, EIOCRESET, 0, 0) < 0)
 		err(1, "ioctl(EIOCRESET)");
 }
 
 static void
-esh_stats(int get_stats)
+esh_stats(int lget_stats)
 {
 	u_int32_t	*stats;
 	long long value;
@@ -720,14 +706,14 @@ esh_stats(int get_stats)
 	stats = rr_stats.rs_stats;
 
 	value = (((long long) stats[0x78 / 4]) << 32) | stats[0x7c / 4];
-	if (get_stats == 1 || value > 0)
+	if (lget_stats == 1 || value > 0)
 		printf("%12lld bytes sent\n", value);
 	value = ((long long) stats[0xb8 / 4] << 32) | stats[0xbc / 4];
-	if (get_stats == 1 || value > 0)
+	if (lget_stats == 1 || value > 0)
 		printf("%12lld bytes received\n", value);
 
 	for (offset = 0; stats_values[offset].offset != 0; offset++) {
-		if (get_stats == 1 || stats[stats_values[offset].offset / 4] > 0)
+		if (lget_stats == 1 || stats[stats_values[offset].offset / 4] > 0)
 			printf("%12d %s\n", stats[stats_values[offset].offset / 4],
 			       stats_values[offset].name);
 	}
@@ -735,7 +721,7 @@ esh_stats(int get_stats)
 
 
 static void
-esh_tuning_stats()
+esh_tuning_stats(void)
 {
 	printf("rt_mode_and_status = %x\n", 
 	       rr_tune.rt_mode_and_status);

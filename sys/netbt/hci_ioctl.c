@@ -1,4 +1,4 @@
-/*	$NetBSD: hci_ioctl.c,v 1.7 2007/11/28 20:16:12 plunky Exp $	*/
+/*	$NetBSD: hci_ioctl.c,v 1.13 2015/11/28 09:04:34 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hci_ioctl.c,v 1.7 2007/11/28 20:16:12 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hci_ioctl.c,v 1.13 2015/11/28 09:04:34 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -132,7 +132,7 @@ hci_dump(void)
 #endif
 
 int
-hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
+hci_ioctl_pcb(unsigned long cmd, void *data)
 {
 	struct btreq *btr = data;
 	struct hci_unit *unit;
@@ -175,6 +175,7 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 	case SIOCGBTSTATS:
 	case SIOCZBTSTATS:
 	case SIOCSBTSCOMTU:
+	case SIOCGBTFEAT:
 		SIMPLEQ_FOREACH(unit, &hci_unit_list, hci_next) {
 			if (strncmp(device_xname(unit->hci_dev),
 			    btr->btr_name, HCI_DEVNAME_SIZE) == 0)
@@ -216,14 +217,17 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 		btr->btr_num_sco = unit->hci_num_sco_pkts;
 		btr->btr_acl_mtu = unit->hci_max_acl_size;
 		btr->btr_sco_mtu = unit->hci_max_sco_size;
+		btr->btr_max_acl = unit->hci_max_acl_pkts;
+		btr->btr_max_sco = unit->hci_max_sco_pkts;
 
 		btr->btr_packet_type = unit->hci_packet_type;
 		btr->btr_link_policy = unit->hci_link_policy;
 		break;
 
 	case SIOCSBTFLAGS:	/* set unit flags (privileged) */
-		err = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		err = kauth_authorize_device(curlwp->l_cred,
+		    KAUTH_DEVICE_BLUETOOTH_SETPRIV, unit, KAUTH_ARG(cmd),
+		    btr, NULL);
 		if (err)
 			break;
 
@@ -233,7 +237,8 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 			unit->hci_flags &= ~BTF_UP;
 		}
 
-		unit->hci_flags |= (btr->btr_flags & BTF_INIT);
+		unit->hci_flags &= ~BTF_MASTER;
+		unit->hci_flags |= (btr->btr_flags & (BTF_INIT | BTF_MASTER));
 
 		if ((unit->hci_flags & BTF_UP) == 0
 		    && (btr->btr_flags & BTF_UP)) {
@@ -248,8 +253,9 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 		break;
 
 	case SIOCSBTPOLICY:	/* set unit link policy (privileged) */
-		err = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		err = kauth_authorize_device(curlwp->l_cred,
+		    KAUTH_DEVICE_BLUETOOTH_SETPRIV, unit, KAUTH_ARG(cmd),
+		    btr, NULL);
 		if (err)
 			break;
 
@@ -259,8 +265,9 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 		break;
 
 	case SIOCSBTPTYPE:	/* set unit packet types (privileged) */
-		err = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		err = kauth_authorize_device(curlwp->l_cred,
+		    KAUTH_DEVICE_BLUETOOTH_SETPRIV, unit, KAUTH_ARG(cmd),
+		    btr, NULL);
 		if (err)
 			break;
 
@@ -274,8 +281,9 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 		break;
 
 	case SIOCZBTSTATS:	/* get & reset unit statistics */
-		err = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		err = kauth_authorize_device(curlwp->l_cred,
+		    KAUTH_DEVICE_BLUETOOTH_SETPRIV, unit, KAUTH_ARG(cmd),
+		    btr, NULL);
 		if (err)
 			break;
 
@@ -289,12 +297,21 @@ hci_ioctl(unsigned long cmd, void *data, struct lwp *l)
 		 * sent to USB bluetooth controllers that are not an
 		 * integer number of frame sizes, the USB bus locks up.
 		 */
-		err = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		err = kauth_authorize_device(curlwp->l_cred,
+		    KAUTH_DEVICE_BLUETOOTH_SETPRIV, unit, KAUTH_ARG(cmd),
+		    btr, NULL);
 		if (err)
 			break;
 
 		unit->hci_max_sco_size = btr->btr_sco_mtu;
+		break;
+
+	case SIOCGBTFEAT:	/* get unit features */
+		memset(btr, 0, sizeof(struct btreq));
+		strlcpy(btr->btr_name, device_xname(unit->hci_dev), HCI_DEVNAME_SIZE);
+		memcpy(btr->btr_features0, unit->hci_feat0, HCI_FEATURES_SIZE);
+		memcpy(btr->btr_features1, unit->hci_feat1, HCI_FEATURES_SIZE);
+		memcpy(btr->btr_features2, unit->hci_feat2, HCI_FEATURES_SIZE);
 		break;
 
 	default:

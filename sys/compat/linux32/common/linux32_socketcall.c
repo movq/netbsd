@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl Exp $ */
+/*	$NetBSD: linux32_socketcall.c,v 1.9 2014/06/21 10:23:07 maxv Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,9 +31,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.9 2014/06/21 10:23:07 maxv Exp $");
 
-#include "opt_ktrace.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
@@ -46,6 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl E
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -55,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socketcall.c,v 1.6 2007/12/20 23:02:58 dsl E
 #include <compat/linux32/common/linux32_socketcall.h>
 #include <compat/linux32/linux32_syscallargs.h>
 
-#define sc(emul, fn) { #fn, sizeof (struct emul##_##fn##_args), \
+#define sc(emul, fn) { "linux32/" #fn, sizeof (struct emul##_##fn##_args), \
 	(int (*)(struct lwp *, const void *, register_t *))emul##_##fn }
 
 static const struct {
@@ -95,7 +96,7 @@ linux32_sys_socketcall(struct lwp *l, const struct linux32_sys_socketcall_args *
 	union linux32_socketcall_args ua;
 	int error;
 
-	if (SCARG(uap, what) < 0 || SCARG(uap, what) > LINUX32_MAX_SOCKETCALL)
+	if (SCARG(uap, what) <= 0 || SCARG(uap, what) > LINUX32_MAX_SOCKETCALL)
 		return ENOSYS;
 
 	if ((error = copyin(SCARG_P32(uap, args), &ua,

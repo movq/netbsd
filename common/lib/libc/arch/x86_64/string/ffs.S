@@ -7,15 +7,15 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: ffs.S,v 1.1 2005/12/20 19:28:51 christos Exp $")
+	RCSID("$NetBSD: ffs.S,v 1.5 2014/03/22 19:16:34 jakllsch Exp $")
 #endif
 
 ENTRY(ffs)
 	bsfl	%edi,%eax
-	jz	L1	 		/* ZF is set if all bits are 0 */
+	jz	1f	 		/* ZF is set if all bits are 0 */
 	incl	%eax			/* bits numbered from 1, not 0 */
 	ret
 
-	_ALIGN_TEXT
-L1:	xorl	%eax,%eax		/* clear result */
+1:	xorl	%eax,%eax		/* clear result */
 	ret
+END(ffs)

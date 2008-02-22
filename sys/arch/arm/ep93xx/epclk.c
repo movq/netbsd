@@ -1,4 +1,4 @@
-/*	$NetBSD: epclk.c,v 1.11 2008/01/20 16:28:22 joerg Exp $	*/
+/*	$NetBSD: epclk.c,v 1.21 2014/03/06 19:46:27 maxv Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.11 2008/01/20 16:28:22 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.21 2014/03/06 19:46:27 maxv Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -57,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.11 2008/01/20 16:28:22 joerg Exp $");
 #include <sys/timetc.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -72,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.11 2008/01/20 16:28:22 joerg Exp $");
 
 #define	TIMER_FREQ	983040
 
-static int	epclk_match(struct device *, struct cfdata *, void *);
-static void	epclk_attach(struct device *, struct device *, void *);
+static int	epclk_match(device_t, cfdata_t, void *);
+static void	epclk_attach(device_t, device_t, void *);
 static u_int	epclk_get_timecount(struct timecounter *);
 
 void		rtcinit(void);
@@ -82,7 +75,6 @@ void		rtcinit(void);
 static int      epclk_intr(void* arg);
 
 struct epclk_softc {
-	struct device		sc_dev;
 	bus_addr_t		sc_baseaddr;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -105,21 +97,32 @@ static struct timecounter epclk_timecounter = {
 
 static struct epclk_softc *epclk_sc = NULL;
 
-CFATTACH_DECL(epclk, sizeof(struct epclk_softc),
+CFATTACH_DECL_NEW(epclk, sizeof(struct epclk_softc),
     epclk_match, epclk_attach, NULL, NULL);
 
-#define TIMER4VAL()	(*(volatile u_int32_t *)(EP93XX_APB_VBASE + \
+/* This is a quick ARM way to multiply by 983040/1000000 (w/o overflow) */
+#define US_TO_TIMER4VAL(x, y) { \
+	uint32_t hi, lo, scalar = 4222124650UL; \
+	__asm volatile ( \
+		"umull %0, %1, %2, %3;" \
+		: "=&r"(lo), "=&r"(hi) \
+		: "r"((x)), "r"(scalar) \
+	); \
+	(y) = hi; \
+}
+
+#define TIMER4VAL()	(*(volatile uint32_t *)(EP93XX_APB_VBASE + \
 	EP93XX_APB_TIMERS + EP93XX_TIMERS_Timer4ValueLow))
 
 static int
-epclk_match(struct device *parent, struct cfdata *match, void *aux)
+epclk_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 2;
 }
 
 static void
-epclk_attach(struct device *parent, struct device *self, void *aux)
+epclk_attach(device_t parent, device_t self, void *aux)
 {
 	struct epclk_softc		*sc;
 	struct epsoc_attach_args	*sa;
@@ -127,7 +130,7 @@ epclk_attach(struct device *parent, struct device *self, void *aux)
 
 	printf("\n");
 
-	sc = (struct epclk_softc*) self;
+	sc = device_private(self);
 	sa = aux;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_baseaddr = sa->sa_addr;
@@ -136,15 +139,16 @@ epclk_attach(struct device *parent, struct device *self, void *aux)
 	if (epclk_sc == NULL) {
 		first_run = true;
 		epclk_sc = sc;
-	}
+	} else
+		first_run = false;
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 
 		0, &sc->sc_ioh))
-		panic("%s: Cannot map registers", self->dv_xname);
+		panic("%s: Cannot map registers", device_xname(self));
 #if defined(HZ) && (HZ == 64)
 	if (bus_space_map(sa->sa_iot, EP93XX_APB_HWBASE + EP93XX_APB_SYSCON + 
 		EP93XX_SYSCON_TEOI, 4, 0, &sc->sc_teoi_ioh))
-		panic("%s: Cannot map registers", self->dv_xname);
+		panic("%s: Cannot map registers", device_xname(self));
 #endif
 
 	/* clear and start the debug timer (Timer4) */
@@ -254,25 +258,14 @@ delay(unsigned int n)
 	 */
 	initial_tick = TIMER4VAL();
 
-	if (n <= UINT_MAX / TIMER_FREQ) {
-		/*
-		 * For unsigned arithmetic, division can be replaced with
-		 * multiplication with the inverse and a shift.
-		 */
-		remaining = n * TIMER_FREQ / 1000000;
-	} else {
-		/* This is a very long delay.
-		 * Being slow here doesn't matter.
-		 */
-		remaining = (unsigned long long) n * TIMER_FREQ / 1000000;
-	}
+	US_TO_TIMER4VAL(n, remaining);
 
 	while (remaining > 0) {
 		cur_tick = TIMER4VAL();
-		if (cur_tick > initial_tick)
-			remaining -= UINT_MAX - (cur_tick - initial_tick);
+		if (cur_tick >= initial_tick)
+			remaining -= cur_tick - initial_tick;
 		else
-			remaining -= initial_tick - cur_tick;
+			remaining -= UINT_MAX - initial_tick + cur_tick + 1;
 		initial_tick = cur_tick;
 	}
 }

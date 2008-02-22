@@ -1,4 +1,4 @@
-/*	$NetBSD: restore.h,v 1.18 2005/06/27 01:55:52 christos Exp $	*/
+/*	$NetBSD: restore.h,v 1.20 2011/08/06 20:46:42 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -69,11 +69,13 @@ extern int	oldinofmt;	/* reading tape with old format inodes */
 extern int	Bcvt;		/* need byte swapping on inodes and dirs */
 extern FILE	*Mtreefile;	/* file descriptor for the mtree file */
 
+union digest_context;
+
 struct digest_desc {
 	const char *dd_name;
 	void (*dd_init)(void *);
-	void (*dd_update)(void *, const u_char *, u_int);
-	char *(*dd_end)(void *, void *);
+	void (*dd_update)(union digest_context *, const void *, u_int);
+	char *(*dd_end)(void *, char *);
 };
 extern const struct digest_desc *ddesc;
 extern const struct digest_desc md5_desc;

@@ -1,4 +1,4 @@
-/* $NetBSD: sfasvar.h,v 1.5 2005/12/11 12:16:05 christos Exp $ */
+/* $NetBSD: sfasvar.h,v 1.7 2012/10/27 17:17:24 chs Exp $ */
 
 /*
  * Copyright (c) 1995 Daniel Widenfalk
@@ -150,7 +150,7 @@ struct nexus {
 #define SFAS_NF_DEBUG		0x8000	/* As it says: DEBUG */
 
 struct	sfas_softc {
-	struct	device		 sc_dev;	/* System required struct */
+	device_t		 sc_dev;	/* System required struct */
 	struct	scsipi_channel	 sc_channel;
 	struct	scsipi_adapter	 sc_adapter;
 	void		 	 *sc_ih;
@@ -259,10 +259,10 @@ struct	sfas_softc {
 #define SFAS_SLOW_CABLE	 0x08	/* Cable is "unsafe" for fast scsi-2 */
 #define SFAS_SLOW_START	 0x10	/* There are slow starters on the bus */
 
-void	sfasinitialize __P((struct sfas_softc *sc));
-void	sfas_minphys   __P((struct buf *bp));
-void	sfas_scsi_request __P((struct scsipi_channel *,
-				scsipi_adapter_req_t, void *));
-void	sfasintr       __P((struct sfas_softc *dev));
+void	sfasinitialize(struct sfas_softc *sc);
+void	sfas_minphys(struct buf *bp);
+void	sfas_scsi_request(struct scsipi_channel *,
+				scsipi_adapter_req_t, void *);
+void	sfasintr(struct sfas_softc *dev);
 
 #endif /* _SFASVAR_H_ */

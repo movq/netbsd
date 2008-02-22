@@ -1,4 +1,4 @@
-.\"	$NetBSD: cgsix.4,v 1.13 2007/01/23 20:33:38 wiz Exp $
+.\"	$NetBSD: cgsix.4,v 1.15 2017/02/17 22:24:47 christos Exp $
 .\"
 .\" Copyright 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"	from: @(#)cgsix.4	8.1 (Berkeley) 2/16/94
 .\"
-.Dd January 17, 2007
+.Dd February 17, 2017
 .Dt CGSIX 4 sparc
 .Os
 .Sh NAME
@@ -158,13 +158,13 @@ field to the desired resolution.
 .Cd "cgsix0 at sbus0 slot 0 offset 0x0 level 9: SUNW,501-2325, 1152 x 900, rev 11"
 .Cd "cgsix0 at sbus0 slot 0 offset 0x0 level 9: SUNW,501-2253, 1280 x 1024, rev 11"
 .Sh SEE ALSO
-.Xr bwtwo 4 ,
-.Xr cgeight 4 ,
-.Xr cgfour 4 ,
-.Xr cgfourteen 4 ,
-.Xr cgthree 4 ,
-.Xr cgtwo 4 ,
-.Xr tcx 4 ,
+.Xr sparc/bwtwo 4 ,
+.Xr sparc/cgeight 4 ,
+.Xr sparc/cgfour 4 ,
+.Xr sparc/cgfourteen 4 ,
+.Xr sparc/cgthree 4 ,
+.Xr sparc/cgtwo 4 ,
+.Xr sparc/tcx 4 ,
 .Xr eeprom 8
 .Sh BUGS
 The double-width
@@ -184,10 +184,10 @@ Several firmware revisions on
 boards have a terminal emulation bug that shows up when using the
 screen control sequences for inserting blank lines
 near the bottom end of the screen
-(i.e., the control sequences produced by the
+(i.e., the control sequences produced by the termcap
 .So al Sc and So AL Sc
 capabilities found in the
-.Xr termcap 5
+.Xr terminfo 5
 database).
 The most likely occasion for triggering
 this bug is to use a full-screen editor such as

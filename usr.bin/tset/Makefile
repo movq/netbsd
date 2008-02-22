@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.5 1997/10/20 01:07:48 lukem Exp $
+#	$NetBSD: Makefile,v 1.7 2012/04/21 12:27:30 roy Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/9/93
 
 PROG=	tset
-SRCS=	map.c misc.c set.c term.c tset.c wrterm.c
+SRCS=	map.c misc.c set.c term.c tset.c
 
-DPADD=	${LIBTERMCAP}
-LDADD=	-ltermcap
+DPADD=	${LIBTERMINFO}
+LDADD=	-lterminfo
 LINKS=	${BINDIR}/tset ${BINDIR}/reset
 MLINKS=	tset.1 reset.1
 

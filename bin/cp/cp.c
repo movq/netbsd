@@ -1,4 +1,4 @@
-/* $NetBSD: cp.c,v 1.48 2006/12/26 00:13:24 alc Exp $ */
+/* $NetBSD: cp.c,v 1.59 2016/03/05 19:48:55 uwe Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -35,15 +35,15 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+"@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cp.c	8.5 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: cp.c,v 1.48 2006/12/26 00:13:24 alc Exp $");
+__RCSID("$NetBSD: cp.c,v 1.59 2016/03/05 19:48:55 uwe Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,10 +65,12 @@ __RCSID("$NetBSD: cp.c,v 1.48 2006/12/26 00:13:24 alc Exp $");
 #include <sys/param.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
 #include <locale.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -85,14 +87,20 @@ static char empty[] = "";
 PATH_T to = { .p_end = to.p_path, .target_end = empty  };
 
 uid_t myuid;
-int Hflag, Lflag, Rflag, Pflag, fflag, iflag, pflag, rflag, vflag, Nflag;
+int Hflag, Lflag, Rflag, Pflag, fflag, iflag, lflag, pflag, rflag, vflag, Nflag;
 mode_t myumask;
+sig_atomic_t pinfo;
 
 enum op { FILE_TO_FILE, FILE_TO_DIR, DIR_TO_DNE };
 
-int 	main(int, char *[]);
-int 	copy(char *[], enum op, int);
-int 	mastercmp(const FTSENT **, const FTSENT **);
+static int copy(char *[], enum op, int);
+
+static void
+progress(int sig __unused)
+{
+
+	pinfo++;
+}
 
 int
 main(int argc, char *argv[])
@@ -102,10 +110,11 @@ main(int argc, char *argv[])
 	int ch, fts_options, r, have_trailing_slash;
 	char *target, **src;
 
+	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
 	Hflag = Lflag = Pflag = Rflag = 0;
-	while ((ch = getopt(argc, argv, "HLNPRfiprv")) != -1) 
+	while ((ch = getopt(argc, argv, "HLNPRfailprv")) != -1) 
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -125,13 +134,22 @@ main(int argc, char *argv[])
 		case 'R':
 			Rflag = 1;
 			break;
+		case 'a':
+			Pflag = 1;
+			pflag = 1;
+			Rflag = 1;
+			Hflag = Lflag = 0;
+			break;
 		case 'f':
 			fflag = 1;
 			iflag = 0;
 			break;
 		case 'i':
-			iflag = isatty(fileno(stdin));
+			iflag = 1;
 			fflag = 0;
+			break;
+		case 'l':
+			lflag = 1;
 			break;
 		case 'p':
 			pflag = 1;
@@ -199,6 +217,8 @@ main(int argc, char *argv[])
 
 	/* Set end of argument list for fts(3). */
 	argv[argc] = NULL;     
+	
+	(void)signal(SIGINFO, progress);
 	
 	/*
 	 * Cp has two distinct cases:
@@ -280,34 +300,55 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-int
+static int dnestack[MAXPATHLEN]; /* unlikely we'll have more nested dirs */
+static ssize_t dnesp;
+static void
+pushdne(int dne)
+{
+
+	dnestack[dnesp++] = dne;
+	assert(dnesp < MAXPATHLEN);
+}
+
+static int
+popdne(void)
+{
+	int rv;
+
+	rv = dnestack[--dnesp];
+	assert(dnesp >= 0);
+	return rv;
+}
+
+static int
 copy(char *argv[], enum op type, int fts_options)
 {
 	struct stat to_stat;
 	FTS *ftsp;
 	FTSENT *curr;
-	int base, dne, rval, sval;
+	int base, dne, sval;
+	int this_failed, any_failed;
 	size_t nlen;
 	char *p, *target_mid;
 
-	dne = 0;
 	base = 0;	/* XXX gcc -Wuninitialized (see comment below) */
 
-	if ((ftsp = fts_open(argv, fts_options, mastercmp)) == NULL)
+	if ((ftsp = fts_open(argv, fts_options, NULL)) == NULL)
 		err(EXIT_FAILURE, "%s", argv[0]);
 		/* NOTREACHED */
-	for (rval = 0; (curr = fts_read(ftsp)) != NULL;) {
+	for (any_failed = 0; (curr = fts_read(ftsp)) != NULL;) {
+		this_failed = 0;
 		switch (curr->fts_info) {
 		case FTS_NS:
 		case FTS_DNR:
 		case FTS_ERR:
 			warnx("%s: %s", curr->fts_path,
 					strerror(curr->fts_errno));
-			rval = 1;
+			this_failed = any_failed = 1;
 			continue;
 		case FTS_DC:			/* Warn, continue. */
 			warnx("%s: directory causes a cycle", curr->fts_path);
-			rval = 1;
+			this_failed = any_failed = 1;
 			continue;
 		}
 
@@ -320,7 +361,7 @@ copy(char *argv[], enum op type, int fts_options)
 			    to.target_end - to.p_path + 1) > MAXPATHLEN) {
 				warnx("%s/%s: name too long (not copied)",
 						to.p_path, curr->fts_name);
-				rval = 1;
+				this_failed = any_failed = 1;
 				continue;
 			}
 
@@ -366,7 +407,7 @@ copy(char *argv[], enum op type, int fts_options)
 			if (target_mid - to.p_path + nlen >= PATH_MAX) {
 				warnx("%s%s: name too long (not copied)",
 				    to.p_path, p);
-				rval = 1;
+				this_failed = any_failed = 1;
 				continue;
 			}
 			(void)strncat(target_mid, p, nlen);
@@ -384,7 +425,7 @@ copy(char *argv[], enum op type, int fts_options)
 			    to_stat.st_ino == curr->fts_statp->st_ino) {
 				warnx("%s and %s are identical (not copied).",
 				    to.p_path, curr->fts_path);
-				rval = 1;
+				this_failed = any_failed = 1;
 				if (S_ISDIR(curr->fts_statp->st_mode))
 					(void)fts_set(ftsp, curr, FTS_SKIP);
 				continue;
@@ -393,11 +434,10 @@ copy(char *argv[], enum op type, int fts_options)
 			    S_ISDIR(to_stat.st_mode)) {
 		warnx("cannot overwrite directory %s with non-directory %s",
 				    to.p_path, curr->fts_path);
-				rval = 1;
+				this_failed = any_failed = 1;
 				continue;
 			}
-			if (!S_ISDIR(curr->fts_statp->st_mode))
-				dne = 0;
+			dne = 0;
 		}
 
 		switch (curr->fts_statp->st_mode & S_IFMT) {
@@ -406,10 +446,10 @@ copy(char *argv[], enum op type, int fts_options)
 			if((fts_options & FTS_LOGICAL) ||
 			   ((fts_options & FTS_COMFOLLOW) && curr->fts_level == 0)) {
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else {	
 				if (copy_link(curr, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			}
 			break;
 		case S_IFDIR:
@@ -418,7 +458,7 @@ copy(char *argv[], enum op type, int fts_options)
 					warnx("%s is a directory (not copied).",
 					    curr->fts_path);
 				(void)fts_set(ftsp, curr, FTS_SKIP);
-				rval = 1;
+				this_failed = any_failed = 1;
 				break;
 			}
 
@@ -437,6 +477,7 @@ copy(char *argv[], enum op type, int fts_options)
 				 * 555) and not causing a permissions race.  If the
 				 * umask blocks owner writes, we fail..
 				 */
+				pushdne(dne);
 				if (dne) {
 					if (mkdir(to.p_path, 
 					    curr->fts_statp->st_mode | S_IRWXU) < 0)
@@ -459,23 +500,16 @@ copy(char *argv[], enum op type, int fts_options)
                         	 * forever.
 				 */
 				if (pflag && setfile(curr->fts_statp, 0))
-					rval = 1;
-				else if (dne)
+					this_failed = any_failed = 1;
+				else if ((dne = popdne()))
 					(void)chmod(to.p_path, 
 					    curr->fts_statp->st_mode);
-
-				/*
-				 * Since this is the second pass, we already
-				 * noted (and acted on) the existence of the
-				 * directory.
-				 */
-				dne = 0;
 			}
 			else
 			{
 				warnx("directory %s encountered when not expected.",
 				    curr->fts_path);
-				rval = 1;
+				this_failed = any_failed = 1;
 				break;
 			}
 
@@ -484,25 +518,25 @@ copy(char *argv[], enum op type, int fts_options)
 		case S_IFCHR:
 			if (Rflag) {
 				if (copy_special(curr->fts_statp, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			break;
 		case S_IFIFO:
 			if (Rflag) {
 				if (copy_fifo(curr->fts_statp, !dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			} else 
 				if (copy_file(curr, dne))
-					rval = 1;
+					this_failed = any_failed = 1;
 			break;
 		default:
 			if (copy_file(curr, dne))
-				rval = 1;
+				this_failed = any_failed = 1;
 			break;
 		}
-		if (vflag && !rval)
+		if (vflag && !this_failed)
 			(void)printf("%s -> %s\n", curr->fts_path, to.p_path);
 	}
 	if (errno) {
@@ -510,31 +544,5 @@ copy(char *argv[], enum op type, int fts_options)
 		/* NOTREACHED */
 	}
 	(void)fts_close(ftsp);
-	return (rval);
-}
-
-/*
- * mastercmp --
- *	The comparison function for the copy order.  The order is to copy
- *	non-directory files before directory files.  The reason for this
- *	is because files tend to be in the same cylinder group as their
- *	parent directory, whereas directories tend not to be.  Copying the
- *	files first reduces seeking.
- */
-int
-mastercmp(const FTSENT **a, const FTSENT **b)
-{
-	int a_info, b_info;
-
-	a_info = (*a)->fts_info;
-	if (a_info == FTS_ERR || a_info == FTS_NS || a_info == FTS_DNR)
-		return (0);
-	b_info = (*b)->fts_info;
-	if (b_info == FTS_ERR || b_info == FTS_NS || b_info == FTS_DNR)
-		return (0);
-	if (a_info == FTS_D)
-		return (-1);
-	if (b_info == FTS_D)
-		return (1);
-	return (0);
+	return (any_failed);
 }

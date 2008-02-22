@@ -1,37 +1,23 @@
-# $NetBSD: Makefile,v 1.24 2006/08/27 06:40:43 sekiya Exp $
+# $NetBSD: Makefile,v 1.39 2017/05/02 20:12:10 christos Exp $
 # Build a smaller ifconfig (i.e. for boot media)
 
-SRCDIR=		${.CURDIR}/../../../sbin/ifconfig
-
-PROG=		ifconfig
 NOMAN=		# defined
+SMALLPROG=1
 
 .include <bsd.own.mk>
 
-CPPFLAGS+=	-I${NETBSDSRCDIR}/sys/
+PROG=		ifconfig
+SRCDIR=		${.CURDIR}/../../../sbin/ifconfig
 
-CPPFLAGS+=	-DINET_ONLY -I${SRCDIR}
+CPPFLAGS+=	-DCRUNCHOPS
+
 .if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
 CPPFLAGS+=	-DINET6
+SRCS+=		af_inet6.c
 .endif
-
-DPADD+=${LIBUTIL}
-LDADD+=-lutil
-
-SRCS= ifconfig.c 
-
-SRCS+= af_atalk.c
-SRCS+= af_inet.c
-.if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
-SRCS+= af_inet6.c
-.endif
-SRCS+= af_iso.c
-
-SRCS+= agr.c
-SRCS+= ieee80211.c
-SRCS+= tunnel.c
-SRCS+= vlan.c
-
-.include <bsd.prog.mk>
 
 .PATH:		${SRCDIR}
+
+.include "${SRCDIR}/Makefile.common"
+
+.include <bsd.prog.mk>

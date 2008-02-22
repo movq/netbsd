@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.2 2007/10/30 15:07:08 tsutsui Exp $	*/
+/*	$NetBSD: clock.c,v 1.5 2014/11/21 00:51:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,6 +38,7 @@
 #include <netinet/in_systm.h>
 #include <lib/libsa/net.h>
 
+#include <dev/clock_subr.h>
 #include <dev/ic/mc146818reg.h>
 
 #include <mips/cpuregs.h>
@@ -68,7 +62,7 @@ delay(int ms)
 		__insn_barrier();
 }
 
-time_t
+satime_t
 getsecs(void)
 {
 	volatile uint8_t *mcclock_reg, *mcclock_data;
@@ -84,5 +78,5 @@ getsecs(void)
 	*mcclock_reg = MC_HOUR;
 	sec += bcdtobin(*mcclock_data) * 60 * 60;
 
-	return (time_t)sec;
+	return (satime_t)sec;
 }

@@ -1,4 +1,4 @@
-# $NetBSD: std.landisk,v 1.3 2008/02/02 05:53:40 uwe Exp $
+# $NetBSD: std.landisk,v 1.5 2011/07/26 16:24:43 dyoung Exp $
 #
 # standard, required NetBSD/landisk 'options'
 

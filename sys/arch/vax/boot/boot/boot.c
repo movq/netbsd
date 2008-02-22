@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.26 2005/12/24 22:45:40 perry Exp $ */
+/*	$NetBSD: boot.c,v 1.34 2016/06/11 06:42:27 dholland Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -35,6 +35,7 @@
 #include <sys/boot_flag.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/net.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
@@ -57,7 +58,6 @@ extern	unsigned opendev;
 void	usage(char *), boot(char *), halt(char *);
 void	Xmain(void);
 void	autoconf(void);
-int	getsecs(void);
 int	setjmp(int *);
 int	testkey(void);
 void	loadpcs(void);
@@ -93,18 +93,15 @@ struct rpb bootrpb;
 void
 Xmain(void)
 {
-	int io;
-	int j, nu;
+	int j, nu, fd;
 	u_long marks[MARK_MAX];
-	extern const char bootprog_rev[], bootprog_date[];
+	extern const char bootprog_rev[];
 
-	io = 0;
 	skip = 1;
 	autoconf();
 
 	askname = bootrpb.rpb_bootr5 & RB_ASKNAME;
-	printf("\n\r>> NetBSD/vax boot [%s %s] <<\n", bootprog_rev,
-		bootprog_date);
+	printf("\n\r>> NetBSD/vax boot [%s] <<\n", bootprog_rev);
 	printf(">> Press any key to abort autoboot  ");
 	sluttid = getsecs() + 5;
 	senast = 0;
@@ -136,14 +133,14 @@ Xmain(void)
 		int fileindex;
 		for (fileindex = 0; filelist[fileindex].name[0] != '\0';
 		    fileindex++) {
-			int err;
 			errno = 0;
 			if (!filelist[fileindex].quiet)
 				printf("> boot %s\n", filelist[fileindex].name);
 			marks[MARK_START] = 0;
-			err = loadfile(filelist[fileindex].name, marks,
+			fd = loadfile(filelist[fileindex].name, marks,
 			    LOAD_KERNEL|COUNT_KERNEL);
-			if (err == 0) {
+			if (fd >= 0) {
+				close(fd);
 				machdep_start((char *)marks[MARK_ENTRY],
 						      marks[MARK_NSYM],
 					      (void *)marks[MARK_START],
@@ -166,7 +163,7 @@ Xmain(void)
 		char *c, *d;
 
 		printf("> ");
-		gets(line);
+		kgets(line, sizeof(line));
 
 		c = line;
 		while (*c == ' ')
@@ -200,7 +197,7 @@ void
 boot(char *arg)
 {
 	char *fn = "netbsd";
-	int howto, fl, err;
+	int howto, fl, fd;
 	u_long marks[MARK_MAX];
 
 	if (arg) {
@@ -233,8 +230,9 @@ fail:			printf("usage: boot [filename] [-asdqv]\n");
 	}
 load:
 	marks[MARK_START] = 0;
-	err = loadfile(fn, marks, LOAD_KERNEL|COUNT_KERNEL);
-	if (err == 0) {
+	fd = loadfile(fn, marks, LOAD_KERNEL|COUNT_KERNEL);
+	if (fd >= 0) {
+		close(fd);
 		machdep_start((char *)marks[MARK_ENTRY],
 				      marks[MARK_NSYM],
 			      (void *)marks[MARK_START],
@@ -265,7 +263,7 @@ load:
 
 
 void
-loadpcs()
+loadpcs(void)
 {
 	static int pcsdone = 0;
 	int mid = mfpr(PR_SID);
@@ -280,7 +278,7 @@ loadpcs()
 		if (*cp == ')' || *cp == ':')
 			break;
 	if (*cp) {
-		bcopy(line, pcs, 99);
+		memcpy(pcs, line, 99);
 		pcs[99] = 0;
 		i = cp - line + 1;
 	} else

@@ -1,4 +1,4 @@
-/*	$NetBSD: crime.c,v 1.28 2008/01/09 20:38:36 wiz Exp $	*/
+/*	$NetBSD: crime.c,v 1.38 2015/02/18 16:47:58 macallan Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher SEKIYA
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crime.c,v 1.28 2008/01/09 20:38:36 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crime.c,v 1.38 2015/02/18 16:47:58 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: crime.c,v 1.28 2008/01/09 20:38:36 wiz Exp $");
 
 #include <machine/locore.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
@@ -59,21 +59,22 @@ __KERNEL_RCSID(0, "$NetBSD: crime.c,v 1.28 2008/01/09 20:38:36 wiz Exp $");
 
 #include "locators.h"
 
-#define CRIME_DISABLE_WATCHDOG
+#define DISABLE_CRIME_WATCHDOG
 
-static int	crime_match(struct device *, struct cfdata *, void *);
-static void	crime_attach(struct device *, struct device *, void *);
-void		crime_bus_reset(void);
+static int	crime_match(device_t, struct cfdata *, void *);
+static void	crime_attach(device_t, device_t, void *);
+static void	crime_mem_reset(void);
+static void	crime_cpu_reset(void);
+static void	crime_bus_reset(void);
 void		crime_watchdog_reset(void);
 void		crime_watchdog_disable(void);
-void		crime_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void		crime_intr(vaddr_t, uint32_t, uint32_t);
 void		*crime_intr_establish(int, int, int (*)(void *), void *);
-extern	void  mace_intr(int); /* XXX */
 
 static bus_space_tag_t crm_iot;
 static bus_space_handle_t crm_ioh;
 
-CFATTACH_DECL(crime, sizeof(struct crime_softc),
+CFATTACH_DECL_NEW(crime, sizeof(struct crime_softc),
     crime_match, crime_attach, NULL, NULL);
 
 #define CRIME_NINTR 32 	/* XXX */
@@ -84,31 +85,34 @@ struct {
 } crime[CRIME_NINTR];
 
 static int
-crime_match(struct device *parent, struct cfdata *match, void *aux)
+crime_match(device_t parent, struct cfdata *match, void *aux)
 {
 
 	/*
 	 * The CRIME is in the O2.
 	 */
 	if (mach_type == MACH_SGI_IP32)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 static void
-crime_attach(struct device *parent, struct device *self, void *aux)
+crime_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
-	u_int64_t crm_id;
-	u_int64_t baseline;
-	u_int32_t cps;
+	struct cpu_info * const ci = curcpu();
+	struct crime_softc *sc = device_private(self);
+	uint64_t crm_id;
+	uint64_t baseline, endline;
+	uint32_t startctr, endctr, cps;
 
-	crm_iot = SGIMIPS_BUS_SPACE_CRIME;
+	sc->sc_dev = self;
+	crm_iot = normal_memt;
 
-	if (bus_space_map(crm_iot, ma->ma_addr, 0 /* XXX */,
+	if (bus_space_map(crm_iot, ma->ma_addr, 0x1000,
 	    BUS_SPACE_MAP_LINEAR, &crm_ioh))
-		panic("crime_attach: can't map I/O space");
+		panic("%s: can't map I/O space", __func__);
 
 	crm_id = bus_space_read_8(crm_iot, crm_ioh, CRIME_REV);
 
@@ -137,28 +141,34 @@ crime_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 
-	aprint_normal(" (CRIME_ID: %llx)\n", crm_id);
+	aprint_normal(" (CRIME_ID: %" PRIu64 ")\n", crm_id);
 
 	/* reset CRIME CPU & memory error registers */
-	crime_bus_reset();
+	crime_mem_reset();
+	crime_cpu_reset();
 
-	bus_space_write_8(crm_iot, crm_ioh, CRIME_WATCHDOG, 0);
-	bus_space_write_8(crm_iot, crm_ioh, CRIME_CONTROL, 0);
+	crime_watchdog_disable();
 
-	baseline = bus_space_read_8(crm_iot, crm_ioh, CRIME_TIME) & CRIME_TIME_MASK;
-	cps = mips3_cp0_count_read();
+#define CRIME_TIMER_FREQ	66666666	/* crime clock is 66.7MHz */
 
-	while (((bus_space_read_8(crm_iot, crm_ioh, CRIME_TIME) & CRIME_TIME_MASK)
-		- baseline) < 50 * 1000000 / 15)
-		continue;
-	cps = mips3_cp0_count_read() - cps;
-	cps = cps / 5;
+	baseline = bus_space_read_8(crm_iot, crm_ioh, CRIME_TIME)
+	    & CRIME_TIME_MASK;
+	startctr = mips3_cp0_count_read();
 
-	/* Counter on R4k/R4400/R4600/R5k counts at half the CPU frequency */
-	curcpu()->ci_cpu_freq = cps * 2 * hz;
-	curcpu()->ci_cycles_per_hz = curcpu()->ci_cpu_freq / (2 * hz);
-	curcpu()->ci_divisor_delay = curcpu()->ci_cpu_freq / (2 * 1000000);
-	MIPS_SET_CI_RECIPROCAL(curcpu());
+	/* read both cp0 and crime counters for 100ms */
+	do {
+		endline = bus_space_read_8(crm_iot, crm_ioh, CRIME_TIME)
+		    & CRIME_TIME_MASK;
+		endctr = mips3_cp0_count_read();
+	} while (endline - baseline < (CRIME_TIMER_FREQ / 10));
+
+	cps = (endctr - startctr) * 10;
+	ci->ci_cpu_freq = cps;
+	ci->ci_cctr_freq = cps;
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
+		ci->ci_cpu_freq *= 2;
+	ci->ci_cycles_per_hz = (cps + (hz / 2)) / hz;
+	ci->ci_divisor_delay = (cps + (1000000 / 2)) / 1000000;
 
 	/* Turn on memory error and crime error interrupts.
 	   All others turned on as devices are registered. */
@@ -188,6 +198,7 @@ crime_attach(struct device *parent, struct device *self, void *aux)
 void *
 crime_intr_establish(int irq, int level, int (*func)(void *), void *arg)
 {
+
 	if (irq < 16)
 		return mace_intr_establish(irq, level, func, arg);
 
@@ -203,11 +214,12 @@ crime_intr_establish(int irq, int level, int (*func)(void *), void *arg)
 }
 
 void
-crime_intr(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipending)
+crime_intr(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
-	u_int64_t crime_intmask;
-	u_int64_t crime_intstat;
-	u_int64_t crime_ipending;
+	uint64_t crime_intmask;
+	uint64_t crime_intstat;
+	uint64_t crime_ipending;
+	uint64_t address, stat;
 	int i;
 
 	crime_intmask = bus_space_read_8(crm_iot, crm_ioh, CRIME_INTMASK);
@@ -222,38 +234,41 @@ crime_intr(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipending)
 	 * CRIME interrupts for CPU and memory errors
 	 */
 		if (crime_ipending & CRIME_INT_MEMERR) {
-			u_int64_t address =
-				bus_space_read_8(crm_iot, crm_ioh, CRIME_MEM_ERROR_ADDR);
-			u_int64_t status1 =
-				bus_space_read_8(crm_iot, crm_ioh, CRIME_MEM_ERROR_STAT);
-			printf("crime: memory error address %llx"
-				" status %llx\n", address << 2, status1);
-			crime_bus_reset();
+			address = bus_space_read_8(crm_iot, crm_ioh,
+			    CRIME_MEM_ERROR_ADDR);
+			stat = bus_space_read_8(crm_iot, crm_ioh,
+			    CRIME_MEM_ERROR_STAT);
+			printf("crime: memory error address %" PRIu64 
+			    " status %" PRIu64 "\n", address << 2, stat);
+			crime_mem_reset();
 		}
 
 		if (crime_ipending & CRIME_INT_CRMERR) {
-			u_int64_t stat =
-				bus_space_read_8(crm_iot, crm_ioh, CRIME_CPU_ERROR_STAT);
-				printf("crime: cpu error %llx at"
-					" address %llx\n", stat,
-					bus_space_read_8(crm_iot, crm_ioh, CRIME_CPU_ERROR_ADDR));
-			crime_bus_reset();
+			stat = bus_space_read_8(crm_iot, crm_ioh,
+			    CRIME_CPU_ERROR_STAT);
+			address = bus_space_read_8(crm_iot, crm_ioh,
+			    CRIME_CPU_ERROR_ADDR) << 2;
+			printf("crime: cpu error %" PRIu64 " at address %"
+			       PRIu64 "\n", stat, address);
+			crime_cpu_reset();
 		}
 	}
 
 	crime_ipending &= ~0xffff;
 
-	if (crime_ipending)
+	if (crime_ipending) {
 		for (i = 16; i < CRIME_NINTR; i++) {
-			if ((crime_ipending & (1 << i)) && crime[i].func != NULL)
+			if ((crime_ipending & (1 << i)) &&
+			    crime[i].func != NULL)
 				(*crime[i].func)(crime[i].arg);
 		}
+	}
 }
 
 void
 crime_intr_mask(unsigned int intr)
 {
-	u_int64_t mask;
+	uint64_t mask;
 
 	mask = bus_space_read_8(crm_iot, crm_ioh, CRIME_INTMASK);
 	mask |= (1 << intr);
@@ -263,7 +278,7 @@ crime_intr_mask(unsigned int intr)
 void
 crime_intr_unmask(unsigned int intr)
 {
-	u_int64_t mask;
+	uint64_t mask;
 
 	mask = bus_space_read_8(crm_iot, crm_ioh, CRIME_INTMASK);
 	mask &= ~(1 << intr);
@@ -271,16 +286,32 @@ crime_intr_unmask(unsigned int intr)
 }
 
 void
+crime_mem_reset(void)
+{
+
+	bus_space_write_8(crm_iot, crm_ioh, CRIME_MEM_ERROR_STAT, 0);
+}
+
+void
+crime_cpu_reset(void)
+{
+
+	bus_space_write_8(crm_iot, crm_ioh, CRIME_CPU_ERROR_STAT, 0);
+}
+
+void
 crime_bus_reset(void)
 {
-	bus_space_write_8(crm_iot, crm_ioh, CRIME_CPU_ERROR_STAT, 0);
-	bus_space_write_8(crm_iot, crm_ioh, CRIME_MEM_ERROR_STAT, 0);
+
+	crime_mem_reset();
+	crime_cpu_reset();
 }
 
 void
 crime_watchdog_reset(void)
 {
-#ifdef CRIME_WATCHDOG_DISABLE
+
+#ifdef DISABLE_CRIME_WATCHDOG
 	bus_space_write_8(crm_iot, crm_ioh, CRIME_WATCHDOG, 0);
 #else
 	/* enable watchdog timer, clear it */
@@ -293,19 +324,20 @@ crime_watchdog_reset(void)
 void
 crime_watchdog_disable(void)
 {
-	u_int64_t reg;
+	uint64_t reg;
 
 	bus_space_write_8(crm_iot, crm_ioh, CRIME_WATCHDOG, 0);
 	reg = bus_space_read_8(crm_iot, crm_ioh, CRIME_CONTROL)
-			& ~CRIME_CONTROL_DOG_ENABLE;
+	    & ~CRIME_CONTROL_DOG_ENABLE;
 	bus_space_write_8(crm_iot, crm_ioh, CRIME_CONTROL, reg);
 }
 
 void
-crime_reboot()
+crime_reboot(void)
 {
 
 	bus_space_write_8(crm_iot, crm_ioh,  CRIME_CONTROL,
 	    CRIME_CONTROL_HARD_RESET);
-	while(1);
+	for (;;)
+		;
 }

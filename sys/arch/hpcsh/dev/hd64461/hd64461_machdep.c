@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461_machdep.c,v 1.4 2005/12/18 23:40:03 uwe Exp $	*/
+/*	$NetBSD: hd64461_machdep.c,v 1.7 2013/11/09 02:54:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,12 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461_machdep.c,v 1.4 2005/12/18 23:40:03 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461_machdep.c,v 1.7 2013/11/09 02:54:11 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
@@ -81,10 +74,10 @@ do {									\
 	r &= ~HD64461_PCCSCR_VCC1;					\
 	hd64461_reg_write_1(scr, r);					\
 } while (/*CONSTCOND*/0)
-	bus_addr_t isr, gcr, scr;
+	bus_addr_t gcr, scr;
 	uint8_t r;
 	
-	isr = HD64461_PCCISR(ch);
+	(void)HD64461_PCCISR(ch);
 	gcr = HD64461_PCCGCR(ch);
 	scr = HD64461_PCCSCR(ch);
 

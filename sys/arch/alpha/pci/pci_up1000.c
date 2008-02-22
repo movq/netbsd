@@ -1,4 +1,4 @@
-/* $NetBSD: pci_up1000.c,v 1.9 2007/03/04 21:58:16 mrg Exp $ */
+/* $NetBSD: pci_up1000.c,v 1.15 2014/03/21 16:39:29 christos Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_up1000.c,v 1.9 2007/03/04 21:58:16 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_up1000.c,v 1.15 2014/03/21 16:39:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -47,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_up1000.c,v 1.9 2007/03/04 21:58:16 mrg Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -68,15 +59,16 @@ __KERNEL_RCSID(0, "$NetBSD: pci_up1000.c,v 1.9 2007/03/04 21:58:16 mrg Exp $");
 
 #include "sio.h"
 
-int     api_up1000_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char *api_up1000_intr_string(void *, pci_intr_handle_t);
+int     api_up1000_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *api_up1000_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *api_up1000_intr_evcnt(void *, pci_intr_handle_t);
 void    *api_up1000_intr_establish(void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *);
 void    api_up1000_intr_disestablish(void *, void *);
 
-void	*api_up1000_pciide_compat_intr_establish(void *, struct device *,
-	    struct pci_attach_args *, int, int (*)(void *), void *);
+void	*api_up1000_pciide_compat_intr_establish(void *, device_t,
+	    const struct pci_attach_args *, int, int (*)(void *), void *);
 
 void
 pci_up1000_pickintr(struct irongate_config *icp)
@@ -102,7 +94,7 @@ pci_up1000_pickintr(struct irongate_config *icp)
 }
 
 int
-api_up1000_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+api_up1000_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	int buspin = pa->pa_intrpin;
@@ -148,13 +140,13 @@ api_up1000_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-api_up1000_intr_string(void *icv, pci_intr_handle_t ih)
+api_up1000_intr_string(void *icv, pci_intr_handle_t ih, char *buf, size_t len)
 {
 #if 0
 	struct irongate_config *icp = icv;
 #endif
 
-	return sio_intr_string(NULL /*XXX*/, ih);
+	return sio_intr_string(NULL /*XXX*/, ih, buf, len);
 }
 
 const struct evcnt *
@@ -190,12 +182,13 @@ api_up1000_intr_disestablish(void *icv, void *cookie)
 }
 
 void *
-api_up1000_pciide_compat_intr_establish(void *icv, struct device *dev,
-    struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
+api_up1000_pciide_compat_intr_establish(void *icv, device_t dev,
+    const struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	void *cookie = NULL;
 	int bus, irq;
+	char buf[64];
 
 	pci_decompose_tag(pc, pa->pa_tag, &bus, NULL, NULL);
 
@@ -211,8 +204,9 @@ api_up1000_pciide_compat_intr_establish(void *icv, struct device *dev,
 	    func, arg);
 	if (cookie == NULL)
 		return (NULL);
-	printf("%s: %s channel interrupting at %s\n", dev->dv_xname,
-	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq));
+	aprint_normal_dev(dev, "%s channel interrupting at %s\n",
+	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq, buf,
+	    sizeof(buf)));
 #endif
 	return (cookie);
 }

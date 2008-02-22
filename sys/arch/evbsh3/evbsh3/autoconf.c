@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.7 2007/12/03 15:33:35 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.11 2012/07/29 18:05:42 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,18 +27,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2007/12/03 15:33:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2012/07/29 18:05:42 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 
+extern void machine_init(void);
+
 void
-cpu_configure()
+cpu_configure(void)
 {
+
 	/* Start configuration */
 	splhigh();
+
+	machine_init();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
@@ -55,9 +53,9 @@ cpu_configure()
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 
 	/* No boot information */
-	setroot(0, 0);
+	rootconf();
 }

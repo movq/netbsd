@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_machdep.h,v 1.9 2006/03/14 21:37:48 cube Exp $	*/
+/*	$NetBSD: elf_machdep.h,v 1.14 2017/11/06 03:47:48 christos Exp $	*/
 
 #define ELF32_MACHDEP_ENDIANNESS	ELFDATA2MSB
 #define	ELF32_MACHDEP_ID_CASES						\
@@ -8,7 +8,6 @@
 
 #define	ELF64_MACHDEP_ENDIANNESS	ELFDATA2MSB
 #define	ELF64_MACHDEP_ID_CASES						\
-		case EM_SPARC32PLUS:					\
 		case EM_SPARCV9:					\
 			break;
 
@@ -16,9 +15,22 @@
 #define	ELF64_MACHDEP_ID	EM_SPARCV9
 
 #ifdef __arch64__
+#define	KERN_ELFSIZE		64
 #define ARCH_ELFSIZE		64	/* MD native binary size */
 #else
+#define	KERN_ELFSIZE		32
 #define ARCH_ELFSIZE		32	/* MD native binary size */
+#endif
+
+#ifdef __arch64__
+/*
+ * we need to check .note.netbsd.mcmodel in native binaries before enabling
+ * top-down VM.
+ */
+struct exec_package;
+void sparc64_elf_mcmodel_check(struct exec_package*, const char *, size_t);
+#define	ELF_MD_MCMODEL_CHECK(ep, str, len)	\
+	sparc64_elf_mcmodel_check(ep,str,len)
 #endif
 
 /* The following are what is used for AT_SUN_HWCAP: */
@@ -101,5 +113,33 @@
 #define	R_SPARC_UA64		54
 #define	R_SPARC_UA16		55
 
+/* TLS relocations */
+#define R_SPARC_TLS_GD_HI22	56
+#define R_SPARC_TLS_GD_LO10	57
+#define R_SPARC_TLS_GD_ADD	58
+#define R_SPARC_TLS_GD_CALL	59
+#define R_SPARC_TLS_LDM_HI22	60
+#define R_SPARC_TLS_LDM_LO10	61
+#define R_SPARC_TLS_LDM_ADD	62
+#define R_SPARC_TLS_LDM_CALL	63
+#define R_SPARC_TLS_LDO_HIX22	64
+#define R_SPARC_TLS_LDO_LOX10	65
+#define R_SPARC_TLS_LDO_ADD	66
+#define R_SPARC_TLS_IE_HI22	67
+#define R_SPARC_TLS_IE_LO10	68
+#define R_SPARC_TLS_IE_LD	69
+#define R_SPARC_TLS_IE_LDX	70
+#define R_SPARC_TLS_IE_ADD	71
+#define R_SPARC_TLS_LE_HIX22	72
+#define R_SPARC_TLS_LE_LOX10	73
+#define R_SPARC_TLS_DTPMOD32	74
+#define R_SPARC_TLS_DTPMOD64	75
+#define R_SPARC_TLS_DTPOFF32	76
+#define R_SPARC_TLS_DTPOFF64	77
+#define R_SPARC_TLS_TPOFF32	78
+#define R_SPARC_TLS_TPOFF64	79
+
+#define R_SPARC_JMP_IREL	248
+#define R_SPARC_IRELATIVE	249
 
 #define R_TYPE(name)		__CONCAT(R_SPARC_,name)

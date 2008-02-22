@@ -1,27 +1,27 @@
-/* $NetBSD: db_disasm.c,v 1.14 2007/02/22 04:51:26 thorpej Exp $ */
+/* $NetBSD: db_disasm.c,v 1.16 2014/03/20 20:51:40 christos Exp $ */
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1991,1990,1989,1988,1987 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
@@ -48,7 +48,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.14 2007/02/22 04:51:26 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.16 2014/03/20 20:51:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.14 2007/02/22 04:51:26 thorpej Exp $
 #include <alpha/alpha/db_instruction.h>
 
 #include <machine/pal.h>
- 
+
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_output.h>
@@ -127,7 +127,7 @@ typedef union {
 /*
  * Major opcodes
  */
-static const char *op_name[64] = {
+static const char * const op_name[64] = {
 /* 0 */	"call_pal", "op1", "op2", "op3", "op4",	"op5",	"op6",	"op7",
 /* 8 */	"lda",	"ldah",	"ldbu",	"ldq_u","ldwu",	"stw",	"stb",	"stq_u",
 /*16 */	"arit",	"logical","bit","mul",	"op20",	"vaxf",	"ieeef","anyf",
@@ -199,15 +199,15 @@ pal_opname(int op)
 			return (pal_op_tbl[i].name);
 	}
 
-	sprintf(unk, "0x%x", op);
+	snprintf(unk, sizeof(unk), "0x%x", op);
 	return (unk);
 }
 
 /* HW (PAL) instruction qualifiers, stright tables */
-static const char *mXpr_name[8] = {
+static const char * const mXpr_name[8] = {
 	"", "/i", "/a", "/ai", "/p", "/pi", "/pa", "/pai"
 };
-static const char *hwlds_name[8] = {
+static const char * const hwlds_name[8] = {
 	"", "/r", "/a", "/ar", "/p", "/p?r", "_l-c", "_l-c/?r"
 };
 
@@ -219,25 +219,25 @@ static const char *hwlds_name[8] = {
  * entry array, but in this way we use just 48 pointers.
  * BUGFIX: the 'cmpbge 0x0f' opcode fits in here too
  */
-static const char *arit_c0[8] = {
+static const char * const arit_c0[8] = {
 	"addl", 0, "addq", 0, "addl/v", 0, "addq/v",
 };
-static const char *arit_c2[8] = {
-	"s4addl", "s8addl", "s4addq", "s8addq", 
+static const char * const arit_c2[8] = {
+	"s4addl", "s8addl", "s4addq", "s8addq",
 };
-static const char *arit_c9[8] = {
-	"subl", 0, "subq", 0, "subl/v", 0, "subq/v", 
+static const char * const arit_c9[8] = {
+	"subl", 0, "subq", 0, "subl/v", 0, "subq/v",
 };
-static const char *arit_cB[8] = {
-	"s4subl", "s8subl", "s4subq", "s8subq", 
+static const char * const arit_cB[8] = {
+	"s4subl", "s8subl", "s4subq", "s8subq",
 };
-static const char *arit_cD[8] = {
+static const char * const arit_cD[8] = {
 	0, "cmpult", "cmpeq", "cmpule", "cmplt", 0, "cmple",
 };
-static const char *arit_cF[1] = {
+static const char * const arit_cF[1] = {
 	"cmpbge"
 };
-static const char **arit_opname[8] = {
+static const char * const * const arit_opname[8] = {
 	arit_c0, arit_c2, 0, 0, arit_c9, arit_cB, arit_cD, arit_cF
 };
 
@@ -253,7 +253,7 @@ arit_name(int op)
 	if (name != NULL)
 		return (name);
 
-	sprintf(unk, "?arit 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?arit 0x%x?", op);
 	return (unk);
 }
 
@@ -267,16 +267,16 @@ arit_name(int op)
  * There are two functions that don't play by these simple rules,
  * so we special-case them.
  */
-static const char *logical_c0[4] = {
+static const char * const logical_c0[4] = {
 	"and", "or", "xor", 0
 };
-static const char *logical_c4[4] = {
+static const char * const logical_c4[4] = {
 	"cmovlbs", "cmoveq", "cmovlt", "cmovle"
 };
-static const char *logical_c6[4] = {
+static const char * const logical_c6[4] = {
 	"cmovlbc", "cmovne", "cmovge", "cmovgt"
 };
-static const char *logical_c8[4] = {
+static const char * const logical_c8[4] = {
 	"andnot", "ornot", "xornot", 0
 };
 
@@ -301,7 +301,7 @@ logical_name(int op)
 	if (name != NULL)
 		return (name);
 
-	sprintf(unk, "?logical 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?logical 0x%x?", op);
 	return (unk);
 }
 
@@ -314,13 +314,13 @@ logical_name(int op)
  * can be used as row index picking bits 0 and 2, for the
  * high one just the lower two bits.
  */
-static const char *bitop_c3[8] = {
+static const char * const bitop_c3[8] = {
 	"zapnot", "mskql", "srl", "extql", "sll", "insql", "sra", 0
 };
-static const char *bitop_c2[8] = {
+static const char * const bitop_c2[8] = {
 	"mskbl", "mskwl", "mskll", 0/*mskql*/, 0, "mskwh", "msklh", "mskqh"
 };
-static const char *bitop_c67ab[4][4] = {
+static const char * const bitop_c67ab[4][4] = {
 /* a */	{ 0, "extwh", "extlh", "extqh"},
 /* b */	{ "insbl", "inswl", "insll", 0 },
 /* 6 */	{ "extbl", "extwl", "extll", 0 },
@@ -344,14 +344,14 @@ bitop_name(int op)
 	if (name != NULL)
 		return (name);
 
-	sprintf(unk, "?bit 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?bit 0x%x?", op);
 	return (unk);
 }
 
 /*
- * Only 5 entries in this one
+ * Only 4 entries in this one
  */
-static const char *mul_opname[4] = {
+static const char * const mul_opname[4] = {
 	"mull", "mulq", "mull/v", "mulq/v"
 };
 
@@ -366,7 +366,7 @@ mul_name(int op)
 	if (name != NULL)
 		return (name);
 
-	sprintf(unk, "?mul 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?mul 0x%x?", op);
 	return (unk);
 }
 
@@ -375,7 +375,7 @@ mul_name(int op)
  * We single out the `f' case to halve the table size, as
  * well as the cases in which the high nibble isn't enough.
  */
-static const char *special_opname[8] = {
+static const char * const special_opname[8] = {
 	"trapb", 0, "mb", 0, "fetch", "fetch_m", "rpcc", "rc"
 };
 
@@ -398,14 +398,14 @@ special_name(int op)
 	if (name != NULL)
 		return (name);
 
-	sprintf(unk, "?special 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?special 0x%x?", op);
 	return (unk);
 }
 
 /*
  * This is trivial
  */
-static const char *jump_opname[4] = {
+static const char * const jump_opname[4] = {
 	"jmp", "jsr", "ret", "jcr"
 };
 #define jump_name(ix)	jump_opname[ix]
@@ -414,7 +414,7 @@ static const char *jump_opname[4] = {
  * For all but 4 of these, we can dispatch on the lower nibble of
  * the "function".
  */
-static const char *intmisc_opname_3x[16] = {
+static const char * const intmisc_opname_3x[16] = {
 	"ctpop", "perr", "ctlz", "cttz", "unpkbw", "unpkbl", "pkwb",
 	"pklb", "minsb8", "minsw4", "minub8", "minuw4", "maxub8",
 	"maxuw4", "maxsb8", "maxsw4",
@@ -435,7 +435,7 @@ intmisc_name(int op)
 	case op_ftois: return ("ftois");
 	}
 
-	sprintf(unk, "?intmisc 0x%x?", op);
+	snprintf(unk, sizeof(unk), "?intmisc 0x%x?", op);
 	return (unk);
 }
 
@@ -450,7 +450,7 @@ float_name(const struct tbl *tbl, int op, const char *type)
 			return (tbl[i].name);
 	}
 
-	sprintf(unk, "?%s 0x%x?", type, op);
+	snprintf(unk, sizeof(unk), "?%s 0x%x?", type, op);
 	return (unk);
 }
 
@@ -774,7 +774,7 @@ static const struct tbl vaxf_tbl[] = {
 /*
  * General purpose registers
  */
-static const char *name_of_register[32] = {
+static const char * const name_of_register[32] = {
 	"v0",	"t0",	"t1",	"t2",	"t3",	"t4",	"t5",	"t6",
 	"t7",	"s0",	"s1",	"s2",	"s3",	"s4",	"s5",	"s6",
 	"a0",	"a1",	"a2",	"a3",	"a4",	"a5",	"t8",	"t9",

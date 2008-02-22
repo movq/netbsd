@@ -1,7 +1,7 @@
-/*	$NetBSD: wsconsctl.h,v 1.9 2006/02/05 17:38:33 jmmv Exp $ */
+/*	$NetBSD: wsconsctl.h,v 1.12 2012/12/24 01:20:44 khorben Exp $ */
 
 /*-
- * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2004, 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,6 +55,7 @@ struct field {
 #define FMT_UINT	1		/* unsigned integer */
 #define FMT_STRING	2		/* zero terminated string */
 #define FMT_BITFIELD	3		/* bit field */
+#define FMT_INT		4		/* signed integer */
 #define FMT_KBDTYPE	101		/* keyboard type */
 #define FMT_MSTYPE	102		/* mouse type */
 #define FMT_DPYTYPE	103		/* display type */
@@ -98,6 +92,5 @@ void display_put_values(int);
 #ifndef YYEMPTY
 int yyparse(void);
 #endif
-void yyerror(const char *);
 int yylex(void);
 void map_scan_setinput(char *);

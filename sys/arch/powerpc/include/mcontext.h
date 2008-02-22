@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.7 2005/12/11 12:18:43 christos Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.18 2018/02/15 15:53:56 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -89,11 +82,15 @@ typedef	__greg_t	__gregset_t[_NGREG];
 #define	_REG_PC		34		/* PC (copy of SRR0) */
 #define	_REG_MSR	35		/* MSR (copy of SRR1) */
 #define	_REG_CTR	36		/* Count Register */
-#define	_REG_XER	37		/* Integet Exception Reigster */
+#define	_REG_XER	37		/* Integer Exception Register */
 #define	_REG_MQ		38		/* MQ Register (POWER only) */
 
 typedef struct {
+#ifdef _KERNEL
+	unsigned long long	__fpu_regs[32];	/* FP0-31 */
+#else
 	double		__fpu_regs[32];	/* FP0-31 */
+#endif
 	unsigned int	__fpu_fpscr;	/* FP Status and Control Register */
 	unsigned int	__fpu_valid;	/* Set together with _UC_FPU */
 } __fpregset_t;
@@ -105,7 +102,10 @@ typedef struct {
 		unsigned char	__vr8[16];
 		unsigned short	__vr16[8];
 		unsigned int	__vr32[4];
-	} 		__vrs[_NVR] __attribute__((__aligned__(16)));
+		unsigned char	__spe8[8];
+		unsigned short	__spe16[4];
+		unsigned int	__spe32[2];
+	} 		__vrs[_NVR] __aligned(16);
 	unsigned int	__vscr;		/* VSCR */
 	unsigned int	__vrsave;	/* VRSAVE */
 } __vrf_t;
@@ -116,13 +116,63 @@ typedef struct {
 	__vrf_t		__vrf;		/* Vector Register File */
 } mcontext_t;
 
+#if defined(_LP64)
+typedef	int		__greg32_t;
+typedef	__greg32_t	__gregset32_t[_NGREG];
+
+typedef struct {
+	__gregset32_t	__gregs;	/* General Purpose Register set */
+	__fpregset_t	__fpregs;	/* Floating Point Register set */
+	__vrf_t		__vrf;		/* Vector Register File */
+} mcontext32_t;
+#endif
+
 /* Machine-dependent uc_flags */
 #define	_UC_POWERPC_VEC	0x00010000	/* Vector Register File valid */
+#define	_UC_POWERPC_SPE	0x00020000	/* Vector Register File valid */
+#define	_UC_TLSBASE	0x00080000	/* thread context valid in R2 */
 
 #define _UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_R1])
+#define _UC_MACHINE_FP(uc)	((uc)->uc_mcontext.__gregs[_REG_R31])
 #define _UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_PC])
 #define _UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_R3])
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
+
+#if defined(_RTLD_SOURCE) || defined(_LIBC_SOURCE) || defined(__LIBPTHREAD_SOURCE__)
+#include <sys/tls.h>
+
+/*
+ * On PowerPC, since displacements are signed 16-bit values, the TCB Pointer
+ * is biased by 0x7000 + sizeof(tcb) so that first thread datum can be 
+ * addressed by -28672 thereby leaving 60KB available for use as thread data.
+ */
+#define	TLS_TP_OFFSET	0x7000
+#define	TLS_DTV_OFFSET	0x8000
+__CTASSERT(TLS_TP_OFFSET + sizeof(struct tls_tcb) < 0x8000);
+
+static __inline void *
+__lwp_gettcb_fast(void)
+{
+	void *__tcb;
+
+	__asm __volatile(
+		"addi %[__tcb],%%r2,%[__offset]"
+	    :	[__tcb] "=r" (__tcb)
+	    :	[__offset] "n" (-(TLS_TP_OFFSET + sizeof(struct tls_tcb))));
+
+	return __tcb;
+}
+
+static __inline void
+__lwp_settcb(void *__tcb)
+{
+	__asm __volatile(
+		"addi %%r2,%[__tcb],%[__offset]"
+	    :
+	    :	[__tcb] "r" (__tcb),
+		[__offset] "n" (TLS_TP_OFFSET + sizeof(struct tls_tcb)));
+}
+#endif /* _RTLD_SOURCE || _LIBC_SOURCE || __LIBPTHREAD_SOURCE__ */
 
 #endif	/* !_POWERPC_MCONTEXT_H_ */

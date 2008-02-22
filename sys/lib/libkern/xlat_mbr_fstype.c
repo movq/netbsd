@@ -1,4 +1,4 @@
-/*	$NetBSD: xlat_mbr_fstype.c,v 1.6 2006/07/16 06:06:20 rillig Exp $	*/
+/*	$NetBSD: xlat_mbr_fstype.c,v 1.9 2013/03/02 22:04:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0,"$NetBSD: xlat_mbr_fstype.c,v 1.6 2006/07/16 06:06:20 rillig Exp $");
+__KERNEL_RCSID(0,"$NetBSD: xlat_mbr_fstype.c,v 1.9 2013/03/02 22:04:06 christos Exp $");
 
 
 #include <sys/disklabel.h>
@@ -62,6 +55,8 @@ xlat_mbr_fstype(int mbr_type)
 		{ MBR_PTYPE_LNXSWAP,	FS_SWAP },
 		{ MBR_PTYPE_NETBSD,	FS_BSDFFS },
 		{ MBR_PTYPE_NTFS,	FS_NTFS },
+		{ MBR_PTYPE_MINIX_14B,	FS_MINIXFS3 },
+		{ MBR_PTYPE_OPENBSD,	FS_BSDFFS },
 		{ 0,			FS_OTHER }
 	};
 	const struct ptn_types *pt;

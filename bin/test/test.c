@@ -1,4 +1,4 @@
-/* $NetBSD: test.c,v 1.34 2007/12/15 19:44:38 perry Exp $ */
+/* $NetBSD: test.c,v 1.41 2016/09/05 01:00:07 sevan Exp $ */
 
 /*
  * test(1); version 7-like  --  author Erik Baalbergen
@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: test.c,v 1.34 2007/12/15 19:44:38 perry Exp $");
+__RCSID("$NetBSD: test.c,v 1.41 2016/09/05 01:00:07 sevan Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -22,6 +22,7 @@ __RCSID("$NetBSD: test.c,v 1.34 2007/12/15 19:44:38 perry Exp $");
 #include <err.h>
 #include <errno.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,7 +156,7 @@ static const struct t_op mop2[] = {
 static char **t_wp;
 static struct t_op const *t_wp_op;
 
-static void syntax(const char *, const char *);
+__dead static void syntax(const char *, const char *);
 static int oexpr(enum token);
 static int aexpr(enum token);
 static int nexpr(enum token);
@@ -165,16 +166,16 @@ static int test_access(struct stat *, mode_t);
 static int filstat(char *, enum token);
 static enum token t_lex(char *);
 static int isoperand(void);
-static int getn(const char *);
+static long long getn(const char *);
 static int newerf(const char *, const char *);
 static int olderf(const char *, const char *);
 static int equalf(const char *, const char *);
 
 #if defined(SHELL)
-extern void error(const char *, ...) __dead;
+extern void error(const char *, ...) __dead __printflike(1, 2);
 extern void *ckmalloc(size_t);
 #else
-static void error(const char *, ...) __dead;
+static void error(const char *, ...) __dead __printflike(1, 2);
 
 static void
 error(const char *msg, ...)
@@ -205,8 +206,6 @@ int testcmd(int, char **);
 int
 testcmd(int argc, char **argv)
 #else
-int main(int, char *[]);
-
 int
 main(int argc, char *argv[])
 #endif
@@ -218,6 +217,7 @@ main(int argc, char *argv[])
 	argv0 = argv[0];
 #else
 	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 	argv0 = getprogname();
 #endif
 	if (strcmp(argv0, "[") == 0) {
@@ -311,7 +311,7 @@ primary(enum token n)
 		case STRNZ:
 			return strlen(*t_wp) != 0;
 		case FILTT:
-			return isatty(getn(*t_wp));
+			return isatty((int)getn(*t_wp));
 		default:
 			return filstat(*t_wp, n);
 		}
@@ -663,25 +663,26 @@ isoperand(void)
 }
 
 /* atoi with error detection */
-static int
+static long long
 getn(const char *s)
 {
 	char *p;
-	long r;
+	long long r;
 
 	errno = 0;
-	r = strtol(s, &p, 10);
+	r = strtoll(s, &p, 10);
 
 	if (errno != 0)
+	if (errno == ERANGE && (r == LLONG_MAX || r == LLONG_MIN))
 	      error("%s: out of range", s);
 
 	while (isspace((unsigned char)*p))
 	      p++;
 	
-	if (*p)
+	if (*p || p == s)
 	      error("%s: bad number", s);
 
-	return (int) r;
+	return r;
 }
 
 static int
@@ -691,7 +692,7 @@ newerf(const char *f1, const char *f2)
 
 	return (stat(f1, &b1) == 0 &&
 		stat(f2, &b2) == 0 &&
-		b1.st_mtime > b2.st_mtime);
+		timespeccmp(&b1.st_mtim, &b2.st_mtim, >));
 }
 
 static int
@@ -701,7 +702,7 @@ olderf(const char *f1, const char *f2)
 
 	return (stat(f1, &b1) == 0 &&
 		stat(f2, &b2) == 0 &&
-		b1.st_mtime < b2.st_mtime);
+		timespeccmp(&b1.st_mtim, &b2.st_mtim, <));
 }
 
 static int

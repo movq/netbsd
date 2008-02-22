@@ -1,4 +1,4 @@
-/*	$NetBSD: ul.c,v 1.12 2003/08/07 11:16:52 agc Exp $	*/
+/*	$NetBSD: ul.c,v 1.19 2016/06/23 03:58:13 abhinav Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,22 +31,24 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ul.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ul.c,v 1.12 2003/08/07 11:16:52 agc Exp $");
+__RCSID("$NetBSD: ul.c,v 1.19 2016/06/23 03:58:13 abhinav Exp $");
 #endif /* not lint */
 
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
+#include <term.h>
 #include <unistd.h>
+#include <util.h>
 
 #define	IESC	'\033'
 #define	SO	'\016'
@@ -63,47 +65,40 @@ __RCSID("$NetBSD: ul.c,v 1.12 2003/08/07 11:16:52 agc Exp $");
 #define	UNDERL	010	/* Ul */
 #define	BOLD	020	/* Bold */
 
-struct tinfo *info;
-int	must_use_uc, must_overstrike;
-char	*CURS_UP, *CURS_RIGHT, *CURS_LEFT,
-	*ENTER_STANDOUT, *EXIT_STANDOUT, *ENTER_UNDERLINE, *EXIT_UNDERLINE,
-	*ENTER_DIM, *ENTER_BOLD, *ENTER_REVERSE, *UNDER_CHAR, *EXIT_ATTRIBUTES;
+static int	must_overstrike;
 
 struct	CHAR	{
 	char	c_mode;
 	char	c_char;
 } ;
 
-struct	CHAR	obuf[MAXBUF];
-int	col, maxcol;
-int	mode;
-int	halfpos;
-int	upln;
-int	iflag;
+static size_t col, maxcol;
+static int	mode;
+static int	halfpos;
+static int	upln;
+static int	iflag;
 
-int	main __P((int, char **));
-void	filter __P((FILE *));
-void	flushln __P((void));
-void	fwd __P((void));
-void	iattr __P((void));
-void	initbuf __P((void));
-void	initcap __P((void));
-void	outc __P((int));
-int	outchar __P((int));
-void	overstrike __P((void));
-void	reverse __P((void));
-void	setulmode __P((int));
+static void filter(FILE *);
+static void flushln(struct CHAR *, size_t);
+static void fwd(struct CHAR *, size_t);
+static void iattr(struct CHAR *);
+static void initbuf(struct CHAR *, size_t);
+static void outc(int);
+static int outchar(int);
+static void overstrike(struct CHAR *);
+static void reverse(struct CHAR *, size_t);
+static void setulmode(int);
+static void alloc_buf(struct CHAR **, size_t *);
+static void set_mode(void);
 
 
 #define	PRINT(s)	if (s == NULL) /* void */; else tputs(s, 1, outchar)
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int c;
-	char *termtype;
+	const char *termtype;
 	FILE *f;
 
 	termtype = getenv("TERM");
@@ -127,50 +122,33 @@ main(argc, argv)
 			exit(1);
 		}
 
-	switch(t_getent(&info, termtype)) {
-
-	case 1:
-		break;
-
-	default:
-		fprintf(stderr,"trouble reading termcap");
-		/* fall through to ... */
-
-	case 0:
-		/* No such terminal type - assume dumb */
-		if (t_setinfo(&info, "dumb:os:col#80:cr=^M:sf=^J:am:") < 0) {
-			fprintf(stderr, "t_setinfo failed, cannot continue\n");
-			exit(1);
-		}
-		
-		break;
+	setupterm(termtype, 0, NULL);
+	if ((over_strike && enter_bold_mode == NULL) ||
+	    (transparent_underline && enter_underline_mode == NULL &&
+		underline_char == NULL)) {
+		set_mode();
 	}
-	initcap();
-	if (    (t_getflag(info, "os") && ENTER_BOLD==NULL ) ||
-		(t_getflag(info, "ul") && ENTER_UNDERLINE==NULL
-		 && UNDER_CHAR==NULL))
-			must_overstrike = 1;
-	initbuf();
 	if (optind == argc)
 		filter(stdin);
-	else for (; optind<argc; optind++) {
-		f = fopen(argv[optind],"r");
-		if (f == NULL) {
-			perror(argv[optind]);
-			exit(1);
+	else {
+		for (; optind < argc; optind++) {
+			f = fopen(argv[optind], "r");
+			if (f == NULL)
+				err(EXIT_FAILURE, "Failed to open `%s'", argv[optind]);
+			filter(f);
+			fclose(f);
 		}
-
-		filter(f);
-		fclose(f);
 	}
 	exit(0);
 }
 
-void
-filter(f)
-	FILE *f;
+static void
+filter(FILE *f)
 {
 	int c;
+	struct	CHAR *obuf = NULL;
+	size_t obuf_size = 0;
+	alloc_buf(&obuf, &obuf_size);
 
 	while ((c = getc(f)) != EOF) switch(c) {
 
@@ -183,6 +161,8 @@ filter(f)
 		col = (col+8) & ~07;
 		if (col > maxcol)
 			maxcol = col;
+		if (col >= obuf_size)
+			alloc_buf(&obuf, &obuf_size);
 		continue;
 
 	case '\r':
@@ -209,7 +189,7 @@ filter(f)
 				halfpos--;
 			} else {
 				halfpos = 0;
-				reverse();
+				reverse(obuf, obuf_size);
 			}
 			continue;
 
@@ -222,12 +202,12 @@ filter(f)
 				halfpos++;
 			} else {
 				halfpos = 0;
-				fwd();
+				fwd(obuf, obuf_size);
 			}
 			continue;
 
 		case FREV:
-			reverse();
+			reverse(obuf, obuf_size);
 			continue;
 
 		default:
@@ -236,7 +216,6 @@ filter(f)
 				IESC, c);
 			exit(1);
 		}
-		continue;
 
 	case '_':
 		if (obuf[col].c_char)
@@ -247,14 +226,16 @@ filter(f)
 		col++;
 		if (col > maxcol)
 			maxcol = col;
+		if (col >= obuf_size)
+			alloc_buf(&obuf, &obuf_size);
 		continue;
 
 	case '\n':
-		flushln();
+		flushln(obuf, obuf_size);
 		continue;
 
 	case '\f':
-		flushln();
+		flushln(obuf, obuf_size);
 		putchar('\f');
 		continue;
 
@@ -274,17 +255,21 @@ filter(f)
 		col++;
 		if (col > maxcol)
 			maxcol = col;
+		if (col >= obuf_size)
+			alloc_buf(&obuf, &obuf_size);
 		continue;
 	}
 	if (maxcol)
-		flushln();
+		flushln(obuf, obuf_size);
+
+	free(obuf);
 }
 
-void
-flushln()
+static void
+flushln(struct CHAR *obuf, size_t obuf_size)
 {
 	int lastmode;
-	int i;
+	size_t i;
 	int hadmodes = 0;
 
 	lastmode = NORMAL;
@@ -296,7 +281,7 @@ flushln()
 		}
 		if (obuf[i].c_char == '\0') {
 			if (upln) {
-				PRINT(CURS_RIGHT);
+				PRINT(cursor_right);
 			}
 			else {
 				outc(' ');
@@ -308,24 +293,24 @@ flushln()
 		setulmode(0);
 	}
 	if (must_overstrike && hadmodes)
-		overstrike();
+		overstrike(obuf);
 	putchar('\n');
 	if (iflag && hadmodes)
-		iattr();
+		iattr(obuf);
 	(void)fflush(stdout);
 	if (upln)
 		upln--;
-	initbuf();
+	initbuf(obuf, obuf_size);
 }
 
 /*
  * For terminals that can overstrike, overstrike underlines and bolds.
  * We don't do anything with halfline ups and downs, or Greek.
  */
-void
-overstrike()
+static void
+overstrike(struct CHAR *obuf)
 {
-	int i;
+	size_t i;
 	char lbuf[256];
 	char *cp = lbuf;
 	int hadbold=0;
@@ -360,10 +345,10 @@ overstrike()
 	}
 }
 
-void
-iattr()
+static void
+iattr(struct CHAR *obuf)
 {
-	int i;
+	size_t i;
 	char lbuf[256];
 	char *cp = lbuf;
 
@@ -384,111 +369,67 @@ iattr()
 	putchar('\n');
 }
 
-void
-initbuf()
+static void
+initbuf(struct CHAR *obuf, size_t obuf_size)
 {
 
-	memset((char *)obuf, 0, sizeof (obuf));	/* depends on NORMAL == 0 */
+	memset(obuf, 0, obuf_size * sizeof(*obuf));	/* depends on NORMAL == 0 */
 	col = 0;
 	maxcol = 0;
+	set_mode();
+}
+
+static void
+set_mode(void)
+{
 	mode &= ALTSET;
 }
 
-void
-fwd()
+static void
+fwd(struct CHAR *obuf, size_t obuf_size)
 {
 	int oldcol, oldmax;
 
 	oldcol = col;
 	oldmax = maxcol;
-	flushln();
+	flushln(obuf, obuf_size);
 	col = oldcol;
 	maxcol = oldmax;
 }
 
-void
-reverse()
+static void
+reverse(struct CHAR *obuf, size_t obuf_size)
 {
 	upln++;
-	fwd();
-	PRINT(CURS_UP);
-	PRINT(CURS_UP);
+	fwd(obuf, obuf_size);
+	PRINT(cursor_up);
+	PRINT(cursor_up);
 	upln++;
 }
 
-void
-initcap()
-{
-	/* This nonsense attempts to work with both old and new termcap */
-	CURS_UP =		t_agetstr(info, "up");
-	CURS_RIGHT =		t_agetstr(info, "ri");
-	if (CURS_RIGHT == NULL)
-		CURS_RIGHT =	t_agetstr(info, "nd");
-	CURS_LEFT =		t_agetstr(info, "le");
-	if (CURS_LEFT == NULL)
-		CURS_LEFT =	t_agetstr(info, "bc");
-	if (CURS_LEFT == NULL && t_getflag(info, "bs"))
-		CURS_LEFT =	"\b";
-
-	ENTER_STANDOUT =	t_agetstr(info, "so");
-	EXIT_STANDOUT =		t_agetstr(info, "se");
-	ENTER_UNDERLINE =	t_agetstr(info, "us");
-	EXIT_UNDERLINE =	t_agetstr(info, "ue");
-	ENTER_DIM =		t_agetstr(info, "mh");
-	ENTER_BOLD =		t_agetstr(info, "md");
-	ENTER_REVERSE =		t_agetstr(info, "mr");
-	EXIT_ATTRIBUTES =	t_agetstr(info, "me");
-
-	if (!ENTER_BOLD && ENTER_REVERSE)
-		ENTER_BOLD = ENTER_REVERSE;
-	if (!ENTER_BOLD && ENTER_STANDOUT)
-		ENTER_BOLD = ENTER_STANDOUT;
-	if (!ENTER_UNDERLINE && ENTER_STANDOUT) {
-		ENTER_UNDERLINE = ENTER_STANDOUT;
-		EXIT_UNDERLINE = EXIT_STANDOUT;
-	}
-	if (!ENTER_DIM && ENTER_STANDOUT)
-		ENTER_DIM = ENTER_STANDOUT;
-	if (!ENTER_REVERSE && ENTER_STANDOUT)
-		ENTER_REVERSE = ENTER_STANDOUT;
-	if (!EXIT_ATTRIBUTES && EXIT_STANDOUT)
-		EXIT_ATTRIBUTES = EXIT_STANDOUT;
-	
-	/*
-	 * Note that we use REVERSE for the alternate character set,
-	 * not the as/ae capabilities.  This is because we are modelling
-	 * the model 37 teletype (since that's what nroff outputs) and
-	 * the typical as/ae is more of a graphics set, not the greek
-	 * letters the 37 has.
-	 */
-
-	UNDER_CHAR =		t_agetstr(info, "uc");
-	must_use_uc = (UNDER_CHAR && !ENTER_UNDERLINE);
-}
-
-int
-outchar(c)
-	int c;
+static int
+outchar(int c)
 {
 	return (putchar(c & 0177));
 }
 
 static int curmode = 0;
 
-void
-outc(c)
-	int c;
+static void
+outc(int c)
 {
 	putchar(c);
-	if (must_use_uc && (curmode&UNDERL)) {
-		PRINT(CURS_LEFT);
-		PRINT(UNDER_CHAR);
+	if (underline_char && !enter_underline_mode && (curmode & UNDERL)) {
+		if (cursor_left)
+			PRINT(cursor_left);
+		else
+			putchar('\b');
+		PRINT(underline_char);
 	}
 }
 
-void
-setulmode(newmode)
-	int newmode;
+static void
+setulmode(int newmode)
 {
 	if (!iflag) {
 		if (curmode != NORMAL && newmode != NORMAL)
@@ -499,42 +440,73 @@ setulmode(newmode)
 			case NORMAL:
 				break;
 			case UNDERL:
-				PRINT(EXIT_UNDERLINE);
+				if (enter_underline_mode)
+					PRINT(exit_underline_mode);
+				else
+					PRINT(exit_standout_mode);
 				break;
 			default:
 				/* This includes standout */
-				PRINT(EXIT_ATTRIBUTES);
+				if (exit_attribute_mode)
+					PRINT(exit_attribute_mode);
+				else
+					PRINT(exit_standout_mode);
 				break;
 			}
 			break;
 		case ALTSET:
-			PRINT(ENTER_REVERSE);
+			if (enter_reverse_mode)
+				PRINT(enter_reverse_mode);
+			else
+				PRINT(enter_standout_mode);
 			break;
 		case SUPERSC:
 			/*
 			 * This only works on a few terminals.
 			 * It should be fixed.
 			 */
-			PRINT(ENTER_UNDERLINE);
-			PRINT(ENTER_DIM);
+			PRINT(enter_underline_mode);
+			PRINT(enter_dim_mode);
 			break;
 		case SUBSC:
-			PRINT(ENTER_DIM);
+			if (enter_dim_mode)
+				PRINT(enter_dim_mode);
+			else
+				PRINT(enter_standout_mode);
 			break;
 		case UNDERL:
-			PRINT(ENTER_UNDERLINE);
+			if (enter_underline_mode)
+				PRINT(enter_underline_mode);
+			else
+				PRINT(enter_standout_mode);
 			break;
 		case BOLD:
-			PRINT(ENTER_BOLD);
+			if (enter_bold_mode)
+				PRINT(enter_bold_mode);
+			else
+				PRINT(enter_reverse_mode);
 			break;
 		default:
 			/*
 			 * We should have some provision here for multiple modes
 			 * on at once.  This will have to come later.
 			 */
-			PRINT(ENTER_STANDOUT);
+			PRINT(enter_standout_mode);
 			break;
 		}
 	}
 	curmode = newmode;
+}
+
+/*
+ * Reallocates the buffer pointed to by *buf and sets
+ * the newly allocated set of bytes to 0.
+ */
+static void
+alloc_buf(struct CHAR **buf, size_t *size)
+{
+        size_t osize = *size;
+        *size += MAXBUF;
+        ereallocarr(buf, *size, sizeof(**buf));
+        memset(*buf + osize, 0, (*size - osize) * sizeof(**buf));
 }

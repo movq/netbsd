@@ -1,3 +1,5 @@
+/*	$NetBSD: amrctl.c,v 1.10 2014/03/23 05:09:56 dholland Exp $	*/
+
 /*-
  * Copyright (c) 2002, Pierre David <Pierre.David@crc.u-strasbg.fr>
  * Copyright (c) 2006, Jung-uk Kim <jkim@FreeBSD.org>
@@ -26,11 +28,15 @@
  */
 
 #include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: amrctl.c,v 1.10 2014/03/23 05:09:56 dholland Exp $");
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <err.h>
 #include <errno.h>
 #include <unistd.h>
 
@@ -44,18 +50,18 @@
 #define NATTEMPTS	5
 #define SLEEPTIME	100000	/* microseconds */
 
-int	nattempts = NATTEMPTS;	/* # of attempts before giving up */
-int	sleeptime = SLEEPTIME;	/* between attempts, in ms */
+static int	nattempts = NATTEMPTS;	/* # of attempts before giving up */
+static int	sleeptime = SLEEPTIME;	/* between attempts, in ms */
 
 #define AMR_BUFSIZE	1024
 
-int	enq_result = AMR_STATUS_FAILED;
-char	enq_buffer[AMR_BUFSIZE];
+static int	enq_result = AMR_STATUS_FAILED;
+static char	enq_buffer[AMR_BUFSIZE];
 
 #define AMR_MAX_NCTRLS	16
 #define AMR_MAX_NSDEVS	16
 
-u_int8_t	nschan = 0;
+static uint8_t	nschan = 0;
 
 /*
  * Include lookup tables, and a function to match a code to a string.
@@ -67,15 +73,15 @@ u_int8_t	nschan = 0;
 /* #define AMR_DEFINE_TABLES */
 /* #include "amr_tables.h" */
 
-int amr_ioctl_enquiry(int, u_int8_t, u_int8_t, u_int8_t);
-void usage(char *);
-int describe_card(int, int, int);
-char * describe_property(u_int8_t, char *);
-const char * describe_state(int, u_int8_t);
-void describe_battery(int, int, int, int, int);
-void describe_one_volume(int, int, u_int32_t, u_int8_t, u_int8_t);
-void describe_one_drive(int, int, u_int8_t);
-void describe_drive(int, int, int, int, int);
+static int amr_ioctl_enquiry(int, uint8_t, uint8_t, uint8_t);
+__dead static void usage(const char *);
+static int describe_card(int, int, int);
+static char * describe_property(uint8_t, char *);
+static const char * describe_state(int, uint8_t);
+static void describe_battery(int, int, int, int, int);
+static void describe_one_volume(int, int, uint32_t, uint8_t, uint8_t);
+static void describe_one_drive(int, int, uint8_t);
+static void describe_drive(int, int, int, int, int);
 
 /*
  * Offsets in an amr_user_ioctl.au_cmd [] array See amrio.h
@@ -90,9 +96,9 @@ void describe_drive(int, int, int, int, int);
 #define FIRMWARE_40LD	1
 #define FIRMWARE_8LD	2
 
-static struct {
+static const struct {
 	const char	*product;
-	const int	signature;
+	const uint32_t	signature;
 } prodtable[] = {
 	{	"Series 431",			AMR_SIG_431	},
 	{	"Series 438",			AMR_SIG_438	},
@@ -104,7 +110,7 @@ static struct {
 	{	"Series 490",			AMR_SIG_490	}
 };
 
-static struct {
+static const struct {
 	const int	code;
 	const char	*ifyes, *ifno;
 } proptable[] = {
@@ -116,7 +122,7 @@ static struct {
 		"adaptative-io",	"no-adaptative-io"	}
 };
 
-static struct {
+static const struct {
 	const int	code;
 	const char	*status;
 } statetable[] = {
@@ -129,8 +135,8 @@ static struct {
 	{	AMR_DRV_HOTSPARE,	"hotspare"	}
 };
 
-static struct {
-	const u_int8_t	code;
+static const struct {
+	const uint8_t	code;
 	const char		*status;
 } battable[] = {
 	{	AMR_BATT_MODULE_MISSING,	"not present"		},
@@ -140,8 +146,8 @@ static struct {
 	{	AMR_BATT_CYCLES_EXCEEDED,	"cycle exceeded"	}
 };
 
-static struct {
-	const u_int8_t	code;
+static const struct {
+	const uint8_t	code;
 	const char		*status;
 } bcstatble[] = {
 	{	AMR_BATT_CHARGE_DONE,		"charge done"		},
@@ -149,10 +155,8 @@ static struct {
 	{	AMR_BATT_CHARGE_FAIL,		"charge failed"		}
 };
 
-#define NTAB(tab)	(sizeof tab / sizeof tab [0])
-
-int
-amr_ioctl_enquiry(int fd, u_int8_t cmd, u_int8_t cmdsub, u_int8_t cmdqual)
+static int
+amr_ioctl_enquiry(int fd, uint8_t cmd, uint8_t cmdsub, uint8_t cmdqual)
 {
 	struct amr_user_ioctl am;
 	int	r, i;
@@ -174,8 +178,8 @@ amr_ioctl_enquiry(int fd, u_int8_t cmd, u_int8_t cmdsub, u_int8_t cmdqual)
 		r = ioctl(fd, AMR_IO_COMMAND, &am);
 		if (r == -1) {
 			if (errno != EBUSY) {
-				perror("ioctl enquiry");
-				exit(1);
+				warn("ioctl enquiry");
+				return -1;
 			} else
 				usleep(sleeptime);
 		}
@@ -184,8 +188,8 @@ amr_ioctl_enquiry(int fd, u_int8_t cmd, u_int8_t cmdsub, u_int8_t cmdqual)
 	return am.au_status;
 }
 
-void
-usage(char *prog)
+static void
+usage(const char *prog)
 {
 	fprintf(stderr, "usage: %s stat [-a num] [-b] "
 		"[-c ctlr|-f dev] [-g] [-l vol]\n\t\t"
@@ -208,11 +212,11 @@ usage(char *prog)
  * Card description
  */
 
-int
+static int
 describe_card(int fd, int verbosity, int globalparam)
 {
 	struct amr_enquiry *ae;
-	int	cardtype;
+	uint32_t	cardtype;
 
 	/*
 	 * Try the 40LD firmware interface
@@ -267,9 +271,9 @@ describe_card(int fd, int verbosity, int globalparam)
 		if (globalparam) {
 			const char   *product = NULL;
 			char	bios[100], firmware[100];
-			int	i;
+			size_t	i;
 
-			for (i = 0; i < NTAB(prodtable); i++) {
+			for (i = 0; i < __arraycount(prodtable); i++) {
 				if (cardtype == prodtable[i].signature) {
 					product = prodtable[i].product;
 					break;
@@ -307,18 +311,21 @@ describe_card(int fd, int verbosity, int globalparam)
 					 */
 					product = "HP NetRaid 3si";
 				}
-				sprintf(firmware, "%c.%02d.%02d",
+				snprintf(firmware, sizeof(firmware),
+					"%c.%02d.%02d",
 					ae->ae_adapter.aa_firmware[2],
 					ae->ae_adapter.aa_firmware[1],
 					ae->ae_adapter.aa_firmware[0]);
-				sprintf(bios, "%c.%02d.%02d",
+				snprintf(bios, sizeof(bios),
+					"%c.%02d.%02d",
 					ae->ae_adapter.aa_bios[2],
 					ae->ae_adapter.aa_bios[1],
 					ae->ae_adapter.aa_bios[0]);
 			} else {
-				sprintf(firmware, "%.4s",
+				snprintf(firmware, sizeof(firmware), "%.4s",
 					ae->ae_adapter.aa_firmware);
-				sprintf(bios, "%.4s", ae->ae_adapter.aa_bios);
+				snprintf(bios, sizeof(bios), "%.4s",
+					ae->ae_adapter.aa_bios);
 			}
 
 			printf("Ioctl = %d (%s)\n", FIRMWARE_8LD, "8LD");
@@ -345,13 +352,13 @@ describe_card(int fd, int verbosity, int globalparam)
 
 }
 
-char *
-describe_property(u_int8_t prop, char *buffer)
+static char *
+describe_property(uint8_t prop, char *buffer)
 {
-	int	i;
+	size_t	i;
 
 	strcpy(buffer, "<");
-	for (i = 0; i < NTAB(proptable); i++) {
+	for (i = 0; i < __arraycount(proptable); i++) {
 		if (i > 0)
 			strcat(buffer, ",");
 		if (prop & proptable[i].code)
@@ -364,16 +371,16 @@ describe_property(u_int8_t prop, char *buffer)
 	return buffer;
 }
 
-const char *
-describe_state(int verbosity, u_int8_t state)
+static const char *
+describe_state(int verbosity, uint8_t state)
 {
-	int	i;
+	size_t	i;
 
 	if ((AMR_DRV_PREVSTATE(state) == AMR_DRV_CURSTATE(state)) &&
 	    (AMR_DRV_CURSTATE(state) == AMR_DRV_OFFLINE) && verbosity == 0)
 		return NULL;
 
-	for (i = 0; i < NTAB(statetable); i++)
+	for (i = 0; i < __arraycount(statetable); i++)
 		if (AMR_DRV_CURSTATE(state) == statetable[i].code)
 			return (statetable[i].status);
 
@@ -383,11 +390,11 @@ describe_state(int verbosity, u_int8_t state)
 /******************************************************************************
  * Battery status
  */
-void
+static void
 describe_battery(int fd, int verbosity, int fwint, int bflags, int globalparam)
 {
-	u_int8_t batt_status;
-	int i;
+	uint8_t batt_status;
+	size_t i;
 
 	if (fwint == FIRMWARE_40LD) {
 		enq_result = amr_ioctl_enquiry(fd, AMR_CMD_CONFIG,
@@ -399,13 +406,14 @@ describe_battery(int fd, int verbosity, int fwint, int bflags, int globalparam)
 			if (bflags || globalparam) {
 				batt_status = ae3->ae_batterystatus;
 				printf("Battery status\t\t");
-				for (i = 0; i < NTAB(battable); i++) {
+				for (i = 0; i < __arraycount(battable); i++) {
 					if (batt_status & battable[i].code)
 						printf("%s, ", battable[i].status);
 				}
 				if (!(batt_status &
 				    (AMR_BATT_MODULE_MISSING|AMR_BATT_PACK_MISSING))) {
-					for (i = 0; i < NTAB(bcstatble); i++)
+					for (i = 0;
+					     i < __arraycount(bcstatble); i++)
 						if (bcstatble[i].code ==
 						    (batt_status & AMR_BATT_CHARGE_MASK))
 							printf("%s", bcstatble[i].status);
@@ -431,9 +439,9 @@ describe_battery(int fd, int verbosity, int fwint, int bflags, int globalparam)
  * Logical volumes
  */
 
-void
+static void
 describe_one_volume(int ldrv, int verbosity,
-		    u_int32_t size, u_int8_t state, u_int8_t prop)
+		    uint32_t size, uint8_t state, uint8_t prop)
 {
 	float	szgb;
 	int	raid_level;
@@ -459,8 +467,8 @@ describe_one_volume(int ldrv, int verbosity,
  * Physical drives
  */
 
-void
-describe_one_drive(int pdrv, int verbosity, u_int8_t state)
+static void
+describe_one_drive(int pdrv, int verbosity, uint8_t state)
 {
 	const char *statestr;
 
@@ -475,7 +483,7 @@ describe_one_drive(int pdrv, int verbosity, u_int8_t state)
 	}
 }
 
-void
+static void
 describe_drive(int verbosity, int fwint, int ldrv, int sbus, int sdev)
 {
 	int	drv, pdrv = -1;
@@ -644,12 +652,10 @@ main(int argc, char *argv[])
 		
 	fd = open(filename, O_RDONLY);
 	if (fd == -1) {
-		perror("open");
-		exit(1);
+		err(EXIT_FAILURE, "open");
 	}
 	if (ioctl(fd, AMR_IO_VERSION, &i) == -1) {
-		perror("ioctl version");
-		exit(1);
+		err(EXIT_FAILURE, "ioctl version");
 	}
 
 	if (sflags) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: setjmp.S,v 1.7 2005/10/16 17:15:38 christos Exp $	*/
+/*	$NetBSD: setjmp.S,v 1.10 2013/09/12 15:36:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@
 #if 0
 	.asciz "@(#)setjmp.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: setjmp.S,v 1.7 2005/10/16 17:15:38 christos Exp $")
+	RCSID("$NetBSD: setjmp.S,v 1.10 2013/09/12 15:36:16 joerg Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -75,7 +75,7 @@ ENTRY(__setjmp14)
 	mov	%g6, %l6
 	mov	%g7, %l7
 
-#ifdef PIC
+#ifdef __PIC__
 	PIC_PROLOGUE(%i1, %o4)
 #endif
 
@@ -83,13 +83,12 @@ ENTRY(__setjmp14)
 	add	%i0, 0x38, %o2		/* build sigcontext in [%o2]->sc.sc_mask */
 	mov	1, %o0			/* SIG_BLOCK */
 					/* sigprocmask(SIG_BLOCK, (sigset_t *)NULL, (sigset_t *)a) */
-#ifdef PIC
-#ifdef BIGPIC
+#if __PIC__ - 0 >= 2
 	set	_C_LABEL(__sigprocmask14), %o4
 	ldx	[%i1 + %o4], %g2
-#else
+	call	%g2
+#elif __PIC__ - 0 >= 1
 	ldx	[%i1 + _C_LABEL(__sigprocmask14)], %g2
-#endif
 	call	%g2
 #else
 	call	_C_LABEL(__sigprocmask14)
@@ -97,13 +96,12 @@ ENTRY(__setjmp14)
 	 clr	%o1
 
 	clr	%o0			/* sigstack(NULL, &foo) */
-#ifdef PIC
-#ifdef BIGPIC
+#if __PIC__ - 0 >= 2
 	set	_C_LABEL(__sigaltstack14), %o4
 	ldx	[%i1 + %o4], %g2
-#else
+	call	%g2
+#elif __PIC__ - 0 >= 1
 	ldx	[%i1 + _C_LABEL(__sigaltstack14)], %g2
-#endif
 	call	%g2
 #else
 	call	_C_LABEL(__sigaltstack14)
@@ -118,19 +116,15 @@ ENTRY(__setjmp14)
 	stx	%fp, [%i0 + 0x08]	/* sc.sc_sp = sp */
 	add	%i7, 8, %o0
 	stx	%o0, [%i0 + 0x10]	/* sc.sc_pc = return_pc */
-	add	%i7, 12, %o0
-	stx	%o0, [%i0 + 0x18]	/* sc.sc_npc = return_pc + 4 */
 	stx	%g0, [%i0 + 0x20]	/* sc.sc_tstate = (clean ccr) */
 	stx	%l1, [%i0 + 0x28]	/* sc.sc_g1 */
 	stx	%l2, [%i0 + 0x30]	/* sc.sc_o0, set in longjmp, use as %g2 */
-	/* 0x38 */			/* sc.sc_mask was already saved above */
+	/* 0x38: 4x32bit */		/* sc.sc_mask was already saved above */
 
 	/* save additional registers needed to fill a complete mcontext */
-	stx	%l3, [%i0 + 0x40]
-	stx	%l4, [%i0 + 0x48]
-	stx	%l5, [%i0 + 0x50]
-	stx	%l6, [%i0 + 0x58]
-	stx	%l7, [%i0 + 0x60]
+	stx	%l3, [%i0 + 0x48]	/* adjust asserts in longjmp.c */
+	stx	%l6, [%i0 + 0x50]	/* if you change any of these */
+	stx	%l7, [%i0 + 0x58]	/* offsets! */
 
 	ret				/* return 0 */
 	 restore %g0, 0, %o0

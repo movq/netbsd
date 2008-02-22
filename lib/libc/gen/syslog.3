@@ -1,4 +1,4 @@
-.\"	$NetBSD: syslog.3,v 1.24 2006/11/22 17:23:25 christos Exp $
+.\"	$NetBSD: syslog.3,v 1.33 2017/07/03 21:32:49 wiz Exp $
 .\"	$OpenBSD: syslog.3,v 1.25 2005/07/22 03:16:58 jaredy Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
@@ -30,7 +30,7 @@
 .\"
 .\"     @(#)syslog.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd November 22, 2006
+.Dd March 22, 2017
 .Dt SYSLOG 3
 .Os
 .Sh NAME
@@ -38,6 +38,10 @@
 .Nm syslog_r ,
 .Nm vsyslog ,
 .Nm vsyslog_r ,
+.Nm syslogp ,
+.Nm syslogp_r ,
+.Nm vsyslogp ,
+.Nm vsyslogp_r ,
 .Nm openlog ,
 .Nm openlog_r ,
 .Nm closelog ,
@@ -53,6 +57,10 @@
 .Fn syslog "int priority" "const char *message" "..."
 .Ft void
 .Fn syslog_r "int priority" "struct syslog_data *data" "const char *message" "..."
+.Ft void
+.Fn syslogp "int priority" "const char *msgid" "const char *sdfmt" "const char *message" "..."
+.Ft void
+.Fn syslogp_r "int priority" "struct syslog_data *data" "const char *msgid" "const char *sdfmt" "const char *message" "..."
 .\" .Ft void
 .\" .Fn syslog_ss "int priority" "struct syslog_data *data" "const char *message" "..."
 .Ft void
@@ -72,26 +80,12 @@
 .Fn vsyslog "int priority" "const char *message" "va_list args"
 .Ft void
 .Fn vsyslog_r "int priority" "struct syslog_data *data" "const char *message" "va_list args"
+.Ft void
+.Fn vsyslogp "int priority" "const char *msgid" "const char *sdfmt" "const char *message" "va_list args"
+.Ft void
+.Fn vsyslogp_r "int priority" "struct syslog_data *data" "const char *msgid" "const char *sdfmt" "const char *message" "va_list args"
 .\" .Ft void
 .\" .Fn vsyslog_ss "int priority" "struct syslog_data *data" "const char *message" "va_list args"
-.Bd -literal
-
-struct syslog_data {
-        int             log_file;
-        int             connected;
-        int             opened;
-        int             log_stat;
-        const char     *log_tag;
-        int             log_fac;
-        int             log_mask;
-};
-
-#define SYSLOG_DATA_INIT { \e
-    .log_file = -1, \e
-    .log_fac = LOG_USER, \e
-    .log_mask = 0xff, \e
-}
-.Ed
 .Sh DESCRIPTION
 The
 .Fn syslog
@@ -100,7 +94,7 @@ writes
 .Fa message
 to the system message logger.
 The message is then written to the system console, log files,
-logged-in users, or forwarded to other machines as appropriate (See
+logged-in users, or forwarded to other machines as appropriate (see
 .Xr syslogd 8 ) .
 .Pp
 The message is identical to a
@@ -114,6 +108,10 @@ message.
 see
 .Xr strerror 3 . )
 A trailing newline is added if none is present.
+.\" shouldn't the newline statement be removed?
+.\" when logging through a socket a newline is
+.\" not added nor is it required. -- ms
+.Pp
 The
 .Fn syslog_r
 function is a multithread-safe version of the
@@ -131,24 +129,45 @@ The
 constant is used for this purpose.
 The
 .Fa syslog_data
-structure is composed of the following elements:
-.Bl -tag -width connected
-.It Dv log_file
+structure and the
+.Dv SYSLOG_DATA_INIT
+constant are defined as:
+.Bd -literal -offset indent
+struct syslog_data {
+        int             log_file;
+        int             connected;
+        int             opened;
+        int             log_stat;
+        const char     *log_tag;
+        int             log_fac;
+        int             log_mask;
+};
+
+#define SYSLOG_DATA_INIT { \e
+    .log_file = -1, \e
+    .log_fac = LOG_USER, \e
+    .log_mask = 0xff, \e
+}
+.Ed
+.Pp
+The structure is composed of the following elements:
+.Bl -tag -width connected -offset indent
+.It Va log_file
 contains the file descriptor of the file where the message is logged
-.It Dv connected
+.It Va connected
 indicates if connect has been done
-.It Dv opened
+.It Va opened
 indicates if
 .Fn openlog_r
 has been called
-.It Dv log_stat
+.It Va log_stat
 status bits, set by
 .Fn openlog_r
-.It Dv log_tag
+.It Va log_tag
 string to tag the entry with
-.It Dv log_fac
+.It Va log_fac
 facility code
-.It Dv log_mask
+.It Va log_mask
 mask of priorities to be logged
 .El
 .\" .Pp
@@ -180,7 +199,18 @@ The
 function
 is an alternative form in which the arguments have already been captured
 using the variable-length argument facilities of
-.Xr varargs 3 .
+.Xr stdarg 3 .
+.Pp
+The
+.Fn syslogp
+variants take additional arguments which correspond to new fields in the
+syslog-protocol message format.
+All three arguments are evaluated as
+.Xr printf 3
+format strings and any of them can be
+.Dv NULL .
+This enables applications to use message IDs, structured data, and UTF-8 encoded
+content in messages.
 .Pp
 The message is tagged with
 .Fa priority .
@@ -265,6 +295,10 @@ immediately.
 Normally the open is delayed until the first message is logged.
 Useful for programs that need to manage the order in which file
 descriptors are allocated.
+.It Dv LOG_NLOG
+Stops syslog from writing to the system log.
+Only useful with
+.Dv LOG_PERROR .
 .It Dv LOG_PERROR
 Write the message to standard error output as well to the system log.
 .It Dv LOG_PID
@@ -272,6 +306,9 @@ Log the process id with each message: useful for identifying
 instantiations of daemons.
 (This PID is placed within brackets
 between the ident and the message.)
+.It Dv LOG_PTRIM
+Trim anything syslog added to the message before writing to
+standard error output.
 .El
 .Pp
 The
@@ -391,8 +428,12 @@ The routines
 .Fn syslog ,
 .Fn syslog_r ,
 .Fn vsyslog ,
+.Fn vsyslog_r ,
+.Fn syslogp ,
+.Fn syslogp_r ,
+.Fn vsyslogp ,
 and
-.Fn vsyslog_r
+.Fn vsyslogp_r
 return no value.
 .Pp
 The routines
@@ -411,17 +452,34 @@ setlogmask(LOG_UPTO(LOG_ERR));
 syslog(LOG_INFO, "Connection from host %d", CallingHost);
 
 syslog(LOG_INFO|LOG_LOCAL2, "foobar error: %m");
+
+syslogp(LOG_INFO|LOG_LOCAL2, NULL, NULL, "foobar error: %m");
+
+syslogp(LOG_INFO, "ID%d", "[meta language=\e"en-US\e"]",
+        "event: %s", 42, EventDescription);
 .Ed
 .Pp
 For the multithread-safe functions:
 .Bd -literal -offset indent
 struct syslog_data sdata = SYSLOG_DATA_INIT;
 
-syslog_r(LOG_INFO|LOG_LOCAL2, \*[Am]sdata, "foobar error: %m");
+syslog_r(LOG_INFO|LOG_LOCAL2, &sdata, "foobar error: %m");
 .Ed
 .Sh SEE ALSO
 .Xr logger 1 ,
 .Xr syslogd 8
+.Rs
+.%R RFC
+.%N 3164
+.%D August 2001
+.%T The BSD syslog Protocol
+.Re
+.Rs
+.%R Internet-Draft
+.%N draft-ietf-syslog-protocol-23
+.%D September 2007
+.%T The syslog Protocol
+.Re
 .Sh HISTORY
 These non-multithread-safe functions appeared in
 .Bx 4.2 .
@@ -431,6 +489,8 @@ and then in
 .Nx 4.0 .
 The async-signal-safe functions appeared in
 .Nx 4.0 .
+The syslog-protocol functions appeared in
+.Nx 5.0 .
 .Sh CAVEATS
 It is important never to pass a string with user-supplied data as a
 format without using
@@ -449,3 +509,16 @@ Always be sure to use the proper secure idiom:
 .Bd -literal -offset indent
 syslog(priority, "%s", string);
 .Ed
+.Pp
+With
+.Fn syslogp
+the caller is responsible to use the right formatting for the message fields.
+A
+.Fa msgid
+must only contain up to 32 ASCII characters.
+A
+.Fa sdfmt
+has strict rules for parenthesis and character quoting.
+If the
+.Fa msgfmt
+contains UTF-8 characters, then it has to start with a Byte Order Mark.

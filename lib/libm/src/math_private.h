@@ -11,7 +11,7 @@
 
 /*
  * from: @(#)fdlibm.h 5.1 93/09/24
- * $NetBSD: math_private.h,v 1.12 2005/07/21 12:55:58 christos Exp $
+ * $NetBSD: math_private.h,v 1.23 2016/09/19 22:05:05 christos Exp $
  */
 
 #ifndef _MATH_PRIVATE_H_
@@ -48,6 +48,9 @@ typedef union
     u_int32_t msw;
     u_int32_t lsw;
   } parts;
+  struct {
+    u_int64_t w;
+  } xparts;
 } ieee_double_shape_type;
 
 #endif
@@ -63,6 +66,9 @@ typedef union
     u_int32_t lsw;
     u_int32_t msw;
   } parts;
+  struct {
+    u_int64_t w;
+  } xparts;
 } ieee_double_shape_type;
 
 #endif
@@ -75,7 +81,16 @@ do {								\
   ew_u.value = (d);						\
   (ix0) = ew_u.parts.msw;					\
   (ix1) = ew_u.parts.lsw;					\
-} while (0)
+} while (/*CONSTCOND*/0)
+
+/* Get a 64-bit int from a double. */
+#define EXTRACT_WORD64(ix,d)					\
+do {								\
+  ieee_double_shape_type ew_u;					\
+  ew_u.value = (d);						\
+  (ix) = ew_u.xparts.w;						\
+} while (/*CONSTCOND*/0)
+
 
 /* Get the more significant 32 bit int from a double.  */
 
@@ -84,7 +99,7 @@ do {								\
   ieee_double_shape_type gh_u;					\
   gh_u.value = (d);						\
   (i) = gh_u.parts.msw;						\
-} while (0)
+} while (/*CONSTCOND*/0)
 
 /* Get the less significant 32 bit int from a double.  */
 
@@ -93,7 +108,7 @@ do {								\
   ieee_double_shape_type gl_u;					\
   gl_u.value = (d);						\
   (i) = gl_u.parts.lsw;						\
-} while (0)
+} while (/*CONSTCOND*/0)
 
 /* Set a double from two 32 bit ints.  */
 
@@ -103,7 +118,16 @@ do {								\
   iw_u.parts.msw = (ix0);					\
   iw_u.parts.lsw = (ix1);					\
   (d) = iw_u.value;						\
-} while (0)
+} while (/*CONSTCOND*/0)
+
+/* Set a double from a 64-bit int. */
+#define INSERT_WORD64(d,ix)					\
+do {								\
+  ieee_double_shape_type iw_u;					\
+  iw_u.xparts.w = (ix);						\
+  (d) = iw_u.value;						\
+} while (/*CONSTCOND*/0)
+
 
 /* Set the more significant 32 bits of a double from an int.  */
 
@@ -113,7 +137,7 @@ do {								\
   sh_u.value = (d);						\
   sh_u.parts.msw = (v);						\
   (d) = sh_u.value;						\
-} while (0)
+} while (/*CONSTCOND*/0)
 
 /* Set the less significant 32 bits of a double from an int.  */
 
@@ -123,7 +147,7 @@ do {								\
   sl_u.value = (d);						\
   sl_u.parts.lsw = (v);						\
   (d) = sl_u.value;						\
-} while (0)
+} while (/*CONSTCOND*/0)
 
 /* A union which permits us to convert between a float and a 32 bit
    int.  */
@@ -141,7 +165,7 @@ do {								\
   ieee_float_shape_type gf_u;					\
   gf_u.value = (d);						\
   (i) = gf_u.word;						\
-} while (0)
+} while (/*CONSTCOND*/0)
 
 /* Set a float from a 32 bit int.  */
 
@@ -150,7 +174,107 @@ do {								\
   ieee_float_shape_type sf_u;					\
   sf_u.word = (i);						\
   (d) = sf_u.value;						\
-} while (0)
+} while (/*CONSTCOND*/0)
+
+/*
+ * Attempt to get strict C99 semantics for assignment with non-C99 compilers.
+ */
+#if FLT_EVAL_METHOD == 0 || __GNUC__ == 0
+#define	STRICT_ASSIGN(type, lval, rval)	((lval) = (rval))
+#else
+#define	STRICT_ASSIGN(type, lval, rval) do {	\
+	volatile type __lval;			\
+						\
+	if (sizeof(type) >= sizeof(long double))	\
+		(lval) = (rval);		\
+	else {					\
+		__lval = (rval);		\
+		(lval) = __lval;		\
+	}					\
+} while (/*CONSTCOND*/0)
+#endif
+
+#ifdef	_COMPLEX_H
+
+/*
+ * Quoting from ISO/IEC 9899:TC2:
+ *
+ * 6.2.5.13 Types
+ * Each complex type has the same representation and alignment requirements as
+ * an array type containing exactly two elements of the corresponding real type;
+ * the first element is equal to the real part, and the second element to the
+ * imaginary part, of the complex number.
+ */
+typedef union {
+	float complex z;
+	float parts[2];
+} float_complex;
+
+typedef union {
+	double complex z;
+	double parts[2];
+} double_complex;
+
+typedef union {
+	long double complex z;
+	long double parts[2];
+} long_double_complex;
+
+#define	REAL_PART(z)	((z).parts[0])
+#define	IMAG_PART(z)	((z).parts[1])
+
+/*
+ * Inline functions that can be used to construct complex values.
+ *
+ * The C99 standard intends x+I*y to be used for this, but x+I*y is
+ * currently unusable in general since gcc introduces many overflow,
+ * underflow, sign and efficiency bugs by rewriting I*y as
+ * (0.0+I)*(y+0.0*I) and laboriously computing the full complex product.
+ * In particular, I*Inf is corrupted to NaN+I*Inf, and I*-0 is corrupted
+ * to -0.0+I*0.0.
+ *
+ * The C11 standard introduced the macros CMPLX(), CMPLXF() and CMPLXL()
+ * to construct complex values.  Compilers that conform to the C99
+ * standard require the following functions to avoid the above issues.
+ */
+
+#ifndef CMPLXF
+static __inline float complex
+CMPLXF(float x, float y)
+{
+	float_complex z;
+
+	REAL_PART(z) = x;
+	IMAG_PART(z) = y;
+	return (z.z);
+}
+#endif
+
+#ifndef CMPLX
+static __inline double complex
+CMPLX(double x, double y)
+{
+	double_complex z;
+
+	REAL_PART(z) = x;
+	IMAG_PART(z) = y;
+	return (z.z);
+}
+#endif
+
+#ifndef CMPLXL
+static __inline long double complex
+CMPLXL(long double x, long double y)
+{
+	long_double_complex z;
+
+	REAL_PART(z) = x;
+	IMAG_PART(z) = y;
+	return (z.z);
+}
+#endif
+
+#endif	/* _COMPLEX_H */
 
 /* ieee style elementary functions */
 extern double __ieee754_sqrt __P((double));
@@ -179,7 +303,7 @@ extern double __ieee754_y1 __P((double));
 extern double __ieee754_jn __P((int,double));
 extern double __ieee754_yn __P((int,double));
 extern double __ieee754_remainder __P((double,double));
-extern int    __ieee754_rem_pio2 __P((double,double*));
+extern int32_t __ieee754_rem_pio2 __P((double,double*));
 extern double __ieee754_scalb __P((double,double));
 
 /* fdlibm kernel function */
@@ -187,7 +311,7 @@ extern double __kernel_standard __P((double,double,int));
 extern double __kernel_sin __P((double,double,int));
 extern double __kernel_cos __P((double,double));
 extern double __kernel_tan __P((double,double,int));
-extern int    __kernel_rem_pio2 __P((double*,double*,int,int,int,const int*));
+extern int    __kernel_rem_pio2 __P((double*,double*,int,int,int,const int32_t*));
 
 
 /* ieee style elementary float functions */
@@ -217,13 +341,46 @@ extern float __ieee754_y1f __P((float));
 extern float __ieee754_jnf __P((int,float));
 extern float __ieee754_ynf __P((int,float));
 extern float __ieee754_remainderf __P((float,float));
-extern int   __ieee754_rem_pio2f __P((float,float*));
+extern int32_t __ieee754_rem_pio2f __P((float,float*));
 extern float __ieee754_scalbf __P((float,float));
 
 /* float versions of fdlibm kernel functions */
 extern float __kernel_sinf __P((float,float,int));
 extern float __kernel_cosf __P((float,float));
 extern float __kernel_tanf __P((float,float,int));
-extern int   __kernel_rem_pio2f __P((float*,float*,int,int,int,const int*));
+extern int   __kernel_rem_pio2f __P((float*,float*,int,int,int,const int32_t*));
+
+/* ieee style elementary long double functions */
+extern long double __ieee754_fmodl(long double, long double);
+extern long double __ieee754_sqrtl(long double);
+
+/*
+ * TRUNC() is a macro that sets the trailing 27 bits in the mantissa of an
+ * IEEE double variable to zero.  It must be expression-like for syntactic
+ * reasons, and we implement this expression using an inline function
+ * instead of a pure macro to avoid depending on the gcc feature of
+ * statement-expressions.
+ */
+#define	TRUNC(d)	(_b_trunc(&(d)))
+
+static __inline void
+_b_trunc(volatile double *_dp)
+{
+	uint32_t _lw;
+
+	GET_LOW_WORD(_lw, *_dp);
+	SET_LOW_WORD(*_dp, _lw & 0xf8000000);
+}
+
+struct Double {
+	double	a;
+	double	b;
+};
+
+/*
+ * Functions internal to the math package, yet not static.
+ */
+double	__exp__D(double, double);
+struct Double __log__D(double);
 
 #endif /* _MATH_PRIVATE_H_ */

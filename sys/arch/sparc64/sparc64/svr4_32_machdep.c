@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_machdep.c,v 1.32 2007/12/22 01:15:37 yamt Exp $	 */
+/*	$NetBSD: svr4_32_machdep.c,v 1.41 2017/09/16 08:46:06 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.32 2007/12/22 01:15:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.41 2017/09/16 08:46:06 martin Exp $");
 
-#ifndef _LKM
+#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
 #endif
 
@@ -48,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.32 2007/12/22 01:15:37 yamt Ex
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
@@ -80,13 +72,13 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.32 2007/12/22 01:15:37 yamt Ex
 static void svr4_32_getsiginfo(union svr4_32_siginfo *, int, u_long, void *);
 
 void
-svr4_32_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+svr4_32_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	register struct trapframe64 *tf = l->l_md.md_tf;
 
 	netbsd32_setregs(l, epp, stack);
 	
-	/* This should be the exit function, not p->p_psstr. */
+	/* This should be the exit function, not p->p_psstrp. */
 	tf->tf_global[1] = (vaddr_t)0;
 }
 
@@ -147,7 +139,7 @@ svr4_32_getmcontext(struct lwp *l, struct svr4_32_mcontext *mc,
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
+		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
 
@@ -234,7 +226,7 @@ svr4_32_setmcontext(struct lwp *l, struct svr4_32_mcontext *mc,
 #endif
 
 #ifdef DEBUG_SVR4
-	svr4_32_printmcontext("setmcontext", uc);
+	svr4_32_printmcontext("setmcontext", mc);
 #endif
 
 	write_user_windows();
@@ -245,7 +237,7 @@ svr4_32_setmcontext(struct lwp *l, struct svr4_32_mcontext *mc,
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
+		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
 
@@ -512,8 +504,8 @@ svr4_32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_handler = catcher;
 
 	DPRINTF(("svr4_32_sendsig signum=%d si = %p uc = %p handler = %p\n",
-	         frame.sf_signum, frame.sf_sip,
-		 frame.sf_ucp, frame.sf_handler));
+	         frame.sf_signum, NETBSD32PTR64(frame.sf_sip),
+		 NETBSD32PTR64(frame.sf_ucp), frame.sf_handler));
 	/*
 	 * Modify the signal context to be used by sigreturn.
 	 */
@@ -521,7 +513,7 @@ svr4_32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	sendsig_reset(l, sig);
 	frame.sf_uc.uc_mcontext.greg[SVR4_SPARC_SP] = oldsp;
 	newsp = (u_long)fp - sizeof(struct rwindow32);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	svr4_32_getcontext(l, &frame.sf_uc, &tmask);
 	write_user_windows();
 
@@ -532,7 +524,7 @@ svr4_32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 	error = (rwindow_save(l) || copyout(&frame, fp, sizeof(frame)) != 0 ||
 	    copyout(&oldsp, &((struct rwindow32 *)newsp)->rw_in[6], sizeof(oldsp)));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 		/*
@@ -540,14 +532,14 @@ svr4_32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		 * instruction to halt it in its tracks.
 		 */
 #ifdef DEBUG
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("svr4_32_sendsig: window save or copyout error\n");
 		printf("svr4_32_sendsig: stack was trashed trying to send sig %d, sending SIGILL\n", sig);
 #ifdef DDB
 		Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 #endif
 		sigexit(l, SIGILL);
 		/* NOTREACHED */
@@ -573,13 +565,13 @@ svr4_32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		printf("svr4_32_sendsig: about to return to catcher %p thru %p\n", 
 		       catcher, (void *)(u_long)addr);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 	}
 #endif
 }
@@ -681,7 +673,8 @@ svr4_32_sys_sysarch(struct lwp *l, const struct svr4_32_sys_sysarch_args *uap, r
 }
 
 vaddr_t
-svr4_32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t size)
+svr4_32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t size,
+    int topdown)
 {
 	return round_page((vaddr_t)(base) + (vsize_t)MAXDSIZ32);
 }

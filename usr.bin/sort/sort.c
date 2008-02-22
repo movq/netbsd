@@ -1,4 +1,4 @@
-/*	$NetBSD: sort.c,v 1.44 2006/10/23 19:53:25 jdolecek Exp $	*/
+/*	$NetBSD: sort.c,v 1.64 2017/01/10 21:13:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,36 +60,34 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#include <sys/cdefs.h>
+#ifndef lint
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
+#endif /* not lint */
+__RCSID("$NetBSD: sort.c,v 1.64 2017/01/10 21:13:45 christos Exp $");
 
 /* Sort sorts a file using an optional user-defined key.
  * Sort uses radix sort for internal sorting, and allows
  * a choice of merge sort and radix sort for external sorting.
  */
 
-#include "sort.h"
-#include "fsort.h"
-#include "pathnames.h"
-
-#ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
-#endif /* not lint */
-
-#ifndef lint
-__RCSID("$NetBSD: sort.c,v 1.44 2006/10/23 19:53:25 jdolecek Exp $");
-__SCCSID("@(#)sort.c	8.1 (Berkeley) 6/6/93");
-#endif /* not lint */
-
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <sys/resource.h>
 
+#include <locale.h>
 #include <paths.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <locale.h>
+#include <util.h>
+
+#include "sort.h"
+#include "fsort.h"
+#include "pathnames.h"
 
 int REC_D = '\n';
 u_char d_mask[NBINS];		/* flags for rec_d, field_d, <blank> */
@@ -105,36 +96,33 @@ u_char d_mask[NBINS];		/* flags for rec_d, field_d, <blank> */
  * weight tables.  Gweights is one of ascii, Rascii..
  * modified to weight rec_d = 0 (or 255)
  */
+u_char *const weight_tables[4] = { ascii, Rascii, Ftable, RFtable };
 u_char ascii[NBINS], Rascii[NBINS], RFtable[NBINS], Ftable[NBINS];
-int SINGL_FLD = 0, SEP_FLAG = 0, UNIQUE = 0;
 
-/*
- * Default to stable sort.
- */
-int stable_sort = 1;
+int SINGL_FLD = 0, SEP_FLAG = 0, UNIQUE = 0;
+int REVERSE = 0;
+int posix_sort;
+
+unsigned int debug_flags = 0;
 
 static char toutpath[MAXPATHLEN];
 
 const char *tmpdir;	/* where temporary files should be put */
 
-static void cleanup __P((void));
-static void onsignal __P((int));
-static void usage __P((const char *));
-
-int main __P((int argc, char **argv));
+static void cleanup(void);
+static void onsignal(int);
+__dead static void usage(const char *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	get_func_t get;
-	int ch, i, stdinflag = 0, tmp = 0;
-	char cflag = 0, mflag = 0;
+	int ch, i, stdinflag = 0;
+	char mode = 0;
 	char *outfile, *outpath = 0;
-	struct field *fldtab, *p;
-	size_t fldtab_sz = 3, fidx = 0;
+	struct field *fldtab;
+	size_t fldtab_sz, fld_cnt;
 	struct filelist filelist;
+	int num_input_files;
 	FILE *outfp = NULL;
 	struct rlimit rl;
 	struct stat st;
@@ -151,58 +139,93 @@ main(argc, argv)
 	d_mask[REC_D = '\n'] = REC_D_F;
 	d_mask['\t'] = d_mask[' '] = BLANK | FLD_D;
 
-	fldtab = malloc(fldtab_sz * sizeof(*fldtab));
+	/* fldtab[0] is the global options. */
+	fldtab_sz = 3;
+	fld_cnt = 0;
+	fldtab = emalloc(fldtab_sz * sizeof(*fldtab));
 	memset(fldtab, 0, fldtab_sz * sizeof(*fldtab));
 
-	fixit(&argc, argv);
+#define SORT_OPTS "bcCdD:fHik:lmno:rR:sSt:T:u"
+
+	/* Convert "+field" args to -k format */
+	fixit(&argc, argv, SORT_OPTS);
 
 	if (!(tmpdir = getenv("TMPDIR")))
 		tmpdir = _PATH_TMP;
 
-	while ((ch = getopt(argc, argv, "bcdfik:mHno:rR:sSt:T:ux")) != -1) {
+	while ((ch = getopt(argc, argv, SORT_OPTS)) != -1) {
 		switch (ch) {
 		case 'b':
-			fldtab->flags |= BI | BT;
+			fldtab[0].flags |= BI | BT;
 			break;
-		case 'c':
-			cflag = 1;
+		case 'c': case 'C': case 'm':
+			if (mode)
+				usage("Incompatible operation modes");
+			mode = ch;
 			break;
-		case 'd': case 'f': case 'i': case 'n': case 'r':
-			tmp |= optval(ch, 0);
-			if ((tmp & R) && (tmp & F))
-				fldtab->weights = RFtable;
-			else if (tmp & F)
-				fldtab->weights = Ftable;
-			else if (tmp & R)
-				fldtab->weights = Rascii;
-			fldtab->flags |= tmp;
+		case 'D': /* Debug flags */
+			for (i = 0; optarg[i]; i++)
+			    debug_flags |= 1 << (optarg[i] & 31);
+			break;
+		case 'd': case 'f': case 'i': case 'n': case 'l':
+			fldtab[0].flags |= optval(ch, 0);
 			break;
 		case 'H':
-			PANIC = 0;
+			/* -H was ; use merge sort for blocks of large files' */
+			/* That is now the default. */
 			break;
 		case 'k':
-			p = realloc(fldtab, (fldtab_sz + 1) * sizeof(*fldtab));
-			if (!p)
-				err(1, "realloc");
-			fldtab = p;
-			memset(&fldtab[fldtab_sz], 0,
-			    sizeof(fldtab[fldtab_sz]));
+			fldtab = erealloc(fldtab, (fldtab_sz + 1) * sizeof(*fldtab));
+			memset(&fldtab[fldtab_sz], 0, sizeof(fldtab[0]));
 			fldtab_sz++;
 
-			setfield(optarg, &fldtab[++fidx], fldtab->flags);
-			break;
-		case 'm':
-			mflag = 1;
+			setfield(optarg, &fldtab[++fld_cnt], fldtab[0].flags);
 			break;
 		case 'o':
 			outpath = optarg;
 			break;
+		case 'r':
+			REVERSE = 1;
+			break;
+		case 'R':
+			if (REC_D != '\n')
+				usage("multiple record delimiters");
+			REC_D = *optarg;
+			if (optarg[1] != '\0') {
+				char *ep;
+				int t = 0;
+
+				if (optarg[0] == '\\')
+					optarg++, t = 8;
+				REC_D = (int)strtol(optarg, &ep, t);
+				if (*ep != '\0' || REC_D < 0 ||
+				    REC_D >= (int)__arraycount(d_mask))
+					errx(2, "invalid record delimiter %s",
+					    optarg);
+			}
+			if (REC_D == '\n')
+				break;
+			d_mask['\n'] = d_mask[' '];
+			d_mask[REC_D] = REC_D_F;
+			break;
 		case 's':
-			/* for GNU sort compatibility (this is our default) */
-			stable_sort = 1;
+			/*
+			 * Nominally 'stable sort', keep lines with equal keys
+			 * in input file order. (Default for NetBSD)
+			 * (-s for GNU sort compatibility.)
+			 */
+			posix_sort = 0;
 			break;
 		case 'S':
-			stable_sort = 0;
+			/*
+			 * Reverse of -s!
+			 * This needs to enforce a POSIX sort where records
+			 * with equal keys are then sorted by the raw data.
+			 * Currently not implemented!
+			 * (using libc radixsort() v sradixsort() doesn't
+			 * have the desired effect.)
+			 */
+			posix_sort = 1;
 			break;
 		case 't':
 			if (SEP_FLAG)
@@ -210,17 +233,10 @@ main(argc, argv)
 			SEP_FLAG = 1;
 			d_mask[' '] &= ~FLD_D;
 			d_mask['\t'] &= ~FLD_D;
+			d_mask['\n'] &= ~FLD_D;
 			d_mask[(u_char)*optarg] |= FLD_D;
 			if (d_mask[(u_char)*optarg] & REC_D_F)
 				errx(2, "record/field delimiter clash");
-			break;
-		case 'R':
-			if (REC_D != '\n')
-				usage("multiple record delimiters");
-			if ('\n' == (REC_D = *optarg))
-				break;
-			d_mask['\n'] = d_mask[' '];
-			d_mask[REC_D] = REC_D_F;
 			break;
 		case 'T':
 			/* -T tmpdir */
@@ -234,14 +250,20 @@ main(argc, argv)
 			usage(NULL);
 		}
 	}
-	if (cflag && argc > optind+1)
+
+	if (UNIQUE)
+		/* Don't sort on raw record if keys match */
+		posix_sort = 0;
+
+	if ((mode == 'c' || mode == 'C') && argc > optind+1)
 		errx(2, "too many input files for -c option");
 	if (argc - 2 > optind && !strcmp(argv[argc-2], "-o")) {
 		outpath = argv[argc-1];
 		argc -= 2;
 	}
-	if (mflag && argc - optind > (MAXFCT - (16+1))*16)
+	if (mode == 'm' && argc - optind > (MAXFCT - (16+1))*16)
 		errx(2, "too many input files for -m option");
+
 	for (i = optind; i < argc; i++) {
 		/* allow one occurrence of /dev/stdin */
 		if (!strcmp(argv[i], "-") || !strcmp(argv[i], _PATH_STDIN)) {
@@ -252,43 +274,47 @@ main(argc, argv)
 				stdinflag = 1;
 
 			/* change to /dev/stdin if '-' */
-			if (argv[i][0] == '-')
-				argv[i] = _PATH_STDIN;
+			if (argv[i][0] == '-') {
+				static char path_stdin[] = _PATH_STDIN;
+				argv[i] = path_stdin;
+			}
 
 		} else if ((ch = access(argv[i], R_OK)))
 			err(2, "%s", argv[i]);
 	}
-	if (!(fldtab->flags & (I|D|N) || fldtab[1].icol.num)) {
-		SINGL_FLD = 1;
-		fldtab[0].icol.num = 1;
-	} else {
-		if (!fldtab[1].icol.num) {
+
+	if (fldtab[1].icol.num == 0) {
+		/* No sort key specified */
+		if (fldtab[0].flags & (I|D|F|N|L)) {
+			/* Modified - generate a key that covers the line */
 			fldtab[0].flags &= ~(BI|BT);
-			setfield("1", &fldtab[++fidx], fldtab->flags);
+			setfield("1", &fldtab[++fld_cnt], fldtab->flags);
+			fldreset(fldtab);
+		} else {
+			/* Unmodified, just compare the line */
+			SINGL_FLD = 1;
+			fldtab[0].icol.num = 1;
 		}
+	} else {
 		fldreset(fldtab);
-		fldtab[0].flags &= ~F;
 	}
-	settables(fldtab[0].flags);
-	num_init();
-	fldtab->weights = gweights;
+
+	settables();
+
 	if (optind == argc) {
 		static const char * const names[] = { _PATH_STDIN, NULL };
-
 		filelist.names = names;
-		optind--;
-	} else
+		num_input_files = 1;
+	} else {
 		filelist.names = (const char * const *) &argv[optind];
+		num_input_files = argc - optind;
+	}
 
-	if (SINGL_FLD)
-		get = makeline;
-	else
-		get = makekey;
-
-	if (cflag) {
-		order(&filelist, get, fldtab);
+	if (mode == 'c' || mode == 'C') {
+		order(&filelist, fldtab, mode == 'C');
 		/* NOT REACHED */
 	}
+
 	if (!outpath) {
 		toutpath[0] = '\0';	/* path not used in this case */
 		outfile = outpath = toutpath;
@@ -307,15 +333,15 @@ main(argc, argv)
 		    outpath);
 		if ((outfd = mkstemp(toutpath)) == -1)
 			err(2, "Cannot create temporary file `%s'", toutpath);
-		if ((outfp = fdopen(outfd, "w")) == NULL)
-			err(2, "Cannot open temporary file `%s'", toutpath);
-		outfile = toutpath;
 		(void)atexit(cleanup);
 		act.sa_handler = onsignal;
 		(void) sigemptyset(&act.sa_mask);
 		act.sa_flags = SA_RESTART | SA_RESETHAND;
 		for (i = 0; sigtable[i]; ++i)	/* always unlink toutpath */
 			sigaction(sigtable[i], &act, 0);
+		outfile = toutpath;
+		if ((outfp = fdopen(outfd, "w")) == NULL)
+			err(2, "Cannot open temporary file `%s'", toutpath);
 	} else {
 		outfile = outpath;
 
@@ -323,11 +349,10 @@ main(argc, argv)
 			err(2, "output file %s", outfile);
 	}
 
-	if (mflag) {
-		fmerge(-1, 0, &filelist, argc-optind, get, outfp, putline,
-			fldtab);
-	} else
-		fsort(-1, 0, 0, &filelist, argc-optind, outfp, fldtab);
+	if (mode == 'm')
+		fmerge(&filelist, num_input_files, outfp, fldtab);
+	else
+		fsort(&filelist, num_input_files, outfp, fldtab);
 
 	if (outfile != outpath) {
 		if (access(outfile, F_OK))
@@ -348,34 +373,47 @@ main(argc, argv)
 			err(2, "cannot link %s: output left in %s",
 			    outpath, outfile);
 		(void)unlink(outfile);
+		toutpath[0] = 0;
 	}
 	exit(0);
 }
 
 static void
-onsignal(sig)
-	int sig;
+onsignal(int sig)
 {
 	cleanup();
 }
 
 static void
-cleanup()
+cleanup(void)
 {
 	if (toutpath[0])
 		(void)unlink(toutpath);
 }
 
 static void
-usage(msg)
-	const char *msg;
+usage(const char *msg)
 {
+	const char *pn = getprogname();
+
 	if (msg != NULL)
-		(void)fprintf(stderr, "sort: %s\n", msg);
+		(void)fprintf(stderr, "%s: %s\n", getprogname(), msg);
 	(void)fprintf(stderr,
-	    "usage: %s [-bcdfHimnrSsu] [-k field1[,field2]] [-o output]"
-	    " [-R char] [-T dir]", getprogname());
+	    "usage: %s [-bdfHilmnrSsu] [-k kstart[,kend]] [-o output]"
+	    " [-R char] [-T dir]\n", pn);
 	(void)fprintf(stderr,
 	    "             [-t char] [file ...]\n");
+	(void)fprintf(stderr,
+	    "   or: %s -C|-c [-bdfilnru] [-k kstart[,kend]] [-o output]"
+	    " [-R char]\n", pn);
+	(void)fprintf(stderr,
+	    "             [-t char] [file]\n");
 	exit(2);
+}
+
+RECHEADER *
+allocrec(RECHEADER *rec, size_t size)
+{
+
+	return (erealloc(rec, size + sizeof(long) - 1));
 }

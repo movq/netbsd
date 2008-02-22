@@ -1,4 +1,4 @@
-/*	$NetBSD: xstr.c,v 1.21 2005/06/02 04:40:00 lukem Exp $	*/
+/*	$NetBSD: xstr.c,v 1.26 2016/03/11 18:39:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,19 +31,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)xstr.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: xstr.c,v 1.21 2005/06/02 04:40:00 lukem Exp $");
+__RCSID("$NetBSD: xstr.c,v 1.26 2016/03/11 18:39:03 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
@@ -62,7 +62,7 @@ __RCSID("$NetBSD: xstr.c,v 1.21 2005/06/02 04:40:00 lukem Exp $");
  */
 
 static off_t	hashit(const char *, int);
-static void	onintr(int);
+__dead static void	onintr(int);
 static off_t	yankstr(char **);
 static int	octdigit(char);
 static void	inithash(void);
@@ -75,12 +75,13 @@ static void	xsdotc(void);
 static char	lastchr(const char *);
 static int	istail(const char *, const char *);
 static void	process(const char *);
-static void	usage(void);
+__dead static void	usage(void);
 
 static off_t	tellpt;
 static off_t	mesgpt;
-static char	*strings =	"strings";
-static char	*array =	0;
+static char	stringtmpfile[MAXPATHLEN];
+static const char *strings =	"strings";
+static const char *array =	0;
 static int	cflg;
 static int	vflg;
 static int	readstd;
@@ -94,8 +95,6 @@ static struct	hash {
 	struct	hash *hnext;
 	short	hnew;
 } bucket[BUCKETS];
-
-int	main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -132,8 +131,10 @@ main(int argc, char *argv[])
 	else {
 		int	fd;
 
-		strings = strdup(_PATH_TMP);
-		fd = mkstemp(strings);
+		snprintf(stringtmpfile, sizeof(stringtmpfile),
+		    "%s%s.XXXXXX", _PATH_TMP, "xstr");
+		strings = stringtmpfile;
+		fd = mkstemp(stringtmpfile);
 		if (fd == -1)
 			err(1, "mkstemp failed");
 		close(fd);
@@ -261,7 +262,7 @@ yankstr(char **cpp)
 	char *cp = *cpp;
 	int c, ch;
 	char *dbuf, *dp, *edp;
-	char *tp;
+	const char *tp;
 	off_t hash;
 	size_t bsiz = BUFSIZ;
 
@@ -358,8 +359,7 @@ out:
 }
 
 static int
-octdigit(c)
-	char c;
+octdigit(char c)
 {
 
 	return (isdigit((unsigned char)c) && c != '8' && c != '9');
@@ -390,7 +390,7 @@ fgetNUL(char *obuf, int rmdr, FILE *file)
 
 	c = 0;	/* XXXGCC -Wuninitialized */
 
-	while (--rmdr > 0 && (c = xgetc(file) != 0 && c != EOF))
+	while (--rmdr > 0 && (c = xgetc(file)) != 0 && c != EOF)
 		*buf++ = c;
 	*buf++ = 0;
 	return (feof(file) || ferror(file)) ? 0 : 1;

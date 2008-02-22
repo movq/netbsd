@@ -1,4 +1,4 @@
-/*	$NetBSD: slcompress.c,v 1.33 2008/02/20 17:05:53 matt Exp $   */
+/*	$NetBSD: slcompress.c,v 1.40 2016/08/05 08:56:36 pgoyette Exp $   */
 /*	Id: slcompress.c,v 1.3 1996/05/24 07:04:47 paulus Exp 	*/
 
 /*
@@ -41,13 +41,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slcompress.c,v 1.33 2008/02/20 17:05:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slcompress.c,v 1.40 2016/08/05 08:56:36 pgoyette Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
+
 #ifdef INET
 #include <sys/param.h>
 #include <sys/mbuf.h>
 #include <sys/systm.h>
+#include <sys/module.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -62,9 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: slcompress.c,v 1.33 2008/02/20 17:05:53 matt Exp $")
 #define INCR(counter)
 #endif
 
-#define BCMP(p1, p2, n) bcmp((char *)(p1), (char *)(p2), (int)(n))
-#define BCOPY(p1, p2, n) bcopy((char *)(p1), (char *)(p2), (int)(n))
-
 
 void
 sl_compress_init(struct slcompress *comp)
@@ -72,7 +73,7 @@ sl_compress_init(struct slcompress *comp)
 	u_int i;
 	struct cstate *tstate = comp->tstate;
 
-	memset((char *)comp, 0, sizeof(*comp));
+	memset(comp, 0, sizeof(*comp));
 	for (i = MAX_STATES - 1; i > 0; --i) {
 		tstate[i].cs_id = i;
 		tstate[i].cs_next = &tstate[i - 1];
@@ -98,11 +99,11 @@ sl_compress_setup(struct slcompress *comp, int max_state)
 
 	if (max_state == -1) {
 		max_state = MAX_STATES - 1;
-		memset((char *)comp, 0, sizeof(*comp));
+		memset(comp, 0, sizeof(*comp));
 	} else {
 		/* Don't reset statistics */
-		memset((char *)comp->tstate, 0, sizeof(comp->tstate));
-		memset((char *)comp->rstate, 0, sizeof(comp->rstate));
+		memset(comp->tstate, 0, sizeof(comp->tstate));
+		memset(comp->rstate, 0, sizeof(comp->rstate));
 	}
 	for (i = max_state; i > 0; --i) {
 		tstate[i].cs_id = i;
@@ -282,9 +283,9 @@ sl_compress_tcp(struct mbuf *m, struct ip *ip, struct slcompress *comp,
 	    ((uint16_t *)ip)[4] != ((uint16_t *)&cs->cs_ip)[4] ||
 	    th->th_off != oth->th_off ||
 	    (deltaS > 5 &&
-	     BCMP(ip + 1, &cs->cs_ip + 1, (deltaS - 5) << 2)) ||
+	     memcmp(ip + 1, &cs->cs_ip + 1, (deltaS - 5) << 2)) ||
 	    (th->th_off > 5 &&
-	     BCMP(th + 1, oth + 1, (th->th_off - 5) << 2)))
+	     memcmp(th + 1, oth + 1, (th->th_off - 5) << 2)))
 		goto uncompressed;
 
 	/*
@@ -381,7 +382,7 @@ sl_compress_tcp(struct mbuf *m, struct ip *ip, struct slcompress *comp,
 	 * state with this packet's header.
 	 */
 	deltaA = ntohs(th->th_sum);
-	BCOPY(ip, &cs->cs_ip, hlen);
+	memcpy(&cs->cs_ip, ip, hlen);
 
 	/*
 	 * We want to use the original packet as our compressed packet.
@@ -409,7 +410,7 @@ sl_compress_tcp(struct mbuf *m, struct ip *ip, struct slcompress *comp,
 	m->m_data += hlen;
 	*cp++ = deltaA >> 8;
 	*cp++ = deltaA;
-	BCOPY(new_seq, cp, deltaS);
+	memcpy(cp, new_seq, deltaS);
 	INCR(sls_compressed)
 	return (TYPE_COMPRESSED_TCP);
 
@@ -419,7 +420,7 @@ sl_compress_tcp(struct mbuf *m, struct ip *ip, struct slcompress *comp,
 	 * to use on future compressed packets in the protocol field).
 	 */
 uncompressed:
-	BCOPY(ip, &cs->cs_ip, hlen);
+	memcpy(&cs->cs_ip, ip, hlen);
 	ip->ip_p = cs->cs_id;
 	comp->last_xmit = cs->cs_id;
 	return (TYPE_UNCOMPRESSED_TCP);
@@ -458,7 +459,7 @@ sl_uncompress_tcp(u_char **bufp, int len, u_int type, struct slcompress *comp)
 	}
 	cp -= hlen;
 	len += hlen;
-	BCOPY(hdr, cp, hlen);
+	memcpy(cp, hdr, hlen);
 
 	*bufp = cp;
 	return (len);
@@ -504,7 +505,7 @@ sl_uncompress_tcp_core(u_char *buf, int buflen, int total_len, u_int type,
 		hlen += ((struct tcphdr *)&((char *)ip)[hlen])->th_off << 2;
 		if (hlen > MAX_HDR || hlen > buflen)
 			goto bad;
-		BCOPY(ip, &cs->cs_ip, hlen);
+		memcpy(&cs->cs_ip, ip, hlen);
 		cs->cs_hlen = hlen;
 		INCR(sls_uncompressedin)
 		*hdrp = (u_char *) &cs->cs_ip;
@@ -617,3 +618,21 @@ bad:
 	return (-1);
 }
 #endif
+
+MODULE(MODULE_CLASS_MISC, slcompress, NULL);
+
+static int
+slcompress_modcmd(modcmd_t cmd, void *arg)
+{
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+	case MODULE_CMD_FINI:
+#ifdef INET
+		return 0;
+#endif
+	case MODULE_CMD_STAT:
+	case MODULE_CMD_AUTOUNLOAD:
+	default:
+		return ENOTTY;
+	}
+}

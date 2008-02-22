@@ -1,4 +1,4 @@
-# $NetBSD: SANDPOINT,v 1.2 2007/10/17 19:56:55 garbled Exp $
+# $NetBSD: SANDPOINT,v 1.14 2017/09/14 07:58:43 mrg Exp $
 #
 # Sandpoint X3/X2 machine description file
 # 
@@ -19,10 +19,11 @@
 # device.
 
 include 	"arch/sandpoint/conf/std.sandpoint"
+options 	PIC_I8259
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"SANDPOINT-$Revision: 1.2 $"
+#ident 		"SANDPOINT-$Revision: 1.14 $"
 
 maxusers	32
 
@@ -43,25 +44,13 @@ options 	DDB
 options 	KTRACE
 #options 	PMAPCHECK
 #options 	PMAPDEBUG
-#options 	SYMTAB_SPACE=300000
 #options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-options 	COMPAT_43
-options 	COMPAT_09
-options 	COMPAT_10
-options 	COMPAT_12
-options 	COMPAT_13
-options 	COMPAT_14
-options 	COMPAT_15
-options 	COMPAT_16
-options 	COMPAT_20
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+include 	"conf/compat_netbsd09.config"
 options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX		# Linux binary compatibility
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	MSGBUFSIZE=65536
 file-system 	FFS
@@ -73,13 +62,13 @@ file-system 	FDESC
 file-system 	KERNFS
 file-system 	NULLFS
 #file-system 	OVERLAY
-#file-system 	PORTAL
 file-system 	PROCFS
 #file-system 	UMAPFS
 #file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
 
-options 	SOFTDEP		# FFS soft updates support.
+#options 	DISKLABEL_EI	# disklabel Endian Independent support
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 options 	INET
@@ -115,15 +104,16 @@ pseudo-device	loop
 #pseudo-device	wsmux
 
 # miscellaneous pseudo-devices
-#pseudo-device	rnd			# /dev/random and in-kernel generator
 #pseudo-device	vnd		
 #options 	VND_COMPRESSION		# compressed vnd(4)
-#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	cgd			# cryptographic disk devices
 pseudo-device	pty
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	fss			# file system snapshot device
+
 #
 # device
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_subr.S,v 1.63 2008/02/07 03:20:17 garbled Exp $	*/
+/*	$NetBSD: trap_subr.S,v 1.79 2018/05/02 08:24:40 phx Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -45,21 +45,30 @@
 #ifdef ALTIVEC
 #define	SAVE_VRSAVE(tf,b)						\
 	mfspr	b,SPR_VRSAVE;						\
-	stint	b,(FRAME_VRSAVE+(2*SZREG))(tf);
+	stint	b,FRAME_VRSAVE(tf);
 
 #define RESTORE_VRSAVE(tf,b)						\
-	ldint	b,(FRAME_VRSAVE+(2*SZREG))(tf);				\
+	ldint	b,FRAME_VRSAVE(tf);					\
 	mtspr	SPR_VRSAVE,b;
 #else
 #define SAVE_VRSAVE(tf,b)
 #define RESTORE_VRSAVE(tf,b)
 #endif
 
-#if defined (PPC_OEA64)
+#if defined (PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 #define	RFI	rfid
 #else
 #define	RFI	rfi
-#endif /* PPC_OEA64 */
+#endif /* PPC_OEA64 || PPC_OEA64_BRIDGE*/
+
+#if defined (PPC_OEA64_BRIDGE)
+#define ENABLE_64BIT_BRIDGE(t0)						\
+	mfmsr	t0;							\
+	clrldi	t0,t0,1;						\
+	mtmsrd	t0;
+#else
+#define ENABLE_64BIT_BRIDGE(t0)
+#endif /* PPC_OEA64_BRIDGE */
 
 #if defined(PPC_OEA64)
 /*
@@ -78,6 +87,14 @@
 	lis	t0,_C_LABEL(kernel_pmap_)@ha;				\
 	ldreg	t0,_C_LABEL(kernel_pmap_)+PM_STEG@l(t0);		\
 	mtasr	t0
+
+#elif defined(PPC_MPC8XX)
+
+/*
+ * PPC_MPC8XX don't have SRs to load
+ */
+#define RESTORE_USER_SRS(t0,t1)
+#define RESTORE_KERN_SRS(t0,t1)
 
 #else /* not OEA64 */
 
@@ -141,10 +158,10 @@
 #if defined(PPC_OEA601)
 #define	SAVE_MQ(tf,b)							\
 	mfspr	b,SPR_MQ;						\
-	streg	b,(FRAME_MQ+(2*SZREG))(tf);
+	streg	b,FRAME_MQ(tf);
 
 #define	RESTORE_MQ(tf,b)						\
-	ldreg	b,(FRAME_MQ+(2*SZREG))(tf);				\
+	ldreg	b,FRAME_MQ(tf);						\
 	mtspr	SPR_MQ,b;
 #else
 #define	SAVE_MQ(tf,b)
@@ -162,6 +179,7 @@
 	.globl	_C_LABEL(trapcode),_C_LABEL(trapsize)
 _C_LABEL(trapcode):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* free r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* free r29 */
@@ -173,7 +191,14 @@ _C_LABEL(trapcode):
 /* Test whether we already had PR set */
 	mfsrr1	%r31
 	mtcr	%r31
+#if defined(DISTANT_KERNEL)
+	lis	%r31,s_trap@ha
+	addi	%r31,%r31,s_trap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	s_trap
+#endif
 _C_LABEL(trapsize) = .-_C_LABEL(trapcode)
 
 /*
@@ -184,6 +209,7 @@ _C_LABEL(trapsize) = .-_C_LABEL(trapcode)
 	.globl	_C_LABEL(alitrap),_C_LABEL(alisize)
 _C_LABEL(alitrap):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1) /* save r29 */
@@ -199,9 +225,17 @@ _C_LABEL(alitrap):
 /* Test whether we already had PR set */
 	mfsrr1	%r31
 	mtcr	%r31
+#if defined(DISTANT_KERNEL)
+	lis	%r31,s_trap@ha
+	addi	%r31,%r31,s_trap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	s_trap
+#endif
 _C_LABEL(alisize) = .-_C_LABEL(alitrap)
 
+#if !defined(PPC_MPC8XX)
 /*
  * Similar to the above for DSI
  * Has to handle BAT spills
@@ -211,6 +245,7 @@ _C_LABEL(alisize) = .-_C_LABEL(alitrap)
 	.globl	_C_LABEL(dsitrap),_C_LABEL(dsisize)
 _C_LABEL(dsitrap):
 	mtsprg1	%r1
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_DISISAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_DISISAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -218,13 +253,15 @@ _C_LABEL(dsitrap):
 	streg	%r31,(CI_DISISAVE+CPUSAVE_R31)(%r1)	/* save r31 */
 	mfsprg1	%r1
 	mfcr	%r29			/* save CR */
-	mfxer	%r30			/* save XER */
-	mtsprg2	%r30			/* in SPRG2 */
 	mfsrr1	%r31			/* test kernel mode */
 	mtcr	%r31
-	bt	17,1f			/* branch if PSL_PR is set */
+#if !defined(PPC_MPC8XX)
+	mfxer	%r30			/* save XER */
+	mtsprg2	%r30			/* in SPRG2 */
+	bt	MSR_PR,1f		/* branch if PSL_PR is set */
 	mfdar	%r31			/* get fault address */
-	rlwinm	%r31,%r31,7,25,28	/* get segment * 8 */
+	rlwinm	%r31,%r31,3+(32-BAT_ADDR_SHIFT),BAT_ADDR_SHIFT-3,28
+					/* get segment * 8 */
 
 	/* get batu */
 	addis	%r31,%r31,_C_LABEL(battable)@ha
@@ -236,15 +273,39 @@ _C_LABEL(dsitrap):
 	ldreg	%r31,_C_LABEL(battable)+SZREG@l(%r31)
 /* We randomly use the highest two bat registers here */
 	mftb	%r28
-	andi.	%r28,%r28,1
-	bne	2f
-	mtdbatu	2,%r30
-	mtdbatl	2,%r31
-	b	3f
-2:
-	mtdbatu	3,%r30
-	mtdbatl	3,%r31
+	mtcr	%r28
+	.globl	dsitrap_fix_dbat4, dsitrap_fix_dbat5
+	.globl	dsitrap_fix_dbat6, dsitrap_fix_dbat7
+dsitrap_fix_dbat4:
+	bt	31,3f
+	/*
+	 * If we are running on a CPU that has HIGHBAT, these will be replaced
+	 * by instructions to test bit 30 (aka bit 1 for normal people) and if
+	 * set skip ahead to 5f (4 instructions),  follored by instructions to
+	 * update BAT4.
+	 */
+	mtspr	SPR_DBAT2U,%r30		/*	bt	30,dsitrap_fix_dbat5 */
+	mtspr	SPR_DBAT2L,%r31		/*	mtspr	SPR_DBAT4U,%r30 */
+	b	8f			/*	mtspr	SPR_DBAT4L,%r31 */	
+	b	8f			/*	do not remove */
+dsitrap_fix_dbat5:
+	mtspr	SPR_DBAT5U,%r30
+	mtspr	SPR_DBAT5L,%r31
+	b	8f
+dsitrap_fix_dbat6:
+	bt	30,3f
+	mtspr	SPR_DBAT6U,%r30
+	mtspr	SPR_DBAT6L,%r31
+	b	8f
 3:
+dsitrap_fix_dbat7:
+	/*
+	 * If we are running on a CPU that has HIGHBAT, these will be replaced
+	 * by instructions to update BAT7.
+	 */
+	mtspr	SPR_DBAT3U,%r30		/*	mtspr	SPR_DBAT7U,%r30 */
+	mtspr	SPR_DBAT3L,%r31		/*	mtspr	SPR_DBAT7L,%r31 */
+8:
 	mfsprg2	%r30			/* restore XER */
 	mtxer	%r30
 	mtcr	%r29			/* restore CR */
@@ -257,10 +318,19 @@ _C_LABEL(dsitrap):
 	mfsprg1	%r1
 	RFI				/* return to trapped code */
 1:
+#endif	/* !PPC_MPC8XX */
 	mflr	%r28			/* save LR */
 	mtsprg1	%r1			/* save SP */
+#if defined(DISTANT_KERNEL)
+	lis	%r31,disitrap@ha
+	addi	%r31,%r31,disitrap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	disitrap
+#endif
 _C_LABEL(dsisize) = .-_C_LABEL(dsitrap)
+#endif /* !PPC_MPC8XX */
 
 #if defined(PPC_OEA601)
 /*
@@ -272,6 +342,7 @@ _C_LABEL(dsisize) = .-_C_LABEL(dsitrap)
 	.globl	_C_LABEL(dsi601trap),_C_LABEL(dsi601size)
 _C_LABEL(dsi601trap):
 	mtsprg1	%r1
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_DISISAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_DISISAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -283,7 +354,7 @@ _C_LABEL(dsi601trap):
 	mtsprg2	%r30			/* in SPRG2 */
 	mfsrr1	%r31			/* test kernel mode */
 	mtcr	%r31
-	bt	17,1f			/* branch if PSL_PR is set */
+	bt	MSR_PR,1f		/* branch if PSL_PR is set */
 	mfdar	%r31			/* get fault address */
 	rlwinm	%r31,%r31,12,20,28	/* get "segment" battable offset */
 
@@ -291,7 +362,7 @@ _C_LABEL(dsi601trap):
 	addis	%r31,%r31,_C_LABEL(battable)@ha
 	ldreg	%r30,_C_LABEL(battable)+SZREG@l(%r31)
 	mtcr	%r30
-	bf	25,1f			/* branch if Valid is is false,
+	bf	25,1f			/* branch if Valid is false,
 					   presently assumes supervisor only */
 
 	/* get batu */
@@ -321,7 +392,14 @@ _C_LABEL(dsi601trap):
 1:
 	mflr	%r28			/* save LR */
 	mtsprg1	%r1
+#if defined(DISTANT_KERNEL)
+	lis	%r31,disitrap@ha
+	addi	%r31,%r31,disitrap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	disitrap
+#endif
 _C_LABEL(dsi601size) = .-_C_LABEL(dsi601trap)
 #endif /* defined(PPC_OEA601) */
 
@@ -332,6 +410,7 @@ _C_LABEL(dsi601size) = .-_C_LABEL(dsi601trap)
 	.globl	_C_LABEL(extint),_C_LABEL(extsize)
 _C_LABEL(extint):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -339,15 +418,23 @@ _C_LABEL(extint):
 	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1)	/* save r31 */
 	mflr	%r28			/* save LR */
 	mfcr	%r29			/* save CR */
-	mfxer	%r30			/* save XER */
-	ldint	%r31,CI_INTRDEPTH(%r1)	/* were we already running on intstk? */
-	addic.	%r31,%r31,1
-	stint	%r31,CI_INTRDEPTH(%r1)
-	ldptr	%r1,CI_INTSTK(%r1)	/* get interrupt stack */
-	beq	1f
-	mfsprg1	%r1			/* yes, get old SP */
+	mfsrr1	%r31
+	mtcr	%r31
+	mr	%r30,%r1
+	mfsprg1	%r1			/* get old SP */
+	bf	MSR_PR,1f		/* branch if PSL_PR is true */
+	ldptr	%r1,CI_CURPCB(%r30)	/* get kernel stack */
+	addi	%r1,%r1,USPACE-CALLFRAMELEN /* stack is top of user struct */
+	RESTORE_KERN_SRS(%r30, %r31)
 1:
+#if defined(DISTANT_KERNEL)
+	lis	%r31,extintr@ha
+	addi	%r31,%r31,extintr@l
+	mtlr	%r31
+	blr
+#else
 	ba	extintr
+#endif
 _C_LABEL(extsize) = .-_C_LABEL(extint)
 
 /*
@@ -357,6 +444,7 @@ _C_LABEL(extsize) = .-_C_LABEL(extint)
 	.globl	_C_LABEL(decrint),_C_LABEL(decrsize)
 _C_LABEL(decrint):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -364,18 +452,26 @@ _C_LABEL(decrint):
 	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1)	/* save r31 */
 	mflr	%r28			/* save LR */
 	mfcr	%r29			/* save CR */
-	mfxer	%r30			/* save XER */
-	ldint	%r31,CI_INTRDEPTH(%r1)	/* were we already running on intstk? */
-	addic.	%r31,%r31,1
-	stint	%r31,CI_INTRDEPTH(%r1)
-	ldptr	%r1,CI_INTSTK(%r1)	/* get interrupt stack */
-	beq	1f
+	mfsrr1	%r31
+	mtcr	%r31
+	mr	%r30,%r1
 	mfsprg1	%r1			/* yes, get old SP */
+	bf	MSR_PR,1f		/* branch if PSL_PR is true */
+	ldptr	%r1,CI_CURPCB(%r30)	/* get kernel stack */
+	addi	%r1,%r1,USPACE-CALLFRAMELEN /* stack is top of user struct */
+	RESTORE_KERN_SRS(%r30, %r31)
 1:
+#if defined(DISTANT_KERNEL)
+	lis	%r31,decrintr@ha
+	addi	%r31,%r31,decrintr@l
+	mtlr	%r31
+	blr
+#else
 	ba	decrintr
+#endif
 _C_LABEL(decrsize) = .-_C_LABEL(decrint)
 
-#if !defined(PPC_OEA64)
+#if !defined(PPC_OEA64) && !defined(PPC_MPC8XX)
 /*
  * Now the tlb software load for 603 processors:
  * (Code essentially from the 603e User Manual, Chapter 5, but
@@ -393,7 +489,7 @@ _C_LABEL(tlbimiss):
 	mtctr	%r1			/* load counter */
 2:
 	ldregu	%r1,8(%r2)		/* get next pte */
-	cmpl	%cr0,%r1,%r3		/* see if found pte */
+	cmplw	%r1,%r3			/* see if found pte */
 	bdneq	2b			/* loop if not eq */
 	bne	3f			/* not found */
 	ldreg	%r1,4(%r2)		/* load tlb entry lower word */
@@ -435,7 +531,11 @@ _C_LABEL(tlbimiss):
 	mtcrf	0x80,%r3		/* restore cr0 */
 	mtmsr	%r0			/* now with native gprs */
 	isync
+#if defined(PPC_HIGH_VEC)
+	ba	EXC_HIGHVEC+EXC_ISI
+#else
 	ba	EXC_ISI
+#endif
 _C_LABEL(tlbimsize) = .-_C_LABEL(tlbimiss)
 
 /* LINTSTUB: Var: int tlbdlmiss[1], tlbdlmsize[1]; */
@@ -450,7 +550,7 @@ _C_LABEL(tlbdlmiss):
 	mtctr	%r1			/* load counter */
 2:
 	ldregu	%r1,8(%r2)		/* get next pte */
-	cmpl	%cr0,%r1,%r3		/* see if found pte */
+	cmplw	%r1,%r3			/* see if found pte */
 	bdneq	2b			/* loop if not eq */
 	bne	3f			/* not found */
 	ldreg	%r1,4(%r2)		/* load tlb entry lower word */
@@ -487,14 +587,18 @@ _C_LABEL(tlbdlmiss):
 	mtcrf	0x80,%r3		/* restore cr0 */
 	mtmsr	%r0			/* now with native gprs */
 	isync
+#if defined(PPC_HIGH_VEC)
+	ba	EXC_HIGHVEC+EXC_DSI
+#else
 	ba	EXC_DSI
+#endif
 _C_LABEL(tlbdlmsize) = .-_C_LABEL(tlbdlmiss)
 
 /* LINTSTUB: Var: int tlbdsmiss[1], tlbdsmsize[1]; */
 	.globl	_C_LABEL(tlbdsmiss),_C_LABEL(tlbdsmsize)
 _C_LABEL(tlbdsmiss):
 	mfspr	%r2,SPR_HASH1		/* get first pointer */
-	li	%r1,%r8
+	li	%r1,8
 	mfctr	%r0			/* save counter */
 	mfspr	%r3,SPR_DCMP		/* get first compare value */
 	addi	%r2,%r2,-8		/* predec pointer */
@@ -502,7 +606,7 @@ _C_LABEL(tlbdsmiss):
 	mtctr	%r1			/* load counter */
 2:
 	ldregu	%r1,8(%r2)		/* get next pte */
-	cmpl	%cr0,%r1,%r3		/* see if found pte */
+	cmplw	%r1,%r3			/* see if found pte */
 	bdneq	2b			/* loop if not eq */
 	bne	3f			/* not found */
 	ldreg	%r1,4(%r2)		/* load tlb entry lower word */
@@ -541,7 +645,7 @@ _C_LABEL(tlbdsmiss):
 	mfsrin	%r1,%r3			/* get the segment register */
 	mfsrr1	%r3
 	rlwinm	%r3,%r3,18,31,31	/* get PR-bit */
-	rlwnm.	%r2,%r2,%r3,1,1		/* get the key */
+	rlwnm.	%r1,%r1,%r3,1,1		/* get the key */
 	bne-	9b			/* protection violation */
 8:	/* found, set reference/change bits */
 	ldreg	%r1,4(%r2)		/* reload tlb entry */
@@ -565,9 +669,13 @@ _C_LABEL(tlbdsmiss):
 	mtcrf	0x80,%r3		/* restore cr0 */
 	mtmsr	%r0			/* now with native gprs */
 	isync
+#if defined(PPC_HIGH_VEC)
+	ba	EXC_HIGHVEC+EXC_DSI
+#else
 	ba	EXC_DSI
+#endif
 _C_LABEL(tlbdsmsize) = .-_C_LABEL(tlbdsmiss)
-#endif /* !defined(PPC_OEA64) */
+#endif /* !PPC_OEA64 && !PPC_MPC8XX */
 
 #if defined(DDB) || defined(KGDB)
 /*
@@ -580,19 +688,27 @@ _C_LABEL(tlbdsmsize) = .-_C_LABEL(tlbdsmiss)
 	.globl	_C_LABEL(ddblow),_C_LABEL(ddbsize)
 _C_LABEL(ddblow):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	mtsprg2 %r29			/* save r29 */
 	mfcr	%r29			/* save CR in r29 */
 	mfsrr1	%r1
 	mtcr	%r1
 	GET_CPUINFO(%r1)
-	bf	17,1f			/* branch if privileged */
+	bf	MSR_PR,1f		/* branch if privileged */
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* free r28 */
 	mfsprg2	%r28
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* free r29 */
 	streg	%r30,(CI_TEMPSAVE+CPUSAVE_R30)(%r1)	/* free r30 */
 	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1)	/* free r31 */
 	mflr	%r28			/* save LR */
+#if defined(DISTANT_KERNEL)
+	lis	%r31,u_trap@ha
+	addi	%r31,%r31,u_trap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	u_trap
+#endif
 1:
 	streg	%r28,(CI_DDBSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	mfsprg2	%r28
@@ -602,11 +718,20 @@ _C_LABEL(ddblow):
 	mflr	%r28			/* save LR */
 	lis	%r1,ddbstk+INTSTK@ha	/* get new SP */
 	addi	%r1,%r1,ddbstk+INTSTK@l
+#if defined(DISTANT_KERNEL)
+	lis	%r31,ddbtrap@ha
+	addi	%r31,%r31,ddbtrap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	ddbtrap
+#endif
 _C_LABEL(ddbsize) = .-_C_LABEL(ddblow)
 #endif	/* DDB || KGDB */
 
-#ifdef IPKDB
+#if defined(IPKDB) && !defined(DISTANT_KERNEL)
+/* IPKDB doesn't work together with DISTANT_KERNEL at the moment! */
+
 #define	ipkdbsave	0xde0		/* primary save area for IPKDB */
 /*
  * In case of IPKDB we want a separate trap catcher for it
@@ -619,6 +744,7 @@ _C_LABEL(ddbsize) = .-_C_LABEL(ddblow)
 	.globl	_C_LABEL(ipkdblow),_C_LABEL(ipkdbsize)
 _C_LABEL(ipkdblow):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_IPKDBSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_IPKDBSAVE+CPUSAVE_R29)(%r1) /* save r29 */
@@ -628,7 +754,14 @@ _C_LABEL(ipkdblow):
 	mfcr	%r29			/* save CR */
 	lis	%r1,ipkdbstk+INTSTK@ha	/* get new SP */
 	addi	%r1,%r1,ipkdbstk+INTSTK@l
+#if defined(DISTANT_KERNEL)
+	lis	%r31,ipkdbtrap@ha
+	addi	%r31,%r31,ipkdbtrap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	ipkdbtrap
+#endif
 _C_LABEL(ipkdbsize) = .-_C_LABEL(ipkdblow)
 #endif	/* IPKDB */
 
@@ -657,112 +790,115 @@ _C_LABEL(ipkdbsize) = .-_C_LABEL(ipkdblow)
 	isync;								\
 	mfsprg1	%r31;			/* get saved SP */		\
 	stregu	%r31,-FRAMELEN(%r1);	/* save it in the callframe */	\
-	streg	%r0,(FRAME_0+(2*SZREG))(%r1);	/* save R0 in the trapframe */ \
-	streg	%r31,(FRAME_1+(2*SZREG))(%r1);	/* save SP in the trapframe */ \
-	streg	%r2,(FRAME_2+(2*SZREG))(%r1);	/* save R2 in the trapframe */ \
-	streg	%r28,(FRAME_LR+(2*SZREG))(%r1);				\
-	stint	%r29,(FRAME_CR+(2*SZREG))(%r1);				\
+	streg	%r0,FRAME_R0(%r1);	/* save R0 in the trapframe */ \
+	streg	%r31,FRAME_R1(%r1);	/* save SP in the trapframe */ \
+	streg	%r2,FRAME_R2(%r1);	/* save R2 in the trapframe */ \
+	streg	%r28,FRAME_LR(%r1);				\
+	stint	%r29,FRAME_CR(%r1);				\
 	GET_CPUINFO(%r2);						\
 	ldreg	%r31,(savearea+CPUSAVE_R31)(%r2); /* get saved r31 */	\
 	ldreg	%r30,(savearea+CPUSAVE_R30)(%r2); /* get saved r30 */	\
 	ldreg	%r29,(savearea+CPUSAVE_R29)(%r2); /* get saved r29 */	\
 	ldreg	%r28,(savearea+CPUSAVE_R28)(%r2); /* get saved r28 */	\
-	streg	%r3,(FRAME_3+(2*SZREG))(%r1);	/* save r3 */		\
-	streg	%r4,(FRAME_4+(2*SZREG))(%r1);	/* save r4 */		\
-	streg	%r5,(FRAME_5+(2*SZREG))(%r1);	/* save r5 */		\
-	streg	%r6,(FRAME_6+(2*SZREG))(%r1);	/* save r6 */		\
-	streg	%r7,(FRAME_7+(2*SZREG))(%r1);	/* save r7 */		\
-	streg	%r8,(FRAME_8+(2*SZREG))(%r1);	/* save r8 */		\
-	streg	%r9,(FRAME_9+(2*SZREG))(%r1);	/* save r9 */		\
-	streg	%r10,(FRAME_10+(2*SZREG))(%r1);	/* save r10 */		\
-	streg	%r11,(FRAME_11+(2*SZREG))(%r1);	/* save r11 */		\
-	streg	%r12,(FRAME_12+(2*SZREG))(%r1);	/* save r12 */		\
-	streg	%r13,(FRAME_13+(2*SZREG))(%r1);	/* save r13 */		\
-	streg	%r14,(FRAME_14+(2*SZREG))(%r1);	/* save r14 */		\
-	streg	%r15,(FRAME_15+(2*SZREG))(%r1);	/* save r15 */		\
-	streg	%r16,(FRAME_16+(2*SZREG))(%r1);	/* save r16 */		\
-	streg	%r17,(FRAME_17+(2*SZREG))(%r1);	/* save r17 */		\
-	streg	%r18,(FRAME_18+(2*SZREG))(%r1);	/* save r18 */		\
-	streg	%r19,(FRAME_19+(2*SZREG))(%r1);	/* save r19 */		\
-	streg	%r20,(FRAME_20+(2*SZREG))(%r1);	/* save r20 */		\
-	streg	%r21,(FRAME_21+(2*SZREG))(%r1);	/* save r21 */		\
-	streg	%r22,(FRAME_22+(2*SZREG))(%r1);	/* save r22 */		\
-	streg	%r23,(FRAME_23+(2*SZREG))(%r1);	/* save r23 */		\
-	streg	%r24,(FRAME_24+(2*SZREG))(%r1);	/* save r24 */		\
-	streg	%r25,(FRAME_25+(2*SZREG))(%r1);	/* save r25 */		\
-	streg	%r26,(FRAME_26+(2*SZREG))(%r1);	/* save r26 */		\
-	streg	%r27,(FRAME_27+(2*SZREG))(%r1);	/* save r27 */		\
-	streg	%r28,(FRAME_28+(2*SZREG))(%r1);	/* save r28 */		\
-	streg	%r29,(FRAME_29+(2*SZREG))(%r1);	/* save r29 */		\
-	streg	%r30,(FRAME_30+(2*SZREG))(%r1);	/* save r30 */		\
-	streg	%r31,(FRAME_31+(2*SZREG))(%r1);	/* save r31 */		\
+	streg	%r3,FRAME_R3(%r1);	/* save r3 */		\
+	streg	%r4,FRAME_R4(%r1);	/* save r4 */		\
+	streg	%r5,FRAME_R5(%r1);	/* save r5 */		\
+	streg	%r6,FRAME_R6(%r1);	/* save r6 */		\
+	streg	%r7,FRAME_R7(%r1);	/* save r7 */		\
+	streg	%r8,FRAME_R8(%r1);	/* save r8 */		\
+	streg	%r9,FRAME_R9(%r1);	/* save r9 */		\
+	streg	%r10,FRAME_R10(%r1);	/* save r10 */		\
+	streg	%r11,FRAME_R11(%r1);	/* save r11 */		\
+	streg	%r12,FRAME_R12(%r1);	/* save r12 */		\
+	streg	%r13,FRAME_R13(%r1);	/* save r13 */		\
+	streg	%r14,FRAME_R14(%r1);	/* save r14 */		\
+	streg	%r15,FRAME_R15(%r1);	/* save r15 */		\
+	streg	%r16,FRAME_R16(%r1);	/* save r16 */		\
+	streg	%r17,FRAME_R17(%r1);	/* save r17 */		\
+	streg	%r18,FRAME_R18(%r1);	/* save r18 */		\
+	streg	%r19,FRAME_R19(%r1);	/* save r19 */		\
+	streg	%r20,FRAME_R20(%r1);	/* save r20 */		\
+	streg	%r21,FRAME_R21(%r1);	/* save r21 */		\
+	streg	%r22,FRAME_R22(%r1);	/* save r22 */		\
+	streg	%r23,FRAME_R23(%r1);	/* save r23 */		\
+	streg	%r24,FRAME_R24(%r1);	/* save r24 */		\
+	streg	%r25,FRAME_R25(%r1);	/* save r25 */		\
+	streg	%r26,FRAME_R26(%r1);	/* save r26 */		\
+	streg	%r27,FRAME_R27(%r1);	/* save r27 */		\
+	streg	%r28,FRAME_R28(%r1);	/* save r28 */		\
+	streg	%r29,FRAME_R29(%r1);	/* save r29 */		\
+	streg	%r30,FRAME_R30(%r1);	/* save r30 */		\
+	streg	%r31,FRAME_R31(%r1);	/* save r31 */		\
 	ldreg	%r28,(savearea+CPUSAVE_DAR)(%r2); /* get saved DAR */	\
 	ldreg	%r29,(savearea+CPUSAVE_DSISR)(%r2); /* get saved DSISR */ \
 	ldreg	%r30,(savearea+CPUSAVE_SRR0)(%r2); /* get saved SRR0 */	\
 	ldreg	%r31,(savearea+CPUSAVE_SRR1)(%r2); /* get saved SRR1 */	\
-	mfxer	%r3;							\
-	mfctr	%r4;							\
-	mflr	%r5;							\
-	andi.	%r5,%r5,0xff00;						\
-	stint	%r3,(FRAME_XER+(2*SZREG))(%r1);				\
-	streg	%r4,(FRAME_CTR+(2*SZREG))(%r1);				\
-	streg	%r30,(FRAME_SRR0+(2*SZREG))(%r1);			\
-	streg	%r31,(FRAME_SRR1+(2*SZREG))(%r1);			\
-	streg	%r28,(FRAME_DAR+(2*SZREG))(%r1);			\
-	stint	%r29,(FRAME_DSISR+(2*SZREG))(%r1);			\
-	stint	%r5,(FRAME_EXC+(2*SZREG))(%r1);				\
-	SAVE_VRSAVE(%r1,%r6);						\
+	ldptr	%r13,CI_CURLWP(%r2);	/* get curlwp */	\
+	mfxer	%r3;						\
+	mfctr	%r4;						\
+	mflr	%r5;						\
+	andi.	%r5,%r5,0xff00;					\
+	stint	%r3,FRAME_XER(%r1);				\
+	streg	%r4,FRAME_CTR(%r1);				\
+	streg	%r30,FRAME_SRR0(%r1);			\
+	streg	%r31,FRAME_SRR1(%r1);			\
+	streg	%r28,FRAME_DAR(%r1);			\
+	stint	%r29,FRAME_DSISR(%r1);			\
+	stint	%r5,FRAME_EXC(%r1);			\
+	SAVE_VRSAVE(%r1,%r6);				\
 	SAVE_MQ(%r1,%r7)
 
-#define	FRAME_LEAVE(savearea)						\
-/* Now restore regs: */							\
-	ldreg	%r2,(FRAME_SRR0+(2*SZREG))(%r1);			\
-	ldreg	%r3,(FRAME_SRR1+(2*SZREG))(%r1);			\
-	ldreg	%r4,(FRAME_CTR+(2*SZREG))(%r1);				\
-	ldint	%r5,(FRAME_XER+(2*SZREG))(%r1);				\
-	ldreg	%r6,(FRAME_LR+(2*SZREG))(%r1);				\
+#define	FRAME_RESTORE_CALLEE					\
+	ldreg	%r31,FRAME_R31(%r1);	/* restore r31 */	\
+	ldreg	%r30,FRAME_R30(%r1);	/* restore r30 */	\
+	ldreg	%r29,FRAME_R29(%r1);	/* restore r29 */	\
+	ldreg	%r28,FRAME_R28(%r1);	/* restore r28 */	\
+	ldreg	%r27,FRAME_R27(%r1);	/* restore r27 */	\
+	ldreg	%r26,FRAME_R26(%r1);	/* restore r26 */	\
+	ldreg	%r25,FRAME_R25(%r1);	/* restore r25 */	\
+	ldreg	%r24,FRAME_R24(%r1);	/* restore r24 */	\
+	ldreg	%r23,FRAME_R23(%r1);	/* restore r23 */	\
+	ldreg	%r22,FRAME_R22(%r1);	/* restore r22 */	\
+	ldreg	%r21,FRAME_R21(%r1);	/* restore r21 */	\
+	ldreg	%r20,FRAME_R20(%r1);	/* restore r20 */	\
+	ldreg	%r19,FRAME_R19(%r1);	/* restore r19 */	\
+	ldreg	%r18,FRAME_R18(%r1);	/* restore r18 */	\
+	ldreg	%r17,FRAME_R17(%r1);	/* restore r17 */	\
+	ldreg	%r16,FRAME_R16(%r1);	/* restore r16 */	\
+	ldreg	%r15,FRAME_R15(%r1);	/* restore r15 */	\
+	ldreg	%r14,FRAME_R14(%r1);	/* restore r14 */
+
+#define	FRAME_LEAVE(savearea)					\
+/* Now restore regs: */						\
+	ldreg	%r2,FRAME_SRR0(%r1);				\
+	ldreg	%r3,FRAME_SRR1(%r1);				\
+	ldreg	%r4,FRAME_CTR(%r1);				\
+	ldint	%r5,FRAME_XER(%r1);				\
+	ldreg	%r6,FRAME_LR(%r1);				\
 	RESTORE_MQ(%r1,%r8);						\
 	RESTORE_VRSAVE(%r1,%r9);					\
 	GET_CPUINFO(%r7);						\
 	streg	%r2,(savearea+CPUSAVE_SRR0)(%r7); /* save SRR0 */	\
 	streg	%r3,(savearea+CPUSAVE_SRR1)(%r7); /* save SRR1 */	\
-	ldint	%r7,(FRAME_CR+(2*SZREG))(%r1);				\
+	ldint	%r7,FRAME_CR(%r1);				\
 	mtctr	%r4;							\
 	mtxer	%r5;							\
 	mtlr	%r6;							\
 	mtsprg1	%r7;			/* save cr */			\
-	ldreg	%r31,(FRAME_31+(2*SZREG))(%r1);	/* restore r31 */	\
-	ldreg	%r30,(FRAME_30+(2*SZREG))(%r1);	/* restore r30 */	\
-	ldreg	%r29,(FRAME_29+(2*SZREG))(%r1);	/* restore r29 */	\
-	ldreg	%r28,(FRAME_28+(2*SZREG))(%r1);	/* restore r28 */	\
-	ldreg	%r27,(FRAME_27+(2*SZREG))(%r1);	/* restore r27 */	\
-	ldreg	%r26,(FRAME_26+(2*SZREG))(%r1);	/* restore r26 */	\
-	ldreg	%r25,(FRAME_25+(2*SZREG))(%r1);	/* restore r25 */	\
-	ldreg	%r24,(FRAME_24+(2*SZREG))(%r1);	/* restore r24 */	\
-	ldreg	%r23,(FRAME_23+(2*SZREG))(%r1);	/* restore r23 */	\
-	ldreg	%r22,(FRAME_22+(2*SZREG))(%r1);	/* restore r22 */	\
-	ldreg	%r21,(FRAME_21+(2*SZREG))(%r1);	/* restore r21 */	\
-	ldreg	%r20,(FRAME_20+(2*SZREG))(%r1);	/* restore r20 */	\
-	ldreg	%r19,(FRAME_19+(2*SZREG))(%r1);	/* restore r19 */	\
-	ldreg	%r18,(FRAME_18+(2*SZREG))(%r1);	/* restore r18 */	\
-	ldreg	%r17,(FRAME_17+(2*SZREG))(%r1);	/* restore r17 */	\
-	ldreg	%r16,(FRAME_16+(2*SZREG))(%r1);	/* restore r16 */	\
-	ldreg	%r15,(FRAME_15+(2*SZREG))(%r1);	/* restore r15 */	\
-	ldreg	%r14,(FRAME_14+(2*SZREG))(%r1);	/* restore r14 */	\
-	ldreg	%r13,(FRAME_13+(2*SZREG))(%r1);	/* restore r13 */	\
-	ldreg	%r12,(FRAME_12+(2*SZREG))(%r1);	/* restore r12 */	\
-	ldreg	%r11,(FRAME_11+(2*SZREG))(%r1);	/* restore r11 */	\
-	ldreg	%r10,(FRAME_10+(2*SZREG))(%r1);	/* restore r10 */	\
-	ldreg	%r9,(FRAME_9+(2*SZREG))(%r1);	/* restore r9 */	\
-	ldreg	%r8,(FRAME_8+(2*SZREG))(%r1);	/* restore r8 */	\
-	ldreg	%r7,(FRAME_7+(2*SZREG))(%r1);	/* restore r7 */	\
-	ldreg	%r6,(FRAME_6+(2*SZREG))(%r1);	/* restore r6 */	\
-	ldreg	%r5,(FRAME_5+(2*SZREG))(%r1);	/* restore r5 */	\
-	ldreg	%r4,(FRAME_4+(2*SZREG))(%r1);	/* restore r4 */	\
-	ldreg	%r3,(FRAME_3+(2*SZREG))(%r1);	/* restore r3 */	\
-	ldreg	%r2,(FRAME_2+(2*SZREG))(%r1);	/* restore r2 */	\
-	ldreg	%r0,(FRAME_0+(2*SZREG))(%r1);	/* restore r0 */	\
-	ldreg	%r1,(FRAME_1+(2*SZREG))(%r1);	/* restore old sp in r1 */ \
+	ldreg	%r13,FRAME_R13(%r1);	/* restore r13 */	\
+	ldreg	%r12,FRAME_R12(%r1);	/* restore r12 */	\
+	ldreg	%r11,FRAME_R11(%r1);	/* restore r11 */	\
+	ldreg	%r10,FRAME_R10(%r1);	/* restore r10 */	\
+	ldreg	%r9,FRAME_R9(%r1);	/* restore r9 */	\
+	ldreg	%r8,FRAME_R8(%r1);	/* restore r8 */	\
+	ldreg	%r7,FRAME_R7(%r1);	/* restore r7 */	\
+	ldreg	%r6,FRAME_R6(%r1);	/* restore r6 */	\
+	ldreg	%r5,FRAME_R5(%r1);	/* restore r5 */	\
+	ldreg	%r4,FRAME_R4(%r1);	/* restore r4 */	\
+	ldreg	%r3,FRAME_R3(%r1);	/* restore r3 */	\
+	ldreg	%r2,FRAME_R2(%r1);	/* restore r2 */	\
+	ldreg	%r0,FRAME_R0(%r1);	/* restore r0 */	\
+	ldreg	%r1,FRAME_R1(%r1);	/* restore old sp in r1 */ \
 /* Can't touch %r1 from here on */					\
 	mtsprg2	%r2;			/* save r2 & r3 */		\
 	mtsprg3	%r3;							\
@@ -775,7 +911,7 @@ _C_LABEL(ipkdbsize) = .-_C_LABEL(ipkdblow)
 	GET_CPUINFO(%r2);						\
 	ldreg	%r3,(savearea+CPUSAVE_SRR1)(%r2);			\
 	mtcr	%r3;							\
-	bf	17,1f;			/* branch if PSL_PR is false */	\
+	bf	MSR_PR,1f;		/* branch if PSL_PR is false */	\
 /* Restore user SRs */							\
 	RESTORE_USER_SRS(%r2,%r3);					\
 1:	mfsprg1	%r2;			/* restore cr */		\
@@ -809,7 +945,7 @@ disitrap:
 #ifdef DDB
 	mfsrr1	%r31
 	mtcr	%r31
-	bt	17,trapstart		/* branch is user mode */
+	bt	MSR_PR,trapstart	/* branch is user mode */
 	mfsprg1	%r31			/* get old SP */
 #if 0
 	subf	%r30,%r30,%r31		/* subtract DAR from it */
@@ -845,11 +981,11 @@ realtrap:
 	mfsprg1	%r1			/* restore SP (might have been
 					   overwritten) */
 s_trap:
-	bf	17,k_trap		/* branch if PSL_PR is false */
+	bf	MSR_PR,k_trap		/* branch if PSL_PR is false */
 	GET_CPUINFO(%r1)		/* get cpu_info for this cpu */
 u_trap:
 	ldptr	%r1,CI_CURPCB(%r1)
-	addi	%r1,%r1,USPACE		/* stack is top of user struct */
+	addi	%r1,%r1,USPACE-CALLFRAMELEN /* stack is top of user struct */
 
 /*
  * Now the common trap catching code.
@@ -862,13 +998,13 @@ k_trap:
 trapagain:
 /* Now we can recover interrupts again: */
 	mfmsr	%r7
-	ldreg	%r6, (FRAME_SRR1+(2*SZREG))(%r1)
+	ldreg	%r6, FRAME_SRR1(%r1)
 	andi.	%r6,%r6,(PSL_EE|PSL_ME|PSL_RI)@l
 	or	%r7,%r7,%r6
 	mtmsr	%r7
 	isync
 /* Call C trap code: */
-	addi	%r3,%r1,(2*SZREG)
+	addi	%r3,%r1,FRAME_TF
 	bl	_C_LABEL(trap)
 /* LINTSTUB: Var: int trapexit[1]; */
 	.globl	trapexit
@@ -878,27 +1014,30 @@ trapexit:
 	andi.	%r3,%r3,~PSL_EE@l
 	mtmsr	%r3
 /* Test AST pending: */
-	ldreg	%r5,(FRAME_SRR1+(2*SZREG))(%r1)
-	mtcr	%r5
-	bf	17,1f			/* branch if PSL_PR is false */
-	GET_CPUINFO(%r3)
-	ldint	%r4,CI_ASTPENDING(%r3)
+	mtcr	%r31
+	bf	MSR_PR,trapleave	/* branch if PSL_PR is false */
+	ldint	%r4,L_MD_ASTPENDING(%r13)
 	andi.	%r4,%r4,1
-	beq	1f
+	beq	trapleave
+
 	li	%r6,EXC_AST
-	stint	%r6,(FRAME_EXC+(2*SZREG))(%r1)
+	stint	%r6,FRAME_EXC(%r1)
 	b	trapagain
-1:
+
+trapleave:
+	FRAME_RESTORE_CALLEE
+intrleave:
 	FRAME_LEAVE(CI_TEMPSAVE)
 	RFI
 
-/* 
+/*
  * Trap handler for syscalls (EXC_SC)
  */
 /* LINTSTUB: Var: int sctrap[1], scsize[1]; */
 	.globl	_C_LABEL(sctrap),_C_LABEL(scsize),_C_LABEL(sctrapexit)
 _C_LABEL(sctrap):
 	mtsprg1	%r1			/* save SP */
+	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1) /* save r20 */
@@ -906,13 +1045,20 @@ _C_LABEL(sctrap):
 	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1) /* save r31 */
 	mflr	%r28			/* save LR */
 	mfcr	%r29			/* save CR */
+#if defined(DISTANT_KERNEL)
+	lis	%r31,s_sctrap@ha
+	addi	%r31,%r31,s_sctrap@l
+	mtlr	%r31
+	blrl
+#else
 	bla	s_sctrap
+#endif
 	_C_LABEL(scsize) = .-_C_LABEL(sctrap)
 
 s_sctrap:
 	GET_CPUINFO(%r1)
 	ldptr	%r1,CI_CURPCB(%r1)
-	addi	%r1,%r1,USPACE		/* stack is top of user struct */
+	addi	%r1,%r1,USPACE-CALLFRAMELEN /* stack is top of user struct */
 	RESTORE_KERN_SRS(%r30,%r31)	/* First enable KERNEL mapping */
 	FRAME_SETUP(CI_TEMPSAVE)
 /* Now we can recover interrupts again: */
@@ -920,157 +1066,150 @@ s_sctrap:
 	ori	%r7,%r7,(PSL_EE|PSL_ME|PSL_RI)@l
 	mtmsr	%r7
 	isync
-	addi	%r3,%r1,(2*SZREG)
+	addi	%r3,%r1,FRAME_TF
 /* Call the appropriate syscall handler: */
-	GET_CPUINFO(%r4)
-	ldptr	%r4,CI_CURLWP(%r4)
-	ldptr	%r4,L_PROC(%r4)
+	ldptr	%r4,L_PROC(%r13)
 	ldptr	%r4,P_MD_SYSCALL(%r4)
 	mtctr	%r4
 	bctrl
 _C_LABEL(sctrapexit):
-/* Disable interrupts: */
-	mfmsr	%r3
-	andi.	%r3,%r3,~PSL_EE@l
-	mtmsr	%r3
-/* Test AST pending: */
-	GET_CPUINFO(%r3)
-	ldint	%r4,CI_ASTPENDING(%r3)
-	andi.	%r4,%r4,1
-	beq	1f
-	li	%r6,EXC_AST
-	stint	%r6,(FRAME_EXC+(2*SZREG))(%r1)
-	b	trapagain
-1:
-	FRAME_LEAVE(CI_TEMPSAVE)
-	RFI
+	b	trapexit
 
 /*
  * External interrupt second level handler
  */
-#define	INTRENTER							\
-/* Save non-volatile registers: */					\
-	stptru	%r1,-IFRAMELEN(%r1);	/* temporarily */		\
-	streg	%r0,IFRAME_R0(%r1);					\
-	mfsprg1	%r0;			/* get original SP */		\
-	streg	%r0,IFRAME_R1(%r1);	/* and store it */		\
-	streg	%r3,IFRAME_R3(%r1);					\
-	streg	%r4,IFRAME_R4(%r1);					\
-	streg	%r5,IFRAME_R5(%r1);					\
-	streg	%r6,IFRAME_R6(%r1);					\
-	streg	%r7,IFRAME_R7(%r1);					\
-	streg	%r8,IFRAME_R8(%r1);					\
-	streg	%r9,IFRAME_R9(%r1);					\
-	streg	%r10,IFRAME_R10(%r1);					\
-	streg	%r11,IFRAME_R11(%r1);					\
-	streg	%r12,IFRAME_R12(%r1);					\
-	streg	%r28,IFRAME_LR(%r1);	/* saved LR */			\
-	stint	%r29,IFRAME_CR(%r1);	/* saved CR */			\
-	stint	%r30,IFRAME_XER(%r1);	/* saved XER */			\
-	GET_CPUINFO(%r4);						\
-	ldreg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r4); /* restore r28 */	\
-	ldreg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r4); /* restore r29 */	\
-	ldreg	%r30,(CI_TEMPSAVE+CPUSAVE_R30)(%r4); /* restore r30 */	\
-	ldreg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r4); /* restore r31 */	\
-	mfctr	%r6;							\
-	ldint	%r5,CI_INTRDEPTH(%r4);					\
-	mfsrr0	%r4;							\
-	mfsrr1	%r3;							\
-	streg	%r6,IFRAME_CTR(%r1);					\
-	stint	%r5,IFRAME_INTR_DEPTH(%r1);				\
-	streg	%r4,IFRAME_SRR0(%r1);					\
-	streg	%r3,IFRAME_SRR1(%r1);					\
-	mtcr	%r3;							\
-	bf	17,99f;	/* branch if PSL_PR is false */		\
-/* interrupts are recoverable here, and enable translation */		\
-	RESTORE_KERN_SRS(%r3,%r4);					\
-99:	mfmsr	%r5;							\
-	ori	%r5,%r5,(PSL_IR|PSL_DR|PSL_RI);				\
-	mtmsr	%r5;							\
-	isync
+/*
+ * INTR_SETUP assumes:
+ *	SPRG1		SP (%r1)
+ *	savearea	r28-r31
+ *	28		LR
+ *	29		CR
+ *	30		scratch
+ *	31		scratch
+ *	1		kernel stack
+ *	SRR0/1		as at start of exception
+ */
+#define	INTR_SETUP(savearea,exc)					\
+/* Have to enable translation to allow access of kernel stack: */	\
+	GET_CPUINFO(%r31);						\
+	mfsrr0	%r30;							\
+	streg	%r30,(savearea+CPUSAVE_SRR0)(%r31);	/* save SRR0 */	\
+	mfsrr1	%r30;							\
+	streg	%r30,(savearea+CPUSAVE_SRR1)(%r31);	/* save SRR1 */	\
+	mfmsr	%r30;							\
+	ori	%r30,%r30,(PSL_DR|PSL_IR);	/* turn on relocation */ \
+	mtmsr	%r30;			/* stack can be accesed now */	\
+	isync;								\
+	mfsprg1	%r31;			/* get saved SP */		\
+	stregu	%r31,-FRAMELEN(%r1);	/* save it in the callframe */	\
+	streg	%r0,FRAME_R0(%r1);	/* save R0 in the trapframe */ \
+	streg	%r31,FRAME_R1(%r1);	/* save SP in the trapframe */ \
+	streg	%r2,FRAME_R2(%r1);	/* save R2 in the trapframe */ \
+	streg	%r28,FRAME_LR(%r1);				\
+	stint	%r29,FRAME_CR(%r1);				\
+	GET_CPUINFO(%r2);						\
+	ldreg	%r31,(savearea+CPUSAVE_R31)(%r2); /* get saved r31 */	\
+	ldreg	%r30,(savearea+CPUSAVE_R30)(%r2); /* get saved r30 */	\
+	ldreg	%r29,(savearea+CPUSAVE_R29)(%r2); /* get saved r29 */	\
+	ldreg	%r28,(savearea+CPUSAVE_R28)(%r2); /* get saved r28 */	\
+	streg	%r3,FRAME_R3(%r1);	/* save r3 */		\
+	streg	%r4,FRAME_R4(%r1);	/* save r4 */		\
+	streg	%r5,FRAME_R5(%r1);	/* save r5 */		\
+	streg	%r6,FRAME_R6(%r1);	/* save r6 */		\
+	streg	%r7,FRAME_R7(%r1);	/* save r7 */		\
+	streg	%r8,FRAME_R8(%r1);	/* save r8 */		\
+	streg	%r9,FRAME_R9(%r1);	/* save r9 */		\
+	streg	%r10,FRAME_R10(%r1);	/* save r10 */		\
+	streg	%r11,FRAME_R11(%r1);	/* save r11 */		\
+	streg	%r12,FRAME_R12(%r1);	/* save r12 */		\
+	streg	%r13,FRAME_R13(%r1);	/* save r13 */		\
+	ldreg	%r11,(savearea+CPUSAVE_SRR0)(%r2); /* get saved SRR0 */	\
+	ldreg	%r12,(savearea+CPUSAVE_SRR1)(%r2); /* get saved SRR1 */	\
+	ldptr	%r13,CI_CURLWP(%r2);	/* get curlwp */	\
+	ldint	%r3,CI_IDEPTH(%r2);					\
+	stint	%r3,FRAME_IDEPTH(%r1);					\
+	mfxer	%r3;							\
+	mfctr	%r4;							\
+	li	%r5,exc;						\
+	stint	%r5,FRAME_EXC(%r1);					\
+	stint	%r3,FRAME_XER(%r1);					\
+	streg	%r4,FRAME_CTR(%r1);					\
+	streg	%r11,FRAME_SRR0(%r1);					\
+	streg	%r12,FRAME_SRR1(%r1);					\
+	mfmsr	%r6;							\
+	ori	%r6,%r6,PSL_RI;		/* turn on recovery interrupt */\
+	mtmsr	%r6;							\
+	SAVE_VRSAVE(%r1,%r6);						\
+	SAVE_MQ(%r1,%r7)
 
 /* LINTSTUB: Var: int extint_call[1]; */
+/*
+ * R1=sp, R28=LR, R29=CR, R30=scratch, R31=scratch
+ */
 	.globl	_C_LABEL(extint_call)
 extintr:
-	INTRENTER
-	mr	%r3,%r1			/* make intrframe available */
+	INTR_SETUP(CI_TEMPSAVE, EXC_EXI)
+					/* make trapframe available */
+	addi	%r3,%r1,FRAME_TF	/* kern frame -> trap frame */
 _C_LABEL(extint_call):
 	bl	_C_LABEL(extint_call)	/* to be filled in later */
 
 intr_exit:
-/* Disable interrupts (should already be disabled) and MMU here: */
+/* Disable interrupts (should already be disabled) but not MMU here: */
 	mfmsr	%r3
-	andi.	%r3,%r3,~(PSL_EE|PSL_ME|PSL_RI|PSL_DR|PSL_IR)@l
+	andi.	%r3,%r3,~(PSL_EE|PSL_ME|PSL_RI)@l
 	mtmsr	%r3
 	isync
 
-/* restore possibly overwritten registers: */
-	ldreg	%r12,IFRAME_R12(%r1)
-	ldreg	%r11,IFRAME_R11(%r1)
-	ldreg	%r10,IFRAME_R10(%r1)
-	ldreg	%r9,IFRAME_R9(%r1)
-	ldreg	%r8,IFRAME_R8(%r1)
-	ldreg	%r7,IFRAME_R7(%r1)
-	ldreg	%r6,IFRAME_SRR1(%r1)
-	ldreg	%r5,IFRAME_SRR0(%r1)
-	ldreg	%r4,IFRAME_CTR(%r1)
-	ldint	%r3,IFRAME_XER(%r1)
-	mtsrr1	%r6
-	mtsrr0	%r5
-	mtctr	%r4
-	mtxer	%r3
-
-	GET_CPUINFO(%r5)
-	ldint	%r4,CI_INTRDEPTH(%r5)
-	addi	%r4,%r4,-1		/* adjust reentrancy count */
-	stint	%r4,CI_INTRDEPTH(%r5)
-
 /* Returning to user mode? */
-	mtcr	%r6			/* saved SRR1 */
-	bf	17,1f			/* branch if PSL_PR is false */
+	ldreg	%r4,FRAME_SRR1(%r1)
+	mtcr	%r4			/* saved SRR1 */
+	bf	MSR_PR,intrleave	/* branch if PSL_PR is false */
 
-	RESTORE_USER_SRS(%r3,%r4)
-	ldint	%r3,CI_ASTPENDING(%r5)	/* Test AST pending */
+	ldint	%r3,L_MD_ASTPENDING(%r13) /* Test AST pending */
 	andi.	%r3,%r3,1
-	beq	1f
+	beq	intrleave		/* common frame exit */
 
-/* Setup for entry to realtrap: */
-	ldreg	%r3,IFRAME_R1(%r1)	/* get saved SP */
-	mtsprg1	%r3
+/*
+ * Since interrupts save their state in a std trapframe, all we need to do to
+ * process the AST is finish filling the trapframe with the rest of the fixed
+ * registers and let trap deal with it.
+ */
+	streg	%r14,FRAME_R14(%r1)
+	streg	%r15,FRAME_R15(%r1)
+	streg	%r16,FRAME_R16(%r1)
+	streg	%r17,FRAME_R17(%r1)
+	streg	%r18,FRAME_R18(%r1)
+	streg	%r19,FRAME_R19(%r1)
+	streg	%r20,FRAME_R20(%r1)
+	streg	%r21,FRAME_R21(%r1)
+	streg	%r22,FRAME_R22(%r1)
+	streg	%r23,FRAME_R23(%r1)
+	streg	%r24,FRAME_R24(%r1)
+	streg	%r25,FRAME_R25(%r1)
+	streg	%r26,FRAME_R26(%r1)
+	streg	%r27,FRAME_R27(%r1)
+	streg	%r28,FRAME_R28(%r1)
+	streg	%r29,FRAME_R29(%r1)
+	streg	%r30,FRAME_R30(%r1)
+	streg	%r31,FRAME_R31(%r1)
+
+	/*
+	 * Tell trap we are doing an AST.
+	 */
 	li	%r6,EXC_AST
-	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r5) /* establish tempsave r28 */
-	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r5) /* establish tempsave r29 */
-	streg	%r30,(CI_TEMPSAVE+CPUSAVE_R30)(%r5) /* establish tempsave r30 */
-	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r5) /* establish tempsave r31 */
-	mtlr	%r6
-	ldreg	%r28,IFRAME_LR(%r1)	/* saved LR */
-	ldint	%r29,IFRAME_CR(%r1)	/* saved CR */
-	ldreg	%r6,IFRAME_R6(%r1)
-	ldreg	%r5,IFRAME_R5(%r1)
-	ldreg	%r4,IFRAME_R4(%r1)
-	ldreg	%r3,IFRAME_R3(%r1)
-	ldreg	%r0,IFRAME_R0(%r1)
-	b	realtrap
-1:
-/* Here is the normal exit of extintr: */
-	ldint	%r5,IFRAME_CR(%r1)
-	ldreg	%r6,IFRAME_LR(%r1)
-	mtcr	%r5
-	mtlr	%r6
-	ldreg	%r6,IFRAME_R6(%r1)
-	ldreg	%r5,IFRAME_R5(%r1)
-	ldreg	%r4,IFRAME_R4(%r1)
-	ldreg	%r3,IFRAME_R3(%r1)
-	ldreg	%r0,IFRAME_R0(%r1)
-	ldreg	%r1,IFRAME_R1(%r1)
-	RFI
+	stint	%r6,FRAME_EXC(%r1)
+
+	mr	%r31, %r4		/* trapagain wants SRR1 in %r31 */
+	b	trapagain
 
 /*
  * Decrementer interrupt second level handler
  */
 decrintr:
-	INTRENTER
-	addi	%r3,%r1,(2*SZREG)	/* intr frame -> clock frame */
+	INTR_SETUP(CI_TEMPSAVE, EXC_DECR)
+
+	addi	%r3,%r1,FRAME_CF	/* intr frame -> clock frame */
 	bl	_C_LABEL(decr_intr)
 	b	intr_exit
 
@@ -1086,6 +1225,7 @@ _C_LABEL(ddb_trap):
 	andi.	%r3,%r3,~(PSL_EE|PSL_ME)@l
 	mtmsr	%r3			/* disable interrupts */
 	isync
+	ENABLE_64BIT_BRIDGE(%r3)
 	GET_CPUINFO(%r3)
 	streg	%r28,(CI_DDBSAVE+CPUSAVE_R28)(%r3)
 	streg	%r29,(CI_DDBSAVE+CPUSAVE_R29)(%r3)
@@ -1105,33 +1245,16 @@ _C_LABEL(ddb_trap):
 ddbtrap:
 	FRAME_SETUP(CI_DDBSAVE)
 /* Call C trap code: */
-	addi	%r3,%r1,(2*SZREG)
+	addi	%r3,%r1,FRAME_TF
 	bl	_C_LABEL(ddb_trap_glue)
 	or.	%r3,%r3,%r3
-	bne	ddbleave
-/* This wasn't for DDB, so switch to real trap: */
-	ldint	%r3,(FRAME_EXC+(2*SZREG))(%r1)	/* save exception */
-	GET_CPUINFO(%r4)
-	streg	%r3,(CI_DDBSAVE+CPUSAVE_R31)(%r4)
-	FRAME_LEAVE(CI_DDBSAVE)
-	mtsprg1	%r1			/* prepare for entrance to realtrap */
-	GET_CPUINFO(%r1)
-	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)
-	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)
-	streg	%r30,(CI_TEMPSAVE+CPUSAVE_R30)(%r1)
-	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1)
-	mflr	%r28
-	mfcr	%r29
-	ldreg	%r31,(CI_DDBSAVE+CPUSAVE_R31)(%r1)
-	mtlr	%r31
-	mfsprg1	%r1
-	b	realtrap
-ddbleave:
+	beq	trapagain
+	FRAME_RESTORE_CALLEE
 	FRAME_LEAVE(CI_DDBSAVE)
 	RFI
 #endif /* DDB || KGDB */
 
-#ifdef IPKDB
+#if defined(IPKDB) && !defined(DISTANT_KERNEL)
 /*
  * Deliberate entry to ipkdbtrap
  */
@@ -1143,6 +1266,7 @@ _C_LABEL(ipkdb_trap):
 	andi.	%r3,%r3,~(PSL_EE|PSL_ME)@l
 	mtmsr	%r3			/* disable interrupts */
 	isync
+	ENABLE_64BIT_BRIDGE(%r3)
 	GET_CPUINFO(%r3)
 	streg	%r28,(CI_IPKDBSAVE+CPUSAVE_R28)(%r3)
 	streg	%r29,(CI_IPKDBSAVE+CPUSAVE_R29)(%r3)
@@ -1158,30 +1282,13 @@ _C_LABEL(ipkdb_trap):
  * Now the ipkdb trap catching code.
  */
 ipkdbtrap:
-	FRAME_SETUP(ipkdbsave)
+	FRAME_SETUP(CI_IPKDBSAVE)
 /* Call C trap code: */
-	addi	%r3,%r1,(2*SZREG)
+	addi	%r3,%r1,FRAME_TF
 	bl	_C_LABEL(ipkdb_trap_glue)
 	or.	%r3,%r3,%r3
-	bne	ipkdbleave
-/* This wasn't for IPKDB, so switch to real trap: */
-	ldint	%r3,(FRAME_EXC+(2*SZREG))(%r1)	/* save exception */
-	GET_CPUINFO(%r4)
-	streg	%r3,(CI_IPKDBSAVE+CPUSAVE_R31)(%r4)
-	FRAME_LEAVE(CI_IPKDBSAVE)
-	mtsprg1	%r1			/* prepare for entrance to realtrap */
-	GET_CPUINFO(%r1)
-	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)
-	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)
-	streg	%r30,(CI_TEMPSAVE+CPUSAVE_R30)(%r1)
-	streg	%r31,(CI_TEMPSAVE+CPUSAVE_R31)(%r1)
-	mflr	%r28
-	mfcr	%r29
-	ldreg	%r31,(CI_IPKDBSAVE+CPUSAVE_R31)(%r1)
-	mtlr	%r31
-	mfsprg1	%r1
-	b	realtrap
-ipkdbleave:
+	beq	trapagain
+	FRAME_RESTORE_CALLEE
 	FRAME_LEAVE(CI_IPKDBSAVE)
 	RFI
 
@@ -1254,3 +1361,12 @@ _C_LABEL(ipkdbsbyte):
 #endif	/* IPKDB */
 	.globl	_C_LABEL(trapend)
 _C_LABEL(trapend):
+
+/*
+ * All OEA have FPUs so include this too.  Some OEA have AltiVec so include
+ * that too.
+ */
+#if !defined(PPC_MPC8XX)
+#include <powerpc/powerpc/fpu_subr.S>
+#include <powerpc/oea/altivec_subr.S>
+#endif

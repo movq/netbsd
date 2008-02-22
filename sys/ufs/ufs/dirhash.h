@@ -1,4 +1,4 @@
-/*	$NetBSD: dirhash.h,v 1.5 2007/07/09 21:11:35 ad Exp $	*/
+/*	$NetBSD: dirhash.h,v 1.7 2013/06/09 17:57:09 dholland Exp $	*/
 
 /*
  * Copyright (c) 2001 Ian Dowse.  All rights reserved.
@@ -47,7 +47,7 @@
 #define DIRHASH_DEL	(-2)	/* deleted entry; may be part of chain */
 
 #define DIRALIGN	4
-#define DH_NFSTATS	(DIRECTSIZ(FFS_MAXNAMLEN + 1) / DIRALIGN)
+#define DH_NFSTATS	(UFS_DIRECTSIZ(FFS_MAXNAMLEN + 1) / DIRALIGN)
 				 /* max DIRALIGN words in a directory entry */
 
 /*
@@ -85,11 +85,13 @@ struct dirhash {
 	kmutex_t dh_lock;	/* protects all fields except dh_list */
 
 	doff_t	**dh_hash;	/* the hash array (2-level) */
+	size_t	dh_hashsz;
 	int	dh_narrays;	/* number of entries in dh_hash */
 	int	dh_hlen;	/* total slots in the 2-level hash array */
 	int	dh_hused;	/* entries in use */
 
 	u_int8_t *dh_blkfree;	/* free DIRALIGN words in each dir block */
+	size_t	dh_blkfreesz;
 	int	dh_nblk;	/* size of dh_blkfree array */
 	int	dh_dirblks;	/* number of DIRBLKSIZ blocks in dir */
 	int	dh_firstfree[DH_NFSTATS + 1]; /* first blk with N words free */

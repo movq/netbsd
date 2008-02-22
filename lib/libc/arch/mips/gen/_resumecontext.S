@@ -1,4 +1,4 @@
-/*	$NetBSD: _resumecontext.S,v 1.4 2004/03/01 20:43:19 drochner Exp $	*/
+/*	$NetBSD: _resumecontext.S,v 1.11 2016/09/21 06:49:39 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,19 +29,54 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <machine/asm.h>
+
 #include "SYS.h"
-#include <machine/mcontext.h>
+#include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	ASMSTR("$NetBSD: _resumecontext.S,v 1.4 2004/03/01 20:43:19 drochner Exp $")
+	RCSID("$NetBSD: _resumecontext.S,v 1.11 2016/09/21 06:49:39 skrll Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 	.set	reorder
-	
+	.hidden	_C_LABEL(__resumecontext)
+
 LEAF_NOPROFILE(__resumecontext)
-	PIC_PROLOGUE(_resumecontext, ra)
+	/*
+	 * We get here not by a call through $t9 but thru $ra after the
+	 * function passed to makecontext returns.  Therefore, we need
+	 * to recover gp from ra
+	 */
+#if defined(__mips_o32) || defined(__mips_o64)
+	.set push
+	.set noreorder
+	.cpload	ra
+	.set pop
+#endif
+#if defined(__mips_n32) || defined(__mips_n64)
+	.cpsetup ra, t3, __resumecontext
+#endif
 	
-	la	t9, _C_LABEL(_resumecontext)
-	jr	t9
-	 nop
+	PTR_SUBU	sp, sp, UCONTEXT_SIZE		# get space for ucontext
+	move		a0, sp				# arg0 for getcontext
+	PTR_S		zero, _OFFSETOF_UC_LINK(a0)	# make sure uc_link is 0
+	SYSTRAP(getcontext)				# get context
+
+#if defined(__mips_n32) || defined(__mips_n64)
+	REG_PROLOGUE
+	/* We saved gp in t2 above */
+	REG_S		t3, _OFFSETOF_UC_GREGS_GP(a0)
+	REG_EPILOGUE
+#endif
+
+	PTR_L		a0, _OFFSETOF_UC_LINK(a0)	# linked context?
+	NOP_L
+	beq		a0, zero, 1f			#   nope, exit process
+	nop
+	PIC_TAILCALL(setcontext)			#   yes, become it.
+	/* NOTREACHED (in theory) */
+	li		a0, -1				# failure,
+1:
+	SYSTRAP(exit)					# all hope is lost.
+	/* NOTREACHED */
 END(__resumecontext)

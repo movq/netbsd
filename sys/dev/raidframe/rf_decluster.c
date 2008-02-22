@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_decluster.c,v 1.22 2007/03/04 06:02:36 christos Exp $	*/
+/*	$NetBSD: rf_decluster.c,v 1.25 2018/01/18 00:32:49 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -48,7 +48,7 @@
  *--------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_decluster.c,v 1.22 2007/03/04 06:02:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_decluster.c,v 1.25 2018/01/18 00:32:49 mrg Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -382,7 +382,7 @@ rf_MapParityDeclustered(RF_Raid_t *raidPtr, RF_RaidAddr_t raidSector,
 	RF_DeclusteredConfigInfo_t *info = (RF_DeclusteredConfigInfo_t *) layoutPtr->layoutSpecificInfo;
 	RF_StripeNum_t SUID = raidSector / layoutPtr->sectorsPerStripeUnit;
 	RF_StripeNum_t FullTableID, FullTableOffset, TableID, TableOffset;
-	RF_StripeNum_t BlockID, BlockOffset, RepIndex;
+	RF_StripeNum_t BlockID, RepIndex;
 	RF_StripeCount_t sus_per_fulltable = info->SUsPerFullTable;
 	RF_StripeCount_t fulltable_depth = info->FullTableDepthInPUs * layoutPtr->SUsPerPU;
 	RF_StripeNum_t base_suid = 0, outSU, SpareRegion = 0, SpareSpace = 0;
@@ -404,8 +404,6 @@ rf_MapParityDeclustered(RF_Raid_t *raidPtr, RF_RaidAddr_t raidSector,
 	/* BlockID         = (TableOffset / info->PUsPerBlock) %
 	 * info->BlocksPerTable; */
 	BlockID = TableOffset / info->PUsPerBlock;
-	/* BlockOffset     = TableOffset % info->PUsPerBlock; */
-	BlockOffset = TableOffset - BlockID * info->PUsPerBlock;
 	BlockID %= info->BlocksPerTable;
 
 	/* the parity block is in the position indicated by RepIndex */
@@ -445,12 +443,10 @@ rf_IdentifyStripeDeclustered(RF_Raid_t *raidPtr, RF_RaidAddr_t addr,
 	RF_StripeCount_t fulltable_depth = info->FullTableDepthInPUs * layoutPtr->SUsPerPU;
 	RF_StripeNum_t base_suid = 0;
 	RF_StripeNum_t SUID = rf_RaidAddressToStripeUnitID(layoutPtr, addr);
-	RF_StripeNum_t stripeID, FullTableID;
+	RF_StripeNum_t stripeID;
 	int     tableOffset;
 
 	rf_decluster_adjust_params(layoutPtr, &SUID, &sus_per_fulltable, &fulltable_depth, &base_suid);
-	FullTableID = SUID / sus_per_fulltable;	/* fulltable ID within array
-						 * (across rows) */
 	stripeID = rf_StripeUnitIDToStripeID(layoutPtr, SUID);	/* find stripe offset
 								 * into array */
 	tableOffset = (stripeID % info->BlocksPerTable);	/* find offset into
@@ -612,8 +608,7 @@ rf_remap_to_spare_space(RF_RaidLayout_t *layoutPtr,
 
 #if (RF_INCLUDE_PARITY_DECLUSTERING_DS > 0)
 int
-rf_InstallSpareTable(RF_Raid_t *raidPtr, RF_RowCol_t frow,
-    RF_RowCol_t fcol)
+rf_InstallSpareTable(RF_Raid_t *raidPtr, RF_RowCol_t fcol)
 {
 	RF_DeclusteredConfigInfo_t *info = (RF_DeclusteredConfigInfo_t *) raidPtr->Layout.layoutSpecificInfo;
 	RF_SparetWait_t *req;
@@ -696,5 +691,5 @@ rf_FreeSpareTable(RF_Raid_t *raidPtr)
 		RF_Free(table[i], info->BlocksPerTable * sizeof(RF_SpareTableEntry_t));
 	}
 	RF_Free(table, info->TablesPerSpareRegion * sizeof(RF_SpareTableEntry_t *));
-	info->SpareTable = (RF_SpareTableEntry_t **) NULL;
+	info->SpareTable = NULL;
 }

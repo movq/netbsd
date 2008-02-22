@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide.c,v 1.215 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: pciide.c,v 1.219 2010/11/06 00:29:09 jakllsch Exp $	*/
 
 
 /*
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -75,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.215 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.219 2010/11/06 00:29:09 jakllsch Exp $");
 
 #include <sys/param.h>
 
@@ -83,15 +78,14 @@ __KERNEL_RCSID(0, "$NetBSD: pciide.c,v 1.215 2006/11/16 01:33:09 christos Exp $"
 #include <dev/pci/pciidereg.h>
 #include <dev/pci/pciidevar.h>
 
-int	pciide_match(struct device *, struct cfdata *, void *);
-void	pciide_attach(struct device *, struct device *, void *);
+static int	pciide_match(device_t, cfdata_t, void *);
+static void	pciide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pciide, sizeof(struct pciide_softc),
-    pciide_match, pciide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(pciide, sizeof(struct pciide_softc),
+    pciide_match, pciide_attach, pciide_detach, NULL);
 
-int
-pciide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+static int
+pciide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -108,11 +102,13 @@ pciide_match(struct device *parent, struct cfdata *match,
 	return (0);
 }
 
-void
-pciide_attach(struct device *parent, struct device *self, void *aux)
+static void
+pciide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa, NULL);
 }

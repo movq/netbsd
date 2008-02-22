@@ -1,7 +1,7 @@
-/*	$NetBSD: ps.c,v 1.65 2008/02/10 17:48:00 christos Exp $	*/
+/*	$NetBSD: ps.c,v 1.91 2018/04/11 18:52:29 christos Exp $	*/
 
 /*
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,20 +60,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.65 2008/02/10 17:48:00 christos Exp $");
+__RCSID("$NetBSD: ps.c,v 1.91 2018/04/11 18:52:29 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/user.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/lwp.h>
@@ -96,6 +88,8 @@ __RCSID("$NetBSD: ps.c,v 1.65 2008/02/10 17:48:00 christos Exp $");
 #include <fcntl.h>
 #include <kvm.h>
 #include <limits.h>
+#include <locale.h>
+#include <math.h>
 #include <nlist.h>
 #include <paths.h>
 #include <pwd.h>
@@ -110,15 +104,13 @@ __RCSID("$NetBSD: ps.c,v 1.65 2008/02/10 17:48:00 christos Exp $");
  * ARGOPTS must contain all option characters that take arguments
  * (except for 't'!) - it is used in kludge_oldps_options()
  */
-#define	GETOPTSTR	"acCeghjk:LlM:mN:O:o:p:rSsTt:U:uvW:wx"
+#define	GETOPTSTR	"aAcCdeghjk:LlM:mN:O:o:p:rSsTt:U:uvW:wx"
 #define	ARGOPTS		"kMNOopUW"
 
-struct kinfo_proc2 *kinfo;
 struct varlist displaylist = SIMPLEQ_HEAD_INITIALIZER(displaylist);
 struct varlist sortlist = SIMPLEQ_HEAD_INITIALIZER(sortlist);
 
 int	eval;			/* exit value */
-int	rawcpu;			/* -C */
 int	sumrusage;		/* -S */
 int	termwidth;		/* width of screen (0 == infinity) */
 int	totwidth;		/* calculated width of requested variables */
@@ -131,18 +123,20 @@ static struct kinfo_lwp
 		    struct kinfo_lwp *, int);
 static struct kinfo_proc2
 		*getkinfo_kvm(kvm_t *, int, int, int *);
+static struct pinfo
+		*setpinfo(struct kinfo_proc2 *, int, int, int);
 static char	*kludge_oldps_options(char *);
 static int	 pscomp(const void *, const void *);
 static void	 scanvars(void);
-static void	 usage(void);
+__dead static void	 usage(void);
 static int	 parsenum(const char *, const char *);
-int		 main(int, char *[]);
+static void	 descendant_sort(struct pinfo *, int);
 
 char dfmt[] = "pid tt state time command";
 char jfmt[] = "user pid ppid pgid sess jobc state tt time command";
 char lfmt[] = "uid pid ppid cpu pri nice vsz rss wchan state tt time command";
 char sfmt[] = "uid pid ppid cpu lid nlwp pri nice vsz rss wchan lstate tt "
-		"time command";
+		"ltime command";
 char ufmt[] = "user pid %cpu %mem vsz rss tt state start time command";
 char vfmt[] = "pid state time sl re pagein vsz rss lim tsiz %cpu %mem command";
 
@@ -152,16 +146,72 @@ struct varent *Opos = NULL; /* -O flag inserts after this point */
 
 kvm_t *kd;
 
+static long long
+ttyname2dev(const char *ttname, int *xflg, int *what)
+{
+	struct stat sb;
+	const char *ttypath;
+	char pathbuf[MAXPATHLEN];
+
+	ttypath = NULL;
+	if (strcmp(ttname, "?") == 0) {
+		*xflg = 1;
+		return KERN_PROC_TTY_NODEV;
+	}
+	if (strcmp(ttname, "-") == 0)
+		return KERN_PROC_TTY_REVOKE;
+
+	if (strcmp(ttname, "co") == 0)
+		ttypath = _PATH_CONSOLE;
+	else if (strncmp(ttname, "pts/", 4) == 0 ||
+		strncmp(ttname, "tty", 3) == 0) {
+		(void)snprintf(pathbuf,
+		    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
+		ttypath = pathbuf;
+	} else if (*ttname != '/') {
+		(void)snprintf(pathbuf,
+		    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
+		ttypath = pathbuf;
+	} else
+		ttypath = ttname;
+	*what = KERN_PROC_TTY;
+	if (stat(ttypath, &sb) == -1) {
+		devmajor_t pts;
+		int serrno;
+
+		serrno = errno;
+		pts = getdevmajor("pts", S_IFCHR);
+		if (pts != NODEVMAJOR && strncmp(ttname, "pts/", 4) == 0) {
+			int ptsminor = atoi(ttname + 4);
+
+			snprintf(pathbuf, sizeof(pathbuf), "pts/%d", ptsminor);
+			if (strcmp(pathbuf, ttname) == 0 && ptsminor >= 0)
+				return makedev(pts, ptsminor);
+		}
+		errno = serrno;
+		err(EXIT_FAILURE, "%s", ttypath);
+	}
+	if (!S_ISCHR(sb.st_mode))
+		errx(EXIT_FAILURE, "%s: not a terminal", ttypath);
+	return sb.st_rdev;
+}
+
 int
 main(int argc, char *argv[])
 {
+	struct kinfo_proc2 *kinfo;
+	struct pinfo *pinfo;
 	struct varent *vent;
 	struct winsize ws;
 	struct kinfo_lwp *kl, *l;
-	int ch, flag, i, j, fmt, lineno, nentries, nlwps;
-	int prtheader, wflag, what, xflg, mode, showlwps;
+	int ch, i, j, fmt, lineno, descendancy, nentries, nlwps;
+	long long flag;
+	int calc_pcpu, prtheader, wflag, what, xflg, rawcpu, showlwps;
 	char *nlistf, *memf, *swapf, errbuf[_POSIX2_LINE_MAX];
 	char *ttname;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
 	     ioctl(STDERR_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
@@ -171,24 +221,29 @@ main(int argc, char *argv[])
 	else
 		termwidth = ws.ws_col - 1;
 
-	setncpu();
-
 	if (argc > 1)
 		argv[1] = kludge_oldps_options(argv[1]);
 
-	fmt = prtheader = wflag = xflg = showlwps = 0;
+	descendancy = fmt = prtheader = wflag = xflg = rawcpu = showlwps = 0;
 	what = KERN_PROC_UID;
 	flag = myuid = getuid();
 	memf = nlistf = swapf = NULL;
-	mode = PRINTMODE;
+
 	while ((ch = getopt(argc, argv, GETOPTSTR)) != -1)
 		switch((char)ch) {
+		case 'A':
+			/* "-A" shows all processes, like "-ax" */
+			xflg = 1;
+			/*FALLTHROUGH*/
 		case 'a':
 			what = KERN_PROC_ALL;
 			flag = 0;
 			break;
 		case 'c':
 			commandonly = 1;
+			break;
+		case 'd':
+			descendancy = 1;
 			break;
 		case 'e':			/* XXX set ufmt */
 			needenv = 1;
@@ -213,8 +268,7 @@ main(int argc, char *argv[])
 			break;			/* no-op - was dontuseprocfs */
 		case 'L':
 			showkey();
-			exit(0);
-			/* NOTREACHED */
+			return 0;
 		case 'l':
 			parsefmt(lfmt);
 			fmt = 1;
@@ -271,44 +325,12 @@ main(int argc, char *argv[])
 			break;
 		case 'T':
 			if ((ttname = ttyname(STDIN_FILENO)) == NULL)
-				errx(1, "stdin: not a terminal");
-			goto tty;
-		case 't':
-			ttname = optarg;
-		tty: {
-			struct stat sb;
-			const char *ttypath;
-			char pathbuf[MAXPATHLEN];
-
-			flag = 0;
-			ttypath = NULL;
-			if (strcmp(ttname, "?") == 0)
-				flag = KERN_PROC_TTY_NODEV;
-			else if (strcmp(ttname, "-") == 0)
-				flag = KERN_PROC_TTY_REVOKE;
-			else if (strcmp(ttname, "co") == 0)
-				ttypath = _PATH_CONSOLE;
-			else if (strncmp(ttname, "pts/", 4) == 0 ||
-				strncmp(ttname, "tty", 3) == 0) {
-				(void)snprintf(pathbuf,
-				    sizeof(pathbuf), "%s%s", _PATH_DEV, ttname);
-				ttypath = pathbuf;
-			} else if (*ttname != '/') {
-				(void)snprintf(pathbuf,
-				    sizeof(pathbuf), "%s%s", _PATH_TTY, ttname);
-				ttypath = pathbuf;
-			} else
-				ttypath = ttname;
-			what = KERN_PROC_TTY;
-			if (flag == 0) {
-				if (stat(ttypath, &sb) == -1)
-					err(1, "%s", ttypath);
-				if (!S_ISCHR(sb.st_mode))
-					errx(1, "%s: not a terminal", ttypath);
-				flag = sb.st_rdev;
-			}
+				errx(EXIT_FAILURE, "stdin: not a terminal");
+			flag = ttyname2dev(ttname, &xflg, &what);
 			break;
-		}
+		case 't':
+			flag = ttyname2dev(optarg, &xflg, &what);
+			break;
 		case 'U':
 			if (*optarg != '\0') {
 				struct passwd *pw;
@@ -371,19 +393,28 @@ main(int argc, char *argv[])
 	} else
 		kd = kvm_openfiles(nlistf, memf, swapf, O_RDONLY, errbuf);
 
-	if (kd == 0)
-		errx(1, "%s", errbuf);
+	if (kd == NULL)
+		errx(EXIT_FAILURE, "%s", errbuf);
 
 	if (!fmt)
 		parsefmt(default_fmt);
 
 	/* Add default sort criteria */
 	parsesort("tdev,pid");
+	calc_pcpu = 0;
 	SIMPLEQ_FOREACH(vent, &sortlist, next) {
 		if (vent->var->flag & LWP || vent->var->type == UNSPECIFIED)
-			warnx("Cannot sort on %s, sort key ignored\n",
+			warnx("Cannot sort on %s, sort key ignored",
 				vent->var->name);
+		if (vent->var->type == PCPU)
+			calc_pcpu = 1;
 	}
+	if (!calc_pcpu)
+		SIMPLEQ_FOREACH(vent, &displaylist, next)
+			if (vent->var->type == PCPU) {
+				calc_pcpu = 1;
+				break;
+			}
 
 	/*
 	 * scan requested variables, noting what structures are needed.
@@ -394,47 +425,56 @@ main(int argc, char *argv[])
 	 * select procs
 	 */
 	if (!(kinfo = getkinfo_kvm(kd, what, flag, &nentries)))
-		err(1, "%s", kvm_geterr(kd));
+		errx(EXIT_FAILURE, "%s", kvm_geterr(kd));
 	if (nentries == 0) {
 		printheader();
-		exit(1);
+		return 1;
 	}
+	pinfo = setpinfo(kinfo, nentries, calc_pcpu, rawcpu);
+
 	/*
 	 * sort proc list
 	 */
-	qsort(kinfo, nentries, sizeof(struct kinfo_proc2), pscomp);
+	qsort(pinfo, nentries, sizeof(struct pinfo), pscomp);
+
+	/*
+	 * We want things in descendant order
+	 */
+	if (descendancy)
+		descendant_sort(pinfo, nentries);
+
 	/*
 	 * For each proc, call each variable output function in
 	 * "setwidth" mode to determine the widest element of
 	 * the column.
 	 */
-	if (mode == PRINTMODE)
-		for (i = 0; i < nentries; i++) {
-			struct kinfo_proc2 *ki = &kinfo[i];
 
-			if (xflg == 0 && (ki->p_tdev == NODEV ||
-			    (ki->p_flag & P_CONTROLT) == 0))
-				continue;
+	for (i = 0; i < nentries; i++) {
+		struct pinfo *pi = &pinfo[i];
+		struct kinfo_proc2 *ki = pi->ki;
 
-			kl = kvm_getlwps(kd, ki->p_pid, ki->p_paddr,
-			    sizeof(struct kinfo_lwp), &nlwps);
-			if (kl == 0)
-				nlwps = 0;
-			if (showlwps == 0) {
-				l = pick_representative_lwp(ki, kl, nlwps);
-				SIMPLEQ_FOREACH(vent, &displaylist, next)
-					OUTPUT(vent, ki, l, WIDTHMODE);
-			} else {
-				/* The printing is done with the loops
-				 * reversed, but here we don't need that,
-				 * and this improves the code locality a bit.
-				 */
-				SIMPLEQ_FOREACH(vent, &displaylist, next)
-					for (j = 0; j < nlwps; j++)
-						OUTPUT(vent, ki, &kl[j],
-						    WIDTHMODE);
-			}
+		if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
+		    (ki->p_flag & P_CONTROLT) == 0))
+			continue;
+
+		kl = kvm_getlwps(kd, ki->p_pid, ki->p_paddr,
+		    sizeof(struct kinfo_lwp), &nlwps);
+		if (kl == 0)
+			nlwps = 0;
+		if (showlwps == 0) {
+			l = pick_representative_lwp(ki, kl, nlwps);
+			SIMPLEQ_FOREACH(vent, &displaylist, next)
+				OUTPUT(vent, l, pi, ki, WIDTHMODE);
+		} else {
+			/* The printing is done with the loops
+			 * reversed, but here we don't need that,
+			 * and this improves the code locality a bit.
+			 */
+			SIMPLEQ_FOREACH(vent, &displaylist, next)
+				for (j = 0; j < nlwps; j++)
+					OUTPUT(vent, &kl[j], pi, ki, WIDTHMODE);
 		}
+	}
 	/*
 	 * Print header - AFTER determining process field widths.
 	 * printheader() also adds up the total width of all
@@ -446,9 +486,10 @@ main(int argc, char *argv[])
 	 * print mode.
 	 */
 	for (i = lineno = 0; i < nentries; i++) {
-		struct kinfo_proc2 *ki = &kinfo[i];
+		struct pinfo *pi = &pinfo[i];
+		struct kinfo_proc2 *ki = pi->ki;
 
-		if (xflg == 0 && (ki->p_tdev == NODEV ||
+		if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
 		    (ki->p_flag & P_CONTROLT ) == 0))
 			continue;
 		kl = kvm_getlwps(kd, ki->p_pid, (u_long)ki->p_paddr,
@@ -458,7 +499,7 @@ main(int argc, char *argv[])
 		if (showlwps == 0) {
 			l = pick_representative_lwp(ki, kl, nlwps);
 			SIMPLEQ_FOREACH(vent, &displaylist, next) {
-				OUTPUT(vent, ki, l, mode);
+				OUTPUT(vent, l, pi, ki, PRINTMODE);
 				if (SIMPLEQ_NEXT(vent, next) != NULL)
 					(void)putchar(' ');
 			}
@@ -471,7 +512,7 @@ main(int argc, char *argv[])
 		} else {
 			for (j = 0; j < nlwps; j++) {
 				SIMPLEQ_FOREACH(vent, &displaylist, next) {
-					OUTPUT(vent, ki, &kl[j], mode);
+					OUTPUT(vent, &kl[j], pi, ki, PRINTMODE);
 					if (SIMPLEQ_NEXT(vent, next) != NULL)
 						(void)putchar(' ');
 				}
@@ -484,8 +525,7 @@ main(int argc, char *argv[])
 			}
 		}
 	}
-	exit(eval);
-	/* NOTREACHED */
+	return eval;
 }
 
 static struct kinfo_lwp *
@@ -542,10 +582,9 @@ pick_representative_lwp(struct kinfo_proc2 *ki, struct kinfo_lwp *kl, int nlwps)
 		break;
 	}
 	/* Error condition! */
-	warnx("Inconsistent LWP state for process %d\n", ki->p_pid);
+	warnx("Inconsistent LWP state for process %d", ki->p_pid);
 	return kl;
 }
-
 
 static struct kinfo_proc2 *
 getkinfo_kvm(kvm_t *kdp, int what, int flag, int *nentriesp)
@@ -553,6 +592,35 @@ getkinfo_kvm(kvm_t *kdp, int what, int flag, int *nentriesp)
 
 	return (kvm_getproc2(kdp, what, flag, sizeof(struct kinfo_proc2),
 	    nentriesp));
+}
+
+static struct pinfo *
+setpinfo(struct kinfo_proc2 *ki, int nentries, int calc_pcpu, int rawcpu)
+{
+	struct pinfo *pi;
+	int i;
+
+	pi = calloc(nentries, sizeof(*pi));
+	if (pi == NULL)
+		err(EXIT_FAILURE, "calloc");
+
+	if (calc_pcpu && !nlistread)
+		donlist();
+
+	for (i = 0; i < nentries; i++) {
+		pi[i].ki = &ki[i];
+		if (!calc_pcpu)
+			continue;
+		if (ki[i].p_swtime == 0 || ki[i].p_realstat == SZOMB) {
+			pi[i].pcpu = 0.0;
+			continue;
+		}
+		pi[i].pcpu = 100.0 * (double)ki[i].p_pctcpu / fscale;
+		if (!rawcpu)
+			pi[i].pcpu /= 1.0 - exp(ki[i].p_swtime * log_ccpu);
+	}
+
+	return pi;
 }
 
 static void
@@ -573,8 +641,10 @@ scanvars(void)
 static int
 pscomp(const void *a, const void *b)
 {
-	const struct kinfo_proc2 *ka = (const struct kinfo_proc2 *)a;
-	const struct kinfo_proc2 *kb = (const struct kinfo_proc2 *)b;
+	const struct pinfo *pa = (const struct pinfo *)a;
+	const struct pinfo *pb = (const struct pinfo *)b;
+	const struct kinfo_proc2 *ka = pa->ki;
+	const struct kinfo_proc2 *kb = pb->ki;
 
 	int i;
 	int64_t i64;
@@ -582,7 +652,7 @@ pscomp(const void *a, const void *b)
 	struct varent *ve;
 	const sigset_t *sa, *sb;
 
-#define	V_SIZE(k) (k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize)
+#define	V_SIZE(k) ((k)->p_vm_msize)
 #define	RDIFF_N(t, n) \
 	if (((const t *)((const char *)ka + v->off))[n] > ((const t *)((const char *)kb + v->off))[n]) \
 		return 1; \
@@ -619,8 +689,8 @@ pscomp(const void *a, const void *b)
 		case UINT32:
 			RDIFF(uint32_t);
 		case SIGLIST:
-			sa = (const void *)((const char *)a + v->off);
-			sb = (const void *)((const char *)b + v->off);
+			sa = (const void *)((const char *)ka + v->off);
+			sb = (const void *)((const char *)kb + v->off);
 			i = 0;
 			do {
 				if (sa->__bits[i] > sb->__bits[i])
@@ -628,7 +698,7 @@ pscomp(const void *a, const void *b)
 				if (sa->__bits[i] < sb->__bits[i])
 					return -1;
 				i++;
-			} while (i < sizeof sa->__bits / sizeof sa->__bits[0]);
+			} while (i < (int)__arraycount(sa->__bits));
 			continue;
 		case INT64:
 			RDIFF(int64_t);
@@ -654,7 +724,7 @@ pscomp(const void *a, const void *b)
 				return i64 > 0 ? 1 : -1;
 			continue;
 		case PCPU:
-			i = getpcpu(kb) - getpcpu(ka);
+			i = pb->pcpu - pa->pcpu;
 			if (i != 0)
 				return i;
 			continue;
@@ -693,7 +763,7 @@ kludge_oldps_options(char *s)
 
 	len = strlen(s);
 	if ((newopts = ns = malloc(len + 3)) == NULL)
-		err(1, NULL);
+		err(EXIT_FAILURE, NULL);
 	/*
 	 * options begin with '-'
 	 */
@@ -745,12 +815,122 @@ parsenum(const char *str, const char *msg)
 	ul = strtoul(str, &ep, 0);
 
 	if (*str == '\0' || *ep != '\0')
-		errx(1, "Invalid %s: `%s'", msg, str);
+		errx(EXIT_FAILURE, "Invalid %s: `%s'", msg, str);
 
 	if (ul > INT_MAX)
-		errx(1, "Out of range %s: `%s'", msg, str);
+		errx(EXIT_FAILURE, "Out of range %s: `%s'", msg, str);
 
 	return (int)ul;
+}
+
+static void
+descendant_sort(struct pinfo *ki, int items)
+{
+	int dst, lvl, maxlvl, n, ndst, nsrc, siblings, src;
+	unsigned char *path;
+	struct pinfo kn;
+
+	/*
+	 * First, sort the entries by descendancy, tracking the descendancy
+	 * depth in the level field.
+	 */
+	src = 0;
+	maxlvl = 0;
+	while (src < items) {
+		if (ki[src].level) {
+			src++;
+			continue;
+		}
+		for (nsrc = 1; src + nsrc < items; nsrc++)
+			if (!ki[src + nsrc].level)
+				break;
+
+		for (dst = 0; dst < items; dst++) {
+			if (ki[dst].ki->p_pid == ki[src].ki->p_pid)
+				continue;
+			if (ki[dst].ki->p_pid == ki[src].ki->p_ppid)
+				break;
+		}
+
+		if (dst == items) {
+			src += nsrc;
+			continue;
+		}
+
+		for (ndst = 1; dst + ndst < items; ndst++)
+			if (ki[dst + ndst].level <= ki[dst].level)
+				break;
+
+		for (n = src; n < src + nsrc; n++) {
+			ki[n].level += ki[dst].level + 1;
+			if (maxlvl < ki[n].level)
+				maxlvl = ki[n].level;
+		}
+
+		while (nsrc) {
+			if (src < dst) {
+				kn = ki[src];
+				memmove(ki + src, ki + src + 1,
+				    (dst - src + ndst - 1) * sizeof *ki);
+				ki[dst + ndst - 1] = kn;
+				nsrc--;
+				dst--;
+				ndst++;
+			} else if (src != dst + ndst) {
+				kn = ki[src];
+				memmove(ki + dst + ndst + 1, ki + dst + ndst,
+				    (src - dst - ndst) * sizeof *ki);
+				ki[dst + ndst] = kn;
+				ndst++;
+				nsrc--;
+				src++;
+			} else {
+				ndst += nsrc;
+				src += nsrc;
+				nsrc = 0;
+			}
+		}
+	}
+
+	/*
+	 * Now populate prefix (instead of level) with the command
+	 * prefix used to show descendancies.
+	 */
+	path = malloc((maxlvl + 7) / 8);
+	memset(path, '\0', (maxlvl + 7) / 8);
+	for (src = 0; src < items; src++) {
+		if ((lvl = ki[src].level) == 0) {
+			ki[src].prefix = NULL;
+			continue;
+		}
+		if ((ki[src].prefix = malloc(lvl * 2 + 1)) == NULL)
+			errx(EXIT_FAILURE, "malloc failed");
+		for (n = 0; n < lvl - 2; n++) {
+			ki[src].prefix[n * 2] =
+			    path[n / 8] & 1 << (n % 8) ? '|' : ' ';
+			ki[src].prefix[n * 2 + 1] = ' ';
+				
+		}
+		if (n == lvl - 2) {
+			/* Have I any more siblings? */
+			for (siblings = 0, dst = src + 1; dst < items; dst++) {
+				if (ki[dst].level > lvl)
+					continue;
+				if (ki[dst].level == lvl)
+					siblings = 1;
+				break;
+			}
+			if (siblings)
+				path[n / 8] |= 1 << (n % 8);
+			else
+				path[n / 8] &= ~(1 << (n % 8));
+			ki[src].prefix[n * 2] = siblings ? '|' : '`';
+			ki[src].prefix[n * 2 + 1] = '-';
+			n++;
+		}
+		strcpy(ki[src].prefix + n * 2, "- ");
+	}
+	free(path);
 }
 
 static void
@@ -759,9 +939,9 @@ usage(void)
 
 	(void)fprintf(stderr,
 	    "usage:\t%s\n\t   %s\n\t%s\n",
-	    "ps [-acCehjlmrsSTuvwx] [-k key] [-O|o fmt] [-p pid] [-t tty]",
-	    "[-M core] [-N system] [-W swap] [-U username]",
-	    "ps [-L]");
+	    "ps [-AaCcdehjlmrSsTuvwx] [-k key] [-M core] [-N system] [-O fmt]",
+	    "[-o fmt] [-p pid] [-t tty] [-U user] [-W swap]",
+	    "ps -L");
 	exit(1);
 	/* NOTREACHED */
 }

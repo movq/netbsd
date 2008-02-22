@@ -1,4 +1,4 @@
-/*	$NetBSD: if_auereg.h,v 1.20 2008/01/16 12:33:54 is Exp $	*/
+/*	$NetBSD: if_auereg.h,v 1.27 2016/04/23 10:15:31 skrll Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -46,6 +46,8 @@
  * transfer is denoted by having a length less that 64 bytes. For
  * the RX case, the data includes an optional RX status word.
  */
+
+#include <sys/rndsource.h>
 
 #define AUE_UR_READREG		0xF0
 #define AUE_UR_WRITEREG		0xF1
@@ -174,14 +176,14 @@
 #define AUE_GPIO_SEL1		0x20
 
 struct aue_intrpkt {
-	u_int8_t		aue_txstat0;
-	u_int8_t		aue_txstat1;
-	u_int8_t		aue_rxstat;
-	u_int8_t		aue_rxlostpkt0;
-	u_int8_t		aue_rxlostpkt1;
-	u_int8_t		aue_wakeupstat;
-	u_int8_t		aue_rsvd;
-	u_int8_t		_pad;
+	uint8_t		aue_txstat0;
+	uint8_t		aue_txstat1;
+	uint8_t		aue_rxstat;
+	uint8_t		aue_rxlostpkt0;
+	uint8_t		aue_rxlostpkt1;
+	uint8_t		aue_wakeupstat;
+	uint8_t		aue_rsvd;
+	uint8_t		_pad;
 };
 #define AUE_INTR_PKTLEN 8
 
@@ -207,7 +209,7 @@ struct aue_softc;
 
 struct aue_chain {
 	struct aue_softc	*aue_sc;
-	usbd_xfer_handle	aue_xfer;
+	struct usbd_xfer	*aue_xfer;
 	char			*aue_buf;
 	struct mbuf		*aue_mbuf;
 	int			aue_idx;
@@ -224,19 +226,11 @@ struct aue_cdata {
 };
 
 struct aue_softc {
-	USBBASEDEVICE		aue_dev;
+	device_t aue_dev;
 
-#if defined(__FreeBSD__)
-	struct arpcom		arpcom;
-	device_t		aue_miibus;
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (device_get_softc((sc)->aue_miibus))
-#elif defined(__NetBSD__)
 	struct ethercom		aue_ec;
 	struct mii_data		aue_mii;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 	struct lwp		*aue_thread;
 	int			aue_closing;
 	kcondvar_t		aue_domc;
@@ -244,29 +238,20 @@ struct aue_softc {
 	kmutex_t		aue_mcmtx;
 #define GET_IFP(sc) (&(sc)->aue_ec.ec_if)
 #define GET_MII(sc) (&(sc)->aue_mii)
-#elif defined(__OpenBSD__)
-	struct arpcom		arpcom;
-	struct mii_data		aue_mii;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (&(sc)->aue_mii)
-#endif
 
-	usb_callout_t		aue_stat_ch;
+	struct callout aue_stat_ch;
 
-	usbd_device_handle	aue_udev;
-	usbd_interface_handle	aue_iface;
-	u_int16_t		aue_vendor;
-	u_int16_t		aue_product;
+	struct usbd_device	*aue_udev;
+	struct usbd_interface	*aue_iface;
+	uint16_t		aue_vendor;
+	uint16_t		aue_product;
 	int			aue_ed[AUE_ENDPT_MAX];
-	usbd_pipe_handle	aue_ep[AUE_ENDPT_MAX];
-	u_int8_t		aue_link;
+	struct usbd_pipe	*aue_ep[AUE_ENDPT_MAX];
+	uint8_t			aue_link;
 	int			aue_if_flags;
 	struct aue_cdata	aue_cdata;
 
-	u_int16_t		aue_flags;
+	uint16_t		aue_flags;
 
 	int			aue_refcnt;
 	char			aue_dying;

@@ -1,4 +1,4 @@
-/*	$NetBSD: build.c,v 1.1 2006/10/31 22:21:17 joerg Exp $	*/
+/*	$NetBSD: build.c,v 1.3 2012/06/01 13:19:39 nonaka Exp $	*/
 /*	$OpenBSD: build.c,v 1.1 2006/01/09 20:03:40 damien Exp $	*/
 
 /*-

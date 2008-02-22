@@ -33,7 +33,7 @@
  *	isdn4bsd layer1 driver for Dynalink IS64PH isdn TA
  *	==================================================
  *
- *	$Id: isic_isapnp_dynalink.c,v 1.9 2007/10/19 12:00:32 ad Exp $
+ *	$Id: isic_isapnp_dynalink.c,v 1.14 2012/10/27 17:18:26 chs Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:29 2001]
  *
@@ -75,7 +75,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_dynalink.c,v 1.9 2007/10/19 12:00:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_dynalink.c,v 1.14 2012/10/27 17:18:26 chs Exp $");
 
 #include "opt_isicpnp.h"
 #ifdef ISICPNP_DYNALINK
@@ -351,13 +351,13 @@ set_softc(struct isic_softc *sc, struct isa_attach_args *ia, int unit)
 }
 
 int
-isapnp_match_dynalink(struct device *parent, struct cfdata *cf,
+isapnp_match_dynalink(device_t parent, cfdata_t cf,
 		struct isa_attach_args *ia)
 {
 	struct isic_softc dummysc, *sc = &dummysc;
 	pnp_resource_t res;
 	char *ids[] = {"ASU1688", NULL};
-	bzero(&res, sizeof res);
+	memset(&res, 0, sizeof res);
 	res.res_irq[0].irq_level = ia->ia_irq;
 	res.res_port[0].prt_base = ia->ia_iobase;
 	res.res_port[0].prt_length = 4;
@@ -390,10 +390,10 @@ isapnp_match_dynalink(struct device *parent, struct cfdata *cf,
 }
 
 int
-isic_attach_Dyn(struct device *parent, struct device *self,
+isic_attach_Dyn(device_t parent, device_t self,
 		struct isa_attach_args *ia)
 {
-	struct isic_softc *sc = (struct isic_softc *)self;
+	struct isic_softc *sc = device_private(self);
 	int unit = sc->sc_dev.dv_unit;
 
 	/* Commit the probed attachment values */
@@ -431,11 +431,11 @@ void isic_attach_Dyn(struct isic_softc *sc)
 	if( ((HSCX_READ(0, H_VSTR) & 0xf) != 0x5) || ((HSCX_READ(1, H_VSTR) & 0xf) != 0x5) )
 	{
 		printf("%s: HSCX VSTR test failed for Dynalink PnP\n",
-			sc->sc_dev.dv_xname);
+			device_xname(sc->sc_dev));
 		printf("%s: HSC0: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(0, H_VSTR));
+			device_xname(sc->sc_dev), HSCX_READ(0, H_VSTR));
 		printf("%s: HSC1: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(1, H_VSTR));
+			device_xname(sc->sc_dev), HSCX_READ(1, H_VSTR));
 		return;
 	}
 

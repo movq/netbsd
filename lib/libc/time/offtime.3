@@ -1,11 +1,12 @@
-.\"	$NetBSD: offtime.3,v 1.1 2004/05/10 02:02:00 kleink Exp $
+.\"	$NetBSD: offtime.3,v 1.4 2017/10/25 19:01:25 abhinav Exp $
 .\" Written by Klaus Klein, May 10, 2004.
 .\" Public domain.
-.Dd May 10, 2004
+.Dd April 14, 2011
 .Dt OFFTIME 3
 .Os
 .Sh NAME
 .Nm offtime ,
+.Nm offtime_r ,
 .Nm timeoff ,
 .Nm timegm ,
 .Nm timelocal
@@ -16,6 +17,8 @@
 .In time.h
 .Ft struct tm *
 .Fn offtime "const time_t * clock" "long int offset"
+.Ft struct tm *
+.Fn offtime_r "const time_t * clock" "long int offset" "struct tm *ret"
 .Ft time_t
 .Fn timeoff "struct tm * tm" "long int offset"
 .Ft time_t
@@ -32,6 +35,15 @@ offset by
 .Fa offset
 seconds,
 into broken-down time, expressed as Coordinated Universal Time (UTC).
+.Pp
+.Fn offtime_r
+is similar to
+.Fn offtime
+but it places the returned
+.Ft "struct tm *"
+in the user supplied
+.Fa ret
+argument.
 .Pp
 .Fn timeoff
 converts the broken-down time
@@ -60,4 +72,5 @@ It is equivalent to the C standard function
 and is provided for symmetry only.
 .Sh SEE ALSO
 .Xr ctime 3 ,
+.Xr tm 3 ,
 .Xr tzset 3

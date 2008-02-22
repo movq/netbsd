@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_misc.c,v 1.58 2008/01/05 19:14:08 dsl Exp $	*/
+/*	$NetBSD: sunos32_misc.c,v 1.78 2017/07/28 15:34:06 riastradh Exp $	*/
 /* from :NetBSD: sunos_misc.c,v 1.107 2000/12/01 19:25:10 jdolecek Exp	*/
 
 /*
@@ -13,8 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -79,16 +77,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.58 2008/01/05 19:14:08 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.78 2017/07/28 15:34:06 riastradh Exp $");
 
 #define COMPAT_SUNOS 1
 
 #if defined(_KERNEL_OPT)
-#include "opt_nfsserver.h"
 #include "opt_compat_43.h"
 #include "opt_compat_netbsd.h"
-#include "opt_ptrace.h"
-#include "fs_nfs.h"
 #endif
 
 #include <sys/param.h>
@@ -159,10 +154,10 @@ sunos32_sigvec_to_sigaction(const struct netbsd32_sigvec *sv, struct sigaction *
 	sa->sa_flags = sv->sv_flags ^ SA_RESTART;
 }
 
-static
-void sunos32_sigvec_from_sigaction(sv, sa)
-	struct netbsd32_sigvec *sv;
-	const struct sigaction *sa;
+static void
+sunos32_sigvec_from_sigaction(
+	struct netbsd32_sigvec *sv,
+	const struct sigaction *sa)
 {
 /*XXX*/ extern void compat_43_sigset_to_sigmask(const sigset_t *, int *);
 
@@ -200,14 +195,14 @@ sunos32_sys_wait4(struct lwp *l, const struct sunos32_sys_wait4_args *uap, regis
 		syscallarg(netbsd32_rusagep_t) rusage;
 	} */
 
-	struct netbsd32_wait4_args bsd_ua;
+	struct compat_50_netbsd32_wait4_args bsd_ua;
 
 	SCARG(&bsd_ua, pid) = SCARG(uap, pid) == 0 ? WAIT_ANY : SCARG(uap, pid);
 	SCARG(&bsd_ua, status) = SCARG(uap, status);
 	SCARG(&bsd_ua, options) = SCARG(uap, options);
 	SCARG(&bsd_ua, rusage) = SCARG(uap, rusage);
 
-	return netbsd32_wait4(l, &bsd_ua, retval);
+	return compat_50_netbsd32_wait4(l, &bsd_ua, retval);
 }
 
 int
@@ -284,7 +279,7 @@ sunos32_sys_stat(struct lwp *l, const struct sunos32_sys_stat_args *uap, registe
 
 	path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, FOLLOW, &sb);
+	error = do_sys_stat(path, FOLLOW, &sb);
 	if (error)
 		return (error);
 	sunos32_from___stat13(&sb, &sb32);
@@ -303,6 +298,7 @@ sunos32_sys_lstat(struct lwp *l, const struct sunos32_sys_lstat_args *uap, regis
 	struct stat sb, sb1;
 	struct netbsd32_stat43 sb32;
 	int error;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int ndflags;
 	const char *path;
@@ -311,8 +307,14 @@ sunos32_sys_lstat(struct lwp *l, const struct sunos32_sys_lstat_args *uap, regis
 
 	ndflags = NOFOLLOW | LOCKLEAF | LOCKPARENT | TRYEMULROOT;
 again:
-	NDINIT(&nd, LOOKUP, ndflags, UIO_USERSPACE, path);
+	error = pathbuf_copyin(path, &pb);
+	if (error) {
+		return error;
+	}
+
+	NDINIT(&nd, LOOKUP, ndflags, pb);
 	if ((error = namei(&nd))) {
+		pathbuf_destroy(pb);
 		if (error == EISDIR && (ndflags & LOCKPARENT) != 0) {
 			/*
 			 * Should only happen on '/'. Retry without LOCKPARENT;
@@ -329,6 +331,7 @@ again:
 	 */
 	vp = nd.ni_vp;
 	dvp = nd.ni_dvp;
+	pathbuf_destroy(pb);
 	if (vp->v_type != VLNK) {
 		if ((ndflags & LOCKPARENT) != 0) {
 			if (dvp == vp)
@@ -336,18 +339,18 @@ again:
 			else
 				vput(dvp);
 		}
-		error = vn_stat(vp, &sb, l);
+		error = vn_stat(vp, &sb);
 		vput(vp);
 		if (error)
 			return (error);
 	} else {
-		error = vn_stat(dvp, &sb, l);
+		error = vn_stat(dvp, &sb);
 		vput(dvp);
 		if (error) {
 			vput(vp);
 			return (error);
 		}
-		error = vn_stat(vp, &sb1, l);
+		error = vn_stat(vp, &sb1);
 		vput(vp);
 		if (error)
 			return (error);
@@ -519,7 +522,7 @@ sunos32_sys_mount(struct lwp *l, const struct sunos32_sys_mount_args *uap, regis
 		na.retrans = sna.retrans;
 		na.hostname = (char *)(u_long)sna.hostname;
 
-		return do_sys_mount(l, vfs_getopsbyname("nfs"), NULL,
+		return do_sys_mount(l, "nfs", UIO_SYSSPACE,
 		    SCARG_P32(uap, path), nflags, &na, UIO_SYSSPACE, sizeof na,
 		    &dummy);
 	}
@@ -527,23 +530,10 @@ sunos32_sys_mount(struct lwp *l, const struct sunos32_sys_mount_args *uap, regis
 	if (strcmp(fsname, "4.2") == 0)
 		strcpy(fsname, "ffs");
 
-	return do_sys_mount(l, vfs_getopsbyname(fsname), NULL,
+	return do_sys_mount(l, fsname, UIO_SYSSPACE,
 	    SCARG_P32(uap, path), nflags, SCARG_P32(uap, data), UIO_USERSPACE,
 	    0, &dummy);
 }
-
-#if defined(NFS)
-int
-async_daemon(struct lwp *l, const void *v, register_t *retval)
-{
-	struct netbsd32_nfssvc_args ouap;
-
-	SCARG(&ouap, flag) = NFSSVC_BIOD;
-	NETBSD32PTR32(SCARG(&ouap, argp), 0);
-
-	return (netbsd32_nfssvc(l, &ouap, retval));
-}
-#endif /* NFS */
 
 void	native_to_sunos_sigset(const sigset_t *, int *);
 void	sunos_to_native_sigset(const int, sigset_t *);
@@ -608,7 +598,6 @@ sunos32_sys_getdents(struct lwp *l, const struct sunos32_sys_getdents_args *uap,
 		syscallarg(netbsd32_charp) buf;
 		syscallarg(int) nbytes;
 	} */
-	struct proc *p = l->l_proc;
 	struct dirent *bdp;
 	struct vnode *vp;
 	char *inp, *sbuf;	/* BSD-format */
@@ -624,8 +613,8 @@ sunos32_sys_getdents(struct lwp *l, const struct sunos32_sys_getdents_args *uap,
 	off_t *cookiebuf, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
 	if ((fp->f_flag & FREAD) == 0) {
@@ -633,7 +622,7 @@ sunos32_sys_getdents(struct lwp *l, const struct sunos32_sys_getdents_args *uap,
 		goto out1;
 	}
 
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_vnode;
 	if (vp->v_type != VDIR) {
 		error = EINVAL;
 		goto out1;
@@ -670,8 +659,10 @@ again:
 	for (cookie = cookiebuf; len > 0; len -= reclen) {
 		bdp = (struct dirent *)inp;
 		reclen = bdp->d_reclen;
-		if (reclen & 3)
-			panic("sunos_getdents");
+		if (reclen & 3) {
+			error = EIO;
+			goto out;
+		}
 		if (cookie && (*cookie >> 32) != 0) {
 			compat_offseterr(vp, "sunos_getdents");
 			error = EINVAL;
@@ -715,18 +706,22 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG_P32(uap, buf))
+	if (outp == SCARG_P32(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;		/* update the vnode offset */
 
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	free(cookiebuf, M_TEMP);
 	free(sbuf, M_TEMP);
  out1:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -760,12 +755,12 @@ sunos32_sys_mmap(struct lwp *l, const struct sunos32_sys_mmap_args *uap, registe
 	SUNOS32TO64_UAP(prot);
 	SCARG(&ua, flags) = SCARG(uap, flags) & ~SUNOS32__MAP_NEW;
 	SUNOS32TO64_UAP(fd);
-	SCARG(&ua, pad) = 0;
+	SCARG(&ua, PAD) = 0;
 	SUNOS32TOX_UAP(pos, off_t);
 
 	error = sys_mmap(l, &ua, retval);
 	if ((u_long)*retval > (u_long)UINT_MAX) {
-		printf("sunos32_mmap: retval out of range: 0x%lx",
+		printf("sunos32_mmap: retval out of range: 0x%lx\n",
 		       (u_long)*retval);
 		/* Should try to recover and return an error here. */
 	}
@@ -809,22 +804,21 @@ sunos32_sys_setsockopt(struct lwp *l, const struct sunos32_sys_setsockopt_args *
 		syscallarg(netbsd32_caddr_t) val;
 		syscallarg(int) valsize;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
-	struct mbuf *m = NULL;
+	struct sockopt sopt;
+	struct socket *so;
 	int name = SCARG(uap, name);
 	int error;
 
-	/* getsock() will use the descriptor for us */
-	if ((error = getsock(p->p_fd, SCARG(uap, s), &fp)) != 0)
+	/* fd_getsock() will use the descriptor for us */
+	if ((error = fd_getsock(SCARG(uap, s), &so)) != 0)
 		return (error);
 #define	SO_DONTLINGER (~SO_LINGER)
 	if (name == SO_DONTLINGER) {
-		m = m_get(M_WAIT, MT_SOOPTS);
-		mtod(m, struct linger *)->l_onoff = 0;
-		m->m_len = sizeof(struct linger);
-		error = sosetopt((struct socket *)fp->f_data, SCARG(uap, level),
-		    SO_LINGER, m);
+		struct linger lg;
+
+		lg.l_onoff = 0;
+		error = so_setsockopt(l, so, SCARG(uap, level), SO_LINGER,
+		    &lg, sizeof(lg));
 		goto out;
 	}
 	if (SCARG(uap, level) == IPPROTO_IP) {
@@ -849,20 +843,16 @@ sunos32_sys_setsockopt(struct lwp *l, const struct sunos32_sys_setsockopt_args *
 		error = EINVAL;
 		goto out;
 	}
+	sockopt_init(&sopt, SCARG(uap, level), name, SCARG(uap, valsize));
 	if (SCARG_P32(uap, val)) {
-		m = m_get(M_WAIT, MT_SOOPTS);
-		error = copyin(SCARG_P32(uap, val), mtod(m, void *),
+		error = copyin(SCARG_P32(uap, val), sopt.sopt_data,
 		    (u_int)SCARG(uap, valsize));
-		if (error) {
-			(void) m_free(m);
-			goto out;
-		}
-		m->m_len = SCARG(uap, valsize);
 	}
-	error = sosetopt((struct socket *)fp->f_data, SCARG(uap, level),
-	    name, m);
+	if (error == 0)
+		error = sosetopt(so, &sopt);
+	sockopt_destroy(&sopt);
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, s));
 	return (error);
 }
 
@@ -872,18 +862,15 @@ static inline int
 sunos32_sys_socket_common(struct lwp *l, register_t *retval, int type)
 {
 	struct socket *so;
-	struct proc *p = l->l_proc;
-	struct file *fp;
 	int error, fd;
 
-	/* getsock() will use the descriptor for us */
+	/* fd_getsock() will use the descriptor for us */
 	fd = (int)*retval;
-	if ((error = getsock(p->p_fd, fd, &fp)) == 0) {
-		so = (struct socket *)fp->f_data;
+	if ((error = fd_getsock(fd, &so)) == 0) {
 		if (type == SOCK_DGRAM)
 			so->so_options |= SO_BROADCAST;
+		fd_putfile(fd);
 	}
-	FILE_UNUSE(fp, l);
 	return (error);
 }
 
@@ -897,7 +884,7 @@ sunos32_sys_socket(struct lwp *l, const struct sunos32_sys_socket_args *uap, reg
 	} */
 	int error;
 
-	error = netbsd32_sys___socket30(l, (const void *)uap, retval);
+	error = netbsd32___socket30(l, (const void *)uap, retval);
 	if (error)
 		return (error);
 	return sunos32_sys_socket_common(l, retval, SCARG(uap, type));
@@ -1004,52 +991,21 @@ sunos32_sys_open(struct lwp *l, const struct sunos32_sys_open_args *uap, registe
 
 	/* XXXSMP unlocked */
 	if (!ret && !noctty && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
-		struct filedesc *fdp = p->p_fd;
-		struct file *fp;
+		file_t *fp;
+		int fd;
 
-		fp = fd_getfile(fdp, *retval);
+		fd = (int)*retval;
+		fp = fd_getfile(fd);
 
 		/* ignore any error, just give it a try */
 		if (fp != NULL) {
-			FILE_USE(fp);
 			if (fp->f_type == DTYPE_VNODE)
-				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, (void *)0, l);
-			FILE_UNUSE(fp, l);
+				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, NULL);
+			fd_putfile(fd);
 		}
 	}
 	return ret;
 }
-
-#if defined (NFSSERVER)
-int
-sunos32_sys_nfssvc(struct lwp *l, const struct sunos32_sys_nfssvc_args *uap, register_t *retval)
-{
-#if 0
-	struct emul *e = p->p_emul;
-	struct sys_nfssvc_args outuap;
-	struct sockaddr sa;
-	int error;
-	void *sg = stackgap_init(p, 0);
-
-	memset(&outuap, 0, sizeof outuap);
-	SCARG(&outuap, fd) = SCARG(uap, fd);
-	SCARG(&outuap, mskval) = stackgap_alloc(p, &sg, sizeof(sa));
-	SCARG(&outuap, msklen) = sizeof(sa);
-	SCARG(&outuap, mtchval) = stackgap_alloc(p, &sg, sizeof(sa));
-	SCARG(&outuap, mtchlen) = sizeof(sa);
-
-	memset(&sa, 0, sizeof sa);
-	if (error = copyout(&sa, SCARG(&outuap, mskval), SCARG(&outuap, msklen)))
-		return (error);
-	if (error = copyout(&sa, SCARG(&outuap, mtchval), SCARG(&outuap, mtchlen)))
-		return (error);
-
-	return nfssvc(l, &outuap, retval);
-#else
-	return (ENOSYS);
-#endif
-}
-#endif /* NFSSERVER */
 
 int
 sunos32_sys_ustat(struct lwp *l, const struct sunos32_sys_ustat_args *uap, register_t *retval)
@@ -1129,18 +1085,18 @@ sunos32_sys_statfs(struct lwp *l, const struct sunos32_sys_statfs_args *uap, reg
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 	struct sys_statvfs1_args ua;
 
 	SUNOS32TOP_UAP(path, const char);
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(&ua, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG(&ua, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
+	vrele(vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -1154,23 +1110,22 @@ sunos32_sys_fstatfs(struct lwp *l, const struct sunos32_sys_fstatfs_args *uap, r
 		syscallarg(int) fd;
 		syscallarg(sunos32_statfsp_t) buf;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
 	error = sunstatfs(sp, SCARG_P32(uap, buf));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -1196,7 +1151,7 @@ sunos32_sys_mknod(struct lwp *l, const struct sunos32_sys_mknod_args *uap, regis
 	if (S_ISFIFO(SCARG(uap, mode)))
 		return netbsd32_mkfifo(l, (const struct netbsd32_mkfifo_args *)uap, retval);
 
-	return netbsd32_mknod(l, (const struct netbsd32_mknod_args *)uap, retval);
+	return compat_50_netbsd32_mknod(l, (const struct compat_50_netbsd32_mknod_args *)uap, retval);
 }
 
 #define SUNOS_SC_ARG_MAX	1
@@ -1290,7 +1245,6 @@ sunos32_sys_setrlimit(struct lwp *l, const struct sunos32_sys_setrlimit_args *ua
 	return compat_43_netbsd32_osetrlimit(l, &ua_43, retval);
 }
 
-#if defined(PTRACE) || defined(_LKM)
 /* for the m68k machines */
 #ifndef PT_GETFPREGS
 #define PT_GETFPREGS -1
@@ -1306,12 +1260,10 @@ static const int sreq2breq[] = {
 	PT_GETREGS,     PT_SETREGS,     PT_GETFPREGS,   PT_SETFPREGS
 };
 static const int nreqs = sizeof(sreq2breq) / sizeof(sreq2breq[0]);
-#endif
 
 int
 sunos32_sys_ptrace(struct lwp *l, const struct sunos32_sys_ptrace_args *uap, register_t *retval)
 {
-#if defined(PTRACE) || defined(_LKM)
 	/* {
 		syscallarg(int) req;
 		syscallarg(pid_t) pid;
@@ -1322,11 +1274,9 @@ sunos32_sys_ptrace(struct lwp *l, const struct sunos32_sys_ptrace_args *uap, reg
 	struct netbsd32_ptrace_args pa;
 	int req;
 
-#ifdef _LKM
 #define sys_ptrace sysent[SYS_ptrace].sy_call
 	if (sys_ptrace == sys_nosys)
 		return ENOSYS;
-#endif
 
 	req = SCARG(uap, req);
 	if ((unsigned int)req >= nreqs)
@@ -1342,9 +1292,6 @@ sunos32_sys_ptrace(struct lwp *l, const struct sunos32_sys_ptrace_args *uap, reg
 	SCARG(&pa, data) = SCARG(uap, data);
 
 	return netbsd32_ptrace(l, &pa, retval);
-#else
-	return (ENOSYS);
-#endif /* PTRACE || _LKM */
 }
 
 /*

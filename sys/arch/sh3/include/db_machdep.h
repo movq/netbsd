@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.13 2007/02/21 22:59:51 thorpej Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.17 2017/11/06 03:47:48 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -36,8 +36,10 @@
 #include <sys/param.h>
 #include <uvm/uvm_extern.h>
 #include <sh3/exception.h>
+#include <sh3/pcb.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
@@ -54,8 +56,9 @@ extern db_regs_t	ddb_regs;	/* register state */
 
 #define	FIXUP_PC_AFTER_BREAK(regs)	((regs)->tf_spc -= BKPT_SIZE)
 
-#define	IS_BREAKPOINT_TRAP(type, code)	((type) == EXPEVT_BREAK)
-#define	IS_WATCHPOINT_TRAP(type, code)	(0) /* XXX (msaitoh) */
+#define	IS_BREAKPOINT_TRAP(type, code)	\
+	((type) == EXPEVT_TRAPA && (code) == _SH_TRA_BREAK)
+#define	IS_WATCHPOINT_TRAP(type, code)	(false)
 
 #define	inst_load(ins)		0
 #define	inst_store(ins)		0
@@ -101,7 +104,6 @@ bool inst_trap_return(int);
  *
  */
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE	32
 
 /*
  * We have machine-dependent commands.

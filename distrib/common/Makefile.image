@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.image,v 1.29 2005/06/27 19:10:32 dbj Exp $
+#	$NetBSD: Makefile.image,v 1.40 2017/02/11 03:07:06 christos Exp $
 #
 # Makefile snippet to build a tree from the provided lists,
 # and make an ffs file system image from that tree
@@ -13,6 +13,7 @@
 #
 # Optional variables:
 #	IMAGE		name of target image
+#	IMAGEPREBUILD	additional operations to run pre image creation
 #	IMAGEPOSTBUILD	operation to run on ${IMAGE} ${.TARGET} after its built
 #			(if this returns non zero, ${.TARGET} is removed)
 #	CRUNCHBIN	name of crunchgen(1)ed binary
@@ -38,6 +39,12 @@ WORKBUILT?=	work.built
 
 PARSELISTENV+=	TARGETDIR=${.OBJDIR}/${WORKDIR:Q}
 
+GZIP_FLAGS= -9 ${GZIP_N_FLAG}
+
+.if ${MKREPRO_TIMESTAMP:Uno} != "no"
+MAKEFS_TIMESTAMP=-T "${MKREPRO_TIMESTAMP}"
+PAX_TIMESTAMP=--timestamp "${MKREPRO_TIMESTAMP}"
+.endif
 
 .if !target(${WORKBUILT})					# {
 ${WORKBUILT}: ${IMAGEDEPENDS} ${WORKSPEC} ${PARSELISTDEP} ${LISTS}
@@ -82,12 +89,16 @@ CLEANFILES+=	${WORKSPEC} ${WORKSPEC}.tmp
 .endif	# ! target (${WORKSPEC})				# }
 
 .if defined(IMAGE)						# {
+IMGMAKEFSOPTIONS?= -o bsize=4096,fsize=512
 ${IMAGE}: ${WORKBUILT}
+.if defined(IMAGEPREBUILD)
+	${IMAGEPREBUILD}
+.endif
 	[ "${.OODATE}" = ${WORKBUILT} -a -f ${IMAGE} -a ! ${IMAGE} -ot ${WORKBUILT} ]  || { \
 	${_MKSHMSG_CREATE} ${.CURDIR:T}/${.TARGET}; \
 	rm -f ${.TARGET} ${.TARGET}.tmp; \
 	${TOOL_MAKEFS} -t ffs -B ${IMAGEENDIAN} -s ${IMAGESIZE} -F ${WORKSPEC} \
-	    -N ${NETBSDSRCDIR}/etc -o bsize=4096,fsize=512 \
+	    ${MAKEFS_TIMESTAMP} -N ${NETBSDSRCDIR}/etc ${IMGMAKEFSOPTIONS} \
 	    -o optimization=space,minfree=0 \
 	    ${MAKEFS_FLAGS} ${.TARGET}.tmp ${WORKDIR} \
 	&& mv -f ${.TARGET}.tmp ${.TARGET}; \
@@ -102,14 +113,14 @@ fsimage: ${IMAGE}
 ${IMAGE}.gz: ${IMAGE}
 	${_MKTARGET_CREATE}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	${TOOL_GZIP} ${GZIP_FLAGS} -c ${.ALLSRC} > ${.TARGET}
 
 realall: ${IMAGE}
 
 .if defined(IMAGE_RELEASEDIR)
 release:: check_RELEASEDIR .WAIT ${IMAGE}.gz
 	${RELEASE_INSTALL} ${IMAGE}.gz \
-	    ${RELEASEDIR}/${MACHINE}/${IMAGE_RELEASEDIR}
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${IMAGE_RELEASEDIR}
 .endif
 
 CLEANFILES+=	${IMAGE} ${IMAGE}.gz ${IMAGE}.tmp
@@ -120,7 +131,9 @@ CLEANFILES+=	${IMAGE} ${IMAGE}.gz ${IMAGE}.tmp
 ${IMAGETAR}: ${WORKBUILT} ${WORKSPEC} ${IMAGEDEPENDS}
 	${_MKTARGET_CREATE}
 	( cd ${WORKDIR}; \
-	  GZIP=-9 ${TOOL_PAX} -ON ${NETBSDSRCDIR}/etc -wdzM <${.OBJDIR}/${WORKSPEC} \
+	  GZIP=${GZIP_FLAGS:Q} \
+	  ${TOOL_PAX} ${PAX_TIMESTAMP} --use-compress-program=${TOOL_GZIP:Q} \
+	      -ON ${NETBSDSRCDIR}/etc -wdM <${.OBJDIR}/${WORKSPEC} \
 	) > ${.TARGET}.tmp \
 	&& mv ${.TARGET}.tmp ${.TARGET}
 
@@ -131,7 +144,7 @@ CLEANFILES+=	${IMAGETAR} ${IMAGETAR}.tmp
 .if defined(IMAGETAR_RELEASEDIR)
 release:: check_RELEASEDIR .WAIT ${IMAGETAR}
 	${RELEASE_INSTALL} ${IMAGETAR} \
-	    ${RELEASEDIR}/${MACHINE}/${IMAGETAR_RELEASEDIR}
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${IMAGETAR_RELEASEDIR}
 .endif
 
 .endif	# ! defined(IMAGETAR)					# }

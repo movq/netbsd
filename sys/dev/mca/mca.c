@@ -1,4 +1,4 @@
-/*	$NetBSD: mca.c,v 1.24 2007/10/19 12:00:35 ad Exp $	*/
+/*	$NetBSD: mca.c,v 1.32 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mca.c,v 1.24 2007/10/19 12:00:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mca.c,v 1.32 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,16 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: mca.c,v 1.24 2007/10/19 12:00:35 ad Exp $");
 
 #include "locators.h"
 
-int	mca_match(struct device *, struct cfdata *, void *);
-void	mca_attach(struct device *, struct device *, void *);
+int	mca_match(device_t, cfdata_t, void *);
+void	mca_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mca, sizeof(struct device),
+CFATTACH_DECL_NEW(mca, 0,
     mca_match, mca_attach, NULL, NULL);
 
 int	mca_print(void *, const char *);
 
 int
-mca_match(struct device *parent, struct cfdata *cf, void *aux)
+mca_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mcabus_attach_args *mba = aux;
 
@@ -80,9 +73,7 @@ mca_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 int
-mca_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mca_print(void *aux, const char *pnp)
 {
 	register struct mca_attach_args *ma = aux;
 	char devinfo[256];
@@ -114,9 +105,7 @@ mca_print(aux, pnp)
 }
 
 void
-mca_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mca_attach(device_t parent, device_t self, void *aux)
 {
 	struct mcabus_attach_args *mba = aux;
 	bus_space_tag_t iot, memt;
@@ -125,7 +114,8 @@ mca_attach(parent, self, aux)
 	int slot;
 
 	mca_attach_hook(parent, self, mba);
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	iot = mba->mba_iot;
 	memt = mba->mba_memt;
@@ -166,8 +156,8 @@ mca_attach(parent, self, aux)
 			config_found_sm_loc(self, "mca", locs, &ma,
 					    mca_print, config_stdsubmatch);
 		else {
-			mca_print(&ma, self->dv_xname);
-			printf(" disabled\n");
+			mca_print(&ma, device_xname(self));
+			aprint_normal(" disabled\n");
 		}
 	}
 }

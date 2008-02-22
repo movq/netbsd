@@ -1,4 +1,4 @@
-/*	$NetBSD: int_limits.h,v 1.7 2007/10/17 19:53:41 garbled Exp $	*/
+/*	$NetBSD: int_limits.h,v 1.11 2014/07/25 21:43:13 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 #ifndef _ARM_INT_LIMITS_H_
 #define _ARM_INT_LIMITS_H_
 
+#ifdef __SIG_ATOMIC_MAX__
+#include <sys/common_int_limits.h>
+#else
 /*
  * 7.18.2 Limits of specified-width integer types
  */
@@ -105,14 +101,14 @@
 
 /* 7.18.2.4 Limits of integer types capable of holding object pointers */
 
-#ifdef __ELF__
+#ifdef _LP64
+#define	INTPTR_MIN	(-0x7fffffffffffffffL-1)	/* intptr_t	  */
+#define	INTPTR_MAX	0x7fffffffffffffffL		/* intptr_t	  */
+#define	UINTPTR_MAX	0xffffffffffffffffUL		/* uintptr_t	  */
+#else
 #define	INTPTR_MIN	(-0x7fffffffL-1)		/* intptr_t	  */
 #define	INTPTR_MAX	0x7fffffffL			/* intptr_t	  */
 #define	UINTPTR_MAX	0xffffffffUL			/* uintptr_t	  */
-#else
-#define	INTPTR_MIN	(-0x7fffffff-1)			/* intptr_t	  */
-#define	INTPTR_MAX	0x7fffffff			/* intptr_t	  */
-#define	UINTPTR_MAX	0xffffffffU			/* uintptr_t	  */
 #endif
 
 /* 7.18.2.5 Limits of greatest-width integer types */
@@ -127,12 +123,12 @@
  */
 
 /* limits of ptrdiff_t */
-#ifdef __ELF__
+#ifdef _LP64
+#define	PTRDIFF_MIN	(-0x7fffffffffffffffL-1)	/* ptrdiff_t	  */
+#define	PTRDIFF_MAX	0x7fffffffffffffffL		/* ptrdiff_t	  */
+#else
 #define	PTRDIFF_MIN	(-0x7fffffffL-1)		/* ptrdiff_t	  */
 #define	PTRDIFF_MAX	0x7fffffffL			/* ptrdiff_t	  */
-#else
-#define	PTRDIFF_MIN	(-0x7fffffff-1)			/* ptrdiff_t	  */
-#define	PTRDIFF_MAX	0x7fffffff			/* ptrdiff_t	  */
 #endif
 
 /* limits of sig_atomic_t */
@@ -140,10 +136,11 @@
 #define	SIG_ATOMIC_MAX	0x7fffffff			/* sig_atomic_t	  */
 
 /* limit of size_t */
-#ifdef __ELF__
-#define	SIZE_MAX	0xffffffffUL			/* size_t	  */
+#ifdef _LP64
+#define	SIZE_MAX	0xffffffffffffffffUL		/* size_t	  */
 #else
-#define	SIZE_MAX	0xffffffffU			/* size_t	  */
+#define	SIZE_MAX	0xffffffffUL			/* size_t	  */
+#endif
 #endif
 
 #endif /* !_ARM_INT_LIMITS_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_icp.c,v 1.18 2007/10/19 11:59:55 ad Exp $	*/
+/*	$NetBSD: ld_icp.c,v 1.31 2017/02/27 21:32:33 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.18 2007/10/19 11:59:55 ad Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.31 2017/02/27 21:32:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,12 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.18 2007/10/19 11:59:55 ad Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>
-
+#include <sys/module.h>
 #include <sys/bus.h>
 
 #include <dev/ldvar.h>
@@ -67,33 +53,35 @@ __KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.18 2007/10/19 11:59:55 ad Exp $");
 #include <dev/ic/icpreg.h>
 #include <dev/ic/icpvar.h>
 
+#include "ioconf.h"
+
 struct ld_icp_softc {
 	struct	ld_softc sc_ld;
 	int	sc_hwunit;
 };
 
-void	ld_icp_attach(struct device *, struct device *, void *);
-int	ld_icp_detach(struct device *, int);
-int	ld_icp_dobio(struct ld_icp_softc *, void *, int, int, int,
+static void	ld_icp_attach(device_t, device_t, void *);
+static int	ld_icp_detach(device_t, int);
+static int	ld_icp_dobio(struct ld_icp_softc *, void *, int, int, int,
 		     struct buf *);
-int	ld_icp_dump(struct ld_softc *, void *, int, int);
-int	ld_icp_flush(struct ld_softc *);
-void	ld_icp_intr(struct icp_ccb *);
-int	ld_icp_match(struct device *, struct cfdata *, void *);
-int	ld_icp_start(struct ld_softc *, struct buf *);
+static int	ld_icp_dump(struct ld_softc *, void *, int, int);
+static int	ld_icp_flush(struct ld_softc *, bool);
+static int	ld_icp_ioctl(struct ld_softc *, u_long, void *, int32_t, bool);
+static void	ld_icp_intr(struct icp_ccb *);
+static int	ld_icp_match(device_t, cfdata_t, void *);
+static int	ld_icp_start(struct ld_softc *, struct buf *);
 
-void	ld_icp_adjqparam(struct device *, int);
+static void	ld_icp_adjqparam(device_t, int);
 
-CFATTACH_DECL(ld_icp, sizeof(struct ld_icp_softc),
+CFATTACH_DECL_NEW(ld_icp, sizeof(struct ld_icp_softc),
     ld_icp_match, ld_icp_attach, ld_icp_detach, NULL);
 
 static const struct icp_servicecb ld_icp_servicecb = {
 	ld_icp_adjqparam,
 };
 
-int
-ld_icp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+static int
+ld_icp_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct icp_attach_args *icpa;
 
@@ -102,23 +90,19 @@ ld_icp_match(struct device *parent, struct cfdata *match,
 	return (icpa->icpa_unit < ICPA_UNIT_SCSI);
 }
 
-void
-ld_icp_attach(struct device *parent, struct device *self, void *aux)
+static void
+ld_icp_attach(device_t parent, device_t self, void *aux)
 {
-	struct icp_attach_args *icpa;
-	struct ld_icp_softc *sc;
-	struct ld_softc *ld;
-	struct icp_softc *icp;
-	struct icp_cachedrv *cd;
+	struct icp_attach_args *icpa = aux;
+	struct ld_icp_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+	struct icp_softc *icp = device_private(parent);
+	struct icp_cachedrv *cd = &icp->icp_cdr[icpa->icpa_unit];
 	struct icp_cdevinfo *cdi;
 	const char *str;
 	int t;
 
-	sc = (struct ld_icp_softc *)self;
-	ld = &sc->sc_ld;
-	icp = (struct icp_softc *)parent;
-	icpa = aux;
-	cd = &icp->icp_cdr[icpa->icpa_unit];
+	ld->sc_dv = self;
 
 	icp_register_servicecb(icp, icpa->icpa_unit, &ld_icp_servicecb);
 
@@ -127,7 +111,7 @@ ld_icp_attach(struct device *parent, struct device *self, void *aux)
 	ld->sc_secsize = ICP_SECTOR_SIZE;
 	ld->sc_start = ld_icp_start;
 	ld->sc_dump = ld_icp_dump;
-	ld->sc_flush = ld_icp_flush;
+	ld->sc_ioctl = ld_icp_ioctl;
 	ld->sc_secperunit = cd->cd_size;
 	ld->sc_flags = LDF_ENABLED;
 	ld->sc_maxqueuecnt = icp->icp_openings;
@@ -177,11 +161,11 @@ ld_icp_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal("status: %s\n", str);
 
  out:
-	ldattach(ld);
+	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
 }
 
-int
-ld_icp_detach(struct device *dv, int flags)
+static int
+ld_icp_detach(device_t dv, int flags)
 {
 	int rv;
 
@@ -192,7 +176,7 @@ ld_icp_detach(struct device *dv, int flags)
 	return (0);
 }
 
-int
+static int
 ld_icp_dobio(struct ld_icp_softc *sc, void *data, int datasize, int blkno,
 	     int dowrite, struct buf *bp)
 {
@@ -201,7 +185,7 @@ ld_icp_dobio(struct ld_icp_softc *sc, void *data, int datasize, int blkno,
 	struct icp_softc *icp;
 	int s, rv;
 
-	icp = (struct icp_softc *)device_parent(&sc->sc_ld.sc_dv);
+	icp = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	/*
 	 * Allocate a command control block.
@@ -248,14 +232,14 @@ ld_icp_dobio(struct ld_icp_softc *sc, void *data, int datasize, int blkno,
 	} else {
  		ic->ic_intr = ld_icp_intr;
 		ic->ic_context = bp;
-		ic->ic_dv = &sc->sc_ld.sc_dv;
+		ic->ic_dv = sc->sc_ld.sc_dv;
 		icp_ccb_enqueue(icp, ic);
 	}
 
 	return (rv);
 }
 
-int
+static int
 ld_icp_start(struct ld_softc *ld, struct buf *bp)
 {
 
@@ -263,7 +247,7 @@ ld_icp_start(struct ld_softc *ld, struct buf *bp)
 	    bp->b_bcount, bp->b_rawblkno, (bp->b_flags & B_READ) == 0, bp));
 }
 
-int
+static int
 ld_icp_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 {
 
@@ -271,8 +255,9 @@ ld_icp_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 	    blkcnt * ld->sc_secsize, blkno, 1, NULL));
 }
 
-int
-ld_icp_flush(struct ld_softc *ld)
+/* ARGSUSED */
+static int
+ld_icp_flush(struct ld_softc *ld, bool poll)
 {
 	struct ld_icp_softc *sc;
 	struct icp_softc *icp;
@@ -281,7 +266,7 @@ ld_icp_flush(struct ld_softc *ld)
 	int rv;
 
 	sc = (struct ld_icp_softc *)ld;
-	icp = (struct icp_softc *)device_parent(&ld->sc_dv);
+	icp = device_private(device_parent(ld->sc_dv));
 
 	ic = icp_ccb_alloc_wait(icp);
 	ic->ic_cmd.cmd_opcode = htole16(ICP_FLUSH);
@@ -302,7 +287,25 @@ ld_icp_flush(struct ld_softc *ld)
 	return (rv);
 }
 
-void
+static int
+ld_icp_ioctl(struct ld_softc *ld, u_long cmd, void *addr, int32_t flag, bool poll)
+{
+        int error;
+
+        switch (cmd) {
+        case DIOCCACHESYNC:
+		error = ld_icp_flush(ld, poll);
+		break;
+
+	default:
+		error = EPASSTHROUGH;
+		break;
+	}
+
+	return error;
+}
+
+static void
 ld_icp_intr(struct icp_ccb *ic)
 {
 	struct buf *bp;
@@ -310,17 +313,17 @@ ld_icp_intr(struct icp_ccb *ic)
 	struct icp_softc *icp;
 
 	bp = ic->ic_context;
-	sc = (struct ld_icp_softc *)ic->ic_dv;
-	icp = (struct icp_softc *)device_parent(&sc->sc_ld.sc_dv);
+	sc = device_private(ic->ic_dv);
+	icp = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if (ic->ic_status != ICP_S_OK) {
-		printf("%s: request failed; status=0x%04x\n",
-		    ic->ic_dv->dv_xname, ic->ic_status);
+		aprint_error_dev(ic->ic_dv, "request failed; status=0x%04x\n",
+		    ic->ic_status);
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 
 		icp->icp_evt.size = sizeof(icp->icp_evt.eu.sync);
-		icp->icp_evt.eu.sync.ionode = device_unit(&icp->icp_dv);
+		icp->icp_evt.eu.sync.ionode = device_unit(icp->icp_dv);
 		icp->icp_evt.eu.sync.service = icp->icp_service;
 		icp->icp_evt.eu.sync.status = icp->icp_status;
 		icp->icp_evt.eu.sync.info = icp->icp_info;
@@ -338,9 +341,52 @@ ld_icp_intr(struct icp_ccb *ic)
 	lddone(&sc->sc_ld, bp);
 }
 
-void
-ld_icp_adjqparam(struct device *dv, int openings)
+static void
+ld_icp_adjqparam(device_t dv, int openings)
 {
 
 	ldadjqparam((struct ld_softc *) dv, openings);
+}
+
+MODULE(MODULE_CLASS_DRIVER, ld_icp, "ld");	/* no icp module yet */
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */     
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+        
+static int
+ld_icp_modcmd(modcmd_t cmd, void *opaque)
+{       
+#ifdef _MODULE
+	/*
+	 * We ignore the cfdriver_vec[] that ioconf provides, since
+	 * the cfdrivers are attached already.
+	 */
+	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
+#endif
+	int error = 0;
+        
+#ifdef _MODULE 
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_init_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_icp, cfdata_ioconf_ld_icp);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_icp, cfdata_ioconf_ld_icp);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

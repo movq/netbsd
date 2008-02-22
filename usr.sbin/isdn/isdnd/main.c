@@ -27,7 +27,7 @@
  *	i4b daemon - main program entry
  *	-------------------------------
  *
- *	$Id: main.c,v 1.9 2004/10/30 08:19:30 dsl Exp $ 
+ *	$Id: main.c,v 1.13 2011/08/31 16:24:59 plunky Exp $ 
  *
  * $FreeBSD$
  *
@@ -49,10 +49,10 @@
 
 #ifdef I4B_NOTCPIP_MONITOR
 /* monitor via local socket */
-static void mloop(int sockfd);
+__dead static void mloop(int sockfd);
 #else /* I4B_NOTCPIP_MONITOR */
 /* monitor via local and tcp/ip socket */
-static void mloop(int localsock, int remotesock);
+__dead static void mloop(int localsock, int remotesock);
 #endif /* I4B_NOTCPIP_MONITOR */
 
 #else /* I4B_EXTERNAL_MONITOR */
@@ -65,7 +65,7 @@ static void kbdrdhdl(void);
 #endif
 
 static void isdnrdhdl(void);
-static void usage(void);
+__dead static void usage(void);
 
 #define MSG_BUF_SIZ	1024	/* message buffer size */
 
@@ -76,7 +76,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "\n");
-	fprintf(stderr, "isdnd - i4b ISDN manager daemon, version %02d.%02d.%d, %s %s\n", VERSION, REL, STEP, __DATE__, __TIME__);
+	fprintf(stderr, "isdnd - i4b ISDN manager daemon, version %02d.%02d.%d\n", VERSION, REL, STEP);
 #ifdef DEBUG
 	fprintf(stderr, "  usage: isdnd [-c file] [-d level] [-F] [-f [-r dev] [-t termtype]]\n");
 #else
@@ -353,7 +353,7 @@ main(int argc, char **argv)
 			logit(LL_ERR, "ERROR, can't open acctfile %s for writing, terminating!", acctfile);
 			exit(1);
 		}
-		setvbuf(acctfp, (char *)NULL, _IONBF, 0);		
+		setvbuf(acctfp, NULL, _IONBF, 0);		
 	}
 
 	/* initialize alias processing */
@@ -510,7 +510,7 @@ mloop(
 )
 {
 	fd_set set;
-	struct timeval timeout;
+	struct timeval timeo;
 	int ret;
 	int high_selfd;
 
@@ -557,10 +557,10 @@ mloop(
 		}
 #endif
 		
-		timeout.tv_sec = 1;
-		timeout.tv_usec = 0;
+		timeo.tv_sec = 1;
+		timeo.tv_usec = 0;
 
-		ret = select(high_selfd + 1, &set, NULL, NULL, &timeout);
+		ret = select(high_selfd + 1, &set, NULL, NULL, &timeo);
 
 		if (ret > 0)
 		{	
@@ -790,7 +790,7 @@ reopenfiles(int dummy)
 			logit(LL_ERR, "ERROR, can't open acctfile %s for writing, terminating!", acctfile);
 			error_exit(1, "ERROR, can't open acctfile %s for writing, terminating!", acctfile);
 		}
-		setvbuf(acctfp, (char *)NULL, _IONBF, 0);
+		setvbuf(acctfp, NULL, _IONBF, 0);
 	}
 
 	if (uselogfile)
@@ -822,7 +822,7 @@ reopenfiles(int dummy)
 
 		/* set unbuffered operation */
 
-		setvbuf(logfp, (char *)NULL, _IONBF, 0);
+		setvbuf(logfp, NULL, _IONBF, 0);
 	}
 }
 

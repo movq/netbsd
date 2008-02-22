@@ -1,4 +1,4 @@
-/*	$NetBSD: w.c,v 1.72 2006/06/22 17:57:31 christos Exp $	*/
+/*	$NetBSD: w.c,v 1.83 2016/11/16 02:03:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)w.c	8.6 (Berkeley) 6/30/94";
 #else
-__RCSID("$NetBSD: w.c,v 1.72 2006/06/22 17:57:31 christos Exp $");
+__RCSID("$NetBSD: w.c,v 1.83 2016/11/16 02:03:30 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,6 @@ __RCSID("$NetBSD: w.c,v 1.72 2006/06/22 17:57:31 christos Exp $");
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 
@@ -91,7 +90,6 @@ struct timeval	boottime;
 struct winsize	ws;
 kvm_t	       *kd;
 time_t		now;		/* the current time of day */
-time_t		uptime;		/* time of last reboot & elapsed time since */
 int		ttywidth;	/* width of tty */
 int		argwidth;	/* width of tty left to print process args */
 int		header = 1;	/* true if -h flag: don't print heading */
@@ -117,26 +115,27 @@ struct	entry {
 	struct	kinfo_proc2 *tp;	/* `most interesting' tty proc */
 	struct	kinfo_proc2 *pp;	/* pid proc */
 	pid_t	pid;			/* pid or ~0 if not known */
-} *ep, *ehead = NULL, **nextp = &ehead;
+} *ehead = NULL, **nextp = &ehead;
 
 static void	pr_args(struct kinfo_proc2 *);
 static void	pr_header(time_t *, int);
+static int	proc_compare_wrapper(const struct kinfo_proc2 *,
+    const struct kinfo_proc2 *);
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 static int	ttystat(const char *, struct stat *);
 static void	process(struct entry *);
 #endif
-static void	usage(int);
-
-int	main(int, char **);
+static void	fixhost(struct entry *ep);
+__dead static void	usage(int);
 
 int
 main(int argc, char **argv)
 {
 	struct kinfo_proc2 *kp;
-	struct hostent *hp;
-	struct in_addr l;
+	struct entry *ep;
 	int ch, i, nentries, nusers, wcmd, curtain, use_sysctl;
-	char *memf, *nlistf, *p, *x, *usrnp;
+	char *memf, *nlistf, *usrnp;
+	const char *options;
 	time_t then;
 	size_t len;
 #ifdef SUPPORT_UTMP
@@ -146,7 +145,7 @@ main(int argc, char **argv)
 	struct utmpx *utx;
 #endif
 	const char *progname;
-	char buf[MAXHOSTNAMELEN], errbuf[_POSIX2_LINE_MAX];
+	char errbuf[_POSIX2_LINE_MAX];
 
 	setprogname(argv[0]);
 
@@ -156,14 +155,14 @@ main(int argc, char **argv)
 		progname++;
 	if (*progname == 'u') {
 		wcmd = 0;
-		p = "";
+		options = "";
 	} else {
 		wcmd = 1;
-		p = "hiM:N:nw";
+		options = "hiM:N:nw";
 	}
 
 	memf = nlistf = NULL;
-	while ((ch = getopt(argc, argv, p)) != -1)
+	while ((ch = getopt(argc, argv, options)) != -1)
 		switch (ch) {
 		case 'h':
 			header = 0;
@@ -222,15 +221,27 @@ main(int argc, char **argv)
 		if (utx->ut_type != USER_PROCESS)
 			continue;
 		++nusers;
+
+#ifndef SUPPORT_UTMP
+		if (wcmd == 0)
+			continue;
+#endif	/* !SUPPORT_UTMP */
+
 		if (sel_user &&
 		    strncmp(utx->ut_name, sel_user, sizeof(utx->ut_name)) != 0)
 			continue;
 		if ((ep = calloc(1, sizeof(struct entry))) == NULL)
 			err(1, NULL);
-		(void)memcpy(ep->name, utx->ut_name, sizeof(utx->ut_name));
 		(void)memcpy(ep->line, utx->ut_line, sizeof(utx->ut_line));
-		ep->name[sizeof(utx->ut_name)] = '\0';
 		ep->line[sizeof(utx->ut_line)] = '\0';
+		*nextp = ep;
+		nextp = &(ep->next);
+
+		if (wcmd == 0)
+			continue;
+
+		(void)memcpy(ep->name, utx->ut_name, sizeof(utx->ut_name));
+		ep->name[sizeof(utx->ut_name)] = '\0';
 		if (!nflag || getnameinfo((struct sockaddr *)&utx->ut_ss,
 		    utx->ut_ss.ss_len, ep->host, sizeof(ep->host), NULL, 0,
 		    NI_NUMERICHOST) != 0) {
@@ -238,13 +249,11 @@ main(int argc, char **argv)
 			    sizeof(utx->ut_host));
 			ep->host[sizeof(utx->ut_host)] = '\0';
 		}
+		fixhost(ep);
 		ep->type[0] = 'x';
 		ep->tv = utx->ut_tv;
 		ep->pid = utx->ut_pid;
-		*nextp = ep;
-		nextp = &(ep->next);
-		if (wcmd != 0)
-			process(ep);
+		process(ep);
 	}
 #endif
 
@@ -267,6 +276,10 @@ main(int argc, char **argv)
 			continue;
 
 		++nusers;
+
+		if (wcmd == 0)
+			continue;
+
 		if ((ep = calloc(1, sizeof(struct entry))) == NULL)
 			err(1, NULL);
 		(void)memcpy(ep->name, ut->ut_name, sizeof(ut->ut_name));
@@ -275,11 +288,11 @@ main(int argc, char **argv)
 		ep->name[sizeof(ut->ut_name)] = '\0';
 		ep->line[sizeof(ut->ut_line)] = '\0';
 		ep->host[sizeof(ut->ut_host)] = '\0';
+		fixhost(ep);
 		ep->tv.tv_sec = ut->ut_time;
 		*nextp = ep;
 		nextp = &(ep->next);
-		if (wcmd != 0)
-			process(ep);
+		process(ep);
 	}
 #endif
 
@@ -303,9 +316,6 @@ main(int argc, char **argv)
 	/* Include trailing space because TTY header starts one column early. */
 	for (i = 0; i < nentries; i++, kp++) {
 
-		if (kp->p_stat == SIDL || kp->p_stat == SZOMB)
-			continue;
-
 		for (ep = ehead; ep != NULL; ep = ep->next) {
 			if (ep->tdev != 0 && ep->tdev == kp->p_tdev &&
 			    kp->p__pgid == kp->p_tpgid) {
@@ -313,7 +323,7 @@ main(int argc, char **argv)
 				 * Proc is in foreground of this
 				 * terminal
 				 */
-				if (proc_compare(ep->tp, kp))
+				if (proc_compare_wrapper(ep->tp, kp))
 					ep->tp = kp;
 				break;
 			} 
@@ -380,6 +390,7 @@ main(int argc, char **argv)
 
 	if (!nflag) {
 		int	rv;
+		char	*p;
 
 		rv = gethostname(domain, sizeof(domain));
 		domain[sizeof(domain) - 1] = '\0';
@@ -390,36 +401,6 @@ main(int argc, char **argv)
 	}
 
 	for (ep = ehead; ep != NULL; ep = ep->next) {
-		char host_buf[MAXHOSTNAMELEN + 1];
-
-		strlcpy(host_buf, ep->host, sizeof(host_buf));
-		p = *host_buf ? host_buf : "-";
-
-		for (x = p; x < p + MAXHOSTNAMELEN; x++)
-			if (*x == '\0' || *x == ':')
-				break;
-		if (x == p + MAXHOSTNAMELEN || *x != ':')
-			x = NULL;
-		else
-			*x++ = '\0';
-
-		if (!nflag && inet_aton(p, &l) &&
-		    (hp = gethostbyaddr((char *)&l, sizeof(l), AF_INET))) {
-			if (domain[0] != '\0') {
-				p = hp->h_name;
-				p += strlen(hp->h_name);
-				p -= strlen(domain);
-				if (p > hp->h_name &&
-				    strcasecmp(p, domain) == 0)
-					*p = '\0';
-			}
-			p = hp->h_name;
-		}
-		if (x) {
-			(void)snprintf(buf, sizeof(buf), "%s:%s", p, x);
-			p = buf;
-		}
-
 		if (ep->tp != NULL)
 			kp = ep->tp;
 		else if (ep->pp != NULL)
@@ -436,7 +417,7 @@ main(int argc, char **argv)
 		usrnp = (kp == NULL) ? ep->name : kp->p_login;
 		(void)printf("%-*s %-7.7s %-*.*s ",
 		    maxname, usrnp, ep->line,
-		    maxhost, maxhost, *p ? p : "-");
+		    maxhost, maxhost, ep->host);
 		then = (time_t)ep->tv.tv_sec;
 		pr_attime(&then, &now);
 		pr_idle(ep->idle);
@@ -457,14 +438,10 @@ pr_args(struct kinfo_proc2 *kp)
 	left = argwidth;
 	argv = kvm_getargv2(kd, kp, (argwidth < 0) ? 0 : argwidth);
 	if (argv == 0) {
-		if (kp->p_comm == 0) {
-			goto nothing;
-		} else {
-			fmt_putc('(', &left);
-			fmt_puts((char *)kp->p_comm, &left);
-			fmt_putc(')', &left);
-			return;
-		}
+		fmt_putc('(', &left);
+		fmt_puts((char *)kp->p_comm, &left);
+		fmt_putc(')', &left);
+		return;
 	}
 	while (*argv) {
 		fmt_puts(*argv, &left);
@@ -481,9 +458,9 @@ pr_header(time_t *nowp, int nusers)
 {
 	double avenrun[3];
 	time_t uptime;
-	int days, hrs, i, mins;
+	int days, hrs, mins;
 	int mib[2];
-	size_t size;
+	size_t size, i;
 	char buf[256];
 
 	/*
@@ -618,6 +595,81 @@ process(struct entry *ep)
 		ep->idle = 0;
 }
 #endif
+
+static int
+proc_compare_wrapper(const struct kinfo_proc2 *p1,
+    const struct kinfo_proc2 *p2)
+{
+	struct kinfo_lwp *l1, *l2;
+	int cnt;
+
+	if (p1 == NULL)
+		return 1;
+
+	l1 = kvm_getlwps(kd, p1->p_pid, 0, sizeof(*l1), &cnt);
+	if (l1 == NULL || cnt == 0)
+		return 1;
+
+	l2 = kvm_getlwps(kd, p2->p_pid, 0, sizeof(*l1), &cnt);
+	if (l2 == NULL || cnt == 0)
+		return 0;
+
+	return proc_compare(p1, l1, p2, l2);
+}
+
+static void
+fixhost(struct entry *ep)
+{
+	char host_buf[sizeof(ep->host)];
+	char *p, *x, *m;
+	struct hostent *hp;
+	union {
+		struct in_addr l4;
+		struct in6_addr l6;
+	} l;
+
+	strlcpy(host_buf, *ep->host ? ep->host : "-", sizeof(host_buf));
+	p = host_buf;
+
+	/*
+	 * One ':' in hostname means X display number, more is IPv6.
+	 */
+	for (x = p; x < &host_buf[sizeof(host_buf)]; x++)
+		if (*x == '\0' || *x == ':')
+			break;
+	if (x == p + sizeof(host_buf) || *x != ':')
+		m = x = NULL;
+	else {
+		for (m = x + 1; m < &host_buf[sizeof(host_buf)]; m++)
+			if (*m == '\0' || *m == ':')
+				break;
+		if (m == p + sizeof(host_buf) || *m != ':') {
+			*x++ = '\0';
+			m = NULL;
+		} else
+			x = NULL;
+	}
+	int af = m ? AF_INET6 : AF_INET;
+	size_t alen = m ? sizeof(l.l6) : sizeof(l.l4);
+	if (!nflag && inet_pton(af, p, &l) &&
+	    (hp = gethostbyaddr((char *)&l, alen, af))) {
+		if (domain[0] != '\0') {
+			p = hp->h_name;
+			p += strlen(hp->h_name);
+			p -= strlen(domain);
+			if (p > hp->h_name &&
+			    strcasecmp(p, domain) == 0)
+				*p = '\0';
+		}
+		p = hp->h_name;
+	}
+
+	if (x)
+		(void)snprintf(ep->host, sizeof(ep->host), "%s:%s", p, x);
+	else
+
+		strlcpy(ep->host, p, sizeof(ep->host));
+}
 
 static void
 usage(int wcmd)

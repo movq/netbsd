@@ -1,4 +1,4 @@
-/*	$NetBSD: sysbeep_isa.c,v 1.5 2003/03/23 14:12:26 chris Exp $	*/
+/*	$NetBSD: sysbeep_isa.c,v 1.11 2012/10/27 17:17:38 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysbeep_isa.c,v 1.5 2003/03/23 14:12:26 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysbeep_isa.c,v 1.11 2012/10/27 17:17:38 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,40 +40,34 @@ __KERNEL_RCSID(0, "$NetBSD: sysbeep_isa.c,v 1.5 2003/03/23 14:12:26 chris Exp $"
 #include <dev/isa/pcppivar.h>
 
 /* Prototypes */
-int sysbeep_isa_match __P((struct device *parent, struct cfdata *cf, void *aux));
-void sysbeep_isa_attach __P((struct device *parent, struct device *self, void *aux));
-void sysbeep_isa __P((int pitch, int period));
+int sysbeep_isa_match(device_t, cfdata_t, void *);
+void sysbeep_isa_attach(device_t, device_t, void *);
+void sysbeep_isa(int, int);
 
 /* device attach structure */
-CFATTACH_DECL(sysbeep_isa, sizeof(struct device),
+CFATTACH_DECL_NEW(sysbeep_isa, 0,
     sysbeep_isa_match, sysbeep_isa_attach, NULL, NULL);
 
 static int ppi_attached;
 static pcppi_tag_t ppicookie;
 
 int
-sysbeep_isa_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+sysbeep_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	return (!ppi_attached);
 }
 
 void
-sysbeep_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+sysbeep_isa_attach(device_t parent, device_t self, void *aux)
 {
-	printf("\n");
+	aprint_normal("\n");
 
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
 	ppi_attached = 1;
 }
 
 void
-sysbeep(pitch, period)
-	int pitch, period;
+sysbeep(int pitch, int period)
 {
 	if (ppi_attached)
 		pcppi_bell(ppicookie, pitch, period, 0);

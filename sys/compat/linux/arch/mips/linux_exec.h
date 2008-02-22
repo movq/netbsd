@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.h,v 1.12 2005/12/11 12:20:16 christos Exp $ */
+/*	$NetBSD: linux_exec.h,v 1.16 2017/02/12 21:02:19 chs Exp $ */
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	     This product includes software developed by the NetBSD
- *	     Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *	   contributors may be used to endorse or promote products derived
- *	   from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,9 @@
 #ifndef _MIPS_LINUX_EXEC_H
 #define _MIPS_LINUX_EXEC_H
 
+#ifdef EXEC_AOUT
 #include <sys/exec_aout.h>
+#endif
 #include <sys/exec_elf.h>
 #include <sys/types.h>
 
@@ -48,11 +43,13 @@
  */
 #define LINUX_ELF_HWCAP (0)
 
+#ifdef EXEC_AOUT
 /*
  * Linux a.out format parameters
  */
 #define LINUX_M_MIPS		MID_MIPS
 #define LINUX_MID_MACHINE	LINUX_M_MIPS
+#endif
 
 /*
  * Linux Elf32 format parameters
@@ -62,7 +59,7 @@
 #define LINUX_GCC_SIGNATURE 1
 
 #define LINUX_ELF_AUX_ARGSIZ \
-    ((howmany(LINUX_ELF_AUX_ENTRIES * sizeof(Aux32Info), sizeof(Elf32_Addr))))
+	(LINUX_ELF_AUX_ENTRIES * sizeof(Aux32Info) + LINUX_RANDOM_BYTES)
 
 #define linux_exec_setup_stack	exec_setup_stack
 

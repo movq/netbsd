@@ -1,4 +1,4 @@
-/*	$NetBSD: drvstats.c,v 1.4 2006/10/17 15:13:08 christos Exp $	*/
+/*	$NetBSD: drvstats.c,v 1.12 2018/02/08 09:05:21 dholland Exp $	*/
 
 /*
  * Copyright (c) 1996 John M. Vinopal
@@ -40,42 +40,18 @@
 
 #include <err.h>
 #include <fcntl.h>
-#include <kvm.h>
 #include <limits.h>
-#include <nlist.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "drvstats.h"
 
-static struct nlist namelist[] = {
-#define	X_TK_NIN	0
-	{ .n_name = "_tk_nin" },		/* tty characters in */
-#define	X_TK_NOUT	1
-	{ .n_name = "_tk_nout" },		/* tty characters out */
-#define	X_HZ		2
-	{ .n_name = "_hz" },		/* ticks per second */
-#define	X_STATHZ	3
-	{ .n_name = "_stathz" },
-#define	X_DRIVE_COUNT	4
-	{ .n_name = "_iostat_count" },	/* number of drives */
-#define	X_DRIVELIST	5
-	{ .n_name = "_iostatlist" },	/* TAILQ of drives */
-	{ .n_name = NULL },
-};
-
 /* Structures to hold the statistics. */
 struct _drive	cur, last;
 
-/* Kernel pointers: nlistf and memf defined in calling program. */
-static kvm_t	*kd = NULL;
-extern char	*nlistf;
-extern char	*memf;
 extern int	hz;
 
-/* Pointer to list of drives. */
-static struct io_stats	*iostathead = NULL;
 /* sysctl hw.drivestats buffer. */
 static struct io_sysctl	*drives = NULL;
 
@@ -84,26 +60,11 @@ size_t		ndrive = 0;
 int		*drv_select;
 char		**dr_name;
 
-#define	KVM_ERROR(_string) do {						\
-	warnx("%s", (_string));						\
-	errx(1, "%s", kvm_geterr(kd));					\
-} while (/* CONSTCOND */0)
-
-/*
- * Dereference the namelist pointer `v' and fill in the local copy
- * 'p' which is of size 's'.
- */
-#define	deref_nl(v, p, s) do {						\
-	deref_kptr((void *)namelist[(v)].n_value, (p), (s));		\
-} while (/* CONSTCOND */0)
-
 /* Missing from <sys/time.h> */
 #define	timerset(tvp, uvp) do {						\
 	((uvp)->tv_sec = (tvp)->tv_sec);				\
 	((uvp)->tv_usec = (tvp)->tv_usec);				\
 } while (/* CONSTCOND */0)
-
-static void deref_kptr(void *, void *, size_t);
 
 /*
  * Take the delta between the present values and the last recorded
@@ -114,12 +75,20 @@ void
 drvswap(void)
 {
 	u_int64_t tmp;
-	int	i;
+	size_t	i;
 
 #define	SWAP(fld) do {							\
 	tmp = cur.fld;							\
 	cur.fld -= last.fld;						\
 	last.fld = tmp;							\
+} while (/* CONSTCOND */0)
+
+#define DELTA(x) do {							\
+		timerclear(&tmp_timer);					\
+		timerset(&(cur.x), &tmp_timer);				\
+		timersub(&tmp_timer, &(last.x), &(cur.x));		\
+		timerclear(&(last.x));					\
+		timerset(&tmp_timer, &(last.x));			\
 } while (/* CONSTCOND */0)
 
 	for (i = 0; i < ndrive; i++) {
@@ -128,6 +97,31 @@ drvswap(void)
 		if (!cur.select[i])
 			continue;
 
+		/*
+		 * When a drive is replaced with one of the same
+		 * name, the previous statistics are invalid. Try
+		 * to detect this by validating counters and timestamp
+		 */
+		if ((cur.rxfer[i] == 0 && cur.wxfer[i] == 0)
+		    || cur.rxfer[i] - last.rxfer[i] > INT64_MAX
+		    || cur.wxfer[i] - last.wxfer[i] > INT64_MAX
+		    || cur.seek[i] - last.seek[i] > INT64_MAX
+		    || (cur.timestamp[i].tv_sec == 0 &&
+		        cur.timestamp[i].tv_usec == 0)) {
+
+			last.rxfer[i] = cur.rxfer[i];
+			last.wxfer[i] = cur.wxfer[i];
+			last.seek[i] = cur.seek[i];
+			last.rbytes[i] = cur.rbytes[i];
+			last.wbytes[i] = cur.wbytes[i];
+
+			timerclear(&last.wait[i]);
+			timerclear(&last.time[i]);
+			timerclear(&last.waitsum[i]);
+			timerclear(&last.busysum[i]);
+			timerclear(&last.timestamp[i]);
+		}
+
 		/* Delta Values. */
 		SWAP(rxfer[i]);
 		SWAP(wxfer[i]);
@@ -135,12 +129,11 @@ drvswap(void)
 		SWAP(rbytes[i]);
 		SWAP(wbytes[i]);
 
-		/* Delta Time. */
-		timerclear(&tmp_timer);
-		timerset(&(cur.time[i]), &tmp_timer);
-		timersub(&tmp_timer, &(last.time[i]), &(cur.time[i]));
-		timerclear(&(last.time[i]));
-		timerset(&tmp_timer, &(last.time[i]));
+		DELTA(wait[i]);
+		DELTA(time[i]);
+		DELTA(waitsum[i]);
+		DELTA(busysum[i]);
+		DELTA(timestamp[i]);
 	}
 }
 
@@ -174,6 +167,7 @@ cpuswap(void)
 
 	cur.cp_etime = etime;
 }
+#undef DELTA
 #undef SWAP
 
 /*
@@ -183,72 +177,77 @@ cpuswap(void)
 void
 drvreadstats(void)
 {
-	struct io_stats	cur_drive, *p;
-	size_t		size;
+	size_t		size, i, j, count;
 	int		mib[3];
-	int		i;
 
-	p = iostathead;
+	mib[0] = CTL_HW;
+	mib[1] = HW_IOSTATS;
+	mib[2] = sizeof(struct io_sysctl);
 
-	if (memf == NULL) {
-		mib[0] = CTL_HW;
-		mib[1] = HW_IOSTATS;
-		mib[2] = sizeof(struct io_sysctl);
+	size = ndrive * sizeof(struct io_sysctl);
+	if (sysctl(mib, 3, drives, &size, NULL, 0) < 0)
+		err(1, "sysctl hw.iostats failed");
+	/* recalculate array length */
+	count = size / sizeof(struct io_sysctl);
 
-		size = ndrive * sizeof(struct io_sysctl);
-		if (sysctl(mib, 3, drives, &size, NULL, 0) < 0)
-			err(1, "sysctl hw.iostats failed");
-		for (i = 0; i < ndrive; i++) {
-			cur.rxfer[i] = drives[i].rxfer;
-			cur.wxfer[i] = drives[i].wxfer;
-			cur.seek[i] = drives[i].seek;
-			cur.rbytes[i] = drives[i].rbytes;
-			cur.wbytes[i] = drives[i].wbytes;
-			cur.time[i].tv_sec = drives[i].time_sec;
-			cur.time[i].tv_usec = drives[i].time_usec;
+#define COPYF(x,k,l) cur.x[k] = drives[l].x
+#define COPYT(x,k,l) do {						\
+		cur.x[k].tv_sec = drives[l].x##_sec;			\
+		cur.x[k].tv_usec = drives[l].x##_usec;			\
+} while (/* CONSTCOND */0)
+
+	for (i = 0, j = 0; i < ndrive && j < count; i++) {
+
+		/*
+		 * skip removed entries
+		 *
+		 * we cannot detect entries replaced with
+		 * devices of the same name (e.g. unplug/replug).
+		 */
+		if (strcmp(cur.name[i], drives[j].name)) {
+			cur.select[i] = 0;
+			continue;
 		}
 
-		mib[0] = CTL_KERN;
-		mib[1] = KERN_TKSTAT;
-		mib[2] = KERN_TKSTAT_NIN;
-		size = sizeof(cur.tk_nin);
-		if (sysctl(mib, 3, &cur.tk_nin, &size, NULL, 0) < 0)
-			cur.tk_nin = 0;
+		COPYF(rxfer, i, j);
+		COPYF(wxfer, i, j);
+		COPYF(seek, i, j);
+		COPYF(rbytes, i, j);
+		COPYF(wbytes, i, j);
 
-		mib[2] = KERN_TKSTAT_NOUT;
-		size = sizeof(cur.tk_nout);
-		if (sysctl(mib, 3, &cur.tk_nout, &size, NULL, 0) < 0)
-			cur.tk_nout = 0;
-	} else {
-		for (i = 0; i < ndrive; i++) {
-			deref_kptr(p, &cur_drive, sizeof(cur_drive));
-			cur.rxfer[i] = cur_drive.io_rxfer;
-			cur.wxfer[i] = cur_drive.io_wxfer;
-			cur.seek[i] = cur_drive.io_seek;
-			cur.rbytes[i] = cur_drive.io_rbytes;
-			cur.wbytes[i] = cur_drive.io_wbytes;
-			timerset(&(cur_drive.io_time), &(cur.time[i]));
-			p = cur_drive.io_link.tqe_next;
-		}
+		COPYT(wait, i, j);
+		COPYT(time, i, j);
+		COPYT(waitsum, i, j);
+		COPYT(busysum, i, j);
+		COPYT(timestamp, i, j);
 
-		deref_nl(X_TK_NIN, &cur.tk_nin, sizeof(cur.tk_nin));
-		deref_nl(X_TK_NOUT, &cur.tk_nout, sizeof(cur.tk_nout));
+		++j;
 	}
 
-	/*
-	 * XXX Need to locate the `correct' CPU when looking for this
-	 * XXX in crash dumps.  Just don't report it for now, in that
-	 * XXX case.
-	 */
+	/* shrink table to new size */
+	ndrive = j;
+
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_TKSTAT;
+	mib[2] = KERN_TKSTAT_NIN;
+	size = sizeof(cur.tk_nin);
+	if (sysctl(mib, 3, &cur.tk_nin, &size, NULL, 0) < 0)
+		cur.tk_nin = 0;
+
+	mib[2] = KERN_TKSTAT_NOUT;
+	size = sizeof(cur.tk_nout);
+	if (sysctl(mib, 3, &cur.tk_nout, &size, NULL, 0) < 0)
+		cur.tk_nout = 0;
+
 	size = sizeof(cur.cp_time);
 	(void)memset(cur.cp_time, 0, size);
-	if (memf == NULL) {
-		mib[0] = CTL_KERN;
-		mib[1] = KERN_CP_TIME;
-		if (sysctl(mib, 2, cur.cp_time, &size, NULL, 0) < 0)
-			(void)memset(cur.cp_time, 0, sizeof(cur.cp_time));
-	}
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_CP_TIME;
+	if (sysctl(mib, 2, cur.cp_time, &size, NULL, 0) < 0)
+		(void)memset(cur.cp_time, 0, sizeof(cur.cp_time));
 }
+#undef COPYT
+#undef COPYF
 
 /*
  * Read collect statistics for tty i/o.
@@ -260,22 +259,17 @@ tkreadstats(void)
 	size_t		size;
 	int		mib[3];
 
-	if (memf == NULL) {
-		mib[0] = CTL_KERN;
-		mib[1] = KERN_TKSTAT;
-		mib[2] = KERN_TKSTAT_NIN;
-		size = sizeof(cur.tk_nin);
-		if (sysctl(mib, 3, &cur.tk_nin, &size, NULL, 0) < 0)
-			cur.tk_nin = 0;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_TKSTAT;
+	mib[2] = KERN_TKSTAT_NIN;
+	size = sizeof(cur.tk_nin);
+	if (sysctl(mib, 3, &cur.tk_nin, &size, NULL, 0) < 0)
+		cur.tk_nin = 0;
 
-		mib[2] = KERN_TKSTAT_NOUT;
-		size = sizeof(cur.tk_nout);
-		if (sysctl(mib, 3, &cur.tk_nout, &size, NULL, 0) < 0)
-			cur.tk_nout = 0;
-	} else {
-		deref_nl(X_TK_NIN, &cur.tk_nin, sizeof(cur.tk_nin));
-		deref_nl(X_TK_NOUT, &cur.tk_nout, sizeof(cur.tk_nout));
-	}
+	mib[2] = KERN_TKSTAT_NOUT;
+	size = sizeof(cur.tk_nout);
+	if (sysctl(mib, 3, &cur.tk_nout, &size, NULL, 0) < 0)
+		cur.tk_nout = 0;
 }
 
 /*
@@ -288,19 +282,12 @@ cpureadstats(void)
 	size_t		size;
 	int		mib[2];
 
-	/*
-	 * XXX Need to locate the `correct' CPU when looking for this
-	 * XXX in crash dumps.  Just don't report it for now, in that
-	 * XXX case.
-	 */
 	size = sizeof(cur.cp_time);
 	(void)memset(cur.cp_time, 0, size);
-	if (memf == NULL) {
-		mib[0] = CTL_KERN;
-		mib[1] = KERN_CP_TIME;
-		if (sysctl(mib, 2, cur.cp_time, &size, NULL, 0) < 0)
-			(void)memset(cur.cp_time, 0, sizeof(cur.cp_time));
-	}
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_CP_TIME;
+	if (sysctl(mib, 2, cur.cp_time, &size, NULL, 0) < 0)
+		(void)memset(cur.cp_time, 0, sizeof(cur.cp_time));
 }
 
 /*
@@ -310,87 +297,60 @@ cpureadstats(void)
 int
 drvinit(int selected)
 {
-	struct iostatlist_head iostat_head;
-	struct io_stats	cur_drive, *p;
 	struct clockinfo clockinfo;
-	char		errbuf[_POSIX2_LINE_MAX];
-	size_t		size;
+	size_t		size, i;
 	static int	once = 0;
-	int		i, mib[3];
+	int		mib[3];
 
 	if (once)
 		return (1);
 
-	if (memf == NULL) {
-		mib[0] = CTL_HW;
-		mib[1] = HW_NCPU;
-		size = sizeof(cur.cp_ncpu);
-		if (sysctl(mib, 2, &cur.cp_ncpu, &size, NULL, 0) == -1)
-			err(1, "sysctl hw.ncpu failed");
+	mib[0] = CTL_HW;
+	mib[1] = HW_NCPU;
+	size = sizeof(cur.cp_ncpu);
+	if (sysctl(mib, 2, &cur.cp_ncpu, &size, NULL, 0) == -1)
+		err(1, "sysctl hw.ncpu failed");
 
-		mib[0] = CTL_KERN;
-		mib[1] = KERN_CLOCKRATE;
-		size = sizeof(clockinfo);
-		if (sysctl(mib, 2, &clockinfo, &size, NULL, 0) == -1)
-			err(1, "sysctl kern.clockrate failed");
-		hz = clockinfo.stathz;
-		if (!hz)
-			hz = clockinfo.hz;
+	mib[0] = CTL_KERN;
+	mib[1] = KERN_CLOCKRATE;
+	size = sizeof(clockinfo);
+	if (sysctl(mib, 2, &clockinfo, &size, NULL, 0) == -1)
+		err(1, "sysctl kern.clockrate failed");
+	hz = clockinfo.stathz;
+	if (!hz)
+		hz = clockinfo.hz;
 
-		mib[0] = CTL_HW;
-		mib[1] = HW_IOSTATS;
-		mib[2] = sizeof(struct io_sysctl);
-		if (sysctl(mib, 3, NULL, &size, NULL, 0) == -1)
-			err(1, "sysctl hw.drivestats failed");
-		ndrive = size / sizeof(struct io_sysctl);
+	mib[0] = CTL_HW;
+	mib[1] = HW_IOSTATS;
+	mib[2] = sizeof(struct io_sysctl);
+	if (sysctl(mib, 3, NULL, &size, NULL, 0) == -1)
+		err(1, "sysctl hw.drivestats failed");
+	ndrive = size / sizeof(struct io_sysctl);
 
-		if (size == 0) {
-			warnx("No drives attached.");
-		} else {
-			drives = (struct io_sysctl *)malloc(size);
-			if (drives == NULL)
-				errx(1, "Memory allocation failure.");
-		}
+	if (size == 0) {
+		warnx("No drives attached.");
 	} else {
-		int drive_count;
-		/* Open the kernel. */
-		if ((kd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY,
-		    errbuf)) == NULL)
-			errx(1, "kvm_openfiles: %s", errbuf);
-
-		/* Obtain the namelist symbols from the kernel. */
-		if (kvm_nlist(kd, namelist))
-			KVM_ERROR("kvm_nlist failed to read symbols.");
-
-		/* Get the number of attached drives. */
-		deref_nl(X_DRIVE_COUNT, &drive_count, sizeof(drive_count));
-
-		if (drive_count < 0)
-			errx(1, "invalid _drive_count %d.", drive_count);
-		else if (drive_count == 0) {
-			warnx("No drives attached.");
-		} else {
-			/* Get a pointer to the first drive. */
-			deref_nl(X_DRIVELIST, &iostat_head,
-				 sizeof(iostat_head));
-			iostathead = iostat_head.tqh_first;
-		}
-		ndrive = drive_count;
-
-		/* Get ticks per second. */
-		deref_nl(X_STATHZ, &hz, sizeof(hz));
-		if (!hz)
-			deref_nl(X_HZ, &hz, sizeof(hz));
+		drives = (struct io_sysctl *)malloc(size);
+		if (drives == NULL)
+			errx(1, "Memory allocation failure.");
 	}
 
 	/* Allocate space for the statistics. */
 	cur.time = calloc(ndrive, sizeof(struct timeval));
+	cur.wait = calloc(ndrive, sizeof(struct timeval));
+	cur.waitsum = calloc(ndrive, sizeof(struct timeval));
+	cur.busysum = calloc(ndrive, sizeof(struct timeval));
+	cur.timestamp = calloc(ndrive, sizeof(struct timeval));
 	cur.rxfer = calloc(ndrive, sizeof(u_int64_t));
 	cur.wxfer = calloc(ndrive, sizeof(u_int64_t));
 	cur.seek = calloc(ndrive, sizeof(u_int64_t));
 	cur.rbytes = calloc(ndrive, sizeof(u_int64_t));
 	cur.wbytes = calloc(ndrive, sizeof(u_int64_t));
 	last.time = calloc(ndrive, sizeof(struct timeval));
+	last.wait = calloc(ndrive, sizeof(struct timeval));
+	last.waitsum = calloc(ndrive, sizeof(struct timeval));
+	last.busysum = calloc(ndrive, sizeof(struct timeval));
+	last.timestamp = calloc(ndrive, sizeof(struct timeval));
 	last.rxfer = calloc(ndrive, sizeof(u_int64_t));
 	last.wxfer = calloc(ndrive, sizeof(u_int64_t));
 	last.seek = calloc(ndrive, sizeof(u_int64_t));
@@ -399,12 +359,18 @@ drvinit(int selected)
 	cur.select = calloc(ndrive, sizeof(int));
 	cur.name = calloc(ndrive, sizeof(char *));
 
-	if (cur.time == NULL || cur.rxfer == NULL ||
-	    cur.wxfer == NULL || cur.seek == NULL ||
-	    cur.rbytes == NULL || cur.wbytes == NULL ||
-	    last.time == NULL || last.rxfer == NULL ||
-	    last.wxfer == NULL || last.seek == NULL ||
-	    last.rbytes == NULL || last.wbytes == NULL ||
+	if (cur.time == NULL || cur.wait == NULL ||
+	    cur.waitsum == NULL || cur.busysum == NULL ||
+	    cur.timestamp == NULL ||
+	    cur.rxfer == NULL || cur.wxfer == NULL ||
+	    cur.seek == NULL || cur.rbytes == NULL ||
+	    cur.wbytes == NULL ||
+	    last.time == NULL || last.wait == NULL ||
+	    last.waitsum == NULL || last.busysum == NULL ||
+	    last.timestamp == NULL ||
+	    last.rxfer == NULL || last.wxfer == NULL ||
+	    last.seek == NULL || last.rbytes == NULL ||
+	    last.wbytes == NULL ||
 	    cur.select == NULL || cur.name == NULL)
 		errx(1, "Memory allocation failure.");
 
@@ -412,51 +378,22 @@ drvinit(int selected)
 	drv_select = cur.select;
 	dr_name = cur.name;
 
-	/* Read the drive names and set intial selection. */
-	if (memf == NULL) {
-		mib[0] = CTL_HW;		/* Should be still set from */
-		mib[1] = HW_IOSTATS;		/* ... above, but be safe... */
-		mib[2] = sizeof(struct io_sysctl);
-		if (sysctl(mib, 3, drives, &size, NULL, 0) == -1)
-			err(1, "sysctl hw.iostats failed");
-		for (i = 0; i < ndrive; i++) {
-			cur.name[i] = drives[i].name;
-			cur.select[i] = selected;
-		}
-	} else {
-		p = iostathead;
-		for (i = 0; i < ndrive; i++) {
-			char	buf[10];
-			deref_kptr(p, &cur_drive, sizeof(cur_drive));
-			deref_kptr(cur_drive.io_name, buf, sizeof(buf));
-			cur.name[i] = strdup(buf);
-			if (!cur.name[i])
-				err(1, "strdup");
-			cur.select[i] = selected;
-
-			p = cur_drive.io_link.tqe_next;
-		}
+	/* Read the drive names and set initial selection. */
+	mib[0] = CTL_HW;		/* Should be still set from */
+	mib[1] = HW_IOSTATS;		/* ... above, but be safe... */
+	mib[2] = sizeof(struct io_sysctl);
+	if (sysctl(mib, 3, drives, &size, NULL, 0) == -1)
+		err(1, "sysctl hw.iostats failed");
+	/* Recalculate array length */
+	ndrive = size / sizeof(struct io_sysctl);
+	for (i = 0; i < ndrive; i++) {
+		cur.name[i] = strndup(drives[i].name, sizeof(drives[i].name));
+		if (cur.name[i] == NULL)
+			errx(1, "Memory allocation failure");
+		cur.select[i] = selected;
 	}
 
 	/* Never do this initialization again. */
 	once = 1;
 	return (1);
-}
-
-/*
- * Dereference the kernel pointer `kptr' and fill in the local copy
- * pointed to by `ptr'.  The storage space must be pre-allocated,
- * and the size of the copy passed in `len'.
- */
-static void
-deref_kptr(void *kptr, void *ptr, size_t len)
-{
-	char buf[128];
-
-	if (kvm_read(kd, (u_long)kptr, (char *)ptr, len) != len) {
-		(void)memset(buf, 0, sizeof(buf));
-		(void)snprintf(buf, sizeof buf, "can't dereference kptr 0x%lx",
-		    (u_long)kptr);
-		KVM_ERROR(buf);
-	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: skeyinfo.c,v 1.4 2003/07/23 04:11:50 itojun Exp $	*/
+/*	$NetBSD: skeyinfo.c,v 1.7 2009/09/05 06:15:24 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,22 +31,20 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: skeyinfo.c,v 1.4 2003/07/23 04:11:50 itojun Exp $");
+__RCSID("$NetBSD: skeyinfo.c,v 1.7 2009/09/05 06:15:24 dholland Exp $");
 #endif
 
-#include <stdio.h>
-#include <pwd.h>
 #include <err.h>
-#include <skey.h>
+#include <errno.h>
+#include <pwd.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
-int main __P((int, char *[]));
+#include <skey.h> /* requires stdio.h */
 
 int
-main(argc, argv)
-	int             argc;
-	char           *argv[];
+main(int argc, char *argv[])
 {
 	struct skey     skey;
 	char            name[100], prompt[1024];
@@ -64,7 +55,7 @@ main(argc, argv)
 	argv++;
 
 	if (geteuid())
-		errx(1, "must be root to read /etc/skeykeys");
+		errx(1, "Must be root to read /etc/skeykeys");
 
 	uid = getuid();
 
@@ -72,14 +63,16 @@ main(argc, argv)
 		pw = getpwuid(uid);
 	else if (!uid)
 		pw = getpwnam(argv[0]);
-	else
-		errx(1, "permission denied to look other users skeys");
+	else {
+		errno = EPERM;
+		err(1, "%s", argv[0]);
+	}
 
 	if (!pw) {
 		if (argc)
 			errx(1, "%s: no such user", argv[0]);
 		else
-			errx(1, "who are you?");
+			errx(1, "Who are you?");
 	}
 
 	(void) strlcpy(name, pw->pw_name, sizeof(name));

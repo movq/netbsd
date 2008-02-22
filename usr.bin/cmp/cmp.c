@@ -1,4 +1,4 @@
-/*	$NetBSD: cmp.c,v 1.15 2006/01/19 20:44:57 garbled Exp $	*/
+/*	$NetBSD: cmp.c,v 1.20 2016/10/30 19:33:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1990, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cmp.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: cmp.c,v 1.15 2006/01/19 20:44:57 garbled Exp $");
+__RCSID("$NetBSD: cmp.c,v 1.20 2016/10/30 19:33:49 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: cmp.c,v 1.15 2006/01/19 20:44:57 garbled Exp $");
 
 int	lflag, sflag;
 
-static void usage(void);
+__dead static void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -67,12 +67,16 @@ main(int argc, char *argv[])
 	struct stat sb1, sb2;
 	off_t skip1 = 0, skip2 = 0;
 	int ch, fd1, fd2, special;
-	char *file1, *file2;
+	const char *file1, *file2;
 
 	setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "ls")) != -1)
+	special = 0;
+	while ((ch = getopt(argc, argv, "cls")) != -1)
 		switch (ch) {
+		case 'c':
+			special = 1;	/* careful!  Don't use mmap() */
+			break;
 		case 'l':		/* print all differences */
 			lflag = 1;
 			break;
@@ -93,7 +97,6 @@ main(int argc, char *argv[])
 		usage();
 
 	/* Backward compatibility -- handle "-" meaning stdin. */
-	special = 0;
 	if (strcmp(file1 = argv[0], "-") == 0) {
 		special = 1;
 		fd1 = 0;
@@ -159,6 +162,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "usage: cmp [-l | -s] file1 file2 [skip1 [skip2]]\n");
+	    "Usage: %s [-c] [-l | -s] file1 file2 [skip1 [skip2]]\n",
+	    getprogname());
 	exit(ERR_EXIT);
 }

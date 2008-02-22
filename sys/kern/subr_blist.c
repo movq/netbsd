@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_blist.c,v 1.9 2006/01/20 14:19:40 yamt Exp $	*/
+/*	$NetBSD: subr_blist.c,v 1.13 2017/02/13 16:53:41 zafer Exp $	*/
 
 /*-
  * Copyright (c) 1998 Matthew Dillon.  All Rights Reserved.
@@ -31,7 +31,7 @@
  *
  *	This module implements a general bitmap allocator/deallocator.  The
  *	allocator eats around 2 bits per 'block'.  The module does not 
- *	try to interpret the meaning of a 'block' other then to return 
+ *	try to interpret the meaning of a 'block' other than to return 
  *	BLIST_NONE on an allocation failure.
  *
  *	A radix tree is used to maintain the bitmap.  Two radix constants are
@@ -59,7 +59,7 @@
  *	the memory subsystem.  In contrast, the rlist code may allocate memory 
  *	on an rlist_free() call.  The non-blocking features of the blist code
  *	are used to great advantage in the swap code (vm/nswap_pager.c).  The
- *	rlist code uses a little less overall memory then the blist code (but
+ *	rlist code uses a little less overall memory than the blist code (but
  *	due to swap interleaving not all that much less), but the blist code 
  *	scales much, much better.
  *
@@ -74,7 +74,7 @@
  *	to cover the number of blocks requested at creation time even if it
  *	must be encompassed in larger root-node radix.
  *
- *	NOTE: the allocator cannot currently allocate more then 
+ *	NOTE: the allocator cannot currently allocate more than 
  *	BLIST_BMAP_RADIX blocks per call.  It will panic with 'allocation too 
  *	large' if you try.  This is an area that could use improvement.  The 
  *	radix is large enough that this restriction does not effect the swap 
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_blist.c,v 1.9 2006/01/20 14:19:40 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_blist.c,v 1.13 2017/02/13 16:53:41 zafer Exp $");
 #if 0
 __FBSDID("$FreeBSD: src/sys/kern/subr_blist.c,v 1.17 2004/06/04 04:03:25 alc Exp $");
 #endif
@@ -96,7 +96,7 @@ __FBSDID("$FreeBSD: src/sys/kern/subr_blist.c,v 1.17 2004/06/04 04:03:25 alc Exp
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/blist.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #else
 
@@ -111,12 +111,14 @@ __FBSDID("$FreeBSD: src/sys/kern/subr_blist.c,v 1.17 2004/06/04 04:03:25 alc Exp
 #include <stdarg.h>
 #include <inttypes.h>
 
-#define malloc(a,b,c)	calloc(a, 1)
-#define free(a,b)	free(a)
+#define	KM_SLEEP 1
+#define	kmem_zalloc(a,b) calloc(1, (a))
+#define	kmem_alloc(a,b) malloc(a)
+#define	kmem_free(a,b) free(a)
 
 #include "../sys/blist.h"
 
-void panic(const char *ctl, ...);
+void panic(const char *ctl, ...) __printflike(1, 2);
 
 #endif
 
@@ -168,15 +170,11 @@ static void blst_radix_print(blmeta_t *scan, blist_blkno_t blk,
     blist_blkno_t radix, blist_blkno_t skip, int tab);
 #endif
 
-#ifdef _KERNEL
-static MALLOC_DEFINE(M_BLIST, "blist", "Bitmap allocator");
-#endif
-
 /*
  * blist_create() - create a blist capable of handling up to the specified
  *		    number of blocks
  *
- *	blocks must be greater then 0
+ *	blocks must be greater than 0
  *
  *	The smallest blist consists of a single leaf node capable of 
  *	managing BLIST_BMAP_RADIX blocks.
@@ -201,14 +199,14 @@ blist_create(blist_blkno_t blocks)
 		skip = (skip + 1) * BLIST_META_RADIX;
 	}
 
-	bl = malloc(sizeof(struct blist), M_BLIST, M_WAITOK | M_ZERO);
+	bl = kmem_zalloc(sizeof(struct blist), KM_SLEEP);
 
 	bl->bl_blocks = blocks;
 	bl->bl_radix = radix;
 	bl->bl_skip = skip;
 	bl->bl_rootblks = 1 +
 	    blst_radix_init(NULL, bl->bl_radix, bl->bl_skip, blocks);
-	bl->bl_root = malloc(sizeof(blmeta_t) * bl->bl_rootblks, M_BLIST, M_WAITOK);
+	bl->bl_root = kmem_alloc(sizeof(blmeta_t) * bl->bl_rootblks, KM_SLEEP);
 
 #if defined(BLIST_DEBUG)
 	printf(
@@ -229,8 +227,9 @@ blist_create(blist_blkno_t blocks)
 void 
 blist_destroy(blist_t bl)
 {
-	free(bl->bl_root, M_BLIST);
-	free(bl, M_BLIST);
+
+	kmem_free(bl->bl_root, sizeof(blmeta_t) * bl->bl_rootblks);
+	kmem_free(bl, sizeof(struct blist));
 }
 
 /*
@@ -869,7 +868,7 @@ blst_meta_fill(
  *
  *	Initialize our meta structures and bitmaps and calculate the exact
  *	amount of space required to manage 'count' blocks - this space may
- *	be considerably less then the calculated radix due to the large
+ *	be considerably less than the calculated radix due to the large
  *	RADIX values we use.
  */
 

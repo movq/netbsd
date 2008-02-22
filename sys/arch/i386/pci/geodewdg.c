@@ -1,4 +1,4 @@
-/*	$NetBSD: geodewdg.c,v 1.7 2008/01/03 04:52:55 dyoung Exp $	*/
+/*	$NetBSD: geodewdg.c,v 1.12 2016/07/11 11:31:49 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2005 David Young.  All rights reserved.
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by David Young.
- * 4. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -48,13 +42,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,14 +63,14 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: geodewdg.c,v 1.7 2008/01/03 04:52:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: geodewdg.c,v 1.12 2016/07/11 11:31:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/wdog.h>
 #include <uvm/uvm_extern.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <arch/i386/pci/geodevar.h>
@@ -97,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: geodewdg.c,v 1.7 2008/01/03 04:52:55 dyoung Exp $");
 #endif
 
 struct geode_wdog_softc {
-	struct device		sc_dev;
 	struct geode_gcb_softc *sc_gcb_dev;
 
 	uint16_t		sc_countdown;
@@ -158,7 +144,7 @@ geode_wdog_enable(struct geode_wdog_softc *sc)
 static void
 geode_wdog_reset(struct geode_wdog_softc *sc)
 {
-	/* set countdown */ 
+	/* set countdown */
 	bus_space_write_2(sc->sc_gcb_dev->sc_iot, sc->sc_gcb_dev->sc_ioh,
 	    SC1100_GCB_WDTO, sc->sc_countdown);
 }
@@ -222,7 +208,7 @@ geode_wdog_setmode(struct sysmon_wdog *smw)
 }
 
 static int
-geode_wdog_match(device_t parent, struct cfdata *match, void *aux)
+geode_wdog_match(device_t parent, cfdata_t match, void *aux)
 {
 	return !attached;
 }
@@ -251,8 +237,8 @@ geode_wdog_attach(device_t parent, device_t self, void *aux)
 	 * Determine cause of the last reset, and issue a warning if it
 	 * was due to watchdog expiry.
 	 */
-	wdsts = bus_space_read_1(sc->sc_gcb_dev->sc_iot, sc->sc_gcb_dev->sc_ioh,
-	    SC1100_GCB_WDSTS);
+	wdsts = bus_space_read_1(sc->sc_gcb_dev->sc_iot,
+	    sc->sc_gcb_dev->sc_ioh, SC1100_GCB_WDSTS);
 
 	GEODE_DPRINTF(("%s: status %#02" PRIx8 "\n", device_xname(self),
 	    wdsts));
@@ -296,5 +282,5 @@ geode_wdog_detach(device_t self, int flags)
 	return 0;
 }
 
-CFATTACH_DECL(geodewdog, sizeof(struct geode_wdog_softc),
+CFATTACH_DECL_NEW(geodewdog, sizeof(struct geode_wdog_softc),
 	      geode_wdog_match, geode_wdog_attach, geode_wdog_detach, NULL);

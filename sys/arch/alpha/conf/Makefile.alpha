@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.alpha,v 1.79 2007/10/17 19:52:57 garbled Exp $
+#	$NetBSD: Makefile.alpha,v 1.84 2016/01/20 12:49:21 jklos Exp $
 
 # Makefile for NetBSD
 #
@@ -35,12 +35,18 @@ CPPFLAGS+=	-Dalpha
 CFLAGS+=	-mno-fp-regs
 AFLAGS+=	-traditional
 
-NORMAL_S=	${CPP} ${AFLAGS} ${CPPFLAGS} $< | sed -e 's,^\#.*,,' | \
+NORMAL_S=	${CPP} ${AFLAGS} ${CPPFLAGS} $< | ${TOOL_SED} -e 's,^\#.*,,' | \
 		${AS} -o ${.TARGET}
 
 ##
 ## (3) libkern and compat
 ##
+OPT_MODULAR=	%MODULAR%
+.if !empty(OPT_MODULAR)
+KERN_AS=	obj
+.else
+KERN_AS=	library
+.endif
 
 ##
 ## (4) local objects, compile rules, and dependencies
@@ -61,7 +67,7 @@ lock_stubs.o: assym.h
 ## (5) link settings
 ##
 LINKFORMAT=	-N
-TEXTADDR?=	fffffc0000300000
+TEXTADDR?=	fffffc0000a00000
 ENTRYPOINT=	__transfer
 EXTRA_LINKFLAGS=	-G 4
 STRIPFLAGS=	-g -X
@@ -92,9 +98,6 @@ MKDEP_AFLAGS=	-x assembler-with-cpp ${AFLAGS}
 %LOAD
 
 %RULES
-
-## Include rules for Atheros WLAN
-.include "$S/contrib/dev/ath/netbsd/Makefile.ath.inc"
 
 ##
 ## (9) port independent kernel machinery

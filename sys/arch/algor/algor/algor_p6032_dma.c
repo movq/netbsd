@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p6032_dma.c,v 1.3 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: algor_p6032_dma.c,v 1.7 2011/07/08 18:48:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,12 +34,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p6032_dma.c,v 1.3 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p6032_dma.c,v 1.7 2011/07/08 18:48:56 matt Exp $");
 
 #include <sys/param.h>
 
-#define	_ALGOR_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#define	_MIPS_BUS_DMA_PRIVATE
+#include <sys/bus.h>
 
 #include <algor/algor/algor_p6032reg.h>
 #include <algor/algor/algor_p6032var.h>
@@ -64,44 +57,21 @@ algor_p6032_dma_init(struct p6032_config *acp)
 	t = &acp->ac_pci_dmat;
 	t->_cookie = acp;
 	t->_wbase = P6032_DMA_PCI_PCIBASE;
-	t->_physbase = P6032_DMA_PCI_PHYSBASE;
-	t->_wsize = P6032_DMA_PCI_SIZE;
-	t->_dmamap_create = _bus_dmamap_create;
-	t->_dmamap_destroy = _bus_dmamap_destroy;
-	t->_dmamap_load = _bus_dmamap_load;
-	t->_dmamap_load_mbuf = _bus_dmamap_load_mbuf;
-	t->_dmamap_load_uio = _bus_dmamap_load_uio;
-	t->_dmamap_load_raw = _bus_dmamap_load_raw;
-	t->_dmamap_unload = _bus_dmamap_unload;
-	t->_dmamap_sync = _bus_dmamap_sync;
-
-	t->_dmamem_alloc = _bus_dmamem_alloc;
-	t->_dmamem_free = _bus_dmamem_free;
-	t->_dmamem_map = _bus_dmamem_map;
-	t->_dmamem_unmap = _bus_dmamem_unmap;
-	t->_dmamem_mmap = _bus_dmamem_mmap;
+        t->_bounce_alloc_lo = P6032_DMA_PCI_PHYSBASE;
+        t->_bounce_alloc_hi = P6032_DMA_PCI_PHYSBASE + P6032_DMA_PCI_SIZE;
+	t->_dmamap_ops = mips_bus_dmamap_ops;
+	t->_dmamem_ops = mips_bus_dmamem_ops;
+	t->_dmatag_ops = mips_bus_dmatag_ops;
 
 	/*
-	 * Initialize the DMA tag usd for ISA DMA.
+	 * Initialize the DMA tag used for ISA DMA.
 	 */
 	t = &acp->ac_isa_dmat;
 	t->_cookie = acp;
 	t->_wbase = P6032_DMA_ISA_PCIBASE;
-	t->_physbase = P6032_DMA_ISA_PHYSBASE;
-	t->_wsize = P6032_DMA_ISA_SIZE;
-
-	t->_dmamap_create = isadma_bounce_dmamap_create;
-	t->_dmamap_destroy = isadma_bounce_dmamap_destroy;
-	t->_dmamap_load = isadma_bounce_dmamap_load;
-	t->_dmamap_load_mbuf = isadma_bounce_dmamap_load_mbuf;
-	t->_dmamap_load_uio = isadma_bounce_dmamap_load_uio;
-	t->_dmamap_load_raw = isadma_bounce_dmamap_load_raw;
-	t->_dmamap_unload = isadma_bounce_dmamap_unload;
-	t->_dmamap_sync = isadma_bounce_dmamap_sync;
-
-	t->_dmamem_alloc = isadma_bounce_dmamem_alloc;
-	t->_dmamem_free = _bus_dmamem_free;
-	t->_dmamem_map = _bus_dmamem_map;
-	t->_dmamem_unmap = _bus_dmamem_unmap;
-	t->_dmamem_mmap = _bus_dmamem_mmap;
+        t->_bounce_alloc_lo = P6032_DMA_ISA_PHYSBASE;
+        t->_bounce_alloc_hi = P6032_DMA_ISA_PHYSBASE + P6032_DMA_ISA_SIZE;
+	t->_dmamap_ops = mips_bus_dmamap_ops;
+	t->_dmamem_ops = mips_bus_dmamem_ops;
+	t->_dmatag_ops = mips_bus_dmatag_ops;
 }

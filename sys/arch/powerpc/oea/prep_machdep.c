@@ -1,4 +1,4 @@
-/* $NetBSD: prep_machdep.c,v 1.2 2007/10/17 19:56:43 garbled Exp $ */
+/* $NetBSD: prep_machdep.c,v 1.11 2016/12/22 14:47:58 cherry Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,18 +37,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.2 2007/10/17 19:56:43 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.11 2016/12/22 14:47:58 cherry Exp $");
+
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/extent.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/reboot.h>
 #include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 #include <machine/powerpc.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pmap.h>
 #include <powerpc/oea/bat.h>
 
@@ -67,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.2 2007/10/17 19:56:43 garbled Exp
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 extern void *endsym, *startsym;
 #endif
 extern struct mem_region physmemr[2], availmemr[2];
@@ -152,7 +146,9 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	oea_batinit(
 	    PREP_BUS_SPACE_MEM, BAT_BL_256M,
 	    PREP_BUS_SPACE_IO,  BAT_BL_256M,
-#ifdef prep
+#if defined(bebox)
+	    0x7ffff000, BAT_BL_8M,	/* BeBox Mainboard Registers (4KB) */
+#elif defined(prep)
 	    0xbf800000, BAT_BL_8M,
 #endif
 	    0);
@@ -167,13 +163,13 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	consinit();
 
 	/* Set the page size */
-	uvm_setpagesize();
+	uvm_md_init();
 
 	/* Initialize pmap module */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
 #endif
 
 #ifdef DDB

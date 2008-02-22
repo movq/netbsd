@@ -1,4 +1,4 @@
-/*	$NetBSD: vrkiu.c,v 1.37 2005/12/11 12:17:34 christos Exp $	*/
+/*	$NetBSD: vrkiu.c,v 1.39 2012/10/27 17:17:56 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999 SASAKI Takesi All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrkiu.c,v 1.37 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrkiu.c,v 1.39 2012/10/27 17:17:56 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/tty.h>
@@ -78,8 +78,8 @@ int vrkiu_debug = 0;
 #define	DPRINTF(arg)
 #endif
 
-static int vrkiumatch(struct device *, struct cfdata *, void *);
-static void vrkiuattach(struct device *, struct device *, void *);
+static int vrkiumatch(device_t, cfdata_t, void *);
+static void vrkiuattach(device_t, device_t, void *);
 
 int vrkiu_intr(void *);
 
@@ -93,7 +93,7 @@ static void eliminate_phantom_keys(struct vrkiu_chip *, unsigned short *);
 static int vrkiu_poll(void*);
 static int vrkiu_input_establish(void*, struct hpckbd_if*);
 
-CFATTACH_DECL(vrkiu, sizeof(struct vrkiu_softc),
+CFATTACH_DECL_NEW(vrkiu, sizeof(struct vrkiu_softc),
     vrkiumatch, vrkiuattach, NULL, NULL);
 
 struct vrkiu_chip *vrkiu_consdata = NULL;
@@ -126,16 +126,16 @@ vrkiu_is_console(bus_space_tag_t iot, bus_space_handle_t ioh)
 }
 
 static int
-vrkiumatch(struct device *parent, struct cfdata *cf, void *aux)
+vrkiumatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-vrkiuattach(struct device *parent, struct device *self, void *aux)
+vrkiuattach(device_t parent, device_t self, void *aux)
 {
-	struct vrkiu_softc *sc = (struct vrkiu_softc *)self;
+	struct vrkiu_softc *sc = device_private(self);
 	struct vrip_attach_args *va = aux;
 	struct hpckbd_attach_args haa;
 	int isconsole, res;
@@ -324,7 +324,7 @@ vrkiu_scan(struct vrkiu_chip* chip)
 
 /* called from bicons.c */
 int
-vrkiu_getc()
+vrkiu_getc(void)
 {
 	static int flag = 1;
 

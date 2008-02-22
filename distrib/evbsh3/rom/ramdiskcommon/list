@@ -1,18 +1,17 @@
-#	$NetBSD: list,v 1.5 2007/03/03 06:40:06 apb Exp $
+#	$NetBSD: list,v 1.11 2011/06/19 06:48:07 tsutsui Exp $
 
 # various files that we need in /etc for the install
 COPY	${CURDIR}/../../../../etc/master.passwd		etc/master.passwd
 #COPY	${CURDIR}/../../../../etc/etc.evbsh3/rc		etc/rc
 COPY	${CURDIR}/../../../../etc/group			etc/group
-COPY	${CURDIR}/../../../../etc/protocols		etc/protocols
-COPY	${CURDIR}/../../../../etc/services 		etc/services
-COPY	${CURDIR}/../../../../etc/gettytab			etc/gettytab
+COPY	${CURDIR}/../../../../etc/gettytab		etc/gettytab
 #COPY	${CURDIR}/localtime				etc/localtime
 COPY	${CURDIR}/../../../../etc/hosts			etc/hosts
-COPY	${CURDIR}/../../../../etc/etc.evbsh3/ttys	etc/ttys
+COPY	${DISTRIBDIR}/common/protocols			etc/protocols
+COPY	${DISTRIBDIR}/common/services			etc/services
 COPY	${CURDIR}/../ramdiskcommon/shells		etc/shells
+COPY	${CURDIR}/../../../../etc/etc.evbsh3/ttys	etc/ttys
 #COPY	${CURDIR}/dot.profile				etc/.profile
-#COPY	${CURDIR}/termcap.mini				usr/share/misc/termcap
 #COPY	${CURDIR}/kvm.db				var/db/kvm.db
 
 #SPECIAL pwd_mkdb -p -d ./ etc/master.passwd
@@ -37,6 +36,7 @@ COPY	${OBJDIR}/ramdiskbin		ramdiskbin
 SPECIAL chown 0:0			ramdiskbin
 #SPECIAL chmod 4755			ramdiskbin
 LINK	ramdiskbin			bin/cat
+LINK	ramdiskbin			bin/chgrp
 LINK	ramdiskbin			bin/chmod
 LINK	ramdiskbin			bin/cp
 LINK	ramdiskbin			bin/date
@@ -92,7 +92,6 @@ LINK	ramdiskbin			usr/bin/su
 LINK	ramdiskbin			bin/netstat
 
 #LINK	ramdiskbin			usr/bin/tftp
-LINK	ramdiskbin			usr/bin/chgrp
 LINK	ramdiskbin			usr/bin/fstat
 LINK	ramdiskbin			usr/bin/ftp
 LINK	ramdiskbin			usr/bin/hexdump
@@ -108,10 +107,10 @@ LINK	ramdiskbin			usr/bin/head
 LINK	ramdiskbin			usr/bin/tail
 
 LINK	ramdiskbin			sbin/arp
+LINK	ramdiskbin			sbin/chown
 LINK	ramdiskbin			sbin/dev_mkdb
 LINK	ramdiskbin			sbin/traceroute
 
-LINK	ramdiskbin			usr/sbin/chown
 LINK	ramdiskbin			usr/sbin/iostat
 LINK	ramdiskbin			usr/sbin/pstat
 #LINK	ramdiskbin			usr/sbin/rdate

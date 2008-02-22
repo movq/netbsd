@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.55 2008/01/23 19:52:24 bouyer Exp $
+#	$NetBSD: Makefile.inc,v 1.68 2015/03/07 07:28:37 mrg Exp $
 #
 #	etc.i386/Makefile.inc -- i386-specific etc Makefile targets
 #
@@ -7,21 +7,20 @@
 # to update the release documentation in distrib/notes/common/contents
 
 KERNEL_SETS=	GENERIC
-KERNEL_SETS+=	GENERIC.NOACPI
-KERNEL_SETS+=	XEN2_DOM0
-KERNEL_SETS+=	XEN2_DOMU
+KERNEL_SETS+=	MONOLITHIC
+KERNEL_SETS+=	LEGACY
 KERNEL_SETS+=	XEN3_DOM0
 KERNEL_SETS+=	XEN3_DOMU
+KERNEL_SETS+=	XEN3PAE_DOM0
 KERNEL_SETS+=	XEN3PAE_DOMU
+# KERNEL_SETS+=	GENERIC_USERMODE
 # KERNEL_SETS+=	GENERIC_TINY
 # KERNEL_SETS+=	GENERIC_PS2TINY
 
-BUILD_KERNELS=	ALL
-BUILD_KERNELS+=	INSTALL_LARGE
 BUILD_KERNELS+=	INSTALL
-BUILD_KERNELS+=	INSTALL_XEN2_DOMU
 BUILD_KERNELS+=	INSTALL_XEN3_DOMU
 BUILD_KERNELS+=	INSTALL_XEN3PAE_DOMU
+# BUILD_KERNELS+=	INSTALL_FLOPPY
 # BUILD_KERNELS+=	INSTALL_SMALL
 # BUILD_KERNELS+=	INSTALL_TINY
 # BUILD_KERNELS+=	INSTALL_PS2
@@ -29,12 +28,14 @@ BUILD_KERNELS+=	INSTALL_XEN3PAE_DOMU
 INSTALLATION_DIRS+=	installation/misc
 INSTALLATION_DIRS+=	installation/cdrom
 INSTALLATION_DIRS+=	installation/floppy
+INSTALLATION_DIRS+=	installation/miniroot
 
 # i386 specific distrib stuff
 snap_md_post:
 	cd ${KERNSRCDIR}/arch/i386/stand/dosboot && ${MAKE} release
 	cd ${KERNSRCDIR}/arch/i386/stand/pxeboot && ${MAKE} release
 	cd ${KERNSRCDIR}/arch/i386/stand/misc && ${MAKE} release
-	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/cdrom '*.iso'
-	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/floppy '*.fs'
-	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/misc '*.*'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom '*.iso'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/floppy '*.fs'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/miniroot '*.*'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc '*.*'

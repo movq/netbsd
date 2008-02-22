@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_lwp.c,v 1.9 2007/12/20 23:03:01 dsl Exp $	*/
+/*	$NetBSD: netbsd32_lwp.c,v 1.19 2017/04/21 15:10:34 christos Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2006, 2007 The NetBSD Foundation.
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.9 2007/12/20 23:03:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.19 2017/04/21 15:10:34 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -56,13 +53,44 @@ netbsd32__lwp_create(struct lwp *l, const struct netbsd32__lwp_create_args *uap,
 		syscallarg(netbsd32_u_long) flags;
 		syscallarg(netbsd32_lwpidp) new_lwp;
 	} */
-	struct sys__lwp_create_args ua;
+	struct proc *p = l->l_proc;
+	ucontext32_t *newuc = NULL;
+	lwpid_t lid;
+	int error;
 
-	NETBSD32TOP_UAP(ucp, const ucontext_t);
-	NETBSD32TO64_UAP(flags);
-	NETBSD32TOP_UAP(new_lwp, lwpid_t);
+	KASSERT(p->p_emul->e_ucsize == sizeof(*newuc));
 
-	return sys__lwp_create(l, &ua, retval);
+	newuc = kmem_alloc(sizeof(ucontext_t), KM_SLEEP);
+	error = copyin(SCARG_P32(uap, ucp), newuc, p->p_emul->e_ucsize);
+	if (error)
+		goto fail;
+
+	/* validate the ucontext */
+	if ((newuc->uc_flags & _UC_CPU) == 0) {
+		error = EINVAL;
+		goto fail;
+	}
+	error = cpu_mcontext32_validate(l, &newuc->uc_mcontext);
+	if (error)
+		goto fail;
+
+	const sigset_t *sigmask = newuc->uc_flags & _UC_SIGMASK ?
+	    &newuc->uc_sigmask : &l->l_sigmask;
+
+	error = do_lwp_create(l, newuc, SCARG(uap, flags), &lid, sigmask,
+	    &SS_INIT);
+	if (error)
+		goto fail;
+
+	/*
+	 * do not free ucontext in case of an error here,
+	 * the lwp will actually run and access it
+	 */
+	return copyout(&lid, SCARG_P32(uap, new_lwp), sizeof(lid));
+
+fail:
+	kmem_free(newuc, sizeof(ucontext_t));
+	return error;
 }
 
 int
@@ -128,11 +156,14 @@ netbsd32__lwp_setprivate(struct lwp *l, const struct netbsd32__lwp_setprivate_ar
 }
 
 int
-netbsd32__lwp_park(struct lwp *l, const struct netbsd32__lwp_park_args *uap, register_t *retval)
+netbsd32____lwp_park60(struct lwp *l,
+    const struct netbsd32____lwp_park60_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(const netbsd32_timespecp) ts;
-		syscallarg(lwpid_t) unpark;
+		syscallarg(const netbsd32_clockid_t) clock_id;
+		syscallarg(int) flags;
+		syscallarg(const netbsd32_timespec50p) ts;
+		syscallarg(netbsd32_lwpid_t) unpark;
 		syscallarg(netbsd32_voidp) hint;
 		syscallarg(netbsd32_voidp) unparkhint;
 	} */
@@ -157,7 +188,8 @@ netbsd32__lwp_park(struct lwp *l, const struct netbsd32__lwp_park_args *uap, reg
 			return error;
 	}
 
-	return lwp_park(tsp, SCARG_P32(uap, hint));
+	return lwp_park(SCARG(uap, clock_id), SCARG(uap, flags), tsp,
+	    SCARG_P32(uap, hint));
 }
 
 int
@@ -252,9 +284,16 @@ netbsd32__lwp_ctl(struct lwp *l, const struct netbsd32__lwp_ctl_args *uap, regis
 		syscallarg(int) features;
 		syscallarg(netbsd32_pointer_t) address;
 	} */
-	struct sys__lwp_ctl_args ua;
+	netbsd32_pointer_t vaddr32;
+	int error, features;
+	vaddr_t vaddr;
 
-	NETBSD32TO64_UAP(features);
-	NETBSD32TOP_UAP(address, struct lwpctl *);
-	return sys__lwp_ctl(l, &ua, retval);
+	features = SCARG(uap, features);
+	features &= ~(LWPCTL_FEATURE_CURCPU | LWPCTL_FEATURE_PCTR);
+	if (features != 0)
+		return ENODEV;
+	if ((error = lwp_ctl_alloc(&vaddr)) != 0)
+		return error;
+	NETBSD32PTR32(vaddr32, (void *)vaddr);
+	return copyout(&vaddr32, SCARG_P32(uap, address), sizeof(vaddr32));
 }

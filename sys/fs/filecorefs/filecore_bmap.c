@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_bmap.c,v 1.6 2007/10/08 18:04:03 ad Exp $	*/
+/*	$NetBSD: filecore_bmap.c,v 1.11 2015/03/28 19:24:05 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_bmap.c,v 1.6 2007/10/08 18:04:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_bmap.c,v 1.11 2015/03/28 19:24:05 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,8 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_bmap.c,v 1.6 2007/10/08 18:04:03 ad Exp $")
  * number to index into the data block (extent) for the file.
  */
 int
-filecore_bmap(v)
-	void *v;
+filecore_bmap(void *v)
 {
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
@@ -133,11 +132,7 @@ filecore_bmap(v)
 }
 
 int
-filecore_map(fcmp, addr, lbn, bnp)
-	struct filecore_mnt *fcmp;
-	u_int32_t addr;
-	daddr_t lbn;
-	daddr_t *bnp;
+filecore_map(struct filecore_mnt *fcmp, u_int32_t addr, daddr_t lbn, daddr_t *bnp)
 {
 	struct buf *bp;
 	u_long frag, sect, zone, izone, a, b, m, n;
@@ -147,7 +142,7 @@ filecore_map(fcmp, addr, lbn, bnp)
 	int error = 0;
 
 #ifdef FILECORE_DEBUG
-	printf("filecore_map(addr=%x, lbn=%x)\n", addr, lbn);
+	printf("filecore_map(addr=%x, lbn=%llx)\n", addr, (long long)lbn);
 #endif
 	frag = addr >> 8;
 	sect = (addr & 0xff) +
@@ -167,17 +162,13 @@ filecore_map(fcmp, addr, lbn, bnp)
 	sect <<= fcmp->drec.share_size;
 	do {
 		error=bread(fcmp->fc_devvp, fcmp->map + zone,
-			    1 << fcmp->drec.log2secsize, NOCRED, &bp);
+			    1 << fcmp->drec.log2secsize, 0, &bp);
 #ifdef FILECORE_DEBUG_BR
 		printf("bread(%p, %lx, %d, CRED, %p)=%d\n", fcmp->fc_devvp,
 		       fcmp->map+zone, 1 << fcmp->drec.log2secsize, bp, error);
 		printf("block is at %p\n", bp->b_data);
 #endif
 		if (error != 0) {
-#ifdef FILECORE_DEBUG_BR
-			printf("brelse(%p) bm1\n", bp);
-#endif
-			brelse(bp, 0);
 			return error;
 		}
 		ptr = (u_long *)(bp->b_data) + 1; /* skip map zone header */
@@ -238,12 +229,7 @@ filecore_map(fcmp, addr, lbn, bnp)
 }
 
 int
-filecore_bread(fcmp, addr, size, cred, bp)
-	struct filecore_mnt *fcmp;
-	u_int32_t addr;
-	int size;
-	kauth_cred_t cred;
-	struct buf **bp;
+filecore_bread(struct filecore_mnt *fcmp, u_int32_t addr, int size, kauth_cred_t cred, struct buf **bp)
 {
 	int error = 0;
 	daddr_t bn;
@@ -256,18 +242,16 @@ filecore_bread(fcmp, addr, size, cred, bp)
 #endif
 		return error;
 	}
-	error = bread(fcmp->fc_devvp, bn, size, cred, bp);
+	error = bread(fcmp->fc_devvp, bn, size, 0, bp);
 #ifdef FILECORE_DEBUG_BR
-	printf("bread(%p, %x, %d, CRED, %p)=%d\n", fcmp->fc_devvp, bn, size,
-	       *bp, error);
+	printf("bread(%p, %llx, %d, CRED, %p)=%d\n", fcmp->fc_devvp,
+	    (long long)bn, size, *bp, error);
 #endif
 	return error;
 }
 
 int
-filecore_dbread(ip, bp)
-	struct filecore_node *ip;
-	struct buf **bp;
+filecore_dbread(struct filecore_node *ip, struct buf **bp)
 {
 	int error = 0;
 
@@ -277,10 +261,10 @@ filecore_dbread(ip, bp)
 	if (error)
 		return error;
 	error = bread(ip->i_mnt->fc_devvp, ip->i_block, FILECORE_DIR_SIZE,
-		      NOCRED, bp);
+		      0, bp);
 #ifdef FILECORE_DEBUG_BR
-	printf("bread(%p, %x, %d, CRED, %p)=%d\n", ip->i_mnt->fc_devvp,
-	       ip->i_block, FILECORE_DIR_SIZE, *bp, error);
+	printf("bread(%p, %llx, %d, CRED, %p)=%d\n", ip->i_mnt->fc_devvp,
+	       (long long)ip->i_block, FILECORE_DIR_SIZE, *bp, error);
 #endif
 	return error;
 }

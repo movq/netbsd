@@ -1,4 +1,4 @@
-/*	$NetBSD: hexdump.c,v 1.13 2006/01/04 01:30:21 perry Exp $	*/
+/*	$NetBSD: hexdump.c,v 1.19 2016/03/04 02:54:38 dholland Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,12 +35,12 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)hexdump.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: hexdump.c,v 1.13 2006/01/04 01:30:21 perry Exp $");
+__RCSID("$NetBSD: hexdump.c,v 1.19 2016/03/04 02:54:38 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,8 +58,7 @@ FS *fshead;				/* head of format strings */
 int blocksize;				/* data block size */
 int exitval;				/* final exit value */
 int length = -1;			/* max bytes to read */
-
-int	main(int, char **);
+static int isod = 0;
 
 int
 main(int argc, char *argv[])
@@ -69,10 +68,15 @@ main(int argc, char *argv[])
 
 	setlocale(LC_ALL, "");
 
-	if (!(p = strrchr(argv[0], 'o')) || strcmp(p, "od"))
-		newsyntax(argc, &argv);
+	isod = 0;
+	p = strrchr(argv[0], 'o');
+	if (p != NULL && strcmp(p, "od") == 0)
+		isod = 1;
+
+	if (isod)
+		odsyntax(argc, &argv);
 	else
-		oldsyntax(argc, &argv);
+		hexsyntax(argc, &argv);
 
 	/* figure out the data block size */
 	for (blocksize = 0, tfs = fshead; tfs; tfs = tfs->nextfs) {
@@ -84,7 +88,23 @@ main(int argc, char *argv[])
 	for (tfs = fshead; tfs; tfs = tfs->nextfs)
 		rewrite(tfs);
 
-	(void)next(argv);
+	stashargv(argv);
 	display();
 	exit(exitval);
+}
+
+void
+usage(void)
+{
+	const char *pname = getprogname();
+
+	(void)fprintf(stderr, "usage: %s ", pname);
+	if (isod)
+		(void)fprintf(stderr, "[-aBbcDdeFfHhIiLlOovXx] [-A base] "
+		    "[-j skip] [-N length] [-t type_string] [[+]offset[.][Bb]] "
+		    "[file ...]\n");
+	else
+		(void)fprintf(stderr, "[-bCcdovx] [-e format_string] [-f format_file] "
+		    "[-n length] [-s skip] [file ...]\n");
+	exit(1);
 }

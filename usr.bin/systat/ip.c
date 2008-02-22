@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.c,v 1.13 2006/10/22 16:43:24 christos Exp $	*/
+/*	$NetBSD: ip.c,v 1.18 2014/06/03 22:22:41 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Andrew Doran <ad@NetBSD.org>
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ip.c,v 1.13 2006/10/22 16:43:24 christos Exp $");
+__RCSID("$NetBSD: ip.c,v 1.18 2014/06/03 22:22:41 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -53,8 +53,8 @@ __RCSID("$NetBSD: ip.c,v 1.13 2006/10/22 16:43:24 christos Exp $");
     mvwprintw(wnd, row, col, "%9llu", (unsigned long long)curstat.stat)
 
 struct mystat {
-	struct ipstat i;
-	struct udpstat u;
+	uint64_t i[IP_NSTATS];
+	uint64_t u[UDP_NSTATS];
 };
 
 enum update {
@@ -67,12 +67,6 @@ static enum update update = UPDATE_TIME;
 static struct mystat curstat;
 static struct mystat oldstat;
 static struct mystat newstat;
-
-static struct nlist namelist[] = {
-	{ .n_name = "_ipstat" },
-	{ .n_name = "_udpstat" },
-	{ .n_name = NULL }
-};
 
 WINDOW *
 openip(void)
@@ -141,105 +135,98 @@ showip(void)
 {
 	u_quad_t totalout;
 
-	totalout = curstat.i.ips_forward + curstat.i.ips_localout;
+	totalout = curstat.i[IP_STAT_FORWARD] + curstat.i[IP_STAT_LOCALOUT];
 
-	SHOW(i.ips_total, 0, 0);
+	SHOW(i[IP_STAT_TOTAL], 0, 0);
 	mvwprintw(wnd, 0, 35, "%9llu", (unsigned long long)totalout);
-	SHOW(i.ips_delivered, 1, 0);
-	SHOW(i.ips_badsum, 2, 0);
-	SHOW(i.ips_tooshort, 3, 0);
-	SHOW(i.ips_toosmall, 4, 0);
-	SHOW(i.ips_badhlen, 5, 0);
-	SHOW(i.ips_badlen, 6, 0);
-	SHOW(i.ips_badvers, 7, 0);
-	SHOW(i.ips_toolong, 8, 0);
-	SHOW(i.ips_badoptions, 9, 0);
+	SHOW(i[IP_STAT_DELIVERED], 1, 0);
+	SHOW(i[IP_STAT_BADSUM], 2, 0);
+	SHOW(i[IP_STAT_TOOSHORT], 3, 0);
+	SHOW(i[IP_STAT_TOOSMALL], 4, 0);
+	SHOW(i[IP_STAT_BADHLEN], 5, 0);
+	SHOW(i[IP_STAT_BADLEN], 6, 0);
+	SHOW(i[IP_STAT_BADVERS], 7, 0);
+	SHOW(i[IP_STAT_TOOLONG], 8, 0);
+	SHOW(i[IP_STAT_BADOPTIONS], 9, 0);
 
-	SHOW(i.ips_localout, 1, 35);
-	SHOW(i.ips_odropped, 2, 35);
-	SHOW(i.ips_ofragments, 3, 35);
-	SHOW(i.ips_cantfrag, 4, 35);
-	SHOW(i.ips_noroute, 5, 35);
-	SHOW(i.ips_rawout, 6, 35);
-	SHOW(u.udps_opackets, 7, 35);
+	SHOW(i[IP_STAT_LOCALOUT], 1, 35);
+	SHOW(i[IP_STAT_ODROPPED], 2, 35);
+	SHOW(i[IP_STAT_OFRAGMENTS], 3, 35);
+	SHOW(i[IP_STAT_CANTFRAG], 4, 35);
+	SHOW(i[IP_STAT_NOROUTE], 5, 35);
+	SHOW(i[IP_STAT_RAWOUT], 6, 35);
+	SHOW(u[UDP_STAT_OPACKETS], 7, 35);
 	
-	SHOW(i.ips_fragments, 10, 0);
-	SHOW(i.ips_fragdropped, 11, 0);
-	SHOW(i.ips_fragtimeout, 12, 0);
-	SHOW(i.ips_reassembled, 13, 0);
+	SHOW(i[IP_STAT_FRAGMENTS], 10, 0);
+	SHOW(i[IP_STAT_FRAGDROPPED], 11, 0);
+	SHOW(i[IP_STAT_FRAGTIMEOUT], 12, 0);
+	SHOW(i[IP_STAT_REASSEMBLED], 13, 0);
 
-	SHOW(i.ips_forward, 15, 0);
-	SHOW(i.ips_fastforward, 16, 0);
-	SHOW(i.ips_cantforward, 17, 0);
-	SHOW(i.ips_redirectsent, 18, 0);
+	SHOW(i[IP_STAT_FORWARD], 15, 0);
+	SHOW(i[IP_STAT_FASTFORWARD], 16, 0);
+	SHOW(i[IP_STAT_CANTFORWARD], 17, 0);
+	SHOW(i[IP_STAT_REDIRECTSENT], 18, 0);
 
-	SHOW(u.udps_ipackets, 9, 35);
-	SHOW(u.udps_hdrops, 10, 35);
-	SHOW(u.udps_badsum, 11, 35);
-	SHOW(u.udps_badlen, 12, 35);
-	SHOW(u.udps_noport, 13, 35);
-	SHOW(u.udps_noportbcast, 14, 35);
-	SHOW(u.udps_fullsock, 15, 35);
+	SHOW(u[UDP_STAT_IPACKETS], 9, 35);
+	SHOW(u[UDP_STAT_HDROPS], 10, 35);
+	SHOW(u[UDP_STAT_BADSUM], 11, 35);
+	SHOW(u[UDP_STAT_BADLEN], 12, 35);
+	SHOW(u[UDP_STAT_NOPORT], 13, 35);
+	SHOW(u[UDP_STAT_NOPORTBCAST], 14, 35);
+	SHOW(u[UDP_STAT_FULLSOCK], 15, 35);
 }
 
 int
 initip(void)
 {
 
-	if (namelist[0].n_type == 0) {
-		if (kvm_nlist(kd, namelist)) {
-			nlisterr(namelist);
-			return(0);
-		}
-		if ((namelist[0].n_type | namelist[1].n_type) == 0) {
-			error("No namelist");
-			return(0);
-		}
-	}
 	return 1;
 }
 
 void
 fetchip(void)
 {
+	size_t size;
 
-	KREAD((void *)namelist[0].n_value, &newstat.i, 
-	    sizeof(newstat.i));
-	KREAD((void *)namelist[1].n_value, &newstat.u, 
-	    sizeof(newstat.u));
+	size = sizeof(newstat.i);
+	if (sysctlbyname("net.inet.ip.stats", newstat.i, &size, NULL, 0) == -1)
+		return;
+	size = sizeof(newstat.u);
+	if (sysctlbyname("net.inet.udp.stats", newstat.u, &size, NULL, 0) == -1)
+		return;
 
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_total);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_delivered);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_badsum);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_tooshort);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_toosmall);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_badhlen);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_badlen);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_badvers);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_toolong);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_badoptions);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_localout);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_odropped);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_ofragments);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_cantfrag);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_noroute);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_rawout);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_fragments);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_fragdropped);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_fragtimeout);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_reassembled);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_forward);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_fastforward);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_cantforward);
-	ADJINETCTR(curstat, oldstat, newstat, i.ips_redirectsent);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_opackets);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_ipackets);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_hdrops);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_badsum);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_badlen);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_noport);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_noportbcast);
-	ADJINETCTR(curstat, oldstat, newstat, u.udps_fullsock);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_TOTAL]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_DELIVERED]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_BADSUM]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_TOOSHORT]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_TOOSMALL]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_BADHLEN]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_BADLEN]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_BADVERS]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_TOOLONG]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_BADOPTIONS]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_LOCALOUT]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_ODROPPED]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_OFRAGMENTS]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_CANTFRAG]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_NOROUTE]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_RAWOUT]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_FRAGMENTS]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_FRAGDROPPED]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_FRAGTIMEOUT]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_REASSEMBLED]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_FORWARD]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_FASTFORWARD]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_CANTFORWARD]);
+	ADJINETCTR(curstat, oldstat, newstat, i[IP_STAT_REDIRECTSENT]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_OPACKETS]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_IPACKETS]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_HDROPS]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_BADSUM]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_BADLEN]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_NOPORT]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_NOPORTBCAST]);
+	ADJINETCTR(curstat, oldstat, newstat, u[UDP_STAT_FULLSOCK]);
 
 	if (update == UPDATE_TIME)
 		memcpy(&oldstat, &newstat, sizeof(oldstat));

@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.57 2007/10/17 19:55:46 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.80 2016/12/22 14:47:58 cherry Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -35,163 +36,92 @@
  *
  *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
- */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.57 2007/10/17 19:55:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.80 2016/12/22 14:47:58 cherry Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-
-#include <sys/param.h>
-#include <sys/signalvar.h>
-#include <sys/kernel.h>
-#include <sys/proc.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/callout.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
-#include <sys/msgbuf.h>
-#include <sys/ioctl.h>
-#include <sys/device.h>
-#include <sys/user.h>
-#include <sys/exec.h>
-#include <sys/mount.h>
-#include <sys/syscallargs.h>
-#include <sys/kcore.h>
-#include <sys/ksyms.h>
-
-#include <uvm/uvm_extern.h>
-
-#include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
-
-#include <machine/cpu.h>
-#include <machine/reg.h>
-#include <machine/psl.h>
-#include <machine/pte.h>
-
-#ifdef DDB
-#include <machine/db_machdep.h>
-#include <ddb/db_extern.h>
-#endif
-
-#include <machine/intr.h>
-#include <machine/mainboard.h>
-#include <machine/sysconf.h>
-#include <machine/autoconf.h>
-#include <machine/bootinfo.h>
-#include <machine/prom.h>
-#include <dev/clock_subr.h>
-#include <dev/cons.h>
-
-#include <sys/boot_flag.h>
-
-#include "fs_mfs.h"
+#include "opt_modular.h"
 #include "opt_execfmt.h"
 
 #include "zsc.h"			/* XXX */
 #include "com.h"			/* XXX */
 #include "ksyms.h"
 
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
+#include <sys/param.h>
+#include <sys/boot_flag.h>
+#include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/kcore.h>
+#include <sys/ksyms.h>
+#include <sys/kernel.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
+
+#include <dev/clock_subr.h>
+#include <dev/cons.h>
+
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_extern.h>
+#endif
+
+#include <machine/mainboard.h>
+#include <machine/sysconf.h>
+#include <machine/autoconf.h>
+#include <machine/bootinfo.h>
+#include <machine/prom.h>
 
 /* maps for VM objects */
 
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-int	physmem;		/* max supported memory, changes to actual */
 char	*bootinfo = NULL;	/* pointer to bootinfo structure */
 
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
-void to_monitor __P((int)) __attribute__((__noreturn__));
-void prom_halt __P((int)) __attribute__((__noreturn__));
+void to_monitor(int) __dead;
+void prom_halt(int) __dead;
 
 #ifdef	KGDB
-void zs_kgdb_init __P((void));
-void kgdb_connect __P((int));
+void zs_kgdb_init(void);
+void kgdb_connect(int);
 #endif
 
 /*
  *  Local functions.
  */
-int initcpu __P((void));
-void configure __P((void));
+int initcpu(void);
+void configure(void);
 
-void mach_init __P((int, char *[], char*[], u_int, char *));
-int  memsize_scan __P((void *));
+void mach_init(int, char *[], char*[], u_int, char *);
+int  memsize_scan(void *);
 
 #ifdef DEBUG
 /* stacktrace code violates prototypes to get callee's registers */
-extern void stacktrace __P((void)); /*XXX*/
+extern void stacktrace(void); /*XXX*/
 #endif
 
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.  Used as an argument to splx().
- * XXX disables interrupt 5 to disable mips3 on-chip clock, which also
- * disables mips1 FPU interrupts.
- */
-int	safepri = MIPS3_PSL_LOWIPL;	/* XXX */
-extern struct user *proc0paddr;
-
 /* locore callback-vector setup */
-extern void mips_vector_init  __P((void));
-extern void prom_init  __P((void));
-extern void pizazz_init __P((void));
+extern void prom_init(void);
+extern void pizazz_init(void);
 
 /* platform-specific initialization vector */
-static void	unimpl_cons_init __P((void));
-static void	unimpl_iointr __P((unsigned, unsigned, unsigned, unsigned));
-static int	unimpl_memsize __P((void *));
-static void	unimpl_intr_establish __P((int, int (*)__P((void *)), void *));
+static void	unimpl_cons_init(void);
+static void	unimpl_iointr(uint32_t, vaddr_t, uint32_t);
+static int	unimpl_memsize(void *);
+static void	unimpl_intr_establish(int, int (*)(void *), void *);
 
 struct platform platform = {
 	.iobus = "iobus not set",
@@ -202,15 +132,14 @@ struct platform platform = {
 	.clkinit = NULL,
 };
 
-struct consdev *cn_tab = NULL;
 extern struct consdev consdev_prom;
 extern struct consdev consdev_zs;
 
-static void null_cnprobe __P((struct consdev *));
-static void prom_cninit __P((struct consdev *));
-static int  prom_cngetc __P((dev_t));
-static void prom_cnputc __P((dev_t, int));
-static void null_cnpollc __P((dev_t, int));
+static void null_cnprobe(struct consdev *);
+static void prom_cninit(struct consdev *);
+static int  prom_cngetc(dev_t);
+static void prom_cnputc(dev_t, int);
+static void null_cnpollc(dev_t, int);
 
 struct consdev consdev_prom = {
         null_cnprobe,
@@ -227,26 +156,19 @@ struct consdev consdev_prom = {
  * Return the first page address following the system.
  */
 void
-mach_init(argc, argv, envp, bim, bip)
-	int    argc;
-	char   *argv[];
-	char   *envp[];
-	u_int  bim;
-	char   *bip;
+mach_init(int argc, char *argv[], char *envp[], u_int bim, char *bip)
 {
 	u_long first, last;
-	char *kernend, *v;
+	char *kernend;
 	char *cp;
 	int i, howto;
 	extern char edata[], end[];
 	const char *bi_msg;
-#if NKSYMS || defined(DDB) || defined(LKM)
-	int nsym = 0;
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	char *ssym = 0;
 	char *esym = 0;
 	struct btinfo_symtab *bi_syms;
 #endif
-
 
 	/* Check for valid bootinfo passed from bootstrap */
 	if (bim == BOOTINFO_MAGIC) {
@@ -265,12 +187,18 @@ mach_init(argc, argv, envp, bim, bip)
 	kernend = (void *)mips_round_page(end);
 	memset(edata, 0, end - edata);
 
+	/*
+	 * Copy exception-dispatch code down to exception vector.
+	 * Initialize locore-function vector.
+	 * Clear out the I and D caches.
+	 */
+	mips_vector_init(NULL, false);
+
 #if NKSYMS || defined(DDB) || defined(LKM)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 
 	/* Load sysmbol table if present */
 	if (bi_syms != NULL) {
-		nsym = bi_syms->nsym;
 		ssym = (void *)bi_syms->ssym;
 		esym = (void *)bi_syms->esym;
 		kernend = (void *)mips_round_page(esym);
@@ -283,10 +211,7 @@ mach_init(argc, argv, envp, bim, bip)
 	if (bi_msg != NULL)
 		printf(bi_msg);
 
-	/*
-	 * Set the VM page size.
-	 */
-	uvm_setpagesize();
+	uvm_md_init();
 
 	/* Find out how much memory is available. */
 	physmem = memsize_scan(kernend);
@@ -298,13 +223,6 @@ mach_init(argc, argv, envp, bim, bip)
 	mem_clusters[0].start = 0;		/* XXX is this correct? */
 	mem_clusters[0].size  = ctob(physmem);
 	mem_cluster_cnt = 1;
-
-	/*
-	 * Copy exception-dispatch code down to exception vector.
-	 * Initialize locore-function vector.
-	 * Clear out the I and D caches.
-	 */
-	mips_vector_init();
 
 	/* Look at argv[0] and compute bootdev */
 	makebootdev(argv[0]);
@@ -329,10 +247,10 @@ mach_init(argc, argv, envp, bim, bip)
 	}
 
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* init symbols if present */
 	if (esym)
-		ksyms_init(esym - ssym, ssym, esym);
+		ksyms_addsyms_elf(esym - ssym, ssym, esym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -344,14 +262,12 @@ mach_init(argc, argv, envp, bim, bip)
 		kgdb_connect(0);
 #endif
 
-#ifdef MFS
 	/*
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
 	 */
 	if (boothowto & RB_MINIROOT)
 		kernend += round_page(mfs_initminiroot(kernend));
-#endif
 
 	/*
 	 * Load the rest of the available pages into the VM system.
@@ -372,13 +288,9 @@ mach_init(argc, argv, envp, bim, bip)
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE); 
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Set up interrupt handling and I/O addresses.
@@ -393,57 +305,16 @@ mach_init(argc, argv, envp, bim, bip)
  * initialize CPU, and do autoconfiguration.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-#ifdef DEBUG
-	extern int pmapdebug;
-	int opmapdebug = pmapdebug;
-
-	pmapdebug = 0;
-#endif
-
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	printf("%s%s", copyright, version);
-	printf("%s\n", cpu_model);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16 * NCARGS, true, false, NULL);
-	/*
-	 * Allocate a submap for physio
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, true, false, NULL);
-
-	/*
-	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.
-	 */
-
-#ifdef DEBUG
-	pmapdebug = opmapdebug;
-#endif
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
+	cpu_startup_common();
 }
 
 /*
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(type)
-	int type;
+lookup_bootinfo(int type)
 {
 	struct btinfo_common *bt;
 	char *help = bootinfo;
@@ -469,8 +340,7 @@ int	waittime = -1;
  * call PROM to halt or reboot.
  */
 void
-prom_halt(howto)
-	int howto;
+prom_halt(int howto)
 {
 	if (howto & RB_HALT)
 		MIPS_PROM(reinit)();
@@ -479,13 +349,10 @@ prom_halt(howto)
 }
 
 void
-cpu_reboot(howto, bootstr)
-	volatile int howto;
-	char *bootstr;
+cpu_reboot(volatile int howto, char *bootstr)
 {
 	/* take a snap shot before clobbering any registers */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 #ifdef DEBUG
 	if (panicstr)
@@ -533,6 +400,8 @@ haltsys:
 	/* run any shutdown hooks */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN)
 		prom_halt(0x80);	/* rom monitor RB_PWOFF */
 
@@ -543,50 +412,41 @@ haltsys:
 }
 
 int
-initcpu()
+initcpu(void)
 {
 	spl0();		/* safe to turn interrupts on now */
 	return 0;
 }
 
 static void
-unimpl_cons_init()
+unimpl_cons_init(void)
 {
 
 	panic("sysconf.init didn't set cons_init");
 }
 
 static void
-unimpl_iointr(mask, pc, statusreg, causereg)
-	u_int mask;
-	u_int pc;
-	u_int statusreg;
-	u_int causereg;
+unimpl_iointr(uint32_t status, vaddr_t pc, uint32_t ipending)
 {
 
 	panic("sysconf.init didn't set intr");
 }
 
 static int
-unimpl_memsize(first)
-void *first;
+unimpl_memsize(void *first)
 {
 
 	panic("sysconf.init didn't set memsize");
 }
 
 void
-unimpl_intr_establish(level, func, arg)
-	int level;
-	int (*func) __P((void *));
-	void *arg;
+unimpl_intr_establish(int level, int (*func)(void *), void *arg)
 {
 	panic("sysconf.init didn't init intr_establish");
 }
 
 void
-delay(n)
-	int n;
+delay(int n)
 {
 	DELAY(n);
 }
@@ -596,8 +456,7 @@ delay(n)
  * Be careful to save and restore the original contents for msgbuf.
  */
 int
-memsize_scan(first)
-	void *first;
+memsize_scan(void *first)
 {
 	volatile int *vp, *vp0;
 	int mem, tmp, tmp0;
@@ -642,14 +501,12 @@ memsize_scan(first)
  */
 
 static void
-null_cnprobe(cn)
-     struct consdev *cn;
+null_cnprobe(struct consdev *cn)
 {
 }
 
 static void
-prom_cninit(cn)
-	struct consdev *cn;
+prom_cninit(struct consdev *cn)
 {
 	extern const struct cdevsw cons_cdevsw;
 
@@ -658,33 +515,26 @@ prom_cninit(cn)
 }
 
 static int
-prom_cngetc(dev)
-	dev_t dev;
+prom_cngetc(dev_t dev)
 {
 	return MIPS_PROM(getchar)();
 }
 
 static void
-prom_cnputc(dev, c)
-	dev_t dev;
-	int c;
+prom_cnputc(dev_t dev, int c)
 {
 	MIPS_PROM(putchar)(c);
 }
 
 static void
-null_cnpollc(dev, on)
-	dev_t dev;
-	int on;
+null_cnpollc(dev_t dev, int on)
 {
 }
 
 void
-consinit()
+consinit(void)
 {
-	int zs_unit;
 
-	zs_unit = 0;
 	cn_tab = &consdev_zs;
 
 	(*cn_tab->cn_init)(cn_tab);

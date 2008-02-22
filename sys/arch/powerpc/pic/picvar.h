@@ -1,4 +1,4 @@
-/*	$NetBSD: picvar.h,v 1.4 2008/01/17 23:43:00 garbled Exp $ */
+/*	$NetBSD: picvar.h,v 1.10 2018/05/11 22:39:59 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,12 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: picvar.h,v 1.4 2008/01/17 23:43:00 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: picvar.h,v 1.10 2018/05/11 22:39:59 macallan Exp $");
 
 #ifndef PIC_VAR_H
 #define PIC_VAR_H
 
-#include <machine/intr.h>
+#include <sys/intr.h>
 
 struct pic_ops {
 	void *pic_cookie;	/* private stuff / hardware info */
@@ -59,9 +56,9 @@ struct pic_ops {
 
 struct intr_source {
 	int is_type;
-	int is_level;
+	int is_ipl;
 	int is_hwirq;
-	int is_mask;
+	imask_t is_mask;
 	struct intrhand *is_hand;
 	struct pic_ops *is_pic;
 	struct evcnt is_ev;
@@ -116,6 +113,8 @@ struct pic_ops *setup_openpic(void *, int);
 struct pic_ops *setup_distributed_openpic(void *, int, void **, int *);
 struct pic_ops *setup_prepivr(int);
 struct pic_ops *setup_i8259(void);
+struct pic_ops *setup_mpcpic(void *);
+void mpcpic_reserv16(void);
 
 /* i8259 common decls */
 void i8259_initialize(void);  
@@ -133,6 +132,6 @@ void opic_ack_irq(struct pic_ops *pic, int irq);
 /* IPI handler */
 int cpuintr(void *);
 /* XXX - may need to be PIC specific */
-#define IPI_VECTOR 64
+#define IPI_VECTOR 128
 
 #endif /* PIC_VAR_H */

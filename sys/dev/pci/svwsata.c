@@ -1,4 +1,4 @@
-/*	$NetBSD: svwsata.c,v 1.9 2008/02/05 07:02:00 simonb Exp $	*/
+/*	$NetBSD: svwsata.c,v 1.23 2018/06/06 20:05:36 kamil Exp $	*/
 
 /*
  * Copyright (c) 2005 Mark Kettenis
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.9 2008/02/05 07:02:00 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.23 2018/06/06 20:05:36 kamil Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -31,15 +31,18 @@ __KERNEL_RCSID(0, "$NetBSD: svwsata.c,v 1.9 2008/02/05 07:02:00 simonb Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_svwsata_reg.h>
 
-static int  svwsata_match(struct device *, struct cfdata *, void *);
-static void svwsata_attach(struct device *, struct device *, void *);
+static int  svwsata_match(device_t, cfdata_t, void *);
+static void svwsata_attach(device_t, device_t, void *);
 
-static void svwsata_chip_map(struct pciide_softc *, struct pci_attach_args *);
-static void svwsata_mapreg_dma(struct pciide_softc *, struct pci_attach_args *);
+static void svwsata_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
+static void svwsata_mapreg_dma(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void svwsata_mapchan(struct pciide_channel *);
+int svwsata_intr(void *);
 
-CFATTACH_DECL(svwsata, sizeof(struct pciide_softc),
-    svwsata_match, svwsata_attach, NULL, NULL);
+CFATTACH_DECL_NEW(svwsata, sizeof(struct pciide_softc),
+    svwsata_match, svwsata_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_svwsata_products[] =  {
 	{ PCI_PRODUCT_SERVERWORKS_K2_SATA,
@@ -75,8 +78,7 @@ static const struct pciide_product_desc pciide_svwsata_products[] =  {
 };
 
 static int
-svwsata_match(struct device *parent, struct cfdata *match,
-    void *aux)
+svwsata_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -89,26 +91,26 @@ svwsata_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-svwsata_attach(struct device *parent, struct device *self, void *aux)
+svwsata_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (void *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_svwsata_products));
 }
 
 static void
-svwsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+svwsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pci_intr_handle_t intrhandle;
 	pcireg_t interface;
 	const char *intrstr;
 	int channel;
-
-	if (pciide_chipen(sc, pa) == 0)
-		return;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	/* The 4-port version has a dummy second function. */
 	if (pci_conf_read(sc->sc_pc, sc->sc_tag,
@@ -121,13 +123,13 @@ svwsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			   PCI_MAPREG_TYPE_MEM |
 			   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-			   NULL, NULL) != 0) {
+			   NULL, &sc->sc_ba5_ss) != 0) {
 		aprint_error(": unable to map BA5 register space\n");
 		return;
 	}
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	svwsata_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -148,34 +150,34 @@ svwsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	/* We can use SControl and SStatus to probe for drives. */
 	sc->sc_wdcdev.sc_atac.atac_probe = wdc_sataprobe;
+	sc->sc_wdcdev.wdc_maxdrives = 1;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
 	/* Map and establish the interrupt handler. */
 	if(pci_intr_map(pa, &intrhandle) != 0) {
-		aprint_error("%s: couldn't map native-PCI interrupt\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map native-PCI interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, intrhandle);
+	intrstr = pci_intr_string(pa->pa_pc, intrhandle, intrbuf, sizeof(intrbuf));
 	sc->sc_pci_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_BIO,
-	    pciide_pci_intr, sc);
+	    svwsata_intr, sc);
 	if (sc->sc_pci_ih != NULL) {
-		aprint_normal("%s: using %s for native-PCI interrupt\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "using %s for native-PCI interrupt\n",
 		    intrstr ? intrstr : "unknown interrupt");
 	} else {
-		aprint_error("%s: couldn't establish native-PCI interrupt",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
 	interface = PCIIDE_INTERFACE_BUS_MASTER_DMA |
 	    PCIIDE_INTERFACE_PCI(0) | PCIIDE_INTERFACE_PCI(1);
-
 
 	for (channel = 0; channel < sc->sc_wdcdev.sc_atac.atac_nchannels;
 	     channel++) {
@@ -188,7 +190,7 @@ svwsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-svwsata_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
+svwsata_mapreg_dma(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *pc;
 	int chan, reg;
@@ -199,7 +201,7 @@ svwsata_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.dma_start = pciide_dma_start;
 	sc->sc_wdcdev.dma_finish = pciide_dma_finish;
 
-	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	if (device_cfdata(sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
 	    PCIIDE_OPTIONS_NODMA) {
 		aprint_normal(
 		    ", but unused (forced off by config file)");
@@ -253,8 +255,8 @@ svwsata_mapchan(struct pciide_channel *cp)
 	if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 		(wdc_cp->ch_channel << 8) + SVWSATA_TF0,
 		SVWSATA_TF8 - SVWSATA_TF0, &wdr->cmd_baseioh) != 0) {
-		aprint_error("%s: couldn't map %s cmd regs\n",
-		       sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map %s cmd regs\n", cp->name);
 		goto bad;
 	}
 
@@ -262,8 +264,8 @@ svwsata_mapchan(struct pciide_channel *cp)
 	if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 		(wdc_cp->ch_channel << 8) + SVWSATA_TF8, 4,
 		&cp->ctl_baseioh) != 0) {
-		aprint_error("%s: couldn't map %s ctl regs\n",
-		       sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map %s ctl regs\n", cp->name);
 		goto bad;
 	}
 	wdr->ctl_ioh = cp->ctl_baseioh;
@@ -272,13 +274,13 @@ svwsata_mapchan(struct pciide_channel *cp)
 		if (bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
 					i << 2, i == 0 ? 4 : 1,
 					&wdr->cmd_iohs[i]) != 0) {
-			aprint_error("%s: couldn't subregion %s channel "
-				     "cmd regs\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "couldn't subregion %s channel cmd regs\n",
+			    cp->name);
 			goto bad;
 		}
 	}
-	wdc_init_shadow_regs(wdc_cp);
+	wdc_init_shadow_regs(wdr);
 	wdr->data32iot = wdr->cmd_iot;
 	wdr->data32ioh = wdr->cmd_iohs[0];
 
@@ -288,34 +290,93 @@ svwsata_mapchan(struct pciide_channel *cp)
 	if (bus_space_subregion(wdr->sata_iot, wdr->sata_baseioh,
 	    (wdc_cp->ch_channel << 8) + SVWSATA_SSTATUS, 1,
 	    &wdr->sata_status) != 0) {
-		aprint_error("%s: couldn't map channel %d "
-		    "sata_status regs\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map channel %d sata_status regs\n",
 		    wdc_cp->ch_channel);
 		goto bad;
 	}
 	if (bus_space_subregion(wdr->sata_iot, wdr->sata_baseioh,
 	    (wdc_cp->ch_channel << 8) + SVWSATA_SERROR, 1,
 	    &wdr->sata_error) != 0) {
-		aprint_error("%s: couldn't map channel %d "
-		    "sata_error regs\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		   "couldn't map channel %d sata_error regs\n",
 		    wdc_cp->ch_channel);
 		goto bad;
 	}
 	if (bus_space_subregion(wdr->sata_iot, wdr->sata_baseioh,
 	    (wdc_cp->ch_channel << 8) + SVWSATA_SCONTROL, 1,
 	    &wdr->sata_control) != 0) {
-		aprint_error("%s: couldn't map channel %d "
-		    "sata_control regs\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map channel %d sata_control regs\n",
 		    wdc_cp->ch_channel);
 		goto bad;
 	}
+
+	bus_space_write_4(sc->sc_ba5_st, sc->sc_ba5_sh,
+	    (wdc_cp->ch_channel << 8) + SVWSATA_SICR1,
+	    bus_space_read_4(sc->sc_ba5_st, sc->sc_ba5_sh,
+	        (wdc_cp->ch_channel << 8) + SVWSATA_SICR1)
+	    & ~0x00040000);
+	bus_space_write_4(sc->sc_ba5_st, sc->sc_ba5_sh,
+	    (wdc_cp->ch_channel << 8) + SVWSATA_SERROR, 0xffffffff);
+	bus_space_write_4(sc->sc_ba5_st, sc->sc_ba5_sh,
+	    (wdc_cp->ch_channel << 8) + SVWSATA_SIM, 0);
+
+	cp->ata_channel.ch_flags |= ATACH_DMA_BEFORE_CMD;
 
 	wdcattach(wdc_cp);
 	return;
 
  bad:
 	cp->ata_channel.ch_flags |= ATACH_DISABLED;
+}
+
+int
+svwsata_intr(void *arg)
+{
+	struct pciide_softc *sc = arg;
+	struct pciide_channel *cp;
+	struct ata_channel *wdc_cp;
+	struct wdc_regs *wdr;
+	int i, rv, crv;
+	uint8_t dmastat;
+
+	rv = 0;
+	for (i = 0; i < sc->sc_wdcdev.sc_atac.atac_nchannels; i++) {
+		volatile uint32_t status;
+		cp = &sc->pciide_channels[i];
+		wdc_cp = &cp->ata_channel;
+		wdr = CHAN_TO_WDC_REGS(wdc_cp);
+
+		/*
+		 * from FreeBSD's ata-serverworks.c:
+		 * We need to do a 4-byte read on the status reg before the
+		 * values will report correctly
+		 */
+		bus_space_read_4(wdr->cmd_iot,
+		    wdr->cmd_iohs[wd_status], 0);
+		__USE(status);
+
+		dmastat = bus_space_read_1(sc->sc_dma_iot,
+		   cp->dma_iohs[IDEDMA_CTL], 0);
+
+		/* If a compat channel skip. */
+		if (cp->compat)
+			continue;
+
+		/* if this channel not waiting for intr, skip */
+		if ((wdc_cp->ch_flags & ATACH_IRQ_WAIT) == 0) {
+			continue;
+		}
+		crv = wdcintr(wdc_cp);
+		if (crv == 0) {
+			bus_space_write_1(sc->sc_dma_iot, 
+			    cp->dma_iohs[IDEDMA_CTL], 0, dmastat);
+		}
+		else if (crv == 1)
+			rv = 1;		/* claim the intr */
+		else if (rv == 0)	/* crv should be -1 in this case */
+			rv = crv;	/* if we've done no better, take it */
+	}
+	return (rv);
 }

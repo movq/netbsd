@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.h,v 1.12 2008/02/15 21:29:50 christos Exp $	*/
+/*	$NetBSD: buf.h,v 1.19 2017/05/31 22:02:06 maya Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -77,35 +77,43 @@
  *	Header for users of the buf library.
  */
 
-#ifndef _BUF_H
-#define _BUF_H
-
-#include    "sprite.h"
+#ifndef MAKE_BUF_H
+#define MAKE_BUF_H
 
 typedef char Byte;
 
 typedef struct Buffer {
     int	    size; 	/* Current size of the buffer */
-    int     left;	/* Space left (== size - (inPtr - buffer)) */
-    Byte    *buffer;	/* The buffer itself */
-    Byte    *inPtr;	/* Place to write to */
-    Byte    *outPtr;	/* Place to read from */
-} *Buffer;
+    int     count;	/* Number of bytes in buffer */
+    Byte    *buffer;	/* The buffer itself (zero terminated) */
+} Buffer;
+
+/* If we aren't on netbsd, __predict_false() might not be defined. */
+#ifndef __predict_false
+#define __predict_false(x) (x)
+#endif
 
 /* Buf_AddByte adds a single byte to a buffer. */
-#define	Buf_AddByte(bp, byte) \
-	(void) (--(bp)->left <= 0 ? Buf_OvAddByte(bp, byte), 1 : \
-		(*(bp)->inPtr++ = (byte), *(bp)->inPtr = 0), 1)
+#define	Buf_AddByte(bp, byte) do { \
+	int _count = ++(bp)->count; \
+	char *_ptr; \
+	if (__predict_false(_count >= (bp)->size)) \
+		Buf_Expand_1(bp); \
+	_ptr = (bp)->buffer + _count; \
+	_ptr[-1] = (byte); \
+	_ptr[0] = 0; \
+    } while (0)
 
 #define BUF_ERROR 256
 
-void Buf_OvAddByte(Buffer, int);
-void Buf_AddBytes(Buffer, int, const Byte *);
-Byte *Buf_GetAll(Buffer, int *);
-void Buf_Discard(Buffer, int);
-int Buf_Size(Buffer);
-Buffer Buf_Init(int);
-void Buf_Destroy(Buffer, Boolean);
-void Buf_ReplaceLastByte(Buffer, int);
+#define Buf_Size(bp) ((bp)->count)
 
-#endif /* _BUF_H */
+void Buf_Expand_1(Buffer *);
+void Buf_AddBytes(Buffer *, int, const Byte *);
+Byte *Buf_GetAll(Buffer *, int *);
+void Buf_Empty(Buffer *);
+void Buf_Init(Buffer *, int);
+Byte *Buf_Destroy(Buffer *, Boolean);
+Byte *Buf_DestroyCompact(Buffer *);
+
+#endif /* MAKE_BUF_H */

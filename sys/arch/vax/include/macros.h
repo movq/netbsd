@@ -1,4 +1,4 @@
-/*	$NetBSD: macros.h,v 1.44 2007/11/22 23:02:05 plunky Exp $	*/
+/*	$NetBSD: macros.h,v 1.46 2017/05/22 17:12:11 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994, 1998, 2000 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -106,7 +101,6 @@ vax_memmove(void *to, const void *from, size_t len)
 	return to;
 }
 #define memmove vax_memmove
-#endif
 
 static __inline void *__attribute__((__unused__))
 vax_memset(void *block, int c, size_t len)
@@ -122,6 +116,7 @@ vax_memset(void *block, int c, size_t len)
 	return block;
 }
 #define memset vax_memset
+#endif
 
 #ifdef notdef 
 /* XXX - the return syntax of memcmp is wrong */

@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_securelevel.c,v 1.8 2008/01/23 15:04:41 elad Exp $ */
+/* $NetBSD: secmodel_securelevel.c,v 1.31 2018/04/26 18:54:09 alnsn Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -28,14 +28,14 @@
 
 /*
  * This file contains kauth(9) listeners needed to implement the traditional
- * NetBSD securelevel. 
+ * NetBSD securelevel.
  *
  * The securelevel is a system-global indication on what operations are
  * allowed or not. It affects all users, including root.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_securelevel.c,v 1.8 2008/01/23 15:04:41 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_securelevel.c,v 1.31 2018/04/26 18:54:09 alnsn Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_insecure.h"
@@ -49,22 +49,31 @@ __KERNEL_RCSID(0, "$NetBSD: secmodel_securelevel.c,v 1.8 2008/01/23 15:04:41 ela
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/vnode.h>
+#include <sys/module.h>
+#include <sys/timevar.h>
 
 #include <miscfs/specfs/specdev.h>
 
+#include <secmodel/secmodel.h>
 #include <secmodel/securelevel/securelevel.h>
+
+MODULE(MODULE_CLASS_SECMODEL, securelevel, NULL);
 
 static int securelevel;
 
-static kauth_listener_t l_system, l_process, l_network, l_machdep, l_device;
+static kauth_listener_t l_system, l_process, l_network, l_machdep, l_device,
+    l_vnode;
+
+static secmodel_t securelevel_sm;
+static struct sysctllog *securelevel_sysctl_log;
 
 /*
- * sysctl helper routine for securelevel. ensures that the value
- * only rises unless the caller has pid 1 (assumed to be init).
+ * Sysctl helper routine for securelevel. Ensures that the value only rises
+ * unless the caller is init.
  */
 int
 secmodel_securelevel_sysctl(SYSCTLFN_ARGS)
-{       
+{
 	int newsecurelevel, error;
 	struct sysctlnode node;
 
@@ -74,13 +83,69 @@ secmodel_securelevel_sysctl(SYSCTLFN_ARGS)
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)
 		return (error);
-        
-	if (newsecurelevel < securelevel && l && l->l_proc->p_pid != 1)
+
+	if ((newsecurelevel < securelevel) && (l->l_proc != initproc))
 		return (EPERM);
 
 	securelevel = newsecurelevel;
 
 	return (error);
+}
+
+void
+sysctl_security_securelevel_setup(struct sysctllog **clog)
+{
+	const struct sysctlnode *rnode, *rnode2;
+
+	sysctl_createv(clog, 0, NULL, &rnode,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "models", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_SECURITY, CTL_CREATE, CTL_EOL);
+
+	/* Compatibility: security.models.bsd44 */
+	rnode2 = rnode;
+	sysctl_createv(clog, 0, &rnode2, &rnode2,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "bsd44", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_CREATE, CTL_EOL);
+
+        /* Compatibility: security.models.bsd44.securelevel */
+	sysctl_createv(clog, 0, &rnode2, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "securelevel",
+		       SYSCTL_DESCR("System security level"),
+		       secmodel_securelevel_sysctl, 0, NULL, 0,
+		       CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, &rnode, &rnode,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "securelevel", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, &rnode, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRING, "name", NULL,
+		       NULL, 0, __UNCONST(SECMODEL_SECURELEVEL_NAME), 0,
+		       CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, &rnode, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "securelevel",
+		       SYSCTL_DESCR("System security level"),
+		       secmodel_securelevel_sysctl, 0, NULL, 0,
+		       CTL_CREATE, CTL_EOL);
+
+	/* Compatibility: kern.securelevel */
+
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "securelevel",
+		       SYSCTL_DESCR("System security level"),
+		       secmodel_securelevel_sysctl, 0, NULL, 0,
+		       CTL_KERN, KERN_SECURELVL, CTL_EOL);
 }
 
 void
@@ -91,26 +156,6 @@ secmodel_securelevel_init(void)
 #else
 	securelevel = 0;
 #endif /* INSECURE */
-}
-
-SYSCTL_SETUP(sysctl_security_securelevel_setup,
-    "sysctl security securelevel setup")
-{
-	/*
-	 * For compatibility, we create a kern.securelevel variable.
-	 */
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "kern", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_KERN, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "securelevel",
-		       SYSCTL_DESCR("System security level"),
-		       secmodel_securelevel_sysctl, 0, NULL, 0,
-		       CTL_KERN, KERN_SECURELVL, CTL_EOL);
 }
 
 void
@@ -126,9 +171,10 @@ secmodel_securelevel_start(void)
 	    secmodel_securelevel_machdep_cb, NULL);
 	l_device = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
 	    secmodel_securelevel_device_cb, NULL);
+	l_vnode = kauth_listen_scope(KAUTH_SCOPE_VNODE,
+	    secmodel_securelevel_vnode_cb, NULL);
 }
 
-#if defined(_LKM)
 void
 secmodel_securelevel_stop(void)
 {
@@ -137,8 +183,67 @@ secmodel_securelevel_stop(void)
 	kauth_unlisten_scope(l_network);
 	kauth_unlisten_scope(l_machdep);
 	kauth_unlisten_scope(l_device);
+	kauth_unlisten_scope(l_vnode);
 }
-#endif /* _LKM */
+
+static int
+securelevel_eval(const char *what, void *arg, void *ret)
+{
+	int error = 0;
+
+	if (strcasecmp(what, "is-securelevel-above") == 0) {
+		int level = (int)(uintptr_t)arg;
+		bool *bp = ret;
+
+		*bp = (securelevel > level);
+	} else {
+		error = ENOENT;
+	}
+
+	return error;
+}
+
+static int
+securelevel_modcmd(modcmd_t cmd, void *arg)
+{
+	int error = 0;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		secmodel_securelevel_init();
+		error = secmodel_register(&securelevel_sm,
+		    SECMODEL_SECURELEVEL_ID, SECMODEL_SECURELEVEL_NAME,
+		    NULL, securelevel_eval, NULL);
+		if (error != 0)
+			printf("securelevel_modcmd::init: secmodel_register "
+			    "returned %d\n", error);
+
+		secmodel_securelevel_start();
+		sysctl_security_securelevel_setup(&securelevel_sysctl_log);
+		break;
+
+	case MODULE_CMD_FINI:
+		sysctl_teardown(&securelevel_sysctl_log);
+		secmodel_securelevel_stop();
+
+		error = secmodel_deregister(securelevel_sm);
+		if (error != 0)
+			printf("securelevel_modcmd::fini: secmodel_deregister "
+			    "returned %d\n", error);
+
+		break;
+
+	case MODULE_CMD_AUTOUNLOAD:
+		error = EPERM;
+		break;
+
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}
 
 /*
  * kauth(9) listener
@@ -148,9 +253,8 @@ secmodel_securelevel_stop(void)
  * Responsibility: Securelevel
  */
 int
-secmodel_securelevel_system_cb(kauth_cred_t cred,
-    kauth_action_t action, void *cookie, void *arg0, void *arg1,
-    void *arg2, void *arg3)
+secmodel_securelevel_system_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	int result;
 	enum kauth_system_req req;
@@ -160,6 +264,7 @@ secmodel_securelevel_system_cb(kauth_cred_t cred,
 
 	switch (action) {
 	case KAUTH_SYSTEM_CHSYSFLAGS:
+		/* Deprecated. */
 		if (securelevel > 0)
 			result = KAUTH_RESULT_DENY;
 		break;
@@ -173,23 +278,9 @@ secmodel_securelevel_system_cb(kauth_cred_t cred,
 
 		case KAUTH_REQ_SYSTEM_TIME_SYSTEM: {
 			struct timespec *ts = arg1;
-			struct timeval *delta = arg2;
+			struct timespec *delta = arg2;
 
-			/*
-			 * Don't allow the time to be set forward so far it will wrap
-			 * and become negative, thus allowing an attacker to bypass
-			 * the next check below.  The cutoff is 1 year before rollover
-			 * occurs, so even if the attacker uses adjtime(2) to move
-			 * the time past the cutoff, it will take a very long time
-			 * to get to the wrap point.
-			 *
-			 * XXX: we check against INT_MAX since on 64-bit
-			 *      platforms, sizeof(int) != sizeof(long) and
-			 *      time_t is 32 bits even when atv.tv_sec is 64 bits.
-			 */
-			if (securelevel > 1 &&
-			    ((ts->tv_sec > INT_MAX - 365*24*60*60) ||
-			     (delta->tv_sec < 0 || delta->tv_usec < 0)))
+			if (securelevel > 1 && time_wraps(ts, delta))
 				result = KAUTH_RESULT_DENY;
 
 			break;
@@ -200,7 +291,11 @@ secmodel_securelevel_system_cb(kauth_cred_t cred,
 		}
 		break;
 
-	case KAUTH_SYSTEM_LKM:
+	case KAUTH_SYSTEM_MAP_VA_ZERO:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
 	case KAUTH_SYSTEM_MODULE:
 		if (securelevel > 0)
 			result = KAUTH_RESULT_DENY;
@@ -263,6 +358,9 @@ secmodel_securelevel_system_cb(kauth_cred_t cred,
 			break;
 		}
 		break;
+
+	default:
+		break;
 	}
 
 	return (result);
@@ -276,9 +374,8 @@ secmodel_securelevel_system_cb(kauth_cred_t cred,
  * Responsibility: Securelevel
  */
 int
-secmodel_securelevel_process_cb(kauth_cred_t cred,
-    kauth_action_t action, void *cookie, void *arg0,
-    void *arg1, void *arg2, void *arg3)
+secmodel_securelevel_process_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	struct proc *p;
 	int result;
@@ -310,7 +407,7 @@ secmodel_securelevel_process_cb(kauth_cred_t cred,
 		}
 
 	case KAUTH_PROCESS_PTRACE:
-		if ((p == initproc) && (securelevel >= 0))
+		if ((p == initproc) && (securelevel > -1))
 			result = KAUTH_RESULT_DENY;
 
 		break;
@@ -318,6 +415,9 @@ secmodel_securelevel_process_cb(kauth_cred_t cred,
 	case KAUTH_PROCESS_CORENAME:
 		if (securelevel > 1)
 			result = KAUTH_RESULT_DENY;
+		break;
+
+	default:
 		break;
 	}
 
@@ -332,9 +432,8 @@ secmodel_securelevel_process_cb(kauth_cred_t cred,
  * Responsibility: Securelevel
  */
 int
-secmodel_securelevel_network_cb(kauth_cred_t cred,
-    kauth_action_t action, void *cookie, void *arg0,
-    void *arg1, void *arg2, void *arg3)
+secmodel_securelevel_network_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	int result;
 	enum kauth_network_req req;
@@ -360,37 +459,8 @@ secmodel_securelevel_network_cb(kauth_cred_t cred,
 		if (securelevel > 0)
 			result = KAUTH_RESULT_DENY;
 		break;
-	}
 
-	return (result);
-}
-
-/*              
- * kauth(9) listener
- *
- * Security model: Traditional NetBSD
- * Scope: Machdep
- * Responsibility: Securelevel
- */
-int
-secmodel_securelevel_machdep_cb(kauth_cred_t cred,
-    kauth_action_t action, void *cookie, void *arg0,
-    void *arg1, void *arg2, void *arg3)
-{
-        int result;
-
-        result = KAUTH_RESULT_DEFER;
-
-        switch (action) {
-	case KAUTH_MACHDEP_IOPERM_SET:
-	case KAUTH_MACHDEP_IOPL:
-		if (securelevel > 0)
-			result = KAUTH_RESULT_DENY;
-		break;
-
-	case KAUTH_MACHDEP_UNMANAGEDMEM:
-		if (securelevel > 0)
-			result = KAUTH_RESULT_DENY;
+	default:
 		break;
 	}
 
@@ -401,13 +471,56 @@ secmodel_securelevel_machdep_cb(kauth_cred_t cred,
  * kauth(9) listener
  *
  * Security model: Traditional NetBSD
- * Scope: Device 
+ * Scope: Machdep
  * Responsibility: Securelevel
  */
 int
-secmodel_securelevel_device_cb(kauth_cred_t cred,
-    kauth_action_t action, void *cookie, void *arg0,
-    void *arg1, void *arg2, void *arg3)
+secmodel_securelevel_machdep_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
+{
+	int result;
+
+	result = KAUTH_RESULT_DEFER;
+
+	switch (action) {
+	case KAUTH_MACHDEP_IOPERM_SET:
+	case KAUTH_MACHDEP_IOPL:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	case KAUTH_MACHDEP_UNMANAGEDMEM:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	case KAUTH_MACHDEP_SVS_DISABLE:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	case KAUTH_MACHDEP_CPU_UCODE_APPLY:
+		if (securelevel > 1)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	default:
+		break;
+	}
+
+	return (result);
+}
+
+/*
+ * kauth(9) listener
+ *
+ * Security model: Traditional NetBSD
+ * Scope: Device
+ * Responsibility: Securelevel
+ */
+int
+secmodel_securelevel_device_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	int result;
 
@@ -415,22 +528,16 @@ secmodel_securelevel_device_cb(kauth_cred_t cred,
 
 	switch (action) {
 	case KAUTH_DEVICE_RAWIO_SPEC: {
-		struct vnode *vp, *bvp;
+		struct vnode *vp;
 		enum kauth_device_req req;
-		dev_t dev;
-		int d_type;
 
 		req = (enum kauth_device_req)arg0;
 		vp = arg1;
 
 		KASSERT(vp != NULL);
 
-		dev = vp->v_rdev;
-		d_type = D_OTHER;
-		bvp = NULL;
-
 		/* Handle /dev/mem and /dev/kmem. */
-		if ((vp->v_type == VCHR) && iskmemdev(dev)) {
+		if (iskmemvp(vp)) {
 			switch (req) {
 			case KAUTH_REQ_DEVICE_RAWIO_SPEC_READ:
 				break;
@@ -439,6 +546,10 @@ secmodel_securelevel_device_cb(kauth_cred_t cred,
 			case KAUTH_REQ_DEVICE_RAWIO_SPEC_RW:
 				if (securelevel > 0)
 					result = KAUTH_RESULT_DENY;
+
+				break;
+
+			default:
 				break;
 			}
 
@@ -450,56 +561,25 @@ secmodel_securelevel_device_cb(kauth_cred_t cred,
 			break;
 
 		case KAUTH_REQ_DEVICE_RAWIO_SPEC_WRITE:
-		case KAUTH_REQ_DEVICE_RAWIO_SPEC_RW:
-			switch (vp->v_type) {
-			case VCHR: {
-				const struct cdevsw *cdev;
+		case KAUTH_REQ_DEVICE_RAWIO_SPEC_RW: {
+			int error;
 
-				cdev = cdevsw_lookup(dev);
-				if (cdev != NULL) {
-					dev_t blkdev;
+			error = rawdev_mounted(vp, NULL);
 
-					blkdev = devsw_chr2blk(dev);
-					if (blkdev != NODEV) {
-						vfinddev(blkdev, VBLK, &bvp);
-						if (bvp != NULL)
-							d_type = (cdev->d_flag
-							    & D_TYPEMASK);
-					}
-				}
-
-				break;
-				}
-			case VBLK: {
-				const struct bdevsw *bdev;
-
-				bdev = bdevsw_lookup(dev);
-				if (bdev != NULL)
-					d_type = (bdev->d_flag & D_TYPEMASK);
-
-				bvp = vp;
-
-				break;
-				}
-
-			default:
-				break;
-			}
-
-			if (d_type != D_DISK)
+			/* Not a disk. */
+			if (error == EINVAL)
 				break;
 
-			/*
-			 * XXX: This is bogus. We should be failing the request
-			 * XXX: not only if this specific slice is mounted, but
-			 * XXX: if it's on a disk with any other mounted slice.
-			 */
-			if (vfs_mountedon(bvp) && (securelevel > 0))
-				break;
+			if (error && securelevel > 0)
+				result = KAUTH_RESULT_DENY;
 
 			if (securelevel > 1)
 				result = KAUTH_RESULT_DENY;
 
+			break;
+			}
+
+		default:
 			break;
 		}
 
@@ -520,7 +600,38 @@ secmodel_securelevel_device_cb(kauth_cred_t cred,
 		}
 
 		break;
+
+	case KAUTH_DEVICE_GPIO_PINSET:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	case KAUTH_DEVICE_RND_ADDDATA_ESTIMATE:
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+		break;
+
+	default:
+		break;
 	}
 
 	return (result);
 }
+
+int
+secmodel_securelevel_vnode_cb(kauth_cred_t cred, kauth_action_t action,
+    void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
+{
+	int result;
+
+	result = KAUTH_RESULT_DEFER;
+
+	if ((action & KAUTH_VNODE_WRITE_SYSFLAGS) &&
+	    (action & KAUTH_VNODE_HAS_SYSFLAGS)) {
+		if (securelevel > 0)
+			result = KAUTH_RESULT_DENY;
+	}
+
+	return (result);
+}
+

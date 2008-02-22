@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.cesfic,v 1.15 2006/09/01 13:07:51 matt Exp $
+#	$NetBSD: Makefile.cesfic,v 1.19 2015/09/06 02:17:30 uebayasi Exp $
 
 # Makefile for NetBSD
 #
@@ -34,8 +34,8 @@ GENASSYM_CONF=	${CESFIC}/cesfic/genassym.cf
 CPPFLAGS+=	-Dcesfic
 CWARNFLAGS+=	-Wno-format
 CFLAGS+=	-msoft-float
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
-AFLAGS+=	-Wa,-m68040 -Wa,-m68030 -Wa,-m68851
+AFLAGS+=	-x assembler-with-cpp
+AFLAGS+=	-Wa,-mcpu=68030 -Wa,-m68040 -Wa,-m68030 -Wa,-m68851
 
 ##
 ## (3) libkern and compat
@@ -48,7 +48,8 @@ KERN_AS=	obj
 # for the Motorola 68040 Floating Point Software Product
 .include "$S/arch/m68k/fpsp/Makefile.inc"
 
-MD_OBJS=	locore.o ${FPSP}
+MD_OBJS=	locore.o
+MD_LIBS=	${FPSP}
 MD_CFILES=
 MD_SFILES=	${CESFIC}/cesfic/locore.s
 
@@ -78,7 +79,7 @@ TEXTADDR?=	2000
 
 %CFILES
 
-#%SFILES
+%SFILES
 
 %LOAD
 

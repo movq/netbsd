@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.15 2008/01/05 20:00:49 christos Exp $
+#	$NetBSD: Makefile,v 1.20 2012/03/21 05:37:43 matt Exp $
 
 .include <bsd.own.mk>
 
-WARNS=4
+WARNS?=5
 USE_SHLIBDIR=	yes
 
 PROPLIBDIR=${NETBSDSRCDIR}/common/lib/libprop
@@ -30,6 +30,12 @@ MLINKS+= prop_send_ioctl.3 prop_array_recv_ioctl.3
 MLINKS+= prop_send_ioctl.3 prop_dictionary_send_ioctl.3
 MLINKS+= prop_send_ioctl.3 prop_dictionary_recv_ioctl.3
 MLINKS+= prop_send_ioctl.3 prop_dictionary_sendrecv_ioctl.3
+
+MAN+=	prop_send_syscall.3
+MLINKS+= prop_send_syscall.3 prop_array_send_syscall.3
+MLINKS+= prop_send_syscall.3 prop_array_recv_syscall.3
+MLINKS+= prop_send_syscall.3 prop_dictionary_send_syscall.3
+MLINKS+= prop_send_syscall.3 prop_dictionary_recv_syscall.3
 
 MAN+=	prop_dictionary_util.3
 MLINKS+= prop_dictionary_util.3 prop_dictionary_get_bool.3
@@ -66,14 +72,40 @@ MLINKS+= prop_array.3 prop_array_ensure_capacity.3
 MLINKS+= prop_array.3 prop_array_equals.3
 MLINKS+= prop_array.3 prop_array_externalize.3
 MLINKS+= prop_array.3 prop_array_externalize_to_file.3
+MLINKS+= prop_array.3 prop_array_externalize_to_pref.3
 MLINKS+= prop_array.3 prop_array_get.3
 MLINKS+= prop_array.3 prop_array_internalize.3
 MLINKS+= prop_array.3 prop_array_internalize_from_file.3
+MLINKS+= prop_array.3 prop_array_internalize_from_pref.3
 MLINKS+= prop_array.3 prop_array_iterator.3
 MLINKS+= prop_array.3 prop_array_make_immutable.3
 MLINKS+= prop_array.3 prop_array_mutable.3
 MLINKS+= prop_array.3 prop_array_remove.3
 MLINKS+= prop_array.3 prop_array_set.3
+
+MAN+=	prop_array_util.3
+MLINKS+= prop_array_util.3 prop_array_get_bool.3
+MLINKS+= prop_array_util.3 prop_array_set_bool.3
+MLINKS+= prop_array_util.3 prop_array_get_int8.3
+MLINKS+= prop_array_util.3 prop_array_get_uint8.3
+MLINKS+= prop_array_util.3 prop_array_set_int8.3
+MLINKS+= prop_array_util.3 prop_array_set_uint8.3
+MLINKS+= prop_array_util.3 prop_array_get_int16.3
+MLINKS+= prop_array_util.3 prop_array_get_uint16.3
+MLINKS+= prop_array_util.3 prop_array_set_int16.3
+MLINKS+= prop_array_util.3 prop_array_set_uint16.3
+MLINKS+= prop_array_util.3 prop_array_get_int32.3
+MLINKS+= prop_array_util.3 prop_array_get_uint32.3
+MLINKS+= prop_array_util.3 prop_array_set_int32.3
+MLINKS+= prop_array_util.3 prop_array_set_uint32.3
+MLINKS+= prop_array_util.3 prop_array_get_int64.3
+MLINKS+= prop_array_util.3 prop_array_get_uint64.3
+MLINKS+= prop_array_util.3 prop_array_set_int64.3
+MLINKS+= prop_array_util.3 prop_array_set_uint64.3
+MLINKS+= prop_array_util.3 prop_array_get_cstring.3
+MLINKS+= prop_array_util.3 prop_array_set_cstring.3
+MLINKS+= prop_array_util.3 prop_array_get_cstring_nocopy.3
+MLINKS+= prop_array_util.3 prop_array_set_cstring_nocopy.3
 
 MLINKS+= prop_bool.3 prop_bool_copy.3
 MLINKS+= prop_bool.3 prop_bool_create.3
@@ -99,10 +131,12 @@ MLINKS+= prop_dictionary.3 prop_dictionary_ensure_capacity.3
 MLINKS+= prop_dictionary.3 prop_dictionary_equals.3
 MLINKS+= prop_dictionary.3 prop_dictionary_externalize.3
 MLINKS+= prop_dictionary.3 prop_dictionary_externalize_to_file.3
+MLINKS+= prop_dictionary.3 prop_dictionary_externalize_to_pref.3
 MLINKS+= prop_dictionary.3 prop_dictionary_get.3
 MLINKS+= prop_dictionary.3 prop_dictionary_get_keysym.3
 MLINKS+= prop_dictionary.3 prop_dictionary_internalize.3
 MLINKS+= prop_dictionary.3 prop_dictionary_internalize_from_file.3
+MLINKS+= prop_dictionary.3 prop_dictionary_internalize_from_pref.3
 MLINKS+= prop_dictionary.3 prop_dictionary_iterator.3
 MLINKS+= prop_dictionary.3 prop_dictionary_keysym_cstring_nocopy.3
 MLINKS+= prop_dictionary.3 prop_dictionary_keysym_equals.3

@@ -1,4 +1,4 @@
-/*      $NetBSD: en.c,v 1.14 2005/12/11 12:18:29 christos Exp $        */
+/*      $NetBSD: en.c,v 1.19 2018/03/08 03:12:02 mrg Exp $        */
 /*
  * Copyright (c) 1996 Rolf Grossmann
  * All rights reserved.
@@ -61,7 +61,7 @@ extern char *mg;
 int en_match(struct netif *, void *);
 int en_probe(struct netif *, void *);
 void en_init(struct iodesc *, void *);
-int en_get(struct iodesc *, void *, size_t, time_t);
+int en_get(struct iodesc *, void *, size_t, saseconds_t);
 int en_put(struct iodesc *, void *, size_t);
 void en_end(struct netif *);
 
@@ -221,7 +221,7 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 
 	for (retries = 0; retries < EN_RETRIES; retries++) {
 		er->txstat = 0xff;
-		bcopy(pkt, dma_buffers[0], len);
+		memcpy(dma_buffers[0], pkt, len);
 		txdma->dd_csr = (turbo ? DMACSR_INITBUFTURBO : DMACSR_INITBUF) |
 			DMACSR_RESET | DMACSR_WRITE;
 		txdma->dd_csr = 0;
@@ -247,9 +247,10 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 #if 01
 			DPRINTF(("en_put: DMA state = 0x%x.\n", state));
 #endif
-			if (state & (DMACSR_COMPLETE|DMACSR_BUSEXC))
+			if (state & (DMACSR_COMPLETE|DMACSR_BUSEXC)) {
 				txdma->dd_csr = DMACSR_RESET | DMACSR_CLRCOMPLETE;
 				break;
+			}
 		}
 
 		txs = er->txstat;
@@ -273,17 +274,21 @@ en_put(struct iodesc *desc, void *pkt, size_t len)
 }
 
 int
-en_get(struct iodesc *desc, void *pkt, size_t len, time_t timeout)
+en_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
 {
 	volatile struct en_regs *er;
 	volatile struct dma_dev *rxdma;
+#if 0
 	volatile struct dma_dev *txdma;
+#endif
 	int state, rxs;
 	size_t rlen;
 	char *gotpkt;
 
 	rxdma = (struct dma_dev *)P_ENETR_CSR;
+#if 0
 	txdma = (struct dma_dev *)P_ENETX_CSR;
+#endif
 	er = (struct en_regs *)P_ENET;
 
 	DPRINTF(("en_get: rxdma->dd_csr = %x\n",rxdma->dd_csr));
@@ -391,7 +396,7 @@ dump_pkt(gotpkt, rlen < 255 ? rlen : 128);
 		rlen = len;
 	}
 
-	bcopy(gotpkt, pkt, rlen);
+	memcpy(pkt, gotpkt, rlen);
 
 #if 0
 	printf("DEBUG: gotpkt = 0x%lx, pkt = 0x%lx, rlen = %d\n",

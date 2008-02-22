@@ -1,4 +1,4 @@
-.\"	$NetBSD: mt.1,v 1.33 2003/08/07 09:05:17 agc Exp $
+.\"	$NetBSD: mt.1,v 1.36 2012/03/19 10:48:20 njoly Exp $
 .\"
 .\" Copyright (c) 1981, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)mt.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd June 6, 1993
+.Dd March 9, 2008
 .Dt MT 1
 .Os
 .Sh NAME
@@ -105,27 +105,43 @@ Back space
 .Ar count
 records.
 .It Cm rewind
-Rewind the tape
-(Count is ignored).
+Rewind the tape.
+(The
+.Ar count
+is ignored.)
 .It Cm offline , rewoffl
-Rewind the tape and place the tape unit off-line
-(Count is ignored).
+Rewind the tape and place the tape unit off-line.
+Where supported, this ejects the tape.
+(The
+.Ar count
+is ignored.)
 .It Cm status
-Print status information about the tape unit
-(Count is ignored).
+Print status information about the tape unit.
+(The
+.Ar count
+is ignored.)
 .It Cm retension
-Retensions the tape
-(Not all tape drives support this feature; count is ignored).
+Retensions the tape.
+Not all tape drives support this feature.
+(The
+.Ar count
+is ignored.)
 .It Cm erase
 Erases the tape
-(Not all tape drives support this feature; count is ignored).
+Not all tape drives support this feature.
+(The
+.Ar count
+is ignored.)
 .It Cm eew
-Enable or disabled early warning EOM behaviour.
-.Ar Count
-is set to nonzero to enable, zero to disable.
+Enable or disable early warning EOM behaviour.
+Set
+.Ar count
+to nonzero to enable, zero to disable.
 .It Cm eom
-Forward space to the end of recorded media
-(Count is ignored).
+Forward space to the end of recorded media.
+(The
+.Ar count
+is ignored.)
 .It Cm blocksize , setblk
 Set the tape blocksize to
 .Ar count
@@ -143,24 +159,31 @@ See the
 .Sx DENSITY CODES
 section for a list of codes for commonly used media types.
 .It Cm rdspos
-Read the logical block position of the tape
-(Not all tape drives support this feature; count is ignored).
+Read the logical block position of the tape.
+Not all tape drives support this feature.
+(The
+.Ar count
+is ignored.)
 .It Cm rdhpos
-Read the hardware block position of the tape
-(Not all tape drives support this feature; count is ignored).
+Read the hardware block position of the tape.
+Not all tape drives support this feature.
+(The
+.Ar count
+is ignored.)
 .It Cm setspos
 Set the logical block position of the tape to
-.Ar count
-(not all tape drives support this feature).
+.Ar count .
+Not all tape drives support this feature.
 .It Cm sethpos
 Set the hardware block position of the tape to
-.Ar count
-(not all tape drives support this feature).
+.Ar count .
+Not all tape drives support this feature.
 .It Cm compress
 If
 .Ar count
 is zero, disable compression.
-Otherwise enable compression (not all tape drives support this feature).
+Otherwise enable compression.
+Not all tape drives support this feature.
 .El
 .Pp
 If a tape name is not specified, and the environment variable
@@ -169,40 +192,6 @@ is not set, then
 .Nm
 uses the device
 .Pa /dev/nrst0 .
-.Sh EXIT STATUS
-.Nm
-returns a 0 exit status when the operation(s) were successful,
-1 if the command was unrecognized, and 2 if an operation failed.
-.Sh DENSITY CODES
-The SCSI-3 specification defines a number of density codes for
-various tape media, some of which are listed here.
-Note that many tape drive vendors also define model-specific codes.
-.Pp
-.Bl -column "Code" "Format" -compact
-.It Em "Code	Format"
-.It Li 0 Ta Device default
-.It Li 1 Ta 1/2" 800 bpi
-.It Li 2 Ta 1/2" 1600 bpi
-.It Li 3 Ta 1/2" 6250 bpi
-.It Li 4 Ta QIC-11
-.It Li 5 Ta QIC-24
-.It Li 15 Ta QIC-120
-.It Li 16 Ta QIC-150
-.It Li 17 Ta QIC-320/525
-.It Li 18 Ta QIC-1320/1350
-.It Li 19 Ta DDS
-.It Li 28 Ta QIC-385M
-.It Li 29 Ta QIC-410M
-.It Li 30 Ta QIC-1000C
-.It Li 31 Ta QIC-2100C
-.It Li 32 Ta QIC-6GB
-.It Li 33 Ta QIC-20GB
-.It Li 34 Ta QIC-2GB
-.It Li 35 Ta QIC-875M
-.It Li 36 Ta DDS-2
-.It Li 37 Ta DDS-3
-.It Li 38 Ta DDS-4
-.El
 .Sh ENVIRONMENT
 If the following environment variables exist, they are used by
 .Nm .
@@ -233,6 +222,40 @@ Raw
 tape device
 .It Pa /dev/rmt*
 Raw magnetic tape device
+.El
+.Sh EXIT STATUS
+.Nm
+returns a 0 exit status when the operation(s) were successful,
+1 if the command was unrecognized, and 2 if an operation failed.
+.Sh DENSITY CODES
+The SCSI-3 specification defines a number of density codes for
+various tape media, some of which are listed here.
+Note that many tape drive vendors also define model-specific codes.
+.Pp
+.Bl -column "Code" "Format" -compact
+.It Em Code Ta Em Format
+.It Li 0 Ta Device default
+.It Li 1 Ta 1/2" 800 bpi
+.It Li 2 Ta 1/2" 1600 bpi
+.It Li 3 Ta 1/2" 6250 bpi
+.It Li 4 Ta QIC-11
+.It Li 5 Ta QIC-24
+.It Li 15 Ta QIC-120
+.It Li 16 Ta QIC-150
+.It Li 17 Ta QIC-320/525
+.It Li 18 Ta QIC-1320/1350
+.It Li 19 Ta DDS
+.It Li 28 Ta QIC-385M
+.It Li 29 Ta QIC-410M
+.It Li 30 Ta QIC-1000C
+.It Li 31 Ta QIC-2100C
+.It Li 32 Ta QIC-6GB
+.It Li 33 Ta QIC-20GB
+.It Li 34 Ta QIC-2GB
+.It Li 35 Ta QIC-875M
+.It Li 36 Ta DDS-2
+.It Li 37 Ta DDS-3
+.It Li 38 Ta DDS-4
 .El
 .Sh SEE ALSO
 .Xr dd 1 ,

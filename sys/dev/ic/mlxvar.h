@@ -1,4 +1,4 @@
-/*	$NetBSD: mlxvar.h,v 1.13 2007/03/04 06:01:58 christos Exp $	*/
+/*	$NetBSD: mlxvar.h,v 1.16 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@ struct mlx_sysdrive {
 	u_int32_t	ms_size;
 	u_short		ms_state;
 	u_short		ms_raidlevel;
-	struct device	*ms_dv;
+	device_t	ms_dv;
 };
 
 /* Optional per-CCB context. */
@@ -94,7 +87,7 @@ struct mlx_ccb;
 struct mlx_context {
 	void	(*mx_handler)(struct mlx_ccb *);
 	void 	*mx_context;
-	struct	device	*mx_dv;
+	device_t	mx_dv;
 };
 
 /* Command control block. */
@@ -124,7 +117,7 @@ struct mlx_ccb {
  * Per-controller state.
  */
 struct mlx_softc {
-	struct device		mlx_dv;
+	device_t		mlx_dv;
 	bus_space_tag_t		mlx_iot;
 	bus_space_handle_t	mlx_ioh;
 	bus_dma_tag_t		mlx_dmat;
@@ -184,6 +177,7 @@ struct mlx_attach_args {
 int	mlx_flush(struct mlx_softc *, int);
 void	mlx_init(struct mlx_softc *, const char *);
 int	mlx_intr(void *);
+int	mlx_configure(struct mlx_softc *, int);
 
 int	mlx_ccb_alloc(struct mlx_softc *, struct mlx_ccb **, int);
 const char *mlx_ccb_diagnose(struct mlx_ccb *);

@@ -1,5 +1,5 @@
 '\" t
-.\" $NetBSD: ksh.Man,v 1.20 2007/07/30 18:01:42 mjf Exp $
+.\" $NetBSD: ksh.Man,v 1.25 2015/12/30 22:26:26 christos Exp $
 .\"{{{}}}
 .\"{{{  Notes about man page
 .\"     - use the pseudo-macros .sh( and .sh) to begin and end sh-specific
@@ -19,10 +19,10 @@
 .\"}}}
 .\"{{{  Title
 .ksh(
-.TH KSH 1 "August 19, 1996" "" "User commands"
+.TH KSH 1 "April 12, 2015" "" "User commands"
 .ksh)
 .sh(
-.TH SH 1 "August 19, 1996" "" "User commands"
+.TH SH 1 "April 12, 2015" "" "User commands"
 .sh)
 .\"}}}
 .\"{{{  Name
@@ -479,8 +479,12 @@ If a \fB\e\fP inside a double-quoted string is followed by \fB\e\fP, \fB$\fP,
 followed by a newline, both the \fB\e\fP and the newline are stripped;
 otherwise, both the \fB\e\fP and the character following are unchanged.
 .PP
-Note: see POSIX Mode below for a special rule regarding sequences
-of the form \fB"\fP...\fB`\fP...\fB\e"\fP...\fB`\fP..\fB"\fP.
+Note: An earlier version of ksh(1) changed the interpretation of sequences
+of the form \fB"\fP...\fB`\fP...\fB\e"\fP...\fB`\fP..\fB"\fP
+according to whether or not POSIX mode was in effect.
+In the current implementation, the backslash in \fB\e"\fP
+is seen and removed by the outer \fB"\fP...\fB"\fP,
+so the backslash is not seen by the inner \fB`\fP...\fB`\fP.
 .\"}}}
 .\"{{{  Aliases
 .SS "Aliases"
@@ -992,7 +996,7 @@ BTW, don't blame me for this hack; it's in the original ksh.
 .sh(
 The prompt is printed verbatim (\fIi.e.\fP, no substitutions are done).
 .sh)
-Default is `\fB$\ \fP' for non-root users, `\fB#\ \fP' for root..
+Default is `\fB$\ \fP' for non-root users, `\fB#\ \fP' for root.
 .\"}}}
 .\"{{{  PS2
 .IP \fBPS2\fP
@@ -1531,15 +1535,16 @@ the \fBposix\fP option:
 reading of \fB$ENV\fP: if not in posix mode, the \fBENV\fP parameter
 is not expanded and included when the shell starts.
 .sh)
-.IP \ \ \(bu
-\fB\e"\fP inside double quoted \fB`\fP..\fB`\fP command substitutions:
-in posix mode, the \fB\e"\fP is interpreted when the command is interpreted;
-in non-posix mode, the backslash is stripped before the command substitution
-is interpreted.
-For example, \fBecho "`echo \e"hi\e"`"\fP produces `"hi"' in
-posix mode, `hi' in non-posix mode.
-To avoid problems, use the \fB$(...\fP)
-form of command substitution.
+.\" The following behaviour is not useful and has been removed in NetBSD
+.\" .IP \ \ \(bu
+.\" \fB\e"\fP inside double quoted \fB`\fP..\fB`\fP command substitutions:
+.\" in posix mode, the \fB\e"\fP is interpreted when the command is interpreted;
+.\" in non-posix mode, the backslash is stripped before the command substitution
+.\" is interpreted.
+.\" For example, \fBecho "`echo \e"hi\e"`"\fP produces `"hi"' in
+.\" posix mode, `hi' in non-posix mode.
+.\" To avoid problems, use the \fB$(...\fP)
+.\" form of command substitution.
 .IP \ \ \(bu
 \fBkill \-l\fP output: in posix mode, signal names are listed one a single line;
 in non-posix mode, signal numbers, names and descriptions are printed in
@@ -1711,7 +1716,7 @@ This command is only available on systems which support job control.
 See Job Control below for more information.
 .\"}}}
 .\"{{{  bind [-l] [-m] [key[=editing-command] ...]
-.IP "\fBbind\fP [\fB\-m\fP] [\fIkey\fP[\fB=\fP\fIediting-command\fP] ...]"
+.IP "\fBbind\fP [\fB\-l\fP] [\fB\-m\fP] [\fIkey\fP[\fB=\fP\fIediting-command\fP] ...]"
 Set or view the current emacs command editing key bindings/macros.
 See Emacs Editing Mode below for a complete description.
 .\"}}}
@@ -2597,8 +2602,8 @@ Exported functions are not implemented yet.
 T}
 .TE
 .\"}}}
-.\"{{{  ulimit [-abcdfHlmnpsStvw] [value]
-.IP "\fBulimit\fP [\fB\-abcdfHlmnpsStvw\fP] [\fIvalue\fP]"
+.\"{{{  ulimit [-abcdfHlmnprsStvw] [value]
+.IP "\fBulimit\fP [\fB\-abcdfHlmnprsStvw\fP] [\fIvalue\fP]"
 Display or set process limits.
 If no options are used, the file size limit (\fB\-f\fP) is assumed.
 \fBvalue\fP, if specified, may be either be an arithmetic expression or the
@@ -2632,6 +2637,9 @@ memory.
 Impose a limit of \fIn\fP kbytes on the amount of physical memory used.
 .IP \fB\-n\fP
 Impose a limit of \fIn\fP file descriptors that can be open at once.
+.IP \fB\-r\fP
+Impose a limit of \fIn\fP threads that can be run by the user at any one
+time.
 .IP \fB\-p\fP
 Impose a limit of \fIn\fP processes that can be run by the user at any one
 time.
@@ -2645,6 +2653,7 @@ on some systems this is the maximum allowable virtual address (in bytes,
 not kbytes).
 .IP \fB\-w\fP
 Impose a limit of \fIn\fP kbytes on the amount of swap space used.
+(Not supported on NetBSD)
 .PP
 As far as \fBulimit\fP is concerned, a block is 512 bytes.
 .RE

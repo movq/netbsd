@@ -1,4 +1,4 @@
-/*	$NetBSD: hpf1275a_tty.c,v 1.22 2007/11/10 18:29:37 ad Exp $ */
+/*	$NetBSD: hpf1275a_tty.c,v 1.29 2017/10/28 04:53:56 riastradh Exp $ */
 
 /*
  * Copyright (c) 2004 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpf1275a_tty.c,v 1.22 2007/11/10 18:29:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpf1275a_tty.c,v 1.29 2017/10/28 04:53:56 riastradh Exp $");
 
 #include "opt_wsdisplay_compat.h"
 
@@ -52,14 +52,13 @@ __KERNEL_RCSID(0, "$NetBSD: hpf1275a_tty.c,v 1.22 2007/11/10 18:29:37 ad Exp $")
 #include <dev/hpc/pckbd_encode.h>
 #endif
 
-
-extern struct cfdriver hpf1275a_cd;
+#include "ioconf.h"
 
 struct hpf1275a_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	struct tty *sc_tp;		/* back reference to the tty */
-	struct device *sc_wskbd;	/* wskbd child */
+	device_t sc_wskbd;	/* wskbd child */
 	int sc_enabled;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int sc_rawkbd;
@@ -76,9 +75,9 @@ static int	hpf1275a_close(struct tty *, int);
 static int	hpf1275a_input(int, struct tty *);
 
 /* autoconf(9) methods */
-static int	hpf1275a_match(struct device *, struct cfdata *, void *);
-static void	hpf1275a_attach(struct device *, struct device *, void *);
-static int	hpf1275a_detach(struct device *, int);
+static int	hpf1275a_match(device_t, cfdata_t, void *);
+static void	hpf1275a_attach(device_t, device_t, void *);
+static int	hpf1275a_detach(device_t, int);
 
 /* wskbd(4) accessops */
 static int	hpf1275a_wskbd_enable(void *, int);
@@ -91,7 +90,7 @@ static int	hpf1275a_wskbd_ioctl(void *, u_long, void *, int,
  * It doesn't need to be exported, as only hpf1275aattach() uses it,
  * but there's no "official" way to make it static.
  */
-CFATTACH_DECL(hpf1275a, sizeof(struct hpf1275a_softc),
+CFATTACH_DECL_NEW(hpf1275a, sizeof(struct hpf1275a_softc),
     hpf1275a_match, hpf1275a_attach, hpf1275a_detach, NULL);
 
 
@@ -244,8 +243,7 @@ hpf1275aattach(int n)
  * XXX: unused: config_attach_pseudo(9) does not call ca_match.
  */
 static int
-hpf1275a_match(struct device *self,
-	       struct cfdata *cfdata, void *arg)
+hpf1275a_match(device_t self, cfdata_t cfdata, void *arg)
 {
 
 	/* pseudo-device; always present */
@@ -258,8 +256,7 @@ hpf1275a_match(struct device *self,
  * open the line discipline.
  */
 static void
-hpf1275a_attach(struct device *parent,
-		struct device *self, void *aux)
+hpf1275a_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpf1275a_softc *sc = device_private(self);
 	struct wskbddev_attach_args wska;
@@ -269,6 +266,7 @@ hpf1275a_attach(struct device *parent,
 	wska.accessops = &hpf1275a_wskbd_accessops;
 	wska.accesscookie = sc;
 
+	sc->sc_dev = self;
 	sc->sc_enabled = 0;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	sc->sc_rawkbd = 0;
@@ -281,7 +279,7 @@ hpf1275a_attach(struct device *parent,
  * Autoconf detach routine.  Called when we close the line discipline.
  */
 static int
-hpf1275a_detach(struct device *self, int flags)
+hpf1275a_detach(device_t self, int flags)
 {
 	struct hpf1275a_softc *sc = device_private(self);
 	int error;
@@ -309,6 +307,7 @@ hpf1275a_open(dev_t dev, struct tty *tp)
 	};
 	struct lwp *l = curlwp;		/* XXX */
 	struct hpf1275a_softc *sc;
+	device_t self;
 	int error, s;
 
 	if ((error = kauth_authorize_device_tty(l->l_cred,
@@ -322,12 +321,13 @@ hpf1275a_open(dev_t dev, struct tty *tp)
 		return 0;
 	}
 
-	sc = (struct hpf1275a_softc *)config_attach_pseudo(&hpf1275a_cfdata);
-	if (sc == NULL) {
+	self = config_attach_pseudo(&hpf1275a_cfdata);
+	if (self == NULL) {
 		splx(s);
 		return (EIO);
 	}
 
+	sc = device_private(self);
 	tp->t_sc = sc;
 	sc->sc_tp = tp;
 
@@ -354,7 +354,7 @@ hpf1275a_close(struct tty *tp, int flag)
 	if (sc != NULL) {
 		tp->t_sc = NULL;
 		if (sc->sc_tp == tp)
-			config_detach(&sc->sc_dev, 0);
+			config_detach(sc->sc_dev, 0);
 	}
 	splx(s);
 	return (0);
@@ -387,7 +387,7 @@ hpf1275a_input(int c, struct tty *tp)
 
 	xtscan = hpf1275a_to_xtscan[code];
 	if (xtscan == 0) {
-		printf("%s: unknown code 0x%x\n", sc->sc_dev.dv_xname, code);
+		aprint_error_dev(sc->sc_dev, "unknown code 0x%x\n", code);
 		return (0);
 	}
 

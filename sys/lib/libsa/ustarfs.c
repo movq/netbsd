@@ -1,4 +1,4 @@
-/*	$NetBSD: ustarfs.c,v 1.31 2007/11/24 13:20:58 isaki Exp $	*/
+/*	$NetBSD: ustarfs.c,v 1.35 2014/03/20 03:13:18 christos Exp $	*/
 
 /* [Notice revision 2.2]
  * Copyright (c) 1997, 1998 Avalon Computer Systems, Inc.
@@ -140,15 +140,15 @@ static const char formatid[] = "USTARFS",
 
 static const int ustarfs_mode_offset = BBSIZE;
 
-static int checksig __P((ust_active_t *));
-static int convert __P((const char *, int, int));
-static int get_volume __P((struct open_file *, int));
+static int checksig(ust_active_t *);
+static int convert(const char *, int, int);
+static int get_volume(struct open_file *, int);
 static void setwindow(ust_active_t *, ustoffs, ustoffs);
-static int real_fs_cylinder_read __P((struct open_file *, ustoffs, int));
-static int ustarfs_cylinder_read __P((struct open_file *, ustoffs, int));
-static void ustarfs_sscanf __P((const char *, const char *, int *));
-static int read512block __P((struct open_file *, ustoffs, char block[512]));
-static int init_volzero_sig __P((struct open_file *));
+static int real_fs_cylinder_read(struct open_file *, ustoffs, int);
+static int ustarfs_cylinder_read(struct open_file *, ustoffs, int);
+static void ustarfs_sscanf(const char *, const char *, int *);
+static int read512block(struct open_file *, ustoffs, char block[512]);
+static int init_volzero_sig(struct open_file *);
 
 #ifdef HAVE_CHANGEDISK_HOOK
 /*
@@ -156,7 +156,7 @@ static int init_volzero_sig __P((struct open_file *));
  * Machine dependent code can eject the medium etc.
  * The new medium must be ready when this hook returns.
  */
-void changedisk_hook __P((struct open_file *));
+void changedisk_hook(struct open_file *);
 #endif
 
 static int
@@ -381,7 +381,7 @@ init_volzero_sig(struct open_file *f)
 	return 0;
 }
 
-int
+__compactcall int
 ustarfs_open(const char *path, struct open_file *f)
 {
 	ust_active_t *ustf;
@@ -442,7 +442,7 @@ ustarfs_open(const char *path, struct open_file *f)
 }
 
 #ifndef LIBSA_NO_FS_WRITE
-int
+__compactcall int
 ustarfs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 
@@ -451,7 +451,7 @@ ustarfs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 #endif /* !LIBSA_NO_FS_WRITE */
 
 #ifndef LIBSA_NO_FS_SEEK
-off_t
+__compactcall off_t
 ustarfs_seek(struct open_file *f, off_t offs, int whence)
 {
 	ust_active_t *ustf;
@@ -474,7 +474,7 @@ ustarfs_seek(struct open_file *f, off_t offs, int whence)
 }
 #endif /* !LIBSA_NO_FS_SEEK */
 
-int
+__compactcall int
 ustarfs_read(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 	ust_active_t *ustf;
@@ -517,7 +517,7 @@ ustarfs_read(struct open_file *f, void *start, size_t size, size_t *resid)
 	return e;
 }
 
-int
+__compactcall int
 ustarfs_stat(struct open_file *f, struct stat *sb)
 {
 	int	mode, uid, gid;
@@ -537,8 +537,19 @@ ustarfs_stat(struct open_file *f, struct stat *sb)
 	return 0;
 }
 
+
+#if defined(LIBSA_ENABLE_LS_OP)
+#include "ls.h"
+__compactcall void
+ustarfs_ls(struct open_file *f, const char *pattern)
+{
+	lsunsup("ustarfs");
+	return;
+}
+#endif
+
 #ifndef LIBSA_NO_FS_CLOSE
-int
+__compactcall int
 ustarfs_close(struct open_file *f)
 {
 	if (f == NULL || f->f_fsdata == NULL)

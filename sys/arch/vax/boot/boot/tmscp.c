@@ -1,4 +1,4 @@
-/*	$NetBSD: tmscp.c,v 1.6 2005/12/11 12:19:30 christos Exp $ */
+/*	$NetBSD: tmscp.c,v 1.9 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -77,9 +72,7 @@ static struct ra_softc ra_softc;
 static int curblock;
 
 
-tmscpopen(f, adapt, ctlr, unit, part)
-	struct open_file *f;
-        int ctlr, unit, part;
+tmscpopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 {
 	char *msg;
 	extern u_int tmsaddr;
@@ -156,12 +149,7 @@ command(cmd, arg)
 
 }
 
-tmscpstrategy(ra, func, dblk, size, buf, rsize)
-	struct ra_softc *ra;
-	int func;
-	daddr_t	dblk;
-	char *buf;
-	u_int size, *rsize;
+tmscpstrategy(struct ra_softc *ra, int func, daddr_t dblk, u_int size, char *buf, u_int *rsize)
 {
 	u_int i,j,pfnum, mapnr, nsize, bn, cn, sn, tn;
 	volatile struct udadevice *udadev=(void*)ra->udaddr;

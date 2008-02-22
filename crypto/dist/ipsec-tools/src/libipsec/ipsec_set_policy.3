@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipsec_set_policy.3,v 1.13 2006/09/09 16:22:09 manu Exp $
+.\"	$NetBSD: ipsec_set_policy.3,v 1.18 2012/01/04 16:30:50 wiz Exp $
 .\"
 .\"	$KAME: ipsec_set_policy.3,v 1.16 2003/01/06 21:59:03 sumikawa Exp $
 .\"
@@ -29,7 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd May 5, 1998
+.Dd January 4, 2012
 .Dt IPSEC_SET_POLICY 3
 .Os
 .Sh NAME
@@ -41,13 +41,13 @@
 .Sh LIBRARY
 .Lb libipsec
 .Sh SYNOPSIS
-.In netinet6/ipsec.h
+.In netipsec/ipsec.h
 .Ft "char *"
-.Fn ipsec_set_policy "char *policy" "int len"
+.Fn ipsec_set_policy "const char *policy" "int len"
 .Ft int
 .Fn ipsec_get_policylen "char *buf"
 .Ft "char *"
-.Fn ipsec_dump_policy "char *buf" "char *delim"
+.Fn ipsec_dump_policy "char *buf" "const char *delim"
 .Sh DESCRIPTION
 .Fn ipsec_set_policy
 generates an IPsec policy specification structure, namely
@@ -124,14 +124,10 @@ be specified when libipsec has been compiled against kernel headers that
 support policy priorities (Linux \*[Gt]= 2.6.6).
 It takes one of the following formats:
 .Bl -tag  -width "discard"
-.It Xo
-.Ar {priority,prio} offset
-.Xc
+.It Ar {priority,prio} offset
 .Ar offset
-is an integer in the range -2147483647..214783648.
-.It Xo
-.Ar {priority,prio} base {+,-} offset
-.Xc
+is an integer in the range \-2147483647..214783648.
+.It Ar {priority,prio} base {+,-} offset
 .Ar base
 is either
 .Li low (-1073741824) ,
@@ -162,12 +158,7 @@ means to consult the SPD defined by
 means to bypass the IPsec processing.
 .Pq the packet will be transmitted in clear .
 This is for privileged sockets.
-.It Xo
-.Ar direction
-.Bq Ar priority specification
-.Li ipsec
-.Ar request ...
-.Xc
+.It Ar direction Bo Ar priority specification Bc Li ipsec Ar request ...
 .Li ipsec
 means that the matching packets are subject to IPsec processing.
 .Li ipsec
@@ -175,16 +166,7 @@ can be followed by one or more
 .Ar request
 strings, which are formatted as below:
 .Bl -tag  -width "discard"
-.It Xo
-.Ar protocol
-.Li /
-.Ar mode
-.Li /
-.Ar src
-.Li -
-.Ar dst
-.Op Ar /level
-.Xc
+.It Ar protocol Li / Ar mode Li / Ar src Li - Ar dst Op Ar /level
 .Ar protocol
 is either
 .Li ah ,

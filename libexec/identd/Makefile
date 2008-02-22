@@ -1,8 +1,7 @@
-# $NetBSD: Makefile,v 1.11 2005/04/03 22:15:32 peter Exp $
+# $NetBSD: Makefile,v 1.16 2018/02/04 09:03:23 mrg Exp $
 
 .include <bsd.own.mk>
 
-WARNS=	4
 PROG=	identd
 SRCS=	identd.c
 MAN=	identd.8
@@ -10,7 +9,7 @@ MAN=	identd.8
 # Build with IP Filter support?
 .if (${MKIPFILTER} != "no")
 SRCS+=	ipf.c
-CPPFLAGS+=-I${NETBSDSRCDIR}/sys/dist/ipf -DWITH_IPF
+CPPFLAGS+=-DWITH_IPF
 .endif
 
 # Build with pf support?
@@ -18,5 +17,16 @@ CPPFLAGS+=-I${NETBSDSRCDIR}/sys/dist/ipf -DWITH_IPF
 SRCS+=	pf.c
 CPPFLAGS+=-DWITH_PF
 .endif
+
+# Build with npf support?
+.if (${MKNPF} != "no")
+SRCS+=	npf.c
+CPPFLAGS+=-DWITH_NPF
+LDADD+=-lnpf -lprop
+DPADD+=${LIBNPF} ${LIBPROP}
+.endif
+
+# XXX
+COPTS+=	-fno-strict-aliasing
 
 .include <bsd.prog.mk>

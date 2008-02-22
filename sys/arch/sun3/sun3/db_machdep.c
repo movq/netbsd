@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.25 2007/10/17 19:57:46 garbled Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.28 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.25 2007/10/17 19:57:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.28 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -64,22 +57,26 @@ static void db_mach_reboot (db_expr_t, bool, db_expr_t, const char *);
 static void db_mach_pagemap(db_expr_t, bool, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
-	{ DDB_ADD_CMD("abort",	db_mach_abort,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("halt",	db_mach_halt,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("pgmap",	db_mach_pagemap, 	CS_SET_DOT, NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("reboot",	db_mach_reboot,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("abort",	db_mach_abort,	0,
+	  "Calls prom_abort()", NULL, NULL) },
+	{ DDB_ADD_CMD("halt",	db_mach_halt,	0,
+	  "Calls prom_halt()", NULL, NULL) },
+	{ DDB_ADD_CMD("pgmap",	db_mach_pagemap, CS_SET_DOT,
+	  "Prints the PTE and segmap values", "virtual-address", NULL) },
+	{ DDB_ADD_CMD("reboot",	db_mach_reboot,	0,
+	  "Calls prom_boot()", NULL, NULL) },
 	{ DDB_ADD_CMD(NULL,NULL,0,NULL,NULL,NULL) }
 };
 
 /*
  * Machine-specific ddb commands for the sun3:
  *    abort:	Drop into monitor via abort (allows continue)
- *    halt: 	Exit to monitor as in halt(8)
+ *    halt:	Exit to monitor as in halt(8)
  *    reboot:	Reboot the machine as in reboot(8)
  *    pgmap:	Given addr, Print addr, segmap, pagemap, pte
  */
 
-static void 
+static void
 db_mach_abort(db_expr_t addr, bool have_addr, db_expr_t count,
     const char *modif)
 {
@@ -87,14 +84,14 @@ db_mach_abort(db_expr_t addr, bool have_addr, db_expr_t count,
 	sunmon_abort();
 }
 
-static void 
+static void
 db_mach_halt(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 {
 
 	sunmon_halt();
 }
 
-static void 
+static void
 db_mach_reboot(db_expr_t addr, bool have_addr, db_expr_t count,
     const char *modif)
 {
@@ -105,7 +102,7 @@ db_mach_reboot(db_expr_t addr, bool have_addr, db_expr_t count,
 
 static void pte_print(int);
 
-static void 
+static void
 db_mach_pagemap(db_expr_t addr, bool have_addr, db_expr_t count,
     const char *modif)
 {
@@ -132,7 +129,7 @@ db_mach_pagemap(db_expr_t addr, bool have_addr, db_expr_t count,
 }
 
 #ifdef	_SUN3_
-static void 
+static void
 pte_print(int pte)
 {
 	int t;
@@ -162,7 +159,7 @@ pte_print(int pte)
 #endif	/* SUN3 */
 
 #ifdef	_SUN3X_
-static void 
+static void
 pte_print(int pte)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: zs_sbdio.c,v 1.7 2007/11/26 23:29:37 ad Exp $	*/
+/*	$NetBSD: zs_sbdio.c,v 1.12 2015/06/23 21:00:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs_sbdio.c,v 1.7 2007/11/26 23:29:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs_sbdio.c,v 1.12 2015/06/23 21:00:23 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: zs_sbdio.c,v 1.7 2007/11/26 23:29:37 ad Exp $");
 
 #include <dev/cons.h>
 #include <dev/ic/z8530reg.h>
+
+#include <mips/locore.h>
 
 #include <machine/sbdiovar.h>
 #include <machine/z8530var.h>
@@ -95,14 +90,14 @@ static uint8_t zs_init_reg[16] = {
 	ZSWR15_BREAK_IE,
 };
 
-int zs_sbdio_match(struct device *, struct cfdata *, void *);
-void zs_sbdio_attach(struct device *, struct device *, void *);
+static int zs_sbdio_match(device_t, cfdata_t, void *);
+static void zs_sbdio_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(zsc_sbdio, sizeof(struct zsc_softc),
+CFATTACH_DECL_NEW(zsc_sbdio, sizeof(struct zsc_softc),
     zs_sbdio_match, zs_sbdio_attach, NULL, NULL);
 
 int
-zs_sbdio_match(struct device *parent, struct cfdata *cf, void *aux)
+zs_sbdio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbdio_attach_args *sa = aux;
 
@@ -110,19 +105,19 @@ zs_sbdio_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-zs_sbdio_attach(struct device *parent, struct device *self, void *aux)
+zs_sbdio_attach(device_t parent, device_t self, void *aux)
 {
+	struct zsc_softc *zsc = device_private(self);
 	struct sbdio_attach_args *sa = aux;
-	struct zsc_softc *zsc = (void *)self;
 	struct zsc_attach_args zsc_args;
 	struct zschan *zc;
 	struct zs_chanstate *cs;
 	struct zsdevice *zs_addr;
-	int s, zs_unit, channel;
+	int s, channel;
 
-	printf(" at %p irq %d\n", (void *)sa->sa_addr1, sa->sa_irq);
+	zsc->zsc_dev = self;
+	aprint_normal("\n");
 
-	zs_unit = device_unit(&zsc->zsc_dev);
 	zs_addr = (void *)MIPS_PHYS_TO_KSEG1(sa->sa_addr1);
 	zsc->zsc_flags = sa->sa_flags;
 

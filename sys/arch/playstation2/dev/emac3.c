@@ -1,4 +1,4 @@
-/*	$NetBSD: emac3.c,v 1.6 2008/01/19 22:10:15 dyoung Exp $	*/
+/*	$NetBSD: emac3.c,v 1.11 2016/04/03 10:03:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,14 +34,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emac3.c,v 1.6 2008/01/19 22:10:15 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emac3.c,v 1.11 2016/04/03 10:03:04 martin Exp $");
 
 #include "debug_playstation2.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
+#include <sys/device.h>
 #include <sys/socket.h>
+#include <sys/pmf.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -69,7 +64,7 @@ int	emac3_debug = 0;
 		printf("%s: " fmt, __func__ , ##args) 
 #define	DPRINTFN(n, arg)						\
 	if (emac3_debug > (n))						\
-n		printf("%s: " fmt, __func__ , ##args) 
+		printf("%s: " fmt, __func__ , ##args) 
 #else
 #define STATIC			static
 #define	DPRINTF(arg...)		((void)0)
@@ -158,14 +153,14 @@ emac3_reset(struct emac3_softc *sc)
 }
 
 void
-emac3_enable()
+emac3_enable(void)
 {
 
 	_emac3_reg_write_4(EMAC3_MR0, MR0_TXE | MR0_RXE);
 }
 
 void
-emac3_disable()
+emac3_disable(void)
 {
 	int retry = 10000;
 
@@ -182,21 +177,21 @@ emac3_disable()
 }
 
 void
-emac3_intr_enable()
+emac3_intr_enable(void)
 {
 
 	_emac3_reg_write_4(EMAC3_ISER, ~0);
 }
 
 void
-emac3_intr_disable()
+emac3_intr_disable(void)
 {
 
 	_emac3_reg_write_4(EMAC3_ISER, 0);
 }
 
 void
-emac3_intr_clear()
+emac3_intr_clear(void)
 {
 
 	_emac3_reg_write_4(EMAC3_ISR, _emac3_reg_read_4(EMAC3_ISR));
@@ -214,14 +209,14 @@ emac3_intr(void *arg)
 }
 
 void
-emac3_tx_kick()
+emac3_tx_kick(void)
 {
 	
 	_emac3_reg_write_4(EMAC3_TMR0, TMR0_GNP0);
 }
 
 int
-emac3_tx_done()
+emac3_tx_done(void)
 {
 
 	return (_emac3_reg_read_4(EMAC3_TMR0) & TMR0_GNP0);
@@ -263,7 +258,7 @@ allmulti:
 }
 
 int
-emac3_soft_reset()
+emac3_soft_reset(void)
 {
 	int retry = 10000;
 
@@ -314,7 +309,7 @@ emac3_config(const u_int8_t *eaddr)
  * PHY/MII
  */
 void
-emac3_phy_writereg(struct device *self, int phy, int reg, int data)
+emac3_phy_writereg(device_t self, int phy, int reg, int data)
 {
 
 	if (emac3_phy_ready() != 0)
@@ -330,7 +325,7 @@ emac3_phy_writereg(struct device *self, int phy, int reg, int data)
 }
 
 int
-emac3_phy_readreg(struct device *self, int phy, int reg)
+emac3_phy_readreg(device_t self, int phy, int reg)
 {
 
 	if (emac3_phy_ready() != 0)
@@ -347,10 +342,10 @@ emac3_phy_readreg(struct device *self, int phy, int reg)
 }
 
 void
-emac3_phy_statchg(struct device *dev)
+emac3_phy_statchg(struct ifnet *ifp)
 {
 #define EMAC3_FDX	(MR1_FDE | MR1_EIFC | MR1_APP)
-	struct emac3_softc *sc = (void *)dev;
+	struct emac3_softc *sc = ifp->if_softc;
 	int media;
 	u_int32_t r;
 	
@@ -385,7 +380,7 @@ emac3_phy_statchg(struct device *dev)
 }
 
 int
-emac3_phy_ready()
+emac3_phy_ready(void)
 {
 	int retry = 10000;
 

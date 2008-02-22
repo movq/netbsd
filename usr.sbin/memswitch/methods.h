@@ -1,4 +1,4 @@
-/*	$NetBSD: methods.h,v 1.3 1999/06/28 08:49:15 minoura Exp $	*/
+/*	$NetBSD: methods.h,v 1.5 2018/01/23 21:06:25 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,34 +30,34 @@
  */
 
 
-int atoi_ __P((const char**));
+int atoi_(const char**);
 
-int fill_uchar __P((struct property*));
-int fill_ushort __P((struct property*));
-int fill_ulong __P((struct property*));
+int fill_uchar(struct property*);
+int fill_ushort(struct property*);
+int fill_ulong(struct property*);
 
-int flush_uchar __P((struct property*));
-int flush_ushort __P((struct property*));
-int flush_ulong __P((struct property*));
-int flush_dummy __P((struct property*));
+int flush_uchar(struct property*);
+int flush_ushort(struct property*);
+int flush_ulong(struct property*);
+int flush_dummy(struct property*);
 
-int parse_dummy __P((struct property*, const char*));
-int parse_uchar __P((struct property*, const char*));
-int parse_ushort __P((struct property*, const char*));
-int parse_ulong __P((struct property*, const char*));
-int parse_byte __P((struct property*, const char*));
-int parse_time __P((struct property*, const char*));
-int parse_bootdev __P((struct property*, const char*));
-int parse_serial __P((struct property*, const char*));
-int parse_srammode __P((struct property*, const char*));
+int parse_dummy(struct property*, const char*);
+int parse_uchar(struct property*, const char*);
+int parse_ushort(struct property*, const char*);
+int parse_ulong(struct property*, const char*);
+int parse_byte(struct property*, const char*);
+int parse_time(struct property*, const char*);
+int parse_bootdev(struct property*, const char*);
+int parse_serial(struct property*, const char*);
+int parse_srammode(struct property*, const char*);
 
-int print_uchar __P((struct property*, char*));
-int print_ucharh __P((struct property*, char*));
-int print_ushorth __P((struct property*, char*));
-int print_ulong __P((struct property*, char*));
-int print_ulongh __P((struct property*, char*));
-int print_magic __P((struct property*, char*));
-int print_timesec __P((struct property*, char*));
-int print_bootdev __P((struct property*, char*));
-int print_serial __P((struct property*, char*));
-int print_srammode __P((struct property*, char*));
+int print_uchar(struct property*, char*);
+int print_ucharh(struct property*, char*);
+int print_ushorth(struct property*, char*);
+int print_ulong(struct property*, char*);
+int print_ulongh(struct property*, char*);
+int print_magic(struct property*, char*);
+int print_timesec(struct property*, char*);
+int print_bootdev(struct property*, char*);
+int print_serial(struct property*, char*);
+int print_srammode(struct property*, char*);

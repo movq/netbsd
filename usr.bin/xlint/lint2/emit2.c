@@ -1,4 +1,4 @@
-/* $NetBSD: emit2.c,v 1.10 2004/09/12 08:58:52 yamt Exp $ */
+/* $NetBSD: emit2.c,v 1.13 2008/09/26 22:52:24 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: emit2.c,v 1.10 2004/09/12 08:58:52 yamt Exp $");
+__RCSID("$NetBSD: emit2.c,v 1.13 2008/09/26 22:52:24 matt Exp $");
 #endif
 
 #include "lint2.h"
@@ -79,6 +79,9 @@ outtype(type_t *tp)
 		case ENUM:	t = 'T';	s = 'e';	break;
 		case STRUCT:	t = 'T';	s = 's';	break;
 		case UNION:	t = 'T';	s = 'u';	break;
+		case FCOMPLEX:	t = 'X';	s = 's';	break;
+		case DCOMPLEX:	t = 'X';	s = '\0';	break;
+		case LCOMPLEX:	t = 'X';	s = 'l';	break;
 		case FUNC:
 			if (tp->t_args != NULL && !tp->t_proto) {
 				t = 'f';

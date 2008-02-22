@@ -1,4 +1,4 @@
-.\"	$NetBSD: elanpex.4,v 1.2 2008/01/21 21:51:57 dyoung Exp $
+.\"	$NetBSD: elanpex.4,v 1.9 2017/02/17 22:24:46 christos Exp $
 .\"
 .\"
 .\" Copyright (c) 2008 David Young.  All rights reserved.
@@ -14,9 +14,6 @@
 .\"    copyright notice, this list of conditions and the following
 .\"    disclaimer in the documentation and/or other materials
 .\"    provided with the distribution.
-.\" 3. David Young's name may not be used to endorse or promote
-.\"    products derived from this software without specific prior
-.\"    written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
 .\" EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -31,14 +28,14 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 10, 2008
-.Dt elanpex 4 i386
+.Dd February 17, 2017
+.Dt ELANPEX 4 i386
 .Os
 .Sh NAME
 .Nm elanpex
 .Nd AMD Elan SC520 PCI Exception Instrumentation
 .Sh SYNOPSIS
-.Cd "elansc* at pci? dev ? function ?"
+.Cd "elansc* at mainbus? bus ?"
 .Cd "elanpex* at elansc?"
 .Sh DESCRIPTION
 The
@@ -85,13 +82,13 @@ Failures may occur for the following reasons:
 .It elanpex0: %s %x target data parity
 .El
 .Pp
-Transaction types are alike to failed master exceptions. 
+Transaction types are alike to failed master exceptions.
 .El
 .Sh SEE ALSO
+.Xr i386/elanpar 4 ,
+.Xr i386/elansc 4 ,
 .Xr dmesg 8 ,
-.Xr elanpar 4 ,
-.Xr elansc 4 ,
-.Xr syslogd 8 .
+.Xr syslogd 8
 .Sh HISTORY
 The
 .Nm
@@ -101,4 +98,4 @@ device first appeared in
 The
 .Nm
 driver was written by
-.An David Young Aq dyoung@NetBSD.org .
+.An David Young Aq Mt dyoung@NetBSD.org .

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_snvar.h,v 1.11 2007/10/17 19:55:54 garbled Exp $	*/
+/*	$NetBSD: if_snvar.h,v 1.13 2011/02/20 07:56:31 matt Exp $	*/
 
 /*
  * Copyright (c) 1991   Algorithmics Ltd (http://www.algor.co.uk)
@@ -32,14 +32,6 @@
 #define	SN_REGSIZE	(SN_NREGS * 4)
 
 #include <mips/locore.h>
-#undef wbflush	/* XXX */
-
-static inline void
-wbflush(void)
-{
-	mips3_wbflush();
-	apbus_wbflush();
-};
 
 /*
  * buffer sizes in 32 bit mode
@@ -65,14 +57,14 @@ wbflush(void)
  * maximum receive packet size plus 2 byte pad to make each
  * one aligned. 4 byte slop (required for eobc)
  */
-#define RBASIZE(sc)	(sizeof(struct ether_header) + ETHERMTU + FCSSIZE + 6)
+#define RBASIZE(sc)	(ETHER_HDR_LEN + ETHERMTU + FCSSIZE + 6)
 
 /*
  * transmit buffer area
  */
 #define TXBSIZE	1536	/* 6*2^8 -- the same size as the 8390 TXBUF */
 
-#define	SN_NPAGES	2 + NRBA + (NTDA/2)
+#define	SN_NPAGES	2 + NRBA + (NTDA / 2)
 
 typedef struct mtd {
 	void		*mtd_txp;
@@ -86,7 +78,7 @@ typedef struct mtd {
  * The sn_softc for NEWS5000 if_sn.
  */
 struct sn_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	struct ethercom	sc_ethercom;
 #define sc_if	sc_ethercom.ec_if	/* network visible interface */
 

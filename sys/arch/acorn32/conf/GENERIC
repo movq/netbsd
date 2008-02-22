@@ -1,4 +1,4 @@
-# 	$NetBSD: GENERIC,v 1.84 2008/01/19 13:11:10 chris Exp $
+# 	$NetBSD: GENERIC,v 1.126 2018/06/07 13:36:28 thorpej Exp $
 #
 #	GENERIC --- NetBSD/acorn32 complete configuration
 #
@@ -18,11 +18,11 @@
 # of each device driver in this file see the section 4 man page for the
 # device.
 
-include		"arch/acorn32/conf/std.acorn32"
+include 	"arch/acorn32/conf/std.acorn32"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.84 $"
+#ident		"GENERIC-$Revision: 1.126 $"
 
 # estimated number of users
 maxusers	32
@@ -42,9 +42,6 @@ options 	CPU_ARM7	# Support the ARM7 core
 # For StrongARM only kernels
 #makeoptions	COPTS="-O2 -march=armv3m -mtune=strongarm"
 
-# FPA options
-#options 	ARMFPE		# ARM Ltd FPE
-
 # File systems
 
 file-system	FFS		# UFS
@@ -60,21 +57,23 @@ file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay filesystem
-file-system	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	PROCFS		# /proc
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
 
 # Networking options
 
@@ -82,15 +81,10 @@ options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking
-options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
@@ -111,27 +105,14 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 
 # Compatibility options
 
-options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options		COMPAT_20	# NetBSD 2.0 compatibility.
-options 	COMPAT_16	# NetBSD 1.6 compatibility.
-options		COMPAT_15	# NetBSD 1.5 compatibility.
-options 	COMPAT_14	# NetBSD 1.4 compatibility.
-options 	COMPAT_13	# NetBSD 1.3 compatibility.
-options 	COMPAT_12	# NetBSD 1.2 compatibility.
-#options 	COMPAT_11	# NetBSD 1.1 compatibility.
-#options 	COMPAT_10	# NetBSD 1.0 compatibility.
-#options 	COMPAT_09	# NetBSD 0.9 compatibility.
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd12.config"
+options 	COMPAT_NETBSD32	# allow running arm (e.g. non-earm) binaries
 
 # Shared memory options
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-options 	SHMMAXPGS=1024	# 1024 pages is the default
-options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -142,15 +123,13 @@ options 	MEMORY_DISK_HOOKS	# boottime setup of ramdisk
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
-options 	LKM		# loadable kernel modules
-options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under 
-# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
@@ -198,19 +177,11 @@ vidc0		at mainbus?
 #options 	WSEMUL_SUN
 options 	WSEMUL_VT100
 
-#options 	WSDISPLAY_COMPAT_RAWKBD
+options         WS_KERNEL_FG=WSCOL_GREEN
 
-#options 	FONT_BOLD8x16
-#options 	FONT_GALLANT12x22	# Very nice font
-#options 	FONT_LUCIDA16x29
-#options 	FONT_OMRON12x20		# looks funny
-#options 	FONT_QVSS8x15		# broken ?
-options 	FONT_SONY12x25		# looks like VT220 font
-options 	FONT_SONY8x16		# not tested
-#options 	FONT_VT220L8x8		# 8x8 font as in Arch. cons
-#options 	FONT_VT220L8x16		# 8x(2x8) font as in Arch. cons
-#options 	FONT_VT220L8x10		# not tested
-#options 	FONT_VT220L8x20		# not tested
+#options 	WSDISPLAY_COMPAT_RAWKBD
+options		WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options		WSDISPLAY_SCROLLSUPPORT
 
 vidcvideo0	at vidc?		# wscons driver for VIDC
 wsdisplay*	at vidcvideo? console ?	# display itself
@@ -261,6 +232,8 @@ lpt*	at pioc? offset 0x0278 irq 0	# Old driver
 vidcaudio0	at vidc?
 audio*		at vidcaudio0
 
+spkr*	at audio?			# PC speaker (synthesized)
+
 # Podule bus device
 podulebus0	at root
 
@@ -310,7 +283,7 @@ ea*	at podulebus?			# Ether3 podules
 eb0	at podulebus?			# EtherB network slot cards
 ne*	at podulebus?			# NE2000 clone cards
 
-pseudo-device	loop	1		# network loopback
+pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
 pseudo-device	sl			# CSLIP
@@ -319,7 +292,7 @@ pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	tun			# network tunneling over tty
 pseudo-device	tap			# virtual Ethernet
 #pseudo-device	gre			# generic L3 over IP tunnel
-#pseudo-device	ipfilter 1		# ip filter
+#pseudo-device	ipfilter		# ip filter
 pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
@@ -331,9 +304,9 @@ pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	cgd	4		# cryptographic disk devices
-pseudo-device	raid	8		# RAIDframe disk driver
+pseudo-device	ccd			# concatenated disk devices
+#pseudo-device	cgd			# cryptographic disk devices
+pseudo-device	raid			# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options	RF_INCLUDE_EVENODD=1
@@ -343,29 +316,31 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss	4		# file system snapshot device
-pseudo-device	md	1		# Ramdisk driver
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
 
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5
 
 # If the standard modes don't work for your monitor, you can specify
 # a RISC-OS-format monitor definition file and a list of modes here.

@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_termios.c,v 1.25 2007/12/08 18:36:26 dsl Exp $	 */
+/*	$NetBSD: svr4_termios.c,v 1.29 2015/12/13 19:47:08 christos Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.25 2007/12/08 18:36:26 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.29 2015/12/13 19:47:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -50,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.25 2007/12/08 18:36:26 dsl Exp $"
 #include <sys/socket.h>
 #include <sys/mount.h>
 #include <net/if.h>
-#include <sys/malloc.h>
 
 #include <sys/syscallargs.h>
 
@@ -190,7 +182,7 @@ bsd_to_svr4_speed(u_long sp, u_long mask)
 {
 	switch (sp) {
 #undef getval
-#define getval(a,b)	case __CONCAT(a,b):	sp = __CONCAT3(SVR4_,a,b)
+#define getval(a,b)	case __CONCAT(a,b): sp = __CONCAT3(SVR4_,a,b); break
 	getval(B,0);
 	getval(B,50);
 	getval(B,75);
@@ -486,21 +478,20 @@ svr4_termios_to_termio(const struct svr4_termios *ts, struct svr4_termio *t)
 }
 
 int
-svr4_term_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *data)
+svr4_term_ioctl(file_t *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *data)
 {
 	struct termios 		bt;
 	struct svr4_termios	st;
 	struct svr4_termio	t;
 	int			error, new;
-	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
 	switch (cmd) {
 	case SVR4_TCGETA:
 	case SVR4_TCGETS:
-		if ((error = (*ctl)(fp, TIOCGETA, (void *) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, &bt)) != 0)
 			return error;
 
 		memset(&st, 0, sizeof(st));
@@ -527,7 +518,7 @@ svr4_term_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_lo
 	case SVR4_TCSETAF:
 	case SVR4_TCSETSF:
 		/* get full BSD termios so we don't lose information */
-		if ((error = (*ctl)(fp, TIOCGETA, (void *) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, &bt)) != 0)
 			return error;
 
 		switch (cmd) {
@@ -578,13 +569,13 @@ svr4_term_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_lo
 		print_svr4_termios(&st);
 #endif /* DEBUG_SVR4 */
 
-		return (*ctl)(fp, cmd, (void *) &bt, l);
+		return (*ctl)(fp, cmd, &bt);
 
 	case SVR4_TIOCGWINSZ:
 		{
 			struct svr4_winsize ws;
 
-			error = (*ctl)(fp, TIOCGWINSZ, (void *) &ws, l);
+			error = (*ctl)(fp, TIOCGWINSZ, &ws);
 			if (error)
 				return error;
 			return copyout(&ws, data, sizeof(ws));
@@ -596,7 +587,7 @@ svr4_term_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_lo
 
 			if ((error = copyin(data, &ws, sizeof(ws))) != 0)
 				return error;
-			return (*ctl)(fp, TIOCSWINSZ, (void *) &ws, l);
+			return (*ctl)(fp, TIOCSWINSZ, &ws);
 		}
 
 	default:

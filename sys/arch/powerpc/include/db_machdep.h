@@ -1,5 +1,5 @@
 /*	$OpenBSD: db_machdep.h,v 1.2 1997/03/21 00:48:48 niklas Exp $	*/
-/*	$NetBSD: db_machdep.h,v 1.19 2006/05/14 21:56:32 elad Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.26 2017/11/06 03:47:48 christos Exp $	*/
 
 /* 
  * Mach Operating System
@@ -42,9 +42,9 @@
 #endif
 
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE	32
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 struct powerpc_saved_state {
 	u_int32_t	r[32];		/* data registers */
@@ -118,7 +118,7 @@ extern	db_regs_t	ddb_regs;		/* register state */
 				 ((ins)&M_BCTR) == I_BCTR )
 #define inst_load(ins)		0
 #define inst_store(ins)		0
-#ifdef PPC_IBM4XX
+#if defined(PPC_IBM4XX) || defined(PPC_BOOKE)
 #define next_instr_address(v, b) ((db_addr_t) ((b) ? (v) : ((v) + 4)))
 extern db_addr_t branch_taken(int, db_addr_t, db_regs_t *);
 #endif
@@ -133,29 +133,43 @@ extern db_addr_t branch_taken(int, db_addr_t, db_regs_t *);
  * and up to 64 4-byte non-standard OES special-purpose registers.
  * GDB keeps some extra space, so the total size of the register array
  * they use is 880 bytes (gdb-5.0).
+ * KGDB_NUMREGS 220
+ */
+/*
+ * GDB's register array of gdb-6.0 is defined in
+ * usr/src/gnu/dist/gdb6/gdb/regformats/reg-ppc.dat
+ * GDB's register array is:
+ *  32 4-byte GPRs
+ *  32 8-byte FPRs
+ *   7 4-byte UISA special-purpose registers: pc, ps, cr, lr, ctr, xer, fpscr
+ * index of pc in array: 32 + 2*32 = 96
+ * size 32 * 4 + 32 * 8 + 7 * 4 = 103 * 4 = 412 bytes
+ * KGD_NUMREGS 103
  */
 typedef long	kgdb_reg_t;
-#define KGDB_NUMREGS	220	/* Treat all registers as 4-byte */
-#define KGDB_BUFLEN	(2*KGDB_NUMREGS*sizeof(kgdb_reg_t)+1)
 #define KGDB_PPC_PC_REG		96	/* first UISA SP register */
 #define KGDB_PPC_MSR_REG	97
 #define KGDB_PPC_CR_REG		98
 #define KGDB_PPC_LR_REG		99
 #define KGDB_PPC_CTR_REG	100
 #define KGDB_PPC_XER_REG	101
-#define KGDB_PPC_MQ_REG		102
+#define KGDB_PPC_FPSCR_REG	102
+#define KGDB_NUMREGS		103	/* Treat all registers as 4-byte */
+#define KGDB_BUFLEN		(2*KGDB_NUMREGS*sizeof(kgdb_reg_t)+1)
 
 #ifdef _KERNEL
 
-void	kdb_kintr __P((void *));
-int	kdb_trap __P((int, void *));
+void	kdb_kintr(void *);
+int	kdb_trap(int, void *);
 
-#ifdef PPC_IBM4XX
+bool	ddb_running_on_this_cpu_p(void);
+bool	ddb_running_on_any_cpu_p(void);
+void	db_resume_others(void);
+
 /*
  * We have machine-dependent commands.
  */
 #define	DB_MACHINE_COMMANDS
-#endif
 
 #endif /* _KERNEL */
 

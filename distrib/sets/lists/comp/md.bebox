@@ -1,10 +1,10 @@
-# $NetBSD: md.bebox,v 1.29 2007/02/17 22:00:25 he Exp $
+# $NetBSD: md.bebox,v 1.40 2015/12/20 16:22:39 christos Exp $
 ./usr/include/bebox				comp-c-include
 ./usr/include/bebox/_G_config.h			comp-obsolete		obsolete
 ./usr/include/bebox/ansi.h			comp-c-include
 ./usr/include/bebox/aout_machdep.h		comp-c-include
 ./usr/include/bebox/asm.h			comp-c-include
-./usr/include/bebox/atomic.h			comp-c-include
+./usr/include/bebox/atomic.h			comp-obsolete		obsolete
 ./usr/include/bebox/bat.h			comp-obsolete		obsolete
 ./usr/include/bebox/bootinfo.h			comp-c-include
 ./usr/include/bebox/bswap.h			comp-c-include
@@ -19,6 +19,7 @@
 ./usr/include/bebox/elf_machdep.h		comp-c-include
 ./usr/include/bebox/endian.h			comp-c-include
 ./usr/include/bebox/endian_machdep.h		comp-c-include
+./usr/include/bebox/fenv.h			comp-c-include
 ./usr/include/bebox/float.h			comp-c-include
 ./usr/include/bebox/fpu.h			comp-c-include
 ./usr/include/bebox/frame.h			comp-c-include
@@ -37,11 +38,11 @@
 ./usr/include/bebox/lock.h			comp-c-include
 ./usr/include/bebox/math.h			comp-c-include
 ./usr/include/bebox/mcontext.h			comp-c-include
-./usr/include/bebox/mouse.h			comp-c-include
+./usr/include/bebox/mouse.h			comp-obsolete		obsolete
 ./usr/include/bebox/mutex.h			comp-c-include
 ./usr/include/bebox/param.h			comp-c-include
 ./usr/include/bebox/pcb.h			comp-c-include
-./usr/include/bebox/pccons.h			comp-c-include
+./usr/include/bebox/pccons.h			comp-obsolete		obsolete
 ./usr/include/bebox/pio.h			comp-obsolete		obsolete
 ./usr/include/bebox/pmap.h			comp-c-include
 ./usr/include/bebox/pmc.h			comp-c-include
@@ -56,13 +57,15 @@
 ./usr/include/bebox/rwlock.h			comp-c-include
 ./usr/include/bebox/setjmp.h			comp-c-include
 ./usr/include/bebox/signal.h			comp-c-include
+./usr/include/bebox/sljit_machdep.h		comp-c-include
+./usr/include/bebox/sljitarch.h			comp-obsolete		obsolete
 ./usr/include/bebox/spkr.h			comp-c-include
-./usr/include/bebox/spr.h			comp-c-include
-./usr/include/bebox/stdarg.h			comp-c-include
+./usr/include/bebox/spr.h			comp-obsolete		obsolete
+./usr/include/bebox/stdarg.h			comp-obsolete		obsolete
 ./usr/include/bebox/trap.h			comp-c-include
 ./usr/include/bebox/types.h			comp-c-include
 ./usr/include/bebox/va-ppc.h			comp-obsolete		obsolete
-./usr/include/bebox/varargs.h			comp-c-include
+./usr/include/bebox/varargs.h			comp-obsolete		obsolete
 ./usr/include/bebox/vmparam.h			comp-c-include
 ./usr/include/bebox/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

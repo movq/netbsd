@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_unistd.c,v 1.21 2008/02/17 21:49:17 njoly Exp $ */
+/*	$NetBSD: linux32_unistd.c,v 1.40 2017/12/26 08:30:58 kamil Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_unistd.c,v 1.21 2008/02/17 21:49:17 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_unistd.c,v 1.40 2017/12/26 08:30:58 kamil Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,6 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_unistd.c,v 1.21 2008/02/17 21:49:17 njoly Ex
 #include <sys/proc.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
+#include <sys/kauth.h>
+#include <sys/filedesc.h>
+#include <sys/vfs_syscalls.h>
 
 #include <machine/types.h>
 
@@ -53,18 +56,21 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_unistd.c,v 1.21 2008/02/17 21:49:17 njoly Ex
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_conv.h>
-#include <compat/netbsd32/netbsd32_syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_oldolduname.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
+#include <compat/linux/common/linux_fcntl.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
 #include <compat/linux32/common/linux32_signal.h>
 #include <compat/linux32/common/linux32_machdep.h>
+#include <compat/linux32/common/linux32_sched.h>
 #include <compat/linux32/common/linux32_sysctl.h>
 #include <compat/linux32/common/linux32_socketcall.h>
 #include <compat/linux32/linux32_syscallargs.h>
@@ -88,18 +94,18 @@ int
 linux32_sys_llseek(struct lwp *l, const struct linux32_sys_llseek_args *uap, register_t *retval)
 {
 	/* {
-		syscallcarg(int) fd;
+		syscallarg(int) fd;
                 syscallarg(u_int32_t) ohigh;
                 syscallarg(u_int32_t) olow;
-		syscallarg(netbsd32_caddr_t) res;
-		syscallcarg(int) whence;
+		syscallarg(netbsd32_voidp) res;
+		syscallarg(int) whence;
 	} */
 	struct linux_sys_llseek_args ua;
 
 	NETBSD32TO64_UAP(fd);
 	NETBSD32TO64_UAP(ohigh);
 	NETBSD32TO64_UAP(olow);
-	NETBSD32TOP_UAP(res, char);
+	NETBSD32TOP_UAP(res, void);
 	NETBSD32TO64_UAP(whence);
 
 	return linux_sys_llseek(l, &ua, retval);
@@ -113,7 +119,7 @@ linux32_sys_select(struct lwp *l, const struct linux32_sys_select_args *uap, reg
 		syscallarg(netbsd32_fd_setp_t) readfds;
 		syscallarg(netbsd32_fd_setp_t) writefds;
 		syscallarg(netbsd32_fd_setp_t) exceptfds;
-		syscallarg(netbsd32_timevalp_t) timeout;
+		syscallarg(netbsd32_timeval50p_t) timeout;
 	} */
 
 	return linux32_select1(l, retval, SCARG(uap, nfds), 
@@ -141,18 +147,14 @@ linux32_sys_oldselect(struct lwp *l, const struct linux32_sys_oldselect_args *ua
 }
 
 static int
-linux32_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
-        struct lwp *l;
-        register_t *retval;
-        int nfds;
-        fd_set *readfds, *writefds, *exceptfds;
-        struct timeval *timeout;
+linux32_select1(struct lwp *l, register_t *retval, int nfds,
+		fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+		struct timeval *timeout)
 {   
-	struct timeval tv0, tv1, utv, *tv = NULL;
-	struct netbsd32_timeval utv32;
+	struct timespec ts0, ts1, uts, *ts = NULL;
+	struct netbsd32_timeval50 utv32;
 	int error;
 
-	timerclear(&utv); /* XXX GCC4 */
 
 	/*
 	 * Store current time for computation of the amount of
@@ -162,28 +164,29 @@ linux32_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 		if ((error = copyin(timeout, &utv32, sizeof(utv32))))
 			return error;
 
-		netbsd32_to_timeval(&utv32, &utv);
+		uts.tv_sec = utv32.tv_sec;
+		uts.tv_nsec = utv32.tv_usec * 1000;
 
-		if (itimerfix(&utv)) {
+		if (itimespecfix(&uts)) {
 			/*
 			 * The timeval was invalid.  Convert it to something
 			 * valid that will act as it does under Linux.
 			 */
-			utv.tv_sec += utv.tv_usec / 1000000;
-			utv.tv_usec %= 1000000;
-			if (utv.tv_usec < 0) {
-				utv.tv_sec -= 1;
-				utv.tv_usec += 1000000;
+			uts.tv_sec += uts.tv_nsec / 1000000000;
+			uts.tv_nsec %= 1000000000;
+			if (uts.tv_nsec < 0) {
+				uts.tv_sec -= 1;
+				uts.tv_nsec += 1000000000;
 			}
-			if (utv.tv_sec < 0)
-				timerclear(&utv);
+			if (uts.tv_sec < 0)
+				timespecclear(&uts);
 		}
-		microtime(&tv0);
-		tv = &utv;
-	}
+		nanotime(&ts0);
+		ts = &uts;
+	} else
+		timespecclear(&uts); /* XXX GCC4 */
 
-	error = selcommon(l, retval, nfds, 
-	    readfds, writefds, exceptfds, tv, NULL);
+	error = selcommon(retval, nfds, readfds, writefds, exceptfds, ts, NULL);
 
 	if (error) {
 		/*
@@ -203,16 +206,17 @@ linux32_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 			 * before we started the call, and subtracting
 			 * that result from the user-supplied value.
 			 */
-			microtime(&tv1);
-			timersub(&tv1, &tv0, &tv1);
-			timersub(&utv, &tv1, &utv);
-			if (utv.tv_sec < 0)
-				timerclear(&utv);
+			nanotime(&ts1);
+			timespecsub(&ts1, &ts0, &ts1);
+			timespecsub(&uts, &ts1, &uts);
+			if (uts.tv_sec < 0)
+				timespecclear(&uts);
 		} else {
-			timerclear(&utv);
+			timespecclear(&uts);
 		}
 		
-		netbsd32_from_timeval(&utv, &utv32);
+		utv32.tv_sec = uts.tv_sec;
+		utv32.tv_usec = uts.tv_nsec / 1000;
 
 		if ((error = copyout(&utv32, timeout, sizeof(utv32))))
 			return error;
@@ -222,29 +226,122 @@ linux32_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 }
 
 int
-linux32_sys_pipe(struct lwp *l, const struct linux32_sys_pipe_args *uap, register_t *retval)
+linux32_sys_pipe(struct lwp *l, const struct linux32_sys_pipe_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(netbsd32_intp) fd;
 	} */
-	int error;
-	int pfds[2];
+	int f[2], error;
 
-	if ((error = sys_pipe(l, 0, retval)))
+	if ((error = pipe1(l, f, 0)))
 		return error;
 
-	pfds[0] = (int)retval[0];
-	pfds[1] = (int)retval[1];
-
-	if ((error = copyout(pfds, SCARG_P32(uap, fd), 2 * sizeof (int))) != 0)
+	if ((error = copyout(f, SCARG_P32(uap, fd), sizeof(f))) != 0)
 		return error;
-
 	retval[0] = 0;
-	retval[1] = 0;
-
 	return 0;
 }
 
+int
+linux32_sys_pipe2(struct lwp *l, const struct linux32_sys_pipe2_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(netbsd32_intp) fd;
+	} */
+	int f[2], flags, error;
+
+	flags = linux_to_bsd_ioflags(SCARG(uap, flags));
+	if ((flags & ~(O_CLOEXEC|O_NONBLOCK)) != 0)
+		return EINVAL;
+
+	if ((error = pipe1(l, f, flags)))
+		return error;
+
+	if ((error = copyout(f, SCARG_P32(uap, fd), sizeof(f))) != 0)
+		return error;
+	retval[0] = 0;
+	return 0;
+}
+
+int
+linux32_sys_dup3(struct lwp *l, const struct linux32_sys_dup3_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) from;
+		syscallarg(int) to;
+		syscallarg(int) flags;
+	} */
+	struct linux_sys_dup3_args ua;
+
+	NETBSD32TO64_UAP(from);
+	NETBSD32TO64_UAP(to);
+	NETBSD32TO64_UAP(flags);
+
+	return linux_sys_dup3(l, &ua, retval);
+}
+
+
+int
+linux32_sys_openat(struct lwp *l, const struct linux32_sys_openat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const netbsd32_charp) path;
+		syscallarg(int) flags;
+		syscallarg(int) mode;
+	} */
+	struct linux_sys_openat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(flags);
+	NETBSD32TO64_UAP(mode);
+
+	return linux_sys_openat(l, &ua, retval);
+}
+
+int
+linux32_sys_mknodat(struct lwp *l, const struct linux32_sys_mknodat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const netbsd32_charp) path;
+		syscallarg(linux_umode_t) mode;
+		syscallarg(unsigned) dev;
+	} */
+	struct linux_sys_mknodat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(mode);
+	NETBSD32TO64_UAP(dev);
+
+	return linux_sys_mknodat(l, &ua, retval);
+}
+
+int
+linux32_sys_linkat(struct lwp *l, const struct linux32_sys_linkat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd1;
+		syscallarg(netbsd32_charp) name1;
+		syscallarg(int) fd2;
+		syscallarg(netbsd32_charp) name2;
+		syscallarg(int) flags;
+	} */
+	int fd1 = SCARG(uap, fd1);
+	const char *name1 = SCARG_P32(uap, name1);
+	int fd2 = SCARG(uap, fd2);
+	const char *name2 = SCARG_P32(uap, name2);
+	int follow;
+
+	follow = SCARG(uap, flags) & LINUX_AT_SYMLINK_FOLLOW;
+
+	return do_sys_linkat(l, fd1, name1, fd2, name2, follow, retval);
+}
 
 int
 linux32_sys_unlink(struct lwp *l, const struct linux32_sys_unlink_args *uap, register_t *retval)
@@ -255,8 +352,94 @@ linux32_sys_unlink(struct lwp *l, const struct linux32_sys_unlink_args *uap, reg
 	struct linux_sys_unlink_args ua;
 
 	NETBSD32TOP_UAP(path, const char);
-	
+
 	return linux_sys_unlink(l, &ua, retval);
+}
+
+int
+linux32_sys_unlinkat(struct lwp *l, const struct linux32_sys_unlinkat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const netbsd32_charp) path;
+		syscallarg(int) flag;
+	} */
+	struct linux_sys_unlinkat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(flag);
+
+	return linux_sys_unlinkat(l, &ua, retval);
+}
+
+int
+linux32_sys_fchmodat(struct lwp *l, const struct linux32_sys_fchmodat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd_charp) path;
+		syscallarg(linux_umode_t) mode;
+	} */
+
+	return do_sys_chmodat(l, SCARG(uap, fd), SCARG_P32(uap, path),
+			      SCARG(uap, mode), AT_SYMLINK_FOLLOW);
+}
+
+int
+linux32_sys_fchownat(struct lwp *l, const struct linux32_sys_fchownat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd_charp) path;
+		syscallarg(uid_t) owner;
+		syscallarg(gid_t) group;
+		syscallarg(int) flag;
+	} */
+	int flag;
+
+	flag = linux_to_bsd_atflags(SCARG(uap, flag));
+	return do_sys_chownat(l, SCARG(uap, fd), SCARG_P32(uap, path),
+			      SCARG(uap, owner), SCARG(uap, group), flag);
+}
+
+int
+linux32_sys_faccessat(struct lwp *l, const struct linux32_sys_faccessat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd_charp) path;
+		syscallarg(int) amode;
+	} */
+
+	return do_sys_accessat(l, SCARG(uap, fd), SCARG_P32(uap, path),
+	     SCARG(uap, amode), AT_SYMLINK_FOLLOW);
+}
+
+int
+linux32_sys_utimensat(struct lwp *l, const struct linux32_sys_utimensat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const netbsd32_charp) path;
+		syscallarg(const linux32_timespecp_t) times;
+		syscallarg(int) flags;
+	} */
+	int error;
+	struct linux32_timespec lts[2];
+	struct timespec *tsp = NULL, ts[2];
+
+	if (SCARG_P32(uap, times)) {
+		error = copyin(SCARG_P32(uap, times), &lts, sizeof(lts));
+		if (error != 0)
+			return error;
+		linux32_to_native_timespec(&ts[0], &lts[0]);
+		linux32_to_native_timespec(&ts[1], &lts[1]);
+		tsp = ts;
+	}
+
+	return linux_do_sys_utimensat(l, SCARG(uap, fd), SCARG_P32(uap, path),
+	    tsp, SCARG(uap, flag), retval);
 }
 
 int
@@ -302,21 +485,6 @@ linux32_sys_break(struct lwp *l, const struct linux32_sys_break_args *uap, regis
 #endif
 
 	return ENOSYS;
-}
-
-int
-linux32_sys_rename(struct lwp *l, const struct linux32_sys_rename_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(const netbsd32_charp) from;
-		syscallarg(const netbsd32_charp) to;
-	} */
-	struct sys___posix_rename_args ua;
-
-	NETBSD32TOP_UAP(from, const char);
-	NETBSD32TOP_UAP(to, const char);
-
-	return sys___posix_rename(l, &ua, retval);
 }
 
 int
@@ -368,22 +536,6 @@ linux32_sys_reboot(struct lwp *l, const struct linux32_sys_reboot_args *uap, reg
 }
 
 int
-linux32_sys_truncate(struct lwp *l, const struct linux32_sys_truncate_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(const netbsd32_charp) path;
-		syscallarg(netbsd32_charp) buf;
-		syscallarg(int) count;
-	} */
-	struct compat_43_sys_truncate_args ua;
-
-	NETBSD32TOP_UAP(path, const char);
-	NETBSD32TO64_UAP(length);
-
-	return compat_43_sys_truncate(l, &ua, retval);
-}
-
-int
 linux32_sys_setresuid(struct lwp *l, const struct linux32_sys_setresuid_args *uap, register_t *retval)
 {
 	/* {
@@ -393,11 +545,35 @@ linux32_sys_setresuid(struct lwp *l, const struct linux32_sys_setresuid_args *ua
 	} */
 	struct linux_sys_setresuid_args ua;
 
-	SCARG(&ua, ruid) = (SCARG(uap, ruid) == -1) ? -1 : SCARG(uap, ruid);
-	SCARG(&ua, euid) = (SCARG(uap, euid) == -1) ? -1 : SCARG(uap, euid);
-	SCARG(&ua, suid) = (SCARG(uap, suid) == -1) ? -1 : SCARG(uap, suid);
+	NETBSD32TO64_UAP(ruid);
+	NETBSD32TO64_UAP(euid);
+	NETBSD32TO64_UAP(suid);
 
 	return linux_sys_setresuid(l, &ua, retval);
+}
+
+int
+linux32_sys_getresuid(struct lwp *l, const struct linux32_sys_getresuid_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(linux32_uidp_t) ruid;
+		syscallarg(linux32_uidp_t) euid;
+		syscallarg(linux32_uidp_t) suid;
+	} */
+	kauth_cred_t pc = l->l_cred;
+	int error;
+	uid_t uid;
+
+	uid = kauth_cred_getuid(pc);
+	if ((error = copyout(&uid, SCARG_P32(uap, ruid), sizeof(uid_t))) != 0)
+		return error;
+
+	uid = kauth_cred_geteuid(pc);
+	if ((error = copyout(&uid, SCARG_P32(uap, euid), sizeof(uid_t))) != 0)
+		return error;
+
+	uid = kauth_cred_getsvuid(pc);
+	return copyout(&uid, SCARG_P32(uap, suid), sizeof(uid_t));
 }
 
 int
@@ -410,11 +586,35 @@ linux32_sys_setresgid(struct lwp *l, const struct linux32_sys_setresgid_args *ua
 	} */
 	struct linux_sys_setresgid_args ua;
 
-	SCARG(&ua, rgid) = (SCARG(uap, rgid) == -1) ? -1 : SCARG(uap, rgid);
-	SCARG(&ua, egid) = (SCARG(uap, egid) == -1) ? -1 : SCARG(uap, egid);
-	SCARG(&ua, sgid) = (SCARG(uap, sgid) == -1) ? -1 : SCARG(uap, sgid);
+	NETBSD32TO64_UAP(rgid);
+	NETBSD32TO64_UAP(egid);
+	NETBSD32TO64_UAP(sgid);
 
 	return linux_sys_setresgid(l, &ua, retval);
+}
+
+int
+linux32_sys_getresgid(struct lwp *l, const struct linux32_sys_getresgid_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(linux32_gidp_t) rgid;
+		syscallarg(linux32_gidp_t) egid;
+		syscallarg(linux32_gidp_t) sgid;
+	} */
+	kauth_cred_t pc = l->l_cred;
+	int error;
+	gid_t gid;
+
+	gid = kauth_cred_getgid(pc);
+	if ((error = copyout(&gid, SCARG_P32(uap, rgid), sizeof(gid_t))) != 0)
+		return error;
+
+	gid = kauth_cred_getegid(pc);
+	if ((error = copyout(&gid, SCARG_P32(uap, egid), sizeof(gid_t))) != 0)
+		return error;
+
+	gid = kauth_cred_getsvgid(pc);
+	return copyout(&gid, SCARG_P32(uap, sgid), sizeof(gid_t));
 }
 
 int
@@ -423,13 +623,16 @@ linux32_sys_nice(struct lwp *l, const struct linux32_sys_nice_args *uap, registe
 	/* {
 		syscallarg(int) incr;
 	} */
-	struct netbsd32_setpriority_args bsa;
+	struct proc *p = l->l_proc;
+	struct sys_setpriority_args bsa;
+	int error;
 
 	SCARG(&bsa, which) = PRIO_PROCESS;
 	SCARG(&bsa, who) = 0;
-	SCARG(&bsa, prio) = SCARG(uap, incr);
+	SCARG(&bsa, prio) = p->p_nice - NZERO + SCARG(uap, incr);
 
-	return netbsd32_setpriority(l, &bsa, retval);
+	error = sys_setpriority(l, &bsa, retval);
+	return (error) ? EPERM : 0;
 }
 
 int
@@ -495,13 +698,14 @@ linux32_sys_pread(struct lwp *l,
 		syscallarg(int) fd;
 		syscallarg(netbsd32_voidp) buf;
 		syscallarg(netbsd32_size_t) nbyte;
-		syscallarg(linux32_off_t) offset;
+		syscallarg(netbsd32_off_t) offset;
 	} */
 	struct sys_pread_args pra;
 
 	SCARG(&pra, fd) = SCARG(uap, fd);
 	SCARG(&pra, buf) = SCARG_P32(uap, buf);
 	SCARG(&pra, nbyte) = SCARG(uap, nbyte);
+	SCARG(&pra, PAD) = 0;
 	SCARG(&pra, offset) = SCARG(uap, offset);
 
 	return sys_pread(l, &pra, retval);
@@ -518,15 +722,15 @@ linux32_sys_pwrite(struct lwp *l,
 		syscallarg(int) fd;
 		syscallarg(const netbsd32_voidp) buf;
 		syscallarg(netbsd32_size_t) nbyte;
-		syscallarg(linux32_off_t) offset;
+		syscallarg(netbsd32_off_t) offset;
 	} */
 	struct sys_pwrite_args pra;
 
 	SCARG(&pra, fd) = SCARG(uap, fd);
 	SCARG(&pra, buf) = SCARG_P32(uap, buf);
 	SCARG(&pra, nbyte) = SCARG(uap, nbyte);
+	SCARG(&pra, PAD) = 0;
 	SCARG(&pra, offset) = SCARG(uap, offset);
 
 	return sys_pwrite(l, &pra, retval);
 }
-

@@ -1,4 +1,4 @@
-.\" $NetBSD: mklocale.1,v 1.13 2004/01/24 17:03:26 wiz Exp $
+.\" $NetBSD: mklocale.1,v 1.17 2017/07/03 21:34:20 wiz Exp $
 .\" FreeBSD: src/usr.bin/mklocale/mklocale.1,v 1.6 1999/09/20 09:15:21 phantom Exp
 .\"
 .\" Copyright (c) 1993, 1994
@@ -33,7 +33,7 @@
 .\"
 .\"	@(#)mklocale.1	8.2 (Berkeley) 4/18/94
 .\"
-.Dd April 18, 1994
+.Dd July 15, 2013
 .Dt MKLOCALE 1
 .Os
 .Sh NAME
@@ -42,15 +42,17 @@
 .Sh SYNOPSIS
 .Nm mklocale
 .Op Fl d
-\*[Lt]
-.Ar src-file
-\*[Gt]
+.Op Fl t Ar type
+<
+.Ar source
+>
 .Ar language/LC_CTYPE
 .Nm mklocale
 .Op Fl d
+.Op Fl t Ar type
 .Fl o
 .Ar language/LC_CTYPE
-.Ar src-file
+.Ar source
 .Sh DESCRIPTION
 The
 .Nm mklocale
@@ -59,10 +61,10 @@ utility reads an
 source file from standard input and produces an
 .Dv LC_CTYPE
 binary file on standard output suitable for placement in
-.Pa /usr/share/locale/\*[Lt]language\*[Gt]/LC_CTYPE .
+.Pa /usr/share/locale/<language>/LC_CTYPE .
 .Pp
 The format of
-.Ar src-file
+.Ar source
 is quite simple.
 It consists of a series of lines which start with a keyword and have
 associated data following.
@@ -75,17 +77,20 @@ Following options are available:
 Turns on debugging messages.
 .It Fl o
 Specify output file.
+.It Fl t
+Generate output in new-style LC_{MONETARY,NUMERIC,TIME,MESSAGES}
+locale-db format.
 .El
 .Pp
 Besides the keywords which will be listed below,
 the following are valid tokens in
-.Ar src-file :
+.Ar source :
 .Bl -tag -width literal
 .It Dv RUNE
 A
 .Dv RUNE
 may be any of the following:
-.Bl -tag -width 0x[0-9a-z]*
+.Bl -tag -width 0x[0-9a-f]+
 .It Ar 'x'
 The ASCII character
 .Ar x .
@@ -103,7 +108,7 @@ is one of
 .Dv \et ,
 or
 .Dv \ev .
-.It Ar 0x[0-9a-z]*
+.It Ar 0x[0-9a-f]+
 A hexadecimal number representing a rune code.
 .It Ar 0[0-7]*
 An octal number representing a rune code.
@@ -120,14 +125,14 @@ or
 Used to indicate ranges.
 .It Ar literal
 The follow characters are taken literally:
-.Bl -tag -width "\*[Lt]\|\|(\|\|["
-.It Dv "\*[Lt]\|(\|["
+.Bl -tag -width "<\|\|(\|\|["
+.It Dv "<\|(\|["
 Used to start a mapping.
 All are equivalent.
-.It Dv "\*[Gt]\|\^)\|]"
+.It Dv ">\|\^)\|]"
 Used to end a mapping.
 All are equivalent.
-.It Dv :
+.It Dv \&:
 Used as a delimiter in mappings.
 .El
 .El
@@ -170,8 +175,7 @@ follows and is used as the invalid rune for this locale.
 .Pp
 The following keywords may appear multiple times and have the following
 format for data:
-.in +.5i
-.Bl -tag -width "XXRUNE1 THRU RUNEn : RUNE2XX"
+.Bl -tag -width "XXRUNE1 THRU RUNEn : RUNE2XX" -offset indent
 .It Aq Dv RUNE1 RUNE2
 .Dv RUNE1
 is mapped to
@@ -187,7 +191,6 @@ through
 .Dv RUNE2
 + n-1.
 .El
-.in -.5i
 .Bl -tag -width PHONOGRAM
 .It Dv MAPLOWER
 Defines the tolower mappings.

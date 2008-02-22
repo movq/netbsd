@@ -1,4 +1,4 @@
-.\" $NetBSD: sha2.3,v 1.4 2005/12/26 19:40:15 perry Exp $
+.\" $NetBSD: sha2.3,v 1.8 2017/10/30 15:44:29 wiz Exp $
 .\"	$OpenBSD: sha2.3,v 1.11 2004/06/22 01:57:29 jfb Exp $
 .\"
 .\" Copyright (c) 2003, 2004 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -21,10 +21,19 @@
 .\"
 .\" See http://www.nist.gov/sha/ for the detailed standard
 .\"
-.Dd April 24, 2003
+.Dd May 20, 2009
 .Dt SHA2 3
 .Os
 .Sh NAME
+.Nm SHA224_Init ,
+.Nm SHA224_Update ,
+.Nm SHA224_Pad ,
+.Nm SHA224_Final ,
+.Nm SHA224_Transform ,
+.Nm SHA224_End ,
+.Nm SHA224_File ,
+.Nm SHA224_FileChunk ,
+.Nm SHA224_Data ,
 .Nm SHA256_Init ,
 .Nm SHA256_Update ,
 .Nm SHA256_Pad ,
@@ -33,11 +42,47 @@
 .Nm SHA256_End ,
 .Nm SHA256_File ,
 .Nm SHA256_FileChunk ,
-.Nm SHA256_Data
+.Nm SHA256_Data ,
+.Nm SHA384_Init ,
+.Nm SHA384_Update ,
+.Nm SHA384_Pad ,
+.Nm SHA384_Final ,
+.Nm SHA384_Transform ,
+.Nm SHA384_End ,
+.Nm SHA384_File ,
+.Nm SHA384_FileChunk ,
+.Nm SHA384_Data ,
+.Nm SHA512_Init ,
+.Nm SHA512_Update ,
+.Nm SHA512_Pad ,
+.Nm SHA512_Final ,
+.Nm SHA512_Transform ,
+.Nm SHA512_End ,
+.Nm SHA512_File ,
+.Nm SHA512_FileChunk ,
+.Nm SHA512_Data
 .Nd calculate the NIST Secure Hash Standard (version 2)
 .Sh SYNOPSIS
 .In sys/types.h
 .In sha2.h
+.Ft void
+.Fn SHA224_Init "SHA224_CTX *context"
+.Ft void
+.Fn SHA224_Update "SHA224_CTX *context" "const uint8_t *data" "size_t len"
+.Ft void
+.Fn SHA224_Pad "SHA224_CTX *context"
+.Ft void
+.Fn SHA224_Final "uint8_t digest[SHA224_DIGEST_LENGTH]" "SHA224_CTX *context"
+.Ft void
+.Fn SHA224_Transform "uint32_t state[8]" "const uint8_t buffer[SHA224_BLOCK_LENGTH]"
+.Ft "char *"
+.Fn SHA224_End "SHA224_CTX *context" "char *buf"
+.Ft "char *"
+.Fn SHA224_File "const char *filename" "char *buf"
+.Ft "char *"
+.Fn SHA224_FileChunk "const char *filename" "char *buf" "off_t offset" "off_t length"
+.Ft "char *"
+.Fn SHA224_Data "uint8_t *data" "size_t len" "char *buf"
 .Ft void
 .Fn SHA256_Init "SHA256_CTX *context"
 .Ft void
@@ -97,9 +142,9 @@ The SHA2 functions implement the NIST Secure Hash Standard,
 FIPS PUB 180-2.
 The SHA2 functions are used to generate a condensed representation of a
 message called a message digest, suitable for use as a digital signature.
-There are three families of functions, with names corresponding to
+There are four families of functions, with names corresponding to
 the number of bits in the resulting message digest.
-The SHA-256 functions are limited to processing a message of less
+The SHA-224 and SHA-256 functions are limited to processing a message of less
 than 2^64 bits as input.
 The SHA-384 and SHA-512 functions can process a message of at most 2^128 - 1
 bits as input.
@@ -107,7 +152,7 @@ bits as input.
 The SHA2 functions are considered to be more secure than the
 .Xr sha1 3
 functions with which they share a similar interface.
-The 256, 384, and 512-bit versions of SHA2 share the same interface.
+The 224, 256, 384, and 512-bit versions of SHA2 share the same interface.
 For brevity, only the 256-bit variants are described below.
 .Pp
 The
@@ -158,9 +203,8 @@ The
 .Fn SHA256_End
 function is a front end for
 .Fn SHA256_Final
-which converts the digest into an
-.Tn ASCII
-representation of the digest in hexadecimal.
+which converts the digest into an ASCII representation of the digest
+in hexadecimal.
 .Pp
 The
 .Fn SHA256_File
@@ -205,6 +249,7 @@ functions the
 .Ar buf
 parameter should either be a string large enough to hold the resulting digest
 (e.g.,
+.Ev SHA224_DIGEST_STRING_LENGTH ,
 .Ev SHA256_DIGEST_STRING_LENGTH ,
 .Ev SHA384_DIGEST_STRING_LENGTH ,
 or
@@ -231,13 +276,13 @@ int n;
 
 buf = "abc";
 n = strlen(buf);
-SHA256_Init(\*[Am]ctx);
-SHA256_Update(\*[Am]ctx, (uint8_t *)buf, n);
-SHA256_Final(results, \*[Am]ctx);
+SHA256_Init(&ctx);
+SHA256_Update(&ctx, (uint8_t *)buf, n);
+SHA256_Final(results, &ctx);
 
 /* Print the digest as one long hex value */
 printf("0x");
-for (n = 0; n \*[Lt] SHA256_DIGEST_LENGTH; n++)
+for (n = 0; n < SHA256_DIGEST_LENGTH; n++)
 	printf("%02x", results[n]);
 putchar('\en');
 .Ed
@@ -266,7 +311,9 @@ The SHA2 functions appeared in
 and
 .Nx 3.0 .
 .Sh AUTHORS
-This implementation of the SHA functions was written by Aaron D. Gifford.
+.An -nosplit
+This implementation of the SHA functions was written by
+.An Aaron D. Gifford .
 .Pp
 The
 .Fn SHA256_End ,
@@ -274,7 +321,8 @@ The
 .Fn SHA256_FileChunk ,
 and
 .Fn SHA256_Data
-helper functions are derived from code written by Poul-Henning Kamp.
+helper functions are derived from code written by
+.An Poul-Henning Kamp .
 .Sh CAVEATS
 This implementation of the Secure Hash Standard has not been validated by
 NIST and as such is not in official compliance with the standard.

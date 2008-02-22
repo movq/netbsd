@@ -1,4 +1,4 @@
-/*	$NetBSD: membar_ops.S,v 1.1 2007/11/30 22:50:44 ad Exp $	*/
+/*	$NetBSD: membar_ops.S,v 1.8 2015/06/23 20:56:17 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,40 +31,50 @@
 
 #include "atomic_op_asm.h"
 
-#ifdef _KERNEL_OPT
-#include "opt_cputype.h"
-#include "opt_lockdebug.h"
-#include "opt_multiprocessor.h"
-#endif
-
-#if defined(_KERNEL)
-
-#include <machine/cpu.h>
-
-#if MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR)
-#define	SYNC		sync
+// If we are on building for MIPS III or later, put in SYNCs
+#if __mips >= 3 || !defined(__mips_o32)
+# define SYNC		sync
 #else
-#define	SYNC		/* nothing */
+# define SYNC		nop
 #endif
 
 	.text
+	.set noreorder
 
-LEAF_NOPROFILE(_membar_sync)
-	SYNC
+LEAF(_membar_sync)
 	j	ra
-	  nop
+	 SYNC
 END(_membar_sync)
+
+#ifdef __OCTEON__
+LEAF(_membar_producer)
+	j	ra
+	 syncw
+END(_membar_producer)
+#endif
+
+#ifdef _KERNEL
+STRONG_ALIAS(mb_read, _membar_sync)
+#ifdef __OCTEON__
+STRONG_ALIAS(mb_write, _membar_producer)
+#else
+STRONG_ALIAS(mb_write, _membar_sync)
+#endif
+STRONG_ALIAS(mb_memory, _membar_sync)
+#endif
 
 ATOMIC_OP_ALIAS(membar_sync,_membar_sync)
 ATOMIC_OP_ALIAS(membar_enter,_membar_sync)
 STRONG_ALIAS(_membar_enter,_membar_sync)
+#ifdef __OCTEON__
+ATOMIC_OP_ALIAS(membar_exit,_membar_producer)
+STRONG_ALIAS(_membar_exit,_membar_producer)
+STRONG_ALIAS(membar_producer,_membar_producer)
+#else
 ATOMIC_OP_ALIAS(membar_exit,_membar_sync)
 STRONG_ALIAS(_membar_exit,_membar_sync)
 ATOMIC_OP_ALIAS(membar_producer,_membar_sync)
 STRONG_ALIAS(_membar_producer,_membar_sync)
+#endif
 ATOMIC_OP_ALIAS(membar_consumer,_membar_sync)
 STRONG_ALIAS(_membar_consumer,_membar_sync)
-
-#else /* _KERNEL */
-
-#endif /* _KERNEL */

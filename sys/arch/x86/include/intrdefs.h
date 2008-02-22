@@ -1,18 +1,19 @@
-/*	$NetBSD: intrdefs.h,v 1.12 2007/12/18 07:17:17 joerg Exp $	*/
+/*	$NetBSD: intrdefs.h,v 1.20 2014/05/19 22:47:54 rmind Exp $	*/
 
 #ifndef _X86_INTRDEFS_H_
 #define _X86_INTRDEFS_H_
 
 /* Interrupt priority levels. */
 #define	IPL_NONE	0x0	/* nothing */
-#define	IPL_SOFTCLOCK	0x1	/* timeouts */
-#define	IPL_SOFTBIO	0x2	/* block I/O passdown */
-#define	IPL_SOFTNET	0x3	/* protocol stacks */
-#define	IPL_SOFTSERIAL	0x4	/* serial passdown */
-#define	IPL_VM		0x5	/* low I/O, memory allocation */
-#define IPL_SCHED	0x6	/* medium I/O, scheduler, clock */
-#define	IPL_HIGH	0x7	/* high I/O, statclock, IPIs */
-#define	NIPL		8
+#define	IPL_PREEMPT	0x1	/* fake, to prevent recursive preemptions */
+#define	IPL_SOFTCLOCK	0x2	/* timeouts */
+#define	IPL_SOFTBIO	0x3	/* block I/O passdown */
+#define	IPL_SOFTNET	0x4	/* protocol stacks */
+#define	IPL_SOFTSERIAL	0x5	/* serial passdown */
+#define	IPL_VM		0x6	/* low I/O, memory allocation */
+#define IPL_SCHED	0x7	/* medium I/O, scheduler, clock */
+#define	IPL_HIGH	0x8	/* high I/O, statclock, IPIs */
+#define	NIPL		9
 
 /* Interrupt sharing types. */
 #define	IST_NONE	0	/* none */
@@ -37,6 +38,7 @@
 #define	SIR_NET		28
 #define	SIR_BIO		27
 #define	SIR_CLOCK	26
+#define	SIR_PREEMPT	25
 
 /*
  * Maximum # of interrupt sources per CPU. 32 to fit in one word.
@@ -54,21 +56,25 @@
 #define IDT_INTR_LOW	(0x20 + NUM_LEGACY_IRQS)
 #define IDT_INTR_HIGH	0xef
 
+#ifndef XEN
+
 #define X86_IPI_HALT			0x00000001
 #define X86_IPI_MICROSET		0x00000002
-#define X86_IPI_FLUSH_FPU		0x00000004
+#define X86_IPI_GENERIC			0x00000004
 #define X86_IPI_SYNCH_FPU		0x00000008
 #define X86_IPI_MTRR			0x00000010
 #define X86_IPI_GDT			0x00000020
-#define X86_IPI_WRITE_MSR		0x00000040
+#define X86_IPI_XCALL			0x00000040
 #define X86_IPI_ACPI_CPU_SLEEP		0x00000080
+#define X86_IPI_KPREEMPT		0x00000100
 
-#define X86_NIPI		8
+#define X86_NIPI		9
 
-#define X86_IPI_NAMES { "halt IPI", "timeset IPI", "FPU flush IPI", \
+#define X86_IPI_NAMES { "halt IPI", "timeset IPI", "generic IPI", \
 			 "FPU synch IPI", "MTRR update IPI", \
-			 "GDT update IPI", "MSR write IPI", \
-			 "ACPI CPU sleep IPI" }
+			 "GDT update IPI", "xcall IPI", \
+			 "ACPI CPU sleep IPI", "kpreempt IPI" }
+#endif /* XEN */
 
 #define IREENT_MAGIC	0x18041969
 

@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.40 2008/01/03 20:48:00 jdc Exp $
+# $NetBSD: mi,v 1.55 2018/06/10 17:17:46 kamil Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -14,17 +14,20 @@
 ./usr/games/caesar				games-utils-bin
 ./usr/games/canfield				games-games-bin
 ./usr/games/cfscores				games-games-bin
+./usr/games/cgram				games-games-bin
 ./usr/games/chess				games-obsolete		obsolete
 ./usr/games/ching				games-games-bin
+./usr/games/colorbars				games-utils-bin
 ./usr/games/countmail				games-utils-bin
 ./usr/games/cribbage				games-games-bin
-./usr/games/dab					games-games-bin
+./usr/games/dab					games-games-bin		cxx
 ./usr/games/dm					games-games-bin
 ./usr/games/factor				games-utils-bin
 ./usr/games/fish				games-games-bin
 ./usr/games/fortune				games-utils-bin
 ./usr/games/gomoku				games-games-bin
 ./usr/games/hack				games-games-bin
+./usr/games/hals_end				games-games-bin
 ./usr/games/hangman				games-games-bin
 ./usr/games/hide/adventure			games-obsolete		obsolete
 ./usr/games/hide/arithmetic			games-obsolete		obsolete
@@ -80,9 +83,11 @@
 ./usr/games/sail				games-games-bin
 ./usr/games/snake				games-games-bin
 ./usr/games/snscore				games-games-bin
+./usr/games/strfile				games-utils-bin
 ./usr/games/teachgammon				games-games-bin
 ./usr/games/tetris				games-games-bin
 ./usr/games/trek				games-games-bin
+./usr/games/unstr				games-utils-bin
 ./usr/games/wargames				games-games-bin
 ./usr/games/worm				games-games-bin
 ./usr/games/worms				games-games-bin
@@ -90,10 +95,17 @@
 ./usr/games/wump				games-games-bin
 ./usr/libexec/ching/castching			games-games-bin
 ./usr/libexec/ching/printching			games-games-bin
-./usr/share/doc/usd/30.rogue/Makefile		games-usd-doc		doc
-./usr/share/doc/usd/30.rogue/rogue.me		games-usd-doc		doc
-./usr/share/doc/usd/31.trek/Makefile		games-usd-doc		doc
-./usr/share/doc/usd/31.trek/trek.me		games-usd-doc		doc
+./usr/share/doc/reference/ref6/rogue/rogue.html		games-usd-doc		doc,html,groffhtmldoc
+./usr/share/doc/reference/ref6/rogue/rogue.ps.gz	games-usd-doc		doc,groff
+./usr/share/doc/reference/ref6/rogue/rogue.txt		games-usd-doc		doc,groff
+./usr/share/doc/reference/ref6/trek/trek.html		games-usd-doc		doc,html,groffhtmldoc
+./usr/share/doc/reference/ref6/trek/trek.ps.gz		games-usd-doc		doc,groff
+./usr/share/doc/reference/ref6/trek/trek.txt		games-usd-doc		doc,groff
+./usr/share/doc/usd/30.rogue/Makefile		games-obsolete		obsolete
+./usr/share/doc/usd/30.rogue/rogue.me		games-obsolete		obsolete
+./usr/share/doc/usd/31.trek/Makefile		games-obsolete		obsolete
+./usr/share/doc/usd/31.trek/trek.me		games-obsolete		obsolete
+./usr/share/doc/usd/31.trek/trek.me		games-obsolete		obsolete
 ./usr/share/games/atc/ATC_scores		games-obsolete		obsolete
 ./usr/share/games/atc/Atlantis			games-games-share	share
 ./usr/share/games/atc/Game_List			games-games-share	share
@@ -114,7 +126,7 @@
 ./usr/share/games/boggle/dictindex		games-games-share	share
 ./usr/share/games/boggle/dictionary		games-games-share	share
 ./usr/share/games/boggle/helpfile		games-games-share	share
-./usr/share/games/cards.pck			games-games-share	share
+./usr/share/games/cards.pck			games-obsolete		obsolete
 ./usr/share/games/ching/hexagrams		games-games-share	share
 ./usr/share/games/ching/macros			games-games-share	share
 ./usr/share/games/cribbage.instr		games-games-share	share
@@ -136,6 +148,8 @@
 ./usr/share/games/fortune/netbsd		games-utils-share	share
 ./usr/share/games/fortune/netbsd-o		games-utils-share	share
 ./usr/share/games/fortune/netbsd-o.dat		games-utils-share	share
+./usr/share/games/fortune/netbsd-tips		games-utils-share	share
+./usr/share/games/fortune/netbsd-tips.dat	games-utils-share	share
 ./usr/share/games/fortune/netbsd.dat		games-utils-share	share
 ./usr/share/games/fortune/startrek		games-utils-share	share
 ./usr/share/games/fortune/startrek.dat		games-utils-share	share
@@ -196,16 +210,19 @@
 ./usr/share/man/cat6/boggle.0			games-games-catman	.cat
 ./usr/share/man/cat6/caesar.0			games-utils-catman	.cat
 ./usr/share/man/cat6/canfield.0			games-games-catman	.cat
+./usr/share/man/cat6/cgram.0			games-games-catman	.cat
 ./usr/share/man/cat6/chess.0			games-obsolete		obsolete
 ./usr/share/man/cat6/ching.0			games-games-catman	.cat
+./usr/share/man/cat6/colorbars.0		games-utils-catman	.cat
 ./usr/share/man/cat6/countmail.0		games-utils-catman	.cat
 ./usr/share/man/cat6/cribbage.0			games-games-catman	.cat
-./usr/share/man/cat6/dab.0			games-games-catman	.cat
+./usr/share/man/cat6/dab.0			games-games-catman	.cat,cxx
 ./usr/share/man/cat6/factor.0			games-utils-catman	.cat
 ./usr/share/man/cat6/fish.0			games-games-catman	.cat
 ./usr/share/man/cat6/fortune.0			games-utils-catman	.cat
 ./usr/share/man/cat6/gomoku.0			games-games-catman	.cat
 ./usr/share/man/cat6/hack.0			games-games-catman	.cat
+./usr/share/man/cat6/hals_end.0			games-games-catman	.cat
 ./usr/share/man/cat6/hangman.0			games-games-catman	.cat
 ./usr/share/man/cat6/hunt.0			games-games-catman	.cat
 ./usr/share/man/cat6/huntd.0			games-games-catman	.cat
@@ -237,6 +254,62 @@
 ./usr/share/man/cat6/wump.0			games-games-catman	.cat
 ./usr/share/man/cat8/dm.0			games-games-catman	.cat
 ./usr/share/man/cat8/strfile.0			games-utils-catman	.cat
+./usr/share/man/cat8/unstr.0			games-utils-catman	.cat
+./usr/share/man/html5/dm.conf.html		games-games-htmlman	html
+./usr/share/man/html6/adventure.html		games-games-htmlman	html
+./usr/share/man/html6/arithmetic.html		games-games-htmlman	html
+./usr/share/man/html6/atc.html			games-games-htmlman	html
+./usr/share/man/html6/backgammon.html		games-games-htmlman	html
+./usr/share/man/html6/banner.html		games-utils-htmlman	html
+./usr/share/man/html6/battlestar.html		games-games-htmlman	html
+./usr/share/man/html6/bcd.html			games-games-htmlman	html
+./usr/share/man/html6/boggle.html		games-games-htmlman	html
+./usr/share/man/html6/caesar.html		games-utils-htmlman	html
+./usr/share/man/html6/canfield.html		games-games-htmlman	html
+./usr/share/man/html6/cgram.html		games-games-htmlman	html
+./usr/share/man/html6/ching.html		games-games-htmlman	html
+./usr/share/man/html6/colorbars.html		games-utils-htmlman	html
+./usr/share/man/html6/countmail.html		games-utils-htmlman	html
+./usr/share/man/html6/cribbage.html		games-games-htmlman	html
+./usr/share/man/html6/dab.html			games-games-htmlman	html,cxx
+./usr/share/man/html6/factor.html		games-utils-htmlman	html
+./usr/share/man/html6/fish.html			games-games-htmlman	html
+./usr/share/man/html6/fortune.html		games-utils-htmlman	html
+./usr/share/man/html6/gomoku.html		games-games-htmlman	html
+./usr/share/man/html6/hack.html			games-games-htmlman	html
+./usr/share/man/html6/hals_end.html		games-games-htmlman	html
+./usr/share/man/html6/hangman.html		games-games-htmlman	html
+./usr/share/man/html6/hunt.html			games-games-htmlman	html
+./usr/share/man/html6/huntd.html		games-games-htmlman	html
+./usr/share/man/html6/intro.html		games-games-htmlman	html
+./usr/share/man/html6/larn.html			games-games-htmlman	html
+./usr/share/man/html6/mille.html		games-games-htmlman	html
+./usr/share/man/html6/monop.html		games-games-htmlman	html
+./usr/share/man/html6/morse.html		games-games-htmlman	html
+./usr/share/man/html6/number.html		games-utils-htmlman	html
+./usr/share/man/html6/phantasia.html		games-games-htmlman	html
+./usr/share/man/html6/pig.html			games-games-htmlman	html
+./usr/share/man/html6/pom.html			games-games-htmlman	html
+./usr/share/man/html6/ppt.html			games-games-htmlman	html
+./usr/share/man/html6/primes.html		games-utils-htmlman	html
+./usr/share/man/html6/quiz.html			games-games-htmlman	html
+./usr/share/man/html6/rain.html			games-games-htmlman	html
+./usr/share/man/html6/random.html		games-utils-htmlman	html
+./usr/share/man/html6/robots.html		games-games-htmlman	html
+./usr/share/man/html6/rogue.html		games-games-htmlman	html
+./usr/share/man/html6/rot13.html		games-utils-htmlman	html
+./usr/share/man/html6/sail.html			games-games-htmlman	html
+./usr/share/man/html6/snake.html		games-games-htmlman	html
+./usr/share/man/html6/tetris.html		games-games-htmlman	html
+./usr/share/man/html6/trek.html			games-games-htmlman	html
+./usr/share/man/html6/wargames.html		games-games-htmlman	html
+./usr/share/man/html6/worm.html			games-games-htmlman	html
+./usr/share/man/html6/worms.html		games-games-htmlman	html
+./usr/share/man/html6/wtf.html			games-utils-htmlman	html
+./usr/share/man/html6/wump.html			games-games-htmlman	html
+./usr/share/man/html8/dm.html			games-games-htmlman	html
+./usr/share/man/html8/strfile.html		games-utils-htmlman	html
+./usr/share/man/html8/unstr.html		games-utils-htmlman	html
 ./usr/share/man/man5/dm.conf.5			games-games-man		.man
 ./usr/share/man/man6/adventure.6		games-games-man		.man
 ./usr/share/man/man6/arithmetic.6		games-games-man		.man
@@ -248,16 +321,19 @@
 ./usr/share/man/man6/boggle.6			games-games-man		.man
 ./usr/share/man/man6/caesar.6			games-utils-man		.man
 ./usr/share/man/man6/canfield.6			games-games-man		.man
+./usr/share/man/man6/cgram.6			games-games-man		.man
 ./usr/share/man/man6/chess.6			games-obsolete		obsolete
 ./usr/share/man/man6/ching.6			games-games-man		.man
+./usr/share/man/man6/colorbars.6		games-utils-man		.man
 ./usr/share/man/man6/countmail.6		games-utils-man		.man
 ./usr/share/man/man6/cribbage.6			games-games-man		.man
-./usr/share/man/man6/dab.6			games-games-man		.man
+./usr/share/man/man6/dab.6			games-games-man		.man,cxx
 ./usr/share/man/man6/factor.6			games-utils-man		.man
 ./usr/share/man/man6/fish.6			games-games-man		.man
 ./usr/share/man/man6/fortune.6			games-utils-man		.man
 ./usr/share/man/man6/gomoku.6			games-games-man		.man
 ./usr/share/man/man6/hack.6			games-games-man		.man
+./usr/share/man/man6/hals_end.6			games-games-man		.man
 ./usr/share/man/man6/hangman.6			games-games-man		.man
 ./usr/share/man/man6/hunt.6			games-games-man		.man
 ./usr/share/man/man6/huntd.6			games-games-man		.man
@@ -289,6 +365,8 @@
 ./usr/share/man/man6/wump.6			games-games-man		.man
 ./usr/share/man/man8/dm.8			games-games-man		.man
 ./usr/share/man/man8/strfile.8			games-utils-man		.man
+./usr/share/man/man8/unstr.8			games-utils-man		.man
+./var/db/obsolete/games				base-sys-root
 ./var/games/atc_scores				games-obsolete		obsolete
 ./var/games/hackdir/data			games-games-root
 ./var/games/hackdir/help			games-games-root

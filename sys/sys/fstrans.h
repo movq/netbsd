@@ -1,4 +1,4 @@
-/*	$NetBSD: fstrans.h,v 1.8 2008/01/02 11:49:07 ad Exp $	*/
+/*	$NetBSD: fstrans.h,v 1.11 2017/06/04 08:05:42 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,28 +41,14 @@
 #define SUSPEND_SUSPEND	0x0001		/* VFS_SUSPENDCTL: suspend */
 #define SUSPEND_RESUME	0x0002		/* VFS_SUSPENDCTL: resume */
 
-enum fstrans_lock_type {
-	FSTRANS_LAZY = 1,		/* Granted while not suspended */
-	FSTRANS_SHARED = 2		/* Granted while not suspending */
-#ifdef _FSTRANS_API_PRIVATE
-	,
-	FSTRANS_EXCL = 3		/* Internal: exclusive lock */
-#endif /* _FSTRANS_API_PRIVATE */
-};
-
 enum fstrans_state {
 	FSTRANS_NORMAL,
-	FSTRANS_SUSPENDING,
 	FSTRANS_SUSPENDED
 };
 
 void	fstrans_init(void);
-#define fstrans_start(mp, t)						\
-do {									\
-	_fstrans_start((mp), (t), 1);					\
-} while (/* CONSTCOND */ 0)
-#define fstrans_start_nowait(mp, t)	_fstrans_start((mp), (t), 0)
-int	_fstrans_start(struct mount *, enum fstrans_lock_type, int);
+void	fstrans_start(struct mount *);
+int	fstrans_start_nowait(struct mount *);
 void	fstrans_done(struct mount *);
 int	fstrans_is_owner(struct mount *);
 int	fstrans_mount(struct mount *);

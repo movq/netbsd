@@ -1,4 +1,4 @@
-/* $NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: tsc.c,v 1.24 2014/02/22 18:42:47 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.24 2014/02/22 18:42:47 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,34 +53,46 @@ __KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.13 2005/12/11 12:16:17 christos Exp $");
 #include <alpha/pci/tsreg.h>
 #include <alpha/pci/tsvar.h>
 
+#include "tsciic.h"
+
 #ifdef DEC_6600
 #include <alpha/pci/pci_6600.h>
 #endif
 
 #define tsc() { Generate ctags(1) key. }
 
-int	tscmatch __P((struct device *, struct cfdata *, void *));
-void	tscattach __P((struct device *, struct device *, void *));
+static int tscmatch(device_t, cfdata_t, void *);
+static void tscattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tsc, sizeof(struct tsc_softc),
-    tscmatch, tscattach, NULL, NULL);
+CFATTACH_DECL_NEW(tsc, 0, tscmatch, tscattach, NULL, NULL);
 
 extern struct cfdriver tsc_cd;
 
-struct tsp_config tsp_configuration[2];
+struct tsp_config tsp_configuration[4];
 
-static int tscprint __P((void *, const char *pnp));
+static int tscprint(void *, const char *pnp);
 
-int	tspmatch __P((struct device *, struct cfdata *, void *));
-void	tspattach __P((struct device *, struct device *, void *));
+static int tspmatch(device_t, cfdata_t, void *);
+static void tspattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tsp, sizeof(struct tsp_softc),
-    tspmatch, tspattach, NULL, NULL);
+CFATTACH_DECL_NEW(tsp, 0, tspmatch, tspattach, NULL, NULL);
 
 extern struct cfdriver tsp_cd;
 
-static int tsp_bus_get_window __P((int, int,
-	struct alpha_bus_space_translation *));
+static int tsp_bus_get_window(int, int,
+	struct alpha_bus_space_translation *);
+
+static int tsciicprint(void *, const char *pnp);
+
+static int tsciicmatch(device_t, cfdata_t, void *);
+static void tsciicattach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(tsciic, sizeof(struct tsciic_softc), tsciicmatch,
+    tsciicattach, NULL, NULL);
+
+#if NTSCIIC
+extern struct cfdriver tsciic_cd;
+#endif
 
 /* There can be only one */
 static int tscfound;
@@ -88,41 +100,43 @@ static int tscfound;
 /* Which hose is the display console connected to? */
 int tsp_console_hose;
 
-int
-tscmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+tscmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-	return cputype == ST_DEC_6600
-	    && strcmp(ma->ma_name, tsc_cd.cd_name) == 0
-	    && !tscfound;
+	switch (cputype) {
+	case ST_DEC_6600:
+	case ST_DEC_TITAN:
+		return strcmp(ma->ma_name, tsc_cd.cd_name) == 0 && !tscfound;
+	default:
+		return 0;
+	}
 }
 
-void tscattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+tscattach(device_t parent, device_t self, void * aux)
 {
 	int i;
 	int nbus;
-	u_int64_t csc, aar;
+	uint64_t csc, aar;
 	struct tsp_attach_args tsp;
+	struct tsciic_attach_args tsciic;
 	struct mainbus_attach_args *ma = aux;
+	int titan = cputype == ST_DEC_TITAN;
 
 	tscfound = 1;
 
 	csc = LDQP(TS_C_CSC);
 
 	nbus = 1 + (CSC_BC(csc) >= 2);
-	printf(": 21272 Core Logic Chipset, Cchip rev %d\n"
+	printf(": 2127%c Core Logic Chipset, Cchip rev %d\n"
 		"%s%d: %c Dchips, %d memory bus%s of %d bytes\n",
-		(int)MISC_REV(LDQP(TS_C_MISC)),
+		titan ? '4' : '2', (int)MISC_REV(LDQP(TS_C_MISC)),
 		ma->ma_name, ma->ma_slot, "2448"[CSC_BC(csc)],
 		nbus, nbus > 1 ? "es" : "", 16 + 16 * ((csc & CSC_AW) != 0));
 	printf("%s%d: arrays present: ", ma->ma_name, ma->ma_slot);
-	for(i = 0; i < 4; ++i) {
+	for (i = 0; i < 4; ++i) {
 		aar = LDQP(TS_C_AAR0 + i * TS_STEP);
 		printf("%s%dMB%s", i ? ", " : "", (8 << AAR_ASIZ(aar)) & ~0xf,
 		    aar & AAR_SPLIT ? " (split)" : "");
@@ -131,44 +145,69 @@ void tscattach(parent, self, aux)
 
 	memset(&tsp, 0, sizeof tsp);
 	tsp.tsp_name = "tsp";
-	config_found(self, &tsp, NULL);
+	tsp.tsp_slot = 0;
 
-	if(LDQP(TS_C_CSC) & CSC_P1P) {
-		++tsp.tsp_slot;
+	config_found(self, &tsp, tscprint);
+	if (titan) {
+		tsp.tsp_slot += 2;
 		config_found(self, &tsp, tscprint);
 	}
+
+	if (csc & CSC_P1P) {
+		tsp.tsp_slot = 1;
+		config_found(self, &tsp, tscprint);
+		if (titan) {
+			tsp.tsp_slot += 2;
+			config_found(self, &tsp, tscprint);
+		}
+	}
+
+	memset(&tsciic, 0, sizeof tsciic);
+	tsciic.tsciic_name = "tsciic";
+
+	config_found(self, &tsciic, tsciicprint);
 }
 
 static int
-tscprint(aux, p)
-	void *aux;
-	const char *p;
+tscprint(void *aux, const char *p)
 {
-	register struct tsp_attach_args *tsp = aux;
+	struct tsp_attach_args *tsp = aux;
 
-	if(p)
+	if (p)
 		aprint_normal("%s%d at %s", tsp->tsp_name, tsp->tsp_slot, p);
+	return UNCONF;
+}
+
+static int
+tsciicprint(void *aux, const char *p)
+{
+	struct tsciic_attach_args *tsciic = aux;
+
+	if (p)
+		aprint_normal("%s at %s\n", tsciic->tsciic_name, p);
+	else
+		aprint_normal("\n");
 	return UNCONF;
 }
 
 #define tsp() { Generate ctags(1) key. }
 
-int
-tspmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+tspmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tsp_attach_args *t = aux;
 
-	return  cputype == ST_DEC_6600
-	    && strcmp(t->tsp_name, tsp_cd.cd_name) == 0;
+	switch (cputype) {
+	case ST_DEC_6600:
+	case ST_DEC_TITAN:
+		return strcmp(t->tsp_name, tsp_cd.cd_name) == 0;
+	default:
+		return 0;
+	}
 }
 
-void
-tspattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+tspattach(device_t parent, device_t self, void *aux)
 {
 	struct pcibus_attach_args pba;
 	struct tsp_attach_args *t = aux;
@@ -178,7 +217,7 @@ tspattach(parent, self, aux)
 	pcp = tsp_init(1, t->tsp_slot);
 
 	tsp_dma_init(pcp);
-	
+
 	/*
 	 * Do PCI memory initialization that needs to be deferred until
 	 * malloc is safe.  On the Tsunami, we need to do this after
@@ -196,23 +235,34 @@ tspattach(parent, self, aux)
 	pba.pba_pc = &pcp->pc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 struct tsp_config *
-tsp_init(mallocsafe, n)
-	int mallocsafe;
-	int n;	/* Pchip number */
+tsp_init(int mallocsafe, int n)
+	/* n:	 Pchip number */
 {
 	struct tsp_config *pcp;
+	int titan = cputype == ST_DEC_TITAN;
 
-	KASSERT((n | 1) == 1);
+	KASSERT(n >= 0 && n < __arraycount(tsp_configuration));
 	pcp = &tsp_configuration[n];
 	pcp->pc_pslot = n;
 	pcp->pc_iobase = TS_Pn(n, 0);
-	pcp->pc_csr = S_PAGE(TS_Pn(n, P_CSRBASE));
+	pcp->pc_csr = S_PAGE(TS_Pn(n & 1, P_CSRBASE));
+	if (n & 2) {
+		/* `A' port of PA Chip */
+		pcp->pc_csr++;
+	}
+	if (titan) {
+		/* same address on G and A ports */
+		pcp->pc_tlbia = &pcp->pc_csr->port.g.tsp_tlbia.tsg_r;
+	} else {
+		pcp->pc_tlbia = &pcp->pc_csr->port.p.tsp_tlbia.tsg_r;
+	}
+
 	if (!pcp->pc_initted) {
 		tsp_bus_io_init(&pcp->pc_iot, pcp);
 		tsp_bus_mem_init(&pcp->pc_memt, pcp);
@@ -229,9 +279,8 @@ tsp_init(mallocsafe, n)
 }
 
 static int
-tsp_bus_get_window(type, window, abst)
-	int type, window;
-	struct alpha_bus_space_translation *abst;
+tsp_bus_get_window(int type, int window,
+    struct alpha_bus_space_translation *abst)
 {
 	struct tsp_config *tsp = &tsp_configuration[tsp_console_hose];
 	bus_space_tag_t st;
@@ -252,10 +301,67 @@ tsp_bus_get_window(type, window, abst)
 
 	error = alpha_bus_space_get_window(st, window, abst);
 	if (error)
-		return (error);
+		return error;
 
 	abst->abst_sys_start = TS_PHYSADDR(abst->abst_sys_start);
 	abst->abst_sys_end = TS_PHYSADDR(abst->abst_sys_end);
 
-	return (0);
+	return 0;
+}
+
+#define tsciic() { Generate ctags(1) key. }
+
+static int
+tsciicmatch(device_t parent, cfdata_t match, void *aux)
+{
+#if NTSCIIC
+	struct tsciic_attach_args *t = aux;
+#endif
+
+	switch (cputype) {
+	case ST_DEC_6600:
+	case ST_DEC_TITAN:
+#if NTSCIIC
+		return strcmp(t->tsciic_name, tsciic_cd.cd_name) == 0;
+#endif
+	default:
+		return 0;
+	}
+}
+
+static void
+tsciicattach(device_t parent, device_t self, void *aux)
+{
+#if NTSCIIC
+	tsciic_init(self);
+#endif
+}
+
+void
+tsc_print_dir(unsigned int indent, unsigned long dir)
+{
+	char buf[60];
+
+	snprintb(buf, 60,
+		 "\177\20"
+		 "b\77Internal Cchip asynchronous error\0"
+		 "b\76Pchip 0 error\0"
+		 "b\75Pchip 1 error\0"
+		 "b\74Pchip 2 error\0"
+		 "b\73Pchip 3 error\0",
+		 dir);
+	IPRINTF(indent, "DIR = %s\n", buf);
+}
+
+void
+tsc_print_misc(unsigned int indent, unsigned long misc)
+{
+	unsigned long tmp = MISC_NXM_SRC(misc);
+
+	if (!MISC_NXM(misc))
+		return;
+
+	IPRINTF(indent, "NXM address detected\n");
+	IPRINTF(indent, "NXM source         = %s %lu\n",
+		tmp <= 3 ? "CPU" : "Pchip", tmp <= 3 ? tmp : tmp - 4);
 }

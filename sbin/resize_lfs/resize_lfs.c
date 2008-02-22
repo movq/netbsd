@@ -1,4 +1,4 @@
-/*	$NetBSD: resize_lfs.c,v 1.5 2006/11/11 14:47:28 jmmv Exp $	*/
+/*	$NetBSD: resize_lfs.c,v 1.14 2015/08/02 18:18:09 dholland Exp $	*/
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,8 +38,8 @@
 #include <sys/mount.h>
 #include <sys/statvfs.h>
 
-#include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
 
 #include <disktab.h>
 #include <err.h>
@@ -67,6 +60,7 @@ int
 main(int argc, char **argv)
 {
 	char *rdev, *fsname, buf[LFS_SBPAD];
+	size_t rdevlen;
 	daddr_t newsize, newnsegs;
 	int devfd, rootfd;
 	int ch, i, verbose;
@@ -102,8 +96,9 @@ main(int argc, char **argv)
 	 */
 	if (statvfs(fsname, &vfs) < 0)
 		err(1, "%s", fsname);
-	rdev = (char *)malloc(strlen(vfs.f_mntfromname + 2));
-	sprintf(rdev, "/dev/r%s", vfs.f_mntfromname + 5);
+	rdevlen = strlen(vfs.f_mntfromname) + 2;
+	rdev = malloc(rdevlen);
+	snprintf(rdev, rdevlen, "/dev/r%s", vfs.f_mntfromname + 5);
 	devfd = open(rdev, O_RDONLY);
 	if (devfd < 0)
 		err(1, "open raw device");
@@ -130,17 +125,18 @@ main(int argc, char **argv)
 	fs = (struct lfs *)malloc(sizeof(*fs));
 	for (sboff = LFS_LABELPAD;;) {
 		pread(devfd, buf, sboff, LFS_SBPAD);
-		memcpy(&fs->lfs_dlfs, buf, sizeof(struct dlfs));
-		if (sboff == LFS_LABELPAD && fsbtob(fs, 1) > LFS_LABELPAD)
-			sboff = fsbtob(fs, (off_t)fs->lfs_sboffs[0]);
+		__CTASSERT(sizeof(struct dlfs) == sizeof(struct dlfs64));
+		memcpy(&fs->lfs_dlfs_u, buf, sizeof(struct dlfs));
+		if (sboff == LFS_LABELPAD && lfs_fsbtob(fs, 1) > LFS_LABELPAD)
+			sboff = lfs_fsbtob(fs, (off_t)lfs_sb_getsboff(fs, 0));
 		else
 			break;
 	}
 	close(devfd);
 
 	/* Calculate new number of segments. */
-	newnsegs = (newsize * secsize) / fs->lfs_ssize;
-	if (newnsegs == fs->lfs_nseg) {
+	newnsegs = (newsize * secsize) / lfs_sb_getssize(fs);
+	if (newnsegs == lfs_sb_getnseg(fs)) {
 		errx(0, "the filesystem is unchanged.");
 	}
 
@@ -150,14 +146,15 @@ main(int argc, char **argv)
 	 * Make the cleaner do this for us.
 	 * (XXX make the kernel able to do this instead?)
 	 */
-	for (i = fs->lfs_nseg - 1; i >= newnsegs; --i) {
-		char cmd[80];
+	for (i = lfs_sb_getnseg(fs) - 1; i >= newnsegs; --i) {
+		char cmd[128];
 
 		/* If it's already empty, don't call the cleaner */
 		if (fcntl(rootfd, LFCNINVAL, &i) == 0)
 			continue;
 
-		sprintf(cmd, "/libexec/lfs_cleanerd -q -i %d %s", i, fsname);
+		snprintf(cmd, sizeof(cmd), "/libexec/lfs_cleanerd -q -i %d %s",
+			 i, fsname);
 		if (system(cmd) != 0)
 			err(1, "invalidating segment %d", i);
 	}
@@ -168,7 +165,7 @@ main(int argc, char **argv)
 	}
 
 	if (verbose)
-		printf("Successfully resized %s from %d to %lld segments\n",
-			fsname, fs->lfs_nseg, (long long)newnsegs);
+		printf("Successfully resized %s from %u to %lld segments\n",
+			fsname, lfs_sb_getnseg(fs), (long long)newnsegs);
 	return 0;
 }

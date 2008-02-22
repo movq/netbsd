@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socketcall.h,v 1.14 2007/12/20 23:02:57 dsl Exp $	*/
+/*	$NetBSD: linux_socketcall.h,v 1.21 2017/02/09 22:01:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,31 +68,36 @@
 /* Used on: arm, i386, m68k, mips, ppc, sparc, sparc64 */
 /* Used for COMPAT_LINUX32 on amd64 */
 /* Not used on: alpha */
+#include <compat/linux/linux_syscall.h>
+#include <compat/linux/linux_syscallargs.h>
 
 /*
  * Values passed to the Linux socketcall() syscall, determining the actual
  * action to take.
  */
 
-#define LINUX_SYS_socket	1
-#define LINUX_SYS_bind		2
-#define LINUX_SYS_connect	3
-#define LINUX_SYS_listen	4
-#define LINUX_SYS_accept	5
-#define LINUX_SYS_getsockname	6
-#define LINUX_SYS_getpeername	7
-#define LINUX_SYS_socketpair	8
-#define LINUX_SYS_send		9
-#define LINUX_SYS_recv		10
-#define LINUX_SYS_sendto	11
-#define LINUX_SYS_recvfrom	12
-#define LINUX_SYS_shutdown	13
-#define LINUX_SYS_setsockopt	14
-#define LINUX_SYS_getsockopt	15
-#define LINUX_SYS_sendmsg	16
-#define LINUX_SYS_recvmsg	17
+#define LINUX_SYS_SOCKET	1
+#define LINUX_SYS_BIND		2
+#define LINUX_SYS_CONNECT	3
+#define LINUX_SYS_LISTEN	4
+#define LINUX_SYS_ACCEPT	5
+#define LINUX_SYS_GETSOCKNAME	6
+#define LINUX_SYS_GETPEERNAME	7
+#define LINUX_SYS_SOCKETPAIR	8
+#define LINUX_SYS_SEND		9
+#define LINUX_SYS_RECV		10
+#define LINUX_SYS_SENDTO	11
+#define LINUX_SYS_RECVFROM	12
+#define LINUX_SYS_SHUTDOWN	13
+#define LINUX_SYS_SETSOCKOPT	14
+#define LINUX_SYS_GETSOCKOPT	15
+#define LINUX_SYS_SENDMSG	16
+#define LINUX_SYS_RECVMSG	17
+#define LINUX_SYS_ACCEPT4	18
+#define LINUX_SYS_RECVMMSG	19
+#define LINUX_SYS_SENDMMSG	20
 
-#define LINUX_MAX_SOCKETCALL	17
+#define LINUX_MAX_SOCKETCALL	20
 
 
 /*
@@ -113,19 +111,24 @@ struct linux_socketcall_dummy_args {
 	void *dummy_ptrs[3];		/* Max 3 pointers */
 };
 
+#ifndef LINUX_SYS_socket
 struct linux_sys_socket_args {
 	syscallarg(int) domain;
 	syscallarg(int) type;
 	syscallarg(int) protocol;
 };
+#endif
 
+#ifndef LINUX_SYS_socketpair
 struct linux_sys_socketpair_args {
 	syscallarg(int) domain;
 	syscallarg(int) type;
 	syscallarg(int) protocol;
 	syscallarg(int *) rsv;
 };
+#endif
 
+#ifndef LINUX_SYS_sendto
 struct linux_sys_sendto_args {
 	syscallarg(int) s;
 	syscallarg(void *) msg;
@@ -134,7 +137,9 @@ struct linux_sys_sendto_args {
 	syscallarg(struct osockaddr *) to;
 	syscallarg(int) tolen;
 };
+#endif
 
+#ifndef LINUX_SYS_recvfrom
 struct linux_sys_recvfrom_args {
 	syscallarg(int) s;
 	syscallarg(void *) buf;
@@ -143,7 +148,9 @@ struct linux_sys_recvfrom_args {
 	syscallarg(struct osockaddr *) from;
 	syscallarg(int *) fromlenaddr;
 };
+#endif
 
+#ifndef LINUX_SYS_setsockopt
 struct linux_sys_setsockopt_args {
 	syscallarg(int) s;
 	syscallarg(int) level;
@@ -151,7 +158,9 @@ struct linux_sys_setsockopt_args {
 	syscallarg(void *) optval;
 	syscallarg(int) optlen;
 };
+#endif
 
+#ifndef LINUX_SYS_getsockopt
 struct linux_sys_getsockopt_args {
 	syscallarg(int) s;
 	syscallarg(int) level;
@@ -159,74 +168,109 @@ struct linux_sys_getsockopt_args {
 	syscallarg(void *) optval;
 	syscallarg(int *) optlen;
 };
+#endif
 
+#ifndef LINUX_SYS_bind
 struct linux_sys_bind_args {
 	syscallarg(int) s;
 	syscallarg(struct osockaddr *) name;
 	syscallarg(int) namelen;
 };
+#endif
 
+#ifndef LINUX_SYS_connect
 struct linux_sys_connect_args {
 	syscallarg(int) s;
 	syscallarg(struct osockaddr *) name;
 	syscallarg(int) namelen;
 };
+#endif
 
+#ifndef LINUX_SYS_accept
 struct linux_sys_accept_args {
 	syscallarg(int) s;
 	syscallarg(struct osockaddr *) name;
 	syscallarg(int *) anamelen;
 };
+#endif
 
+#ifndef LINUX_SYS_getsockname
 struct linux_sys_getsockname_args {
 	syscallarg(int) fdes;
 	syscallarg(struct osockaddr *) asa;
 	syscallarg(int *) alen;
 };
+#endif
 
+#ifndef LINUX_SYS_getpeername
 struct linux_sys_getpeername_args {
 	syscallarg(int) fdes;
 	syscallarg(struct osockaddr *) asa;
 	syscallarg(int *) alen;
 };
+#endif
 
+#ifndef LINUX_SYS_sendmsg
 struct linux_sys_sendmsg_args {
 	syscallarg(int) s;
-	syscallarg(struct msghdr *) msg;
+	syscallarg(struct linux_msghdr *) msg;
 	syscallarg(u_int) flags;
 };
+#endif
 
+#ifndef LINUX_SYS_recvmsg
 struct linux_sys_recvmsg_args {
 	syscallarg(int) s;
-	syscallarg(struct msghdr *) msg;
+	syscallarg(struct linux_msghdr *) msg;
 	syscallarg(u_int) flags;
 };
+#endif
 
+#ifndef LINUX_SYS_send
 struct linux_sys_send_args {
 	syscallarg(int) s;
 	syscallarg(void *) buf;
 	syscallarg(int) len;
 	syscallarg(int) flags;
 };
+#endif
 
+#ifndef LINUX_SYS_recv
 struct linux_sys_recv_args {
 	syscallarg(int) s;
 	syscallarg(void *) buf;
 	syscallarg(int) len;
 	syscallarg(int) flags;
 };
+#endif
 
-/* These are only used for their size: */
-
-struct linux_sys_listen_args {
+#ifndef LINUX_SYS_accept4
+struct linux_sys_accept4_args {
 	syscallarg(int) s;
-	syscallarg(int) backlog;
+	syscallarg(struct osockaddr *) name;
+	syscallarg(int *) anamelen;
+	syscallarg(int) flags;
 };
+#endif
 
-struct linux_sys_shutdown_args {
+#ifndef LINUX_SYS_recvmmsg
+struct linux_sys_recvmmsg_args {
 	syscallarg(int) s;
-	syscallarg(int) how;
+	syscallarg(struct linux_mmsghdr *) msgvec;
+	syscallarg(unsigned int) vlen;
+	syscallarg(unsigned int) flags;
+	syscallarg(struct linux_timespec *) timeout;
 };
+#endif
+
+#ifndef LINUX_SYS_sendmmsg
+struct linux_sys_sendmmsg_args {
+	syscallarg(int) s;
+	syscallarg(struct linux_mmsghdr *) msgvec;
+	syscallarg(unsigned int) vlen;
+	syscallarg(unsigned int) flags;
+};
+#endif
 
 # ifdef _KERNEL
 __BEGIN_DECLS
@@ -246,6 +290,9 @@ SYS_DEF(linux_sys_recvmsg)
 SYS_DEF(linux_sys_recv)
 SYS_DEF(linux_sys_send)
 SYS_DEF(linux_sys_accept)
+SYS_DEF(linux_sys_accept4)
+SYS_DEF(linux_sys_recvmmsg)
+SYS_DEF(linux_sys_sendmmsg)
 #undef SYS_DEF
 __END_DECLS
 # endif /* !_KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_ipc.c,v 1.20 2007/02/09 21:55:31 ad Exp $	*/
+/*	$NetBSD: sysv_ipc.c,v 1.32 2015/12/05 00:51:42 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.20 2007/02/09 21:55:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.32 2015/12/05 00:51:42 pgoyette Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_sysv.h"
+#include "opt_compat_netbsd.h"
+#endif
 
+#include <sys/syscall.h>
+#include <sys/syscallargs.h>
+#include <sys/syscallvar.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
@@ -55,7 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.20 2007/02/09 21:55:31 ad Exp $");
 #include <sys/shm.h>
 #endif
 #include <sys/systm.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
+#include <sys/module.h>
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/stat.h>
@@ -63,23 +63,241 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_ipc.c,v 1.20 2007/02/09 21:55:31 ad Exp $");
 #include <sys/kauth.h>
 
 /*
- * Check for ipc permission
+ * Values in support of System V compatible shared memory.	XXX
+ * (originally located in sys/conf/param.c)
  */
+#ifdef SYSVSHM
+#if !defined(SHMMAX) && defined(SHMMAXPGS)
+#define	SHMMAX	SHMMAXPGS	/* shminit() performs a `*= PAGE_SIZE' */
+#elif !defined(SHMMAX)
+#define SHMMAX 0
+#endif
+#ifndef	SHMMIN
+#define	SHMMIN	1
+#endif
+#ifndef	SHMMNI
+#define	SHMMNI	128		/* <64k, see IPCID_TO_IX in ipc.h */
+#endif
+#ifndef	SHMSEG
+#define	SHMSEG	128
+#endif
 
-int
-ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
+struct	shminfo shminfo = {
+	SHMMAX,
+	SHMMIN,
+	SHMMNI,
+	SHMSEG,
+	0
+};
+#endif
+
+/*
+ * Values in support of System V compatible semaphores.
+ */
+#ifdef SYSVSEM
+struct	seminfo seminfo = {
+	SEMMAP,		/* # of entries in semaphore map */
+	SEMMNI,		/* # of semaphore identifiers */
+	SEMMNS,		/* # of semaphores in system */
+	SEMMNU,		/* # of undo structures in system */
+	SEMMSL,		/* max # of semaphores per id */
+	SEMOPM,		/* max # of operations per semop call */
+	SEMUME,		/* max # of undo entries per process */
+	SEMUSZ,		/* size in bytes of undo structure */
+	SEMVMX,		/* semaphore maximum value */
+	SEMAEM		/* adjust on exit max value */
+};
+#endif
+
+/*
+ * Values in support of System V compatible messages.
+ */
+#ifdef SYSVMSG
+struct	msginfo msginfo = {
+	MSGMAX,		/* max chars in a message */
+	MSGMNI,		/* # of message queue identifiers */
+	MSGMNB,		/* max chars in a queue */
+	MSGTQL,		/* max messages in system */
+	MSGSSZ,		/* size of a message segment */
+			/* (must be small power of 2 greater than 4) */
+	MSGSEG		/* number of message segments */
+};
+#endif
+
+#if defined(COMPAT_50)
+int sysctl_kern_sysvipc50(SYSCTLFN_PROTO);
+#endif
+
+MODULE(MODULE_CLASS_EXEC, sysv_ipc, NULL);
+ 
+SYSCTL_SETUP_PROTO(sysctl_ipc_setup);
+
+static struct sysctllog *sysctl_sysvipc_clog = NULL;
+
+static const struct syscall_package sysvipc_syscalls[] = {
+#if defined(SYSVSHM)
+	{ SYS___shmctl50, 0, (sy_call_t *)sys___shmctl50 },
+	{ SYS_shmat, 0, (sy_call_t *)sys_shmat },
+	{ SYS_shmdt, 0, (sy_call_t *)sys_shmdt },
+	{ SYS_shmget, 0, (sy_call_t *)sys_shmget },
+#if defined(COMPAT_10) && !defined(_LP64)
+	{ SYS_compat_10_oshmsys, 0, (sy_call_t *)compat_10_sys_shmsys },
+#endif
+#if defined(COMPAT_14)
+	{ SYS_compat_14_shmctl, 0, (sy_call_t *)compat_14_sys_shmctl },
+#endif
+#if defined(COMPAT_50)
+	{ SYS_compat_50___shmctl13, 0, (sy_call_t *)compat_50_sys___shmctl13 },
+#endif
+#endif	/* SYSVSHM */
+
+#if defined(SYSVSEM)
+	{ SYS_____semctl50, 0, (sy_call_t *)sys_____semctl50 },
+	{ SYS_semget, 0, (sy_call_t *)sys_semget },
+	{ SYS_semop, 0, (sy_call_t *)sys_semop },
+	{ SYS_semconfig, 0, (sy_call_t *)sys_semconfig },
+#if defined(COMPAT_10) && !defined(_LP64)
+	{ SYS_compat_10_osemsys, 0, (sy_call_t *)compat_10_sys_semsys },
+#endif
+#if defined(COMPAT_14)
+	{ SYS_compat_14___semctl, 0, (sy_call_t *)compat_14_sys___semctl },
+#endif
+#if defined(COMPAT_50)
+	{ SYS_compat_50_____semctl13, 0, (sy_call_t *)compat_50_sys_____semctl13 },
+#endif
+#endif	/* SYSVSEM */
+
+#if defined(SYSVMSG)
+	{ SYS___msgctl50, 0, (sy_call_t *)sys___msgctl50 },
+	{ SYS_msgget, 0, (sy_call_t *)sys_msgget },
+	{ SYS_msgsnd, 0, (sy_call_t *)sys_msgsnd },
+	{ SYS_msgrcv, 0, (sy_call_t *)sys_msgrcv },
+#if defined(COMPAT_10) && !defined(_LP64)
+	{ SYS_compat_10_omsgsys, 0, (sy_call_t *)compat_10_sys_msgsys },
+#endif
+#if defined(COMPAT_14)
+	{ SYS_compat_14_msgctl, 0, (sy_call_t *)compat_14_sys_msgctl },
+#endif
+#if defined(COMPAT_50)
+	{ SYS_compat_50___msgctl13, 0, (sy_call_t *)compat_50_sys___msgctl13 },
+#endif
+#endif	/* SYSVMSG */
+	{ 0, 0, NULL }
+};
+
+static int
+sysv_ipc_modcmd(modcmd_t cmd, void *arg)
+{
+	int error = 0;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		/* Set up the kauth listener */
+		sysvipcinit();
+
+#ifdef _MODULE
+		/* Set up the common sysctl tree */
+		sysctl_ipc_setup(&sysctl_sysvipc_clog);
+#endif
+
+		/* Link the system calls */
+		error = syscall_establish(NULL, sysvipc_syscalls);
+		if (error)
+			sysvipcfini();
+
+		/*
+		 * Initialize each sub-component, including their
+		 * sysctl data
+		 */
+#ifdef SYSVSHM
+		shminit(&sysctl_sysvipc_clog);
+#endif
+#ifdef SYSVSEM
+		seminit(&sysctl_sysvipc_clog);
+#endif
+#ifdef SYSVMSG
+		msginit(&sysctl_sysvipc_clog);
+#endif
+		break;
+	case MODULE_CMD_FINI:
+		/*
+		 * Make sure no subcomponents are active.  Each one
+		 * tells us if it is busy, and if it was _not_ busy,
+		 * we assume it has already done its own clean-up.
+		 * So we might need to re-init any components that
+		 * are successfully fini'd if we find one that is 
+		 * still busy.
+		 */
+#ifdef SYSVSHM
+		if (shmfini()) {
+			return EBUSY;
+		}
+#endif
+#ifdef SYSVSEM
+		if (semfini()) {
+#ifdef SYSVSHM
+			shminit(NULL);
+#endif
+			return EBUSY;
+		}
+#endif
+#ifdef SYSVMSG
+		if (msgfini()) {
+#ifdef SYSVSEM
+			seminit(NULL);
+#endif
+#ifdef SYSVSHM
+			shminit(NULL);
+#endif
+			return EBUSY;
+		}
+#endif
+
+		/* Unlink the system calls. */
+		error = syscall_disestablish(NULL, sysvipc_syscalls);
+		if (error)
+			return error;
+
+#ifdef _MODULE
+		/* Remove the sysctl sub-trees */
+		sysctl_teardown(&sysctl_sysvipc_clog);
+#endif
+
+		/* Remove the kauth listener */
+		sysvipcfini();
+		break;
+	default:
+		return ENOTTY;
+	}
+	return error;
+}
+
+static kauth_listener_t sysvipc_listener = NULL;
+
+static int
+sysvipc_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
+    void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	mode_t mask;
 	int ismember = 0;
+	struct ipc_perm *perm;
+	int mode;
+	enum kauth_system_req req;
 
-	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0)
-		return (0);
+	req = (enum kauth_system_req)arg0;
+
+	if (!(action == KAUTH_SYSTEM_SYSVIPC &&
+	      req == KAUTH_REQ_SYSTEM_SYSVIPC_BYPASS))
+		return KAUTH_RESULT_DEFER;
+
+	perm = arg1;
+	mode = (int)(uintptr_t)arg2;
 
 	if (mode == IPC_M) {
 		if (kauth_cred_geteuid(cred) == perm->uid ||
 		    kauth_cred_geteuid(cred) == perm->cuid)
-			return (0);
-		return (EPERM);
+			return (KAUTH_RESULT_ALLOW);
+		return (KAUTH_RESULT_DEFER); /* EPERM */
 	}
 
 	mask = 0;
@@ -90,7 +308,7 @@ ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
 			mask |= S_IRUSR;
 		if (mode & IPC_W)
 			mask |= S_IWUSR;
-		return ((perm->mode & mask) == mask ? 0 : EACCES);
+		return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
 	}
 
 	if (kauth_cred_getegid(cred) == perm->gid ||
@@ -101,65 +319,61 @@ ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
 			mask |= S_IRGRP;
 		if (mode & IPC_W)
 			mask |= S_IWGRP;
-		return ((perm->mode & mask) == mask ? 0 : EACCES);
+		return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
 	}
 
 	if (mode & IPC_R)
 		mask |= S_IROTH;
 	if (mode & IPC_W)
 		mask |= S_IWOTH;
-	return ((perm->mode & mask) == mask ? 0 : EACCES);
+	return ((perm->mode & mask) == mask ? KAUTH_RESULT_ALLOW : KAUTH_RESULT_DEFER /* EACCES */);
 }
 
 /*
- * sysctl helper routine for kern.ipc.sysvipc_info subtree.
+ * Check for ipc permission
  */
 
-#define FILL_PERM(src, dst) do { \
-	(dst)._key = (src)._key; \
-	(dst).uid = (src).uid; \
-	(dst).gid = (src).gid; \
-	(dst).cuid = (src).cuid; \
-	(dst).cgid = (src).cgid; \
-	(dst).mode = (src).mode; \
-	(dst)._seq = (src)._seq; \
-} while (/*CONSTCOND*/ 0);
+int
+ipcperm(kauth_cred_t cred, struct ipc_perm *perm, int mode)
+{
+	int error;
 
-#define FILL_MSG(src, dst) do { \
-	FILL_PERM((src).msg_perm, (dst).msg_perm); \
-	(dst).msg_qnum = (src).msg_qnum; \
-	(dst).msg_qbytes = (src).msg_qbytes; \
-	(dst)._msg_cbytes = (src)._msg_cbytes; \
-	(dst).msg_lspid = (src).msg_lspid; \
-	(dst).msg_lrpid = (src).msg_lrpid; \
-	(dst).msg_stime = (src).msg_stime; \
-	(dst).msg_rtime = (src).msg_rtime; \
-	(dst).msg_ctime = (src).msg_ctime; \
-} while (/*CONSTCOND*/ 0)
+	error = kauth_authorize_system(cred, KAUTH_SYSTEM_SYSVIPC,
+	    KAUTH_REQ_SYSTEM_SYSVIPC_BYPASS, perm, KAUTH_ARG(mode), NULL);
+	if (error == 0)
+		return (0);
 
-#define FILL_SEM(src, dst) do { \
-	FILL_PERM((src).sem_perm, (dst).sem_perm); \
-	(dst).sem_nsems = (src).sem_nsems; \
-	(dst).sem_otime = (src).sem_otime; \
-	(dst).sem_ctime = (src).sem_ctime; \
-} while (/*CONSTCOND*/ 0)
+	/* Adjust EPERM and EACCES errors until there's a better way to do this. */
+	if (mode != IPC_M)
+		error = EACCES;
 
-#define FILL_SHM(src, dst) do { \
-	FILL_PERM((src).shm_perm, (dst).shm_perm); \
-	(dst).shm_segsz = (src).shm_segsz; \
-	(dst).shm_lpid = (src).shm_lpid; \
-	(dst).shm_cpid = (src).shm_cpid; \
-	(dst).shm_atime = (src).shm_atime; \
-	(dst).shm_dtime = (src).shm_dtime; \
-	(dst).shm_ctime = (src).shm_ctime; \
-	(dst).shm_nattch = (src).shm_nattch; \
-} while (/*CONSTCOND*/ 0)
+	return error;
+}
+
+void
+sysvipcfini(void)
+{
+
+	KASSERT(sysvipc_listener != NULL);
+	kauth_unlisten_scope(sysvipc_listener);
+	sysvipc_listener = NULL;
+}
+
+void
+sysvipcinit(void)
+{
+
+	KASSERT(sysvipc_listener == NULL);
+
+	sysvipc_listener = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
+	    sysvipc_listener_cb, NULL);
+}
 
 static int
 sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 {
 	void *where = oldp;
-	size_t *sizep = oldlenp;
+	size_t sz, *sizep = oldlenp;
 #ifdef SYSVMSG
 	struct msg_sysctl_info *msgsi = NULL;
 #endif
@@ -174,6 +388,18 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 	char *start;
 	int32_t nds;
 	int i, error, ret;
+
+/*
+ * If present, call the compat sysctl() code.  If it handles the request
+ * completely (either success or error), return.  Otherwise fallthrough
+ * to the non-compat sysctl code.
+ */
+
+#if defined(COMPAT_50)
+	error = sysctl_kern_sysvipc50(SYSCTLFN_CALL(rnode));
+	if (error != EPASSTHROUGH)
+		return error;
+#endif
 
 	if (namelen != 1)
 		return EINVAL;
@@ -231,7 +457,8 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 		*sizep = 0;
 		return ENOMEM;
 	}
-	bf = malloc(min(tsize, buflen), M_TEMP, M_WAITOK | M_ZERO);
+	sz = min(tsize, buflen);
+	bf = kmem_zalloc(sz, KM_SLEEP);
 
 	switch (*name) {
 #ifdef SYSVMSG
@@ -267,18 +494,18 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 #ifdef SYSVMSG
 			case KERN_SYSVIPC_MSG_INFO:
 				mutex_enter(&msgmutex);
-				FILL_MSG(msqs[i].msq_u, msgsi->msgids[i]);
+				SYSCTL_FILL_MSG(msqs[i].msq_u, msgsi->msgids[i]);
 				mutex_exit(&msgmutex);
 				break;
 #endif
 #ifdef SYSVSEM
 			case KERN_SYSVIPC_SEM_INFO:
-				FILL_SEM(sema[i], semsi->semids[i]);
+				SYSCTL_FILL_SEM(sema[i], semsi->semids[i]);
 				break;
 #endif
 #ifdef SYSVSHM
 			case KERN_SYSVIPC_SHM_INFO:
-				FILL_SHM(shmsegs[i], shmsi->shmids[i]);
+				SYSCTL_FILL_SHM(shmsegs[i], shmsi->shmids[i]);
 				break;
 #endif
 			}
@@ -291,22 +518,12 @@ sysctl_kern_sysvipc(SYSCTLFN_ARGS)
 	if (error == 0)
 		error = ret;
 	if (bf)
-		free(bf, M_TEMP);
+		kmem_free(bf, sz);
 	return error;
 }
 
-#undef FILL_PERM
-#undef FILL_MSG
-#undef FILL_SEM
-#undef FILL_SHM
-
 SYSCTL_SETUP(sysctl_ipc_setup, "sysctl kern.ipc subtree setup")
 {
-	sysctl_createv(clog, 0, NULL, NULL,
-		CTLFLAG_PERMANENT,
-		CTLTYPE_NODE, "kern", NULL,
-		NULL, 0, NULL, 0,
-		CTL_KERN, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		CTLFLAG_PERMANENT,

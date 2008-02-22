@@ -1,4 +1,4 @@
-/*	$NetBSD: tr2a.c,v 1.2 2008/01/04 22:15:09 ad Exp $	*/
+/*	$NetBSD: tr2a.c,v 1.6 2015/06/23 21:00:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tr2a.c,v 1.2 2008/01/04 22:15:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tr2a.c,v 1.6 2015/06/23 21:00:23 matt Exp $");
 
+#define __INTR_PRIVATE
 #include "fb_sbdio.h"
 #include "kbms_sbdio.h"
 #include "zsc_sbdio.h"
@@ -48,9 +42,11 @@ __KERNEL_RCSID(0, "$NetBSD: tr2a.c,v 1.2 2008/01/04 22:15:09 ad Exp $");
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <mips/locore.h>
 #include <mips/cache.h>		/* Set L2-cache size */
 
 #include <machine/autoconf.h>
@@ -66,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: tr2a.c,v 1.2 2008/01/04 22:15:09 ad Exp $");
 SBD_DECL(tr2a);
 
 /* EWS4800/360 bus list */
-static const char *tr2a_mainbusdevs[] = {
+static const char * const tr2a_mainbusdevs[] = {
 	"sbdio",
 #ifdef notyet
 	"apbus",
@@ -158,12 +154,14 @@ tr2a_init(void)
 	if (have_fb_sbdio)
 		platform.sbdiodevs = tr2a_sbdiodevs;
 
-	ipl_sr_bits = tr2a_sr_bits;
+	ipl_sr_map = tr2a_ipl_sr_map;
 
 	kseg2iobufsize = 0x02000000;	/* 32MB for APbus and framebuffer */
 
 	/* Register system-board specific ops. */
 	_SBD_OPS_REGISTER_ALL(tr2a);
+
+	mips_locore_jumpvec.ljv_wbflush = platform.wbflush;
 }
 
 int
@@ -177,7 +175,7 @@ void
 tr2a_cache_config(void)
 {
 
-	mips_sdcache_size = 1024 * 1024;	/* 1MB L2-cache */
+	mips_cache_info.mci_sdcache_size = 1024 * 1024;	/* 1MB L2-cache */
 }
 
 void

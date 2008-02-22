@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_ecn.c,v 1.15 2006/09/05 00:29:36 rpaulo Exp $	*/
+/*	$NetBSD: ip_ecn.c,v 1.17 2017/12/09 08:03:07 pgoyette Exp $	*/
 /*	$KAME: ip_ecn.c,v 1.11 2001/05/03 16:09:29 itojun Exp $	*/
 
 /*
@@ -36,15 +36,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_ecn.c,v 1.15 2006/09/05 00:29:36 rpaulo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_ecn.c,v 1.17 2017/12/09 08:03:07 pgoyette Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/errno.h>
+#include <sys/module.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -128,3 +131,20 @@ ip6_ecn_egress(int mode, const u_int32_t *outer, u_int32_t *inner)
 	*inner |= htonl((u_int32_t)inner8 << 20);
 }
 #endif
+
+MODULE(MODULE_CLASS_MISC, ip_ecn, NULL);
+
+static int
+ip_ecn_modcmd(modcmd_t cmd, void *arg)
+{
+ 
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+	case MODULE_CMD_FINI:
+		return 0;
+ 
+	default:
+		return ENOTTY;
+        }
+}
+

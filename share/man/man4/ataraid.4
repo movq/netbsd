@@ -1,4 +1,4 @@
-.\"	$NetBSD: ataraid.4,v 1.5 2007/04/05 18:37:14 garbled Exp $
+.\"	$NetBSD: ataraid.4,v 1.15 2013/08/06 17:33:29 snj Exp $
 .\"
 .\" Copyright (c) 2005 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 5, 2007
+.Dd September 16, 2008
 .Dt ATARAID 4
 .Os
 .Sh NAME
@@ -42,6 +35,7 @@
 .Nd software BIOS RAID
 .Sh SYNOPSIS
 .Cd "pseudo-device ataraid"
+.Cd "ld* at ataraid? vendtype ? unit ?"
 .Sh DESCRIPTION
 The
 .Nm
@@ -55,14 +49,26 @@ so that it may be a boot device.
 The driver currently supports RAID formats from:
 .Bl -bullet -offset indent -compact
 .It
-Promise FastTrak
-.It
 Adaptec HostRAID (found in Intel 6300ESB)
+.It
+Intel MatrixRAID
+.It
+JMicron RAID
+.It
+nVidia MediaShield
+.It
+Promise FastTrak
 .It
 Via V-RAID (found in many VIA-based motherboards)
 .El
+.Pp
+Status of the logical disk, as well as the disks associated with it,
+can be viewed through the
+.Xr bioctl 8
+utility.
 .Sh SEE ALSO
-.Xr ld 4
+.Xr ld 4 ,
+.Xr bioctl 8
 .Sh HISTORY
 The
 .Nm
@@ -84,5 +90,5 @@ should be in a
 .Dq building
 state, and it does not do the right thing.
 .Pp
-At least part of the reason for this is that the publically-available
+At least part of the reason for this is that the publicly-available
 information on these formats is quite limited.

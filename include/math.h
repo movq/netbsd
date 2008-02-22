@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.46 2007/02/22 22:08:19 drochner Exp $	*/
+/*	$NetBSD: math.h,v 1.65 2018/06/24 23:55:29 christos Exp $	*/
 
 /*
  * ====================================================
@@ -38,6 +38,20 @@ union __long_double_u {
 
 #include <machine/math.h>		/* may use __float_u, __double_u,
 					   or __long_double_u */
+#include <limits.h>			/* for INT_{MIN,MAX} */
+
+#if ((_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE))
+#  if defined(__FLT_EVAL_METHOD__) && (__FLT_EVAL_METHOD__ - 0) == 0
+typedef double double_t;
+typedef float float_t;
+#  elif (__FLT_EVAL_METHOD__ - 0) == 1
+typedef double double_t;
+typedef double float_t;
+#  elif (__FLT_EVAL_METHOD__ - 0) == 2
+typedef long double double_t;
+typedef long double float_t;
+#  endif
+#endif
 
 #ifdef __HAVE_LONG_DOUBLE
 #define	__fpmacro_unary_floating(__name, __arg0)			\
@@ -59,8 +73,12 @@ union __long_double_u {
  * ANSI/POSIX
  */
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define HUGE_VAL	__builtin_huge_val()
+#else
 extern const union __double_u __infinity;
 #define HUGE_VAL	__infinity.__val
+#endif
 
 /*
  * ISO C99
@@ -72,23 +90,34 @@ extern const union __double_u __infinity;
     ((_XOPEN_SOURCE  - 0) >= 600) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define	HUGE_VALF	__builtin_huge_valf()
+#define	HUGE_VALL	__builtin_huge_vall()
+#else
 extern const union __float_u __infinityf;
 #define	HUGE_VALF	__infinityf.__val
 
 extern const union __long_double_u __infinityl;
 #define	HUGE_VALL	__infinityl.__val
+#endif
 
 /* 7.12#4 INFINITY */
-#ifdef __INFINITY
+#if defined(__INFINITY)
 #define	INFINITY	__INFINITY	/* float constant which overflows */
+#elif __GNUC_PREREQ__(3, 3)
+#define	INFINITY	__builtin_inff()
 #else
 #define	INFINITY	HUGE_VALF	/* positive infinity */
 #endif /* __INFINITY */
 
 /* 7.12#5 NAN: a quiet NaN, if supported */
 #ifdef __HAVE_NANF
+#if __GNUC_PREREQ__(3,3)
+#define	NAN	__builtin_nanf("")
+#else
 extern const union __float_u __nanf;
 #define	NAN		__nanf.__val
+#endif
 #endif /* __HAVE_NANF */
 
 /* 7.12#6 number classification macros */
@@ -100,6 +129,9 @@ extern const union __float_u __nanf;
 /* NetBSD extensions */
 #define	_FP_LOMD	0x80		/* range for machine-specific classes */
 #define	_FP_HIMD	0xff
+
+#define	FP_ILOGB0	INT_MIN
+#define	FP_ILOGBNAN	INT_MAX
 
 #endif /* !_ANSI_SOURCE && ... */
 
@@ -148,7 +180,7 @@ extern  _LIB_VERSION_TYPE  _LIB_VERSION;
 #ifndef __cplusplus
 struct exception {
 	int type;
-	char *name;
+	const char *name;
 	double arg1;
 	double arg2;
 	double retval;
@@ -190,6 +222,7 @@ double	sinh(double);
 double	tanh(double);
 
 double	exp(double);
+double	exp2(double);
 double	frexp(double, int *);
 double	ldexp(double, int);
 double	log(double);
@@ -220,6 +253,19 @@ double	y1(double);
 double	yn(int, double);
 
 #if (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)
+double	scalb(double, double);
+#endif /* (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)*/
+#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
+
+/*
+ * ISO C99
+ */
+#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
+    !defined(_XOPEN_SOURCE) || \
+    ((__STDC_VERSION__ - 0) >= 199901L) || \
+    ((_POSIX_C_SOURCE - 0) >= 200809L) || \
+    ((_XOPEN_SOURCE  - 0) >= 500) || \
+    defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 double	acosh(double);
 double	asinh(double);
 double	atanh(double);
@@ -231,13 +277,8 @@ double	logb(double);
 double	nextafter(double, double);
 double	remainder(double, double);
 double	rint(double);
-double	scalb(double, double);
-#endif /* (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)*/
-#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
+#endif
 
-/*
- * ISO C99
- */
 #if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
     !defined(_XOPEN_SOURCE) || \
     ((__STDC_VERSION__ - 0) >= 199901L) || \
@@ -266,6 +307,14 @@ float	cosf(float);
 float	sinf(float);
 float	tanf(float);
 
+long double	acosl(long double);
+long double	asinl(long double);
+long double	atanl(long double);
+long double	atan2l(long double, long double);
+long double	cosl(long double);
+long double	sinl(long double);
+long double	tanl(long double);
+
 /* 7.12.5 hyperbolic */
 
 float	acoshf(float);
@@ -274,10 +323,17 @@ float	atanhf(float);
 float	coshf(float);
 float	sinhf(float);
 float	tanhf(float);
+long double	acoshl(long double);
+long double	asinhl(long double);
+long double	atanhl(long double);
+long double	coshl(long double);
+long double	sinhl(long double);
+long double	tanhl(long double);
 
 /* 7.12.6 exp / log */
 
 float	expf(float);
+float	exp2f(float);
 float	expm1f(float);
 float	frexpf(float, int *);
 int	ilogbf(float);
@@ -289,6 +345,23 @@ float	log1pf(float);
 float	logbf(float);
 float	modff(float, float *);
 float	scalbnf(float, int);
+float	scalblnf(float, long);
+
+long double	expl(long double);
+long double	exp2l(long double);
+long double	expm1l(long double);
+long double	frexpl(long double, int *);
+int		ilogbl(long double);
+long double	ldexpl(long double, int);
+long double	logl(long double);
+long double	log2l(long double);
+long double	log10l(long double);
+long double	log1pl(long double);
+long double	logbl(long double);
+long double	modfl(long double, long double *);
+long double	scalbnl(long double, int);
+long double	scalblnl(long double, long);
+
 
 /* 7.12.7 power / absolute */
 
@@ -297,49 +370,87 @@ float	fabsf(float);
 float	hypotf(float, float);
 float	powf(float, float);
 float	sqrtf(float);
+long double	cbrtl(long double);
+long double	fabsl(long double);
+long double	hypotl(long double, long double);
+long double	powl(long double, long double);
+long double	sqrtl(long double);
 
 /* 7.12.8 error / gamma */
 
+double	tgamma(double);
 float	erff(float);
 float	erfcf(float);
 float	lgammaf(float);
+float	tgammaf(float);
+long double	erfl(long double);
+long double	erfcl(long double);
+long double	lgammal(long double);
+long double	tgammal(long double);
 
 /* 7.12.9 nearest integer */
 
-float	ceilf(float);
-float	floorf(float);
-float	rintf(float);
-double	round(double);
-float	roundf(float);
-double	trunc(double);
-float	truncf(float);
-long int	lrint(double);
-long int	lrintf(float);
 /* LONGLONG */
 long long int	llrint(double);
-/* LONGLONG */
-long long int	llrintf(float);
 long int	lround(double);
-long int	lroundf(float);
 /* LONGLONG */
 long long int	llround(double);
+long int	lrint(double);
+double	round(double);
+double	trunc(double);
+
+float	ceilf(float);
+float	floorf(float);
+/* LONGLONG */
+long long int	llrintf(float);
+long int	lroundf(float);
 /* LONGLONG */
 long long int	llroundf(float);
+long int	lrintf(float);
+float	rintf(float);
+float	roundf(float);
+float	truncf(float);
+long double	ceill(long double);
+long double	floorl(long double);
+/* LONGLONG */
+long long int	llrintl(long double);
+long int	lroundl(long double);
+/* LONGLONG */
+long long int	llroundl(long double);
+long int	lrintl(long double);
+long double	rintl(long double);
+long double	roundl(long double);
+long double	truncl(long double);
 
 /* 7.12.10 remainder */
 
 float	fmodf(float, float);
 float	remainderf(float, float);
+long double	fmodl(long double, long double);
+long double	remainderl(long double, long double);
+
+/* 7.12.10.3 The remquo functions */
+double	remquo(double, double, int *);
+float	remquof(float, float, int *);
+long double	remquol(long double, long double, int *);
 
 /* 7.12.11 manipulation */
 
-float	copysignf(float, float);
 double	nan(const char *);
+double	nearbyint(double);
+double	nexttoward(double, long double);
+float	copysignf(float, float);
 float	nanf(const char *);
-long double	nanl(const char *);
+float	nearbyintf(float);
 float	nextafterf(float, float);
+float	nexttowardf(float, long double);
+long double	copysignl(long double, long double);
+long double	nanl(const char *);
+long double	nearbyintl(long double);
+long double     nextafterl(long double, long double);
+long double	nexttowardl(long double, long double);
 
-/* 7.12.14 comparision */
+/* 7.12.14 comparison */
 
 #define isunordered(x, y)	(isnan(x) || isnan(y))
 #define isgreater(x, y)		(!isunordered((x), (y)) && (x) > (y))
@@ -348,6 +459,18 @@ float	nextafterf(float, float);
 #define islessequal(x, y)	(!isunordered((x), (y)) && (x) <= (y))
 #define islessgreater(x, y)	(!isunordered((x), (y)) && \
 				 ((x) > (y) || (y) > (x)))
+double	fdim(double, double);
+double	fma(double, double, double);
+double	fmax(double, double);
+double	fmin(double, double);
+float	fdimf(float, float);
+float	fmaf(float, float, float);
+float	fmaxf(float, float);
+float	fminf(float, float);
+long double fdiml(long double, long double);
+long double fmal(long double, long double, long double);
+long double fmaxl(long double, long double);
+long double fminl(long double, long double);
 
 #endif /* !_ANSI_SOURCE && ... */
 
@@ -357,14 +480,14 @@ float	nextafterf(float, float);
     ((_POSIX_C_SOURCE - 0) >= 200112L) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 /* 7.12.3.3 int isinf(real-floating x) */
-#ifdef __isinf
+#if defined(__isinf) || defined(__HAVE_INLINE___ISINF)
 #define	isinf(__x)	__isinf(__x)
 #else
 #define	isinf(__x)	__fpmacro_unary_floating(isinf, __x)
 #endif
 
 /* 7.12.3.4 int isnan(real-floating x) */
-#ifdef __isnan
+#if defined(__isnan) || defined(__HAVE_INLINE___ISNAN)
 #define	isnan(__x)	__isnan(__x)
 #else
 #define	isnan(__x)	__fpmacro_unary_floating(isnan, __x)
@@ -386,6 +509,7 @@ double	significand(double);
  */
 double	copysign(double, double);
 double	scalbn(double, int);
+double	scalbln(double, long);
 
 /*
  * BSD math library entry points
@@ -463,6 +587,7 @@ int	__isinfl(long double);
 int	__isnanl(long double);
 int	__signbitl(long double);
 #endif
+
 __END_DECLS
 
 #endif /* _MATH_H_ */

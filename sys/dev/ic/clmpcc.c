@@ -1,4 +1,4 @@
-/*	$NetBSD: clmpcc.c,v 1.36 2007/11/19 18:51:47 ad Exp $ */
+/*	$NetBSD: clmpcc.c,v 1.52 2017/10/28 04:53:55 riastradh Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.36 2007/11/19 18:51:47 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.52 2017/10/28 04:53:55 riastradh Exp $");
 
 #include "opt_ddb.h"
 
@@ -51,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.36 2007/11/19 18:51:47 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -69,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.36 2007/11/19 18:51:47 ad Exp $");
 #include <dev/ic/clmpccvar.h>
 #include <dev/cons.h>
 
+#include "ioconf.h"
 
 #if defined(CLMPCC_ONLY_BYTESWAP_LOW) && defined(CLMPCC_ONLY_BYTESWAP_HIGH)
 #error	"CLMPCC_ONLY_BYTESWAP_LOW and CLMPCC_ONLY_BYTESWAP_HIGH are mutually exclusive."
@@ -83,16 +76,14 @@ static void	clmpcc_set_params(struct clmpcc_chan *);
 static void	clmpcc_start(struct tty *);
 static int 	clmpcc_modem_control(struct clmpcc_chan *, int, int);
 
-#define	CLMPCCUNIT(x)		(minor(x) & 0x7fffc)
-#define CLMPCCCHAN(x)		(minor(x) & 0x00003)
-#define	CLMPCCDIALOUT(x)	(minor(x) & 0x80000)
+#define	CLMPCCUNIT(x)		(TTUNIT(x) & ~0x3)	// XXX >> 2? 
+#define	CLMPCCCHAN(x)		(TTUNIT(x) & 0x3)
+#define	CLMPCCDIALOUT(x)	TTDIALOUT(x)
 
 /*
  * These should be in a header file somewhere...
  */
 #define	ISCLR(v, f)	(((v) & (f)) == 0)
-
-extern struct cfdriver clmpcc_cd;
 
 dev_type_open(clmpccopen);
 dev_type_close(clmpccclose);
@@ -104,8 +95,18 @@ dev_type_tty(clmpcctty);
 dev_type_poll(clmpccpoll);
 
 const struct cdevsw clmpcc_cdevsw = {
-	clmpccopen, clmpccclose, clmpccread, clmpccwrite, clmpccioctl,
-	clmpccstop, clmpcctty, clmpccpoll, nommap, ttykqfilter, D_TTY
+	.d_open = clmpccopen,
+	.d_close = clmpccclose,
+	.d_read = clmpccread,
+	.d_write = clmpccwrite,
+	.d_ioctl = clmpccioctl,
+	.d_stop = clmpccstop,
+	.d_tty = clmpcctty,
+	.d_poll = clmpccpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 /*
@@ -149,9 +150,7 @@ integrate void      clmpcc_enable_transmitter(struct clmpcc_chan *);
 
 
 integrate u_int8_t
-clmpcc_rdreg(sc, offset)
-	struct clmpcc_softc *sc;
-	u_int offset;
+clmpcc_rdreg(struct clmpcc_softc *sc, u_int offset)
 {
 #if !defined(CLMPCC_ONLY_BYTESWAP_LOW) && !defined(CLMPCC_ONLY_BYTESWAP_HIGH)
 	offset ^= sc->sc_byteswap;
@@ -162,10 +161,7 @@ clmpcc_rdreg(sc, offset)
 }
 
 integrate void
-clmpcc_wrreg(sc, offset, val)
-	struct clmpcc_softc *sc;
-	u_int offset;
-	u_int val;
+clmpcc_wrreg(struct clmpcc_softc *sc, u_int offset, u_int val)
 {
 #if !defined(CLMPCC_ONLY_BYTESWAP_LOW) && !defined(CLMPCC_ONLY_BYTESWAP_HIGH)
 	offset ^= sc->sc_byteswap;
@@ -176,9 +172,7 @@ clmpcc_wrreg(sc, offset, val)
 }
 
 integrate u_int8_t
-clmpcc_rdreg_odd(sc, offset)
-	struct clmpcc_softc *sc;
-	u_int offset;
+clmpcc_rdreg_odd(struct clmpcc_softc *sc, u_int offset)
 {
 #if !defined(CLMPCC_ONLY_BYTESWAP_LOW) && !defined(CLMPCC_ONLY_BYTESWAP_HIGH)
 	offset ^= (sc->sc_byteswap & 2);
@@ -189,10 +183,7 @@ clmpcc_rdreg_odd(sc, offset)
 }
 
 integrate void
-clmpcc_wrreg_odd(sc, offset, val)
-	struct clmpcc_softc *sc;
-	u_int offset;
-	u_int val;
+clmpcc_wrreg_odd(struct clmpcc_softc *sc, u_int offset, u_int val)
 {
 #if !defined(CLMPCC_ONLY_BYTESWAP_LOW) && !defined(CLMPCC_ONLY_BYTESWAP_HIGH)
 	offset ^= (sc->sc_byteswap & 2);
@@ -203,10 +194,7 @@ clmpcc_wrreg_odd(sc, offset, val)
 }
 
 integrate void
-clmpcc_wrtx_multi(sc, buff, count)
-	struct clmpcc_softc *sc;
-	u_int8_t *buff;
-	u_int count;
+clmpcc_wrtx_multi(struct clmpcc_softc *sc, u_int8_t *buff, u_int count)
 {
 	u_int offset = CLMPCC_REG_TDR;
 
@@ -219,9 +207,7 @@ clmpcc_wrtx_multi(sc, buff, count)
 }
 
 integrate u_int8_t
-clmpcc_select_channel(sc, new_chan)
-	struct clmpcc_softc *sc;
-	u_int new_chan;
+clmpcc_select_channel(struct clmpcc_softc *sc, u_int new_chan)
 {
 	u_int old_chan = clmpcc_rdreg_odd(sc, CLMPCC_REG_CAR);
 
@@ -231,10 +217,7 @@ clmpcc_select_channel(sc, new_chan)
 }
 
 integrate void
-clmpcc_channel_cmd(sc, chan, cmd)
-	struct clmpcc_softc *sc;
-	int chan;
-	int cmd;
+clmpcc_channel_cmd(struct clmpcc_softc *sc, int chan, int cmd)
 {
 	int i;
 
@@ -246,14 +229,13 @@ clmpcc_channel_cmd(sc, chan, cmd)
 
 	if ( i == 0 )
 		printf("%s: channel %d command timeout (idle)\n",
-			sc->sc_dev.dv_xname, chan);
+			device_xname(sc->sc_dev), chan);
 
 	clmpcc_wrreg(sc, CLMPCC_REG_CCR, cmd);
 }
 
 integrate void
-clmpcc_enable_transmitter(ch)
-	struct clmpcc_chan *ch;
+clmpcc_enable_transmitter(struct clmpcc_chan *ch)
 {
 	u_int old;
 	int s;
@@ -270,10 +252,7 @@ clmpcc_enable_transmitter(ch)
 }
 
 static int
-clmpcc_speed(sc, speed, cor, bpr)
-	struct clmpcc_softc *sc;
-	speed_t speed;
-	int *cor, *bpr;
+clmpcc_speed(struct clmpcc_softc *sc, speed_t speed, int *cor, int *bpr)
 {
 	int c, co, br;
 
@@ -290,8 +269,7 @@ clmpcc_speed(sc, speed, cor, bpr)
 }
 
 void
-clmpcc_attach(sc)
-	struct clmpcc_softc *sc;
+clmpcc_attach(struct clmpcc_softc *sc)
 {
 	struct clmpcc_chan *ch;
 	struct tty *tp;
@@ -319,7 +297,7 @@ clmpcc_attach(sc)
 		ch->ch_sc = sc;
 		ch->ch_car = chan;
 
-		tp = ttymalloc();
+		tp = tty_alloc();
 		tp->t_oproc = clmpcc_start;
 		tp->t_param = clmpcc_param;
 
@@ -327,8 +305,8 @@ clmpcc_attach(sc)
 
 		ch->ch_ibuf = malloc(clmpcc_ibuf_size * 2, M_DEVBUF, M_NOWAIT);
 		if ( ch->ch_ibuf == NULL ) {
-			printf("%s(%d): unable to allocate ring buffer\n",
-		    		sc->sc_dev.dv_xname, chan);
+			aprint_error_dev(sc->sc_dev, "(%d): unable to allocate ring buffer\n",
+		    		chan);
 			return;
 		}
 
@@ -338,7 +316,7 @@ clmpcc_attach(sc)
 		tty_attach(tp);
 	}
 
-	printf("%s: %d channels available", sc->sc_dev.dv_xname,
+	aprint_error_dev(sc->sc_dev, "%d channels available",
 					    CLMPCC_NUM_CHANS);
 	if ( cons_sc == sc ) {
 		printf(", console on channel %d.\n", cons_chan);
@@ -349,11 +327,10 @@ clmpcc_attach(sc)
 }
 
 static int
-clmpcc_init(sc)
-	struct clmpcc_softc *sc;
+clmpcc_init(struct clmpcc_softc *sc)
 {
-	u_int tcor, tbpr;
-	u_int rcor, rbpr;
+	u_int tcor = 0, tbpr = 0;
+	u_int rcor = 0, rbpr = 0;
 	u_int msvr_rts, msvr_dtr;
 	u_int ccr;
 	int is_console;
@@ -389,7 +366,7 @@ clmpcc_init(sc)
 	delay(1000);
 
 	/*
-	 * The chip will set it's firmware revision register to a non-zero
+	 * The chip will set its firmware revision register to a non-zero
 	 * value to indicate completion of reset.
 	 */
 	for (i = 10000; clmpcc_rdreg(sc, CLMPCC_REG_GFRCR) == 0 && i; i--)
@@ -400,7 +377,7 @@ clmpcc_init(sc)
 		 * Watch out... If this chip is console, the message
 		 * probably won't be sent since we just reset it!
 		 */
-		printf("%s: Failed to reset chip\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "Failed to reset chip\n");
 		return -1;
 	}
 
@@ -475,8 +452,7 @@ clmpcc_init(sc)
 }
 
 static void
-clmpcc_shutdown(ch)
-	struct clmpcc_chan *ch;
+clmpcc_shutdown(struct clmpcc_chan *ch)
 {
 	int oldch;
 
@@ -498,10 +474,7 @@ clmpcc_shutdown(ch)
 }
 
 int
-clmpccopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+clmpccopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct clmpcc_softc *sc;
 	struct clmpcc_chan *ch;
@@ -509,7 +482,7 @@ clmpccopen(dev, flag, mode, l)
 	int oldch;
 	int error;
 
-	sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -602,13 +575,10 @@ bad:
 }
 
 int
-clmpccclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+clmpccclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct clmpcc_softc	*sc =
-		device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+		device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	struct clmpcc_chan	*ch = &sc->sc_chans[CLMPCCCHAN(dev)];
 	struct tty		*tp = ch->ch_tty;
 	int s;
@@ -637,59 +607,44 @@ clmpccclose(dev, flag, mode, l)
 }
 
 int
-clmpccread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+clmpccread(dev_t dev, struct uio *uio, int flag)
 {
-	struct clmpcc_softc *sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	struct clmpcc_softc *sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	struct tty *tp = sc->sc_chans[CLMPCCCHAN(dev)].ch_tty;
 
 	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
 
 int
-clmpccwrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+clmpccwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct clmpcc_softc *sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	struct clmpcc_softc *sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	struct tty *tp = sc->sc_chans[CLMPCCCHAN(dev)].ch_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
 
 int
-clmpccpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+clmpccpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct clmpcc_softc *sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	struct clmpcc_softc *sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	struct tty *tp = sc->sc_chans[CLMPCCCHAN(dev)].ch_tty;
 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
 }
 
 struct tty *
-clmpcctty(dev)
-	dev_t dev;
+clmpcctty(dev_t dev)
 {
-	struct clmpcc_softc *sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	struct clmpcc_softc *sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 
 	return (sc->sc_chans[CLMPCCCHAN(dev)].ch_tty);
 }
 
 int
-clmpccioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+clmpccioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct clmpcc_softc *sc = device_lookup(&clmpcc_cd, CLMPCCUNIT(dev));
+	struct clmpcc_softc *sc = device_lookup_private(&clmpcc_cd, CLMPCCUNIT(dev));
 	struct clmpcc_chan *ch = &sc->sc_chans[CLMPCCCHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 	int error;
@@ -764,10 +719,7 @@ clmpccioctl(dev, cmd, data, flag, l)
 }
 
 int
-clmpcc_modem_control(ch, bits, howto)
-	struct clmpcc_chan *ch;
-	int bits;
-	int howto;
+clmpcc_modem_control(struct clmpcc_chan *ch, int bits, int howto)
 {
 	struct clmpcc_softc *sc = ch->ch_sc;
 	struct tty *tp = ch->ch_tty;
@@ -845,17 +797,15 @@ clmpcc_modem_control(ch, bits, howto)
 }
 
 static int
-clmpcc_param(tp, t)
-	struct tty *tp;
-	struct termios *t;
+clmpcc_param(struct tty *tp, struct termios *t)
 {
 	struct clmpcc_softc *sc =
-	    device_lookup(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
+	    device_lookup_private(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
 	struct clmpcc_chan *ch = &sc->sc_chans[CLMPCCCHAN(tp->t_dev)];
 	u_char cor;
 	u_char oldch;
-	int oclk, obpr;
-	int iclk, ibpr;
+	int oclk = 0, obpr = 0;
+	int iclk = 0, ibpr = 0;
 	int s;
 
 	/* Check requested parameters. */
@@ -980,8 +930,7 @@ clmpcc_param(tp, t)
 }
 
 static void
-clmpcc_set_params(ch)
-	struct clmpcc_chan *ch;
+clmpcc_set_params(struct clmpcc_chan *ch)
 {
 	struct clmpcc_softc *sc = ch->ch_sc;
 	u_char r1;
@@ -1038,11 +987,10 @@ clmpcc_set_params(ch)
 }
 
 static void
-clmpcc_start(tp)
-	struct tty *tp;
+clmpcc_start(struct tty *tp)
 {
 	struct clmpcc_softc *sc =
-	    device_lookup(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
+	    device_lookup_private(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
 	struct clmpcc_chan *ch = &sc->sc_chans[CLMPCCCHAN(tp->t_dev)];
 	u_int oldch;
 	int s;
@@ -1078,12 +1026,10 @@ clmpcc_start(tp)
  * Stop output on a line.
  */
 void
-clmpccstop(tp, flag)
-	struct tty *tp;
-	int flag;
+clmpccstop(struct tty *tp, int flag)
 {
 	struct clmpcc_softc *sc =
-	    device_lookup(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
+	    device_lookup_private(&clmpcc_cd, CLMPCCUNIT(tp->t_dev));
 	struct clmpcc_chan *ch = &sc->sc_chans[CLMPCCCHAN(tp->t_dev)];
 	int s;
 
@@ -1101,8 +1047,7 @@ clmpccstop(tp, flag)
  * RX interrupt routine
  */
 int
-clmpcc_rxintr(arg)
-	void *arg;
+clmpcc_rxintr(void *arg)
 {
 	struct clmpcc_softc *sc = (struct clmpcc_softc *)arg;
 	struct clmpcc_chan *ch;
@@ -1252,12 +1197,10 @@ rx_done:
  * Tx interrupt routine
  */
 int
-clmpcc_txintr(arg)
-	void *arg;
+clmpcc_txintr(void *arg)
 {
 	struct clmpcc_softc *sc = (struct clmpcc_softc *)arg;
 	struct clmpcc_chan *ch;
-	struct tty *tp;
 	u_char ftc, oftc;
 	u_char tir, teoir;
 	int etcmode = 0;
@@ -1274,7 +1217,6 @@ clmpcc_txintr(arg)
 
 	/* Get pointer to interrupting channel's data structure */
 	ch = &sc->sc_chans[tir & CLMPCC_TIR_TCN_MASK];
-	tp = ch->ch_tty;
 
 	/* Dummy read of the interrupt status register */
 	(void) clmpcc_rdreg(sc, CLMPCC_REG_TISR);
@@ -1366,8 +1308,7 @@ clmpcc_txintr(arg)
  * Modem change interrupt routine
  */
 int
-clmpcc_mdintr(arg)
-	void *arg;
+clmpcc_mdintr(void *arg)
 {
 	struct clmpcc_softc *sc = (struct clmpcc_softc *)arg;
 	u_char mir;
@@ -1396,8 +1337,7 @@ clmpcc_mdintr(arg)
 }
 
 void
-clmpcc_softintr(arg)
-	void *arg;
+clmpcc_softintr(void *arg)
 {
 	struct clmpcc_softc *sc = (struct clmpcc_softc *)arg;
 	struct clmpcc_chan *ch;
@@ -1484,10 +1424,7 @@ clmpcc_softintr(arg)
  * Following are all routines needed for a cd240x channel to act as console
  */
 int
-clmpcc_cnattach(sc, chan, rate)
-	struct clmpcc_softc *sc;
-	int chan;
-	int rate;
+clmpcc_cnattach(struct clmpcc_softc *sc, int chan, int rate)
 {
 	cons_sc = sc;
 	cons_chan = chan;
@@ -1500,9 +1437,7 @@ clmpcc_cnattach(sc, chan, rate)
  * The following functions are polled getc and putc routines, for console use.
  */
 static int
-clmpcc_common_getc(sc, chan)
-	struct clmpcc_softc *sc;
-	int chan;
+clmpcc_common_getc(struct clmpcc_softc *sc, int chan)
 {
 	u_char old_chan;
 	u_char old_ier;
@@ -1571,10 +1506,7 @@ clmpcc_common_getc(sc, chan)
 
 
 static void
-clmpcc_common_putc(sc, chan, c)
-	struct clmpcc_softc *sc;
-	int chan;
-	int c;
+clmpcc_common_putc(struct clmpcc_softc *sc, int chan, int c)
 {
 	u_char old_chan;
 	int s = splhigh();
@@ -1603,8 +1535,7 @@ clmpcc_common_putc(sc, chan, c)
 }
 
 int
-clmpcccngetc(dev)
-	dev_t dev;
+clmpcccngetc(dev_t dev)
 {
 	return clmpcc_common_getc(cons_sc, cons_chan);
 }
@@ -1613,9 +1544,7 @@ clmpcccngetc(dev)
  * Console kernel output character routine.
  */
 void
-clmpcccnputc(dev, c)
-	dev_t dev;
-	int c;
+clmpcccnputc(dev_t dev, int c)
 {
 	if ( c == '\n' )
 		clmpcc_common_putc(cons_sc, cons_chan, '\r');

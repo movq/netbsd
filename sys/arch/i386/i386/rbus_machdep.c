@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.22 2007/12/01 16:07:20 ad Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.27 2017/08/15 09:25:00 maxv Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by HAYAKAWA Koichi.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.22 2007/12/01 16:07:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.27 2017/08/15 09:25:00 maxv Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -40,11 +35,9 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.22 2007/12/01 16:07:20 ad Exp $")
 #include <sys/systm.h>
 #include <sys/extent.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <sys/sysctl.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/cardbus/rbus.h>
 
 #include <sys/device.h>
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.22 2007/12/01 16:07:20 ad Exp $")
 
 #include <dev/pci/pcivar.h>
 #if defined(PCI_ADDR_FIXUP)
-#include <arch/i386/pci/pci_addr_fixup.h>
+#include <arch/x86/pci/pci_addr_fixup.h>
 #endif
 
 #ifndef RBUS_IO_BASE
@@ -87,13 +80,13 @@ bus_addr_t rbus_min_start = RBUS_MIN_START;
  * or 2046 vs 2048.
  */
 void
-rbus_min_start_hint(size_t ram)
+rbus_min_start_hint(psize_t ram)
 {
 #ifdef RBUS_MIN_START_FORCED
-	aprint_debug("rbus: rbus_min_start from config at 0x%0lx\n",
+	aprint_debug("rbus: rbus_min_start from config at %#0" PRIxPADDR "\n",
 	    rbus_min_start);
 #else
-        if (ram <= 192*1024*1024UL) {
+	if (ram <= 192*1024*1024UL) {
 		/*
 		 * <= 192 MB, so try 0.5 GB.  This will work on
 		 * Thinkpad 600E (2645-4AU), which fails at 1GB, and
@@ -118,8 +111,8 @@ rbus_min_start_hint(size_t ram)
 		rbus_min_start =  3 * 1024 * 1024 * 1024UL;
 	}
 
-	aprint_debug("rbus: rbus_min_start set to 0x%0lx\n",
-	   rbus_min_start);
+	aprint_debug("rbus: rbus_min_start set to %#0" PRIxPADDR "\n",
+	    rbus_min_start);
 #endif
 }
 
@@ -156,11 +149,11 @@ rbus_pccbb_parent_mem(struct pci_attach_args *pa)
 	 * which is not recognised by the kernel as already reserved.
 	 */
 
-	if (start < rbus_min_start) 
+	if (start < rbus_min_start)
 		start = rbus_min_start;
 
 	size = ex->ex_end - start;
-  
+
 	return rbus_new_root_share(pa->pa_memt, ex, start, size, 0);
 }
 
@@ -187,7 +180,7 @@ rbus_pccbb_parent_io(struct pci_attach_args *pa)
 
 	ret = rbus_new_root_share(pa->pa_iot, ex, start, size, 0);
 	if (ret == NULL)
-	  panic("failed to alloc I/O space");
+		panic("failed to alloc I/O space");
 
 	return ret;
 }

@@ -1,6 +1,6 @@
-/*	$NetBSD: if_ie_vme.c,v 1.23 2007/10/19 12:01:23 ad Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.31 2014/08/18 04:26:38 riastradh Exp $	*/
 
-/*-
+/*
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -145,7 +140,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.23 2007/10/19 12:01:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.31 2014/08/18 04:26:38 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -162,9 +157,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.23 2007/10/19 12:01:23 ad Exp $");
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-#ifdef __sparc__
-#include <machine/autoconf.h>
-#endif
 #include <dev/vme/vmevar.h>
 
 #include <dev/ic/i82586reg.h>
@@ -238,8 +230,8 @@ static void ie_vmeattend(struct ie_softc *, int);
 static void ie_vmerun(struct ie_softc *);
 static int  ie_vmeintr(struct ie_softc *, int);
 
-int ie_vme_match(struct device *, struct cfdata *, void *);
-void ie_vme_attach(struct device *, struct device *, void *);
+int ie_vme_match(device_t, cfdata_t, void *);
+void ie_vme_attach(device_t, device_t, void *);
 
 struct ie_vme_softc {
 	struct ie_softc ie;
@@ -247,7 +239,7 @@ struct ie_vme_softc {
 	bus_space_handle_t ievh;
 };
 
-CFATTACH_DECL(ie_vme, sizeof(struct ie_vme_softc),
+CFATTACH_DECL_NEW(ie_vme, sizeof(struct ie_vme_softc),
     ie_vme_match, ie_vme_attach, NULL, NULL);
 
 #define read_iev(sc, reg) \
@@ -259,9 +251,7 @@ CFATTACH_DECL(ie_vme, sizeof(struct ie_vme_softc),
  * MULTIBUS/VME support routines
  */
 void
-ie_vmereset(sc, what)
-	struct ie_softc *sc;
-	int what;
+ie_vmereset(struct ie_softc *sc, int what)
 {
 	struct ie_vme_softc *vsc = (struct ie_vme_softc *)sc;
 	write_iev(vsc, status, IEVME_RESET);
@@ -270,9 +260,7 @@ ie_vmereset(sc, what)
 }
 
 void
-ie_vmeattend(sc, why)
-	struct ie_softc *sc;
-	int why;
+ie_vmeattend(struct ie_softc *sc, int why)
 {
 	struct ie_vme_softc *vsc = (struct ie_vme_softc *)sc;
 
@@ -283,8 +271,7 @@ ie_vmeattend(sc, why)
 }
 
 void
-ie_vmerun(sc)
-	struct ie_softc *sc;
+ie_vmerun(struct ie_softc *sc)
 {
 	struct ie_vme_softc *vsc = (struct ie_vme_softc *)sc;
 
@@ -293,9 +280,7 @@ ie_vmerun(sc)
 }
 
 int
-ie_vmeintr(sc, where)
-	struct ie_softc *sc;
-	int where;
+ie_vmeintr(struct ie_softc *sc, int where)
 {
 	struct ie_vme_softc *vsc = (struct ie_vme_softc *)sc;
 
@@ -306,8 +291,8 @@ ie_vmeintr(sc, where)
          * check for parity error
          */
 	if (read_iev(vsc, status) & IEVME_PERR) {
-		printf("%s: parity error (ctrl 0x%x @ 0x%02x%04x)\n",
-		       sc->sc_dev.dv_xname, read_iev(vsc, pectrl),
+		aprint_error_dev(sc->sc_dev, "parity error (ctrl 0x%x @ 0x%02x%04x)\n",
+		       read_iev(vsc, pectrl),
 		       read_iev(vsc, pectrl) & IEVME_HADDR,
 		       read_iev(vsc, peaddr));
 		write_iev(vsc, pectrl, read_iev(vsc, pectrl) | IEVME_PARACK);
@@ -322,11 +307,7 @@ void ie_memcopyout(struct ie_softc *, const void *, int, size_t);
  * Copy board memory to kernel.
  */
 void
-ie_memcopyin(sc, p, offset, size)
-	struct ie_softc	*sc;
-	void *p;
-	int offset;
-	size_t size;
+ie_memcopyin(struct ie_softc *sc, void *p, int offset, size_t size)
 {
 	size_t help;
 
@@ -356,11 +337,7 @@ ie_memcopyin(sc, p, offset, size)
  * Copy from kernel space to board memory.
  */
 void
-ie_memcopyout(sc, p, offset, size)
-	struct ie_softc	*sc;
-	const void *p;
-	int offset;
-	size_t size;
+ie_memcopyout(struct ie_softc *sc, const void *p, int offset, size_t size)
 {
 	size_t help;
 
@@ -393,9 +370,7 @@ void ie_vme_write16(struct ie_softc *, int offset, u_int16_t value);
 void ie_vme_write24(struct ie_softc *, int offset, int addr);
 
 u_int16_t
-ie_vme_read16(sc, offset)
-	struct ie_softc *sc;
-	int offset;
+ie_vme_read16(struct ie_softc *sc, int offset)
 {
 	u_int16_t v;
 
@@ -405,10 +380,7 @@ ie_vme_read16(sc, offset)
 }
 
 void
-ie_vme_write16(sc, offset, v)
-	struct ie_softc *sc;
-	int offset;
-	u_int16_t v;
+ie_vme_write16(struct ie_softc *sc, int offset, u_int16_t v)
 {
 	int v0 = ((((v)&0xff)<<8) | (((v)>>8)&0xff));
 	bus_space_write_2(sc->bt, sc->bh, offset, v0);
@@ -416,10 +388,7 @@ ie_vme_write16(sc, offset, v)
 }
 
 void
-ie_vme_write24(sc, offset, addr)
-	struct ie_softc *sc;
-	int offset;
-	int addr;
+ie_vme_write24(struct ie_softc *sc, int offset, int addr)
 {
 	u_char *f = (u_char *)&addr;
 	u_int16_t v0, v1;
@@ -437,10 +406,7 @@ ie_vme_write24(sc, offset, addr)
 }
 
 int
-ie_vme_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ie_vme_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct vme_attach_args *va = aux;
 	vme_chipset_tag_t ct = va->va_vct;
@@ -458,7 +424,7 @@ ie_vme_match(parent, cf, aux)
 		return (0);
 	}
 	if (va->r[0].size != VMECF_LEN_DEFAULT &&
-	    va->r[0].size != sizeof(sizeof(struct ievme))) {
+	    va->r[0].size != sizeof(struct ievme)) {
 		printf("ie_vme_match: bad csr size\n");
 		return (0);
 	}
@@ -490,13 +456,10 @@ ie_vme_match(parent, cf, aux)
 }
 
 void
-ie_vme_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void   *aux;
+ie_vme_attach(device_t parent, device_t self, void *aux)
 {
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-	struct ie_vme_softc *vsc = (void *) self;
+	struct ie_vme_softc *vsc = device_private(self);
 	struct vme_attach_args *va = aux;
 	vme_chipset_tag_t ct = va->va_vct;
 	struct ie_softc *sc;
@@ -505,7 +468,7 @@ ie_vme_attach(parent, self, aux)
 	vme_size_t memsize;
 	vme_mapresc_t resc;
 	int lcv;
-
+	prop_data_t eaddrprop;
 	vme_am_t mod;
 
 	/*
@@ -521,6 +484,7 @@ ie_vme_attach(parent, self, aux)
 		panic("if_ie: vme alloc");
 
 	sc = &vsc->ie;
+	sc->sc_dev = self;
 
 	sc->hwreset = ie_vmereset;
 	sc->hwinit = ie_vmerun;
@@ -594,11 +558,13 @@ ie_vme_attach(parent, self, aux)
 
 	sc->do_xmitnopchain = 0;
 
-	printf("\n%s:", self->dv_xname);
+	printf("\n%s:", device_xname(self));
 
-#ifdef __sparc__
-	prom_getether(0, myaddr);
-#endif
+	eaddrprop = prop_dictionary_get(device_properties(self), "mac-address");
+	if (eaddrprop != NULL && prop_data_size(eaddrprop) == ETHER_ADDR_LEN)
+		memcpy(myaddr, prop_data_data_nocopy(eaddrprop),
+			ETHER_ADDR_LEN);
+
 	i82586_attach(sc, "multibus/vme", myaddr, media, NMEDIA, media[0]);
 
 	vme_intr_map(ct, va->ilevel, va->ivector, &ih);

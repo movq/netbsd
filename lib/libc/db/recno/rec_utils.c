@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: rec_utils.c,v 1.14 2013/12/14 18:04:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,13 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)rec_utils.c	8.6 (Berkeley) 7/16/94";
-#else
-__RCSID("$NetBSD: rec_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: rec_utils.c,v 1.14 2013/12/14 18:04:56 christos Exp $");
 
 #include <sys/param.h>
 
@@ -76,17 +70,15 @@ __rec_ret(BTREE *t, EPG *e, recno_t nrec, DBT *key, DBT *data)
 		goto dataonly;
 
 	/* We have to copy the key, it's not on the page. */
-	if (sizeof(recno_t) > t->bt_rkey.size) {
-		p = (void *)(t->bt_rkey.data == NULL ?
-		    malloc(sizeof(recno_t)) :
-		    realloc(t->bt_rkey.data, sizeof(recno_t)));
+	if (sizeof(nrec) > t->bt_rkey.size) {
+		p = realloc(t->bt_rkey.data, sizeof(nrec));
 		if (p == NULL)
 			return (RET_ERROR);
 		t->bt_rkey.data = p;
-		t->bt_rkey.size = sizeof(recno_t);
+		t->bt_rkey.size = sizeof(nrec);
 	}
-	memmove(t->bt_rkey.data, &nrec, sizeof(recno_t));
-	key->size = sizeof(recno_t);
+	memmove(t->bt_rkey.data, &nrec, sizeof(nrec));
+	key->size = sizeof(nrec);
 	key->data = t->bt_rkey.data;
 
 dataonly:
@@ -107,9 +99,7 @@ dataonly:
 	} else if (F_ISSET(t, B_DB_LOCK)) {
 		/* Use +1 in case the first record retrieved is 0 length. */
 		if (rl->dsize + 1 > t->bt_rdata.size) {
-			p = (void *)(t->bt_rdata.data == NULL ?
-			    malloc(rl->dsize + 1) :
-			    realloc(t->bt_rdata.data, rl->dsize + 1));
+			p = realloc(t->bt_rdata.data, rl->dsize + 1);
 			if (p == NULL)
 				return (RET_ERROR);
 			t->bt_rdata.data = p;

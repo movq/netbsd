@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.21 2007/10/17 19:57:16 garbled Exp $
+#	$NetBSD: Makefile,v 1.38 2017/04/08 19:53:23 christos Exp $
+
+.include <bsd.init.mk>
 
 CURDIR=	${.CURDIR}
 S=	${CURDIR}/../../../..
@@ -7,23 +9,29 @@ S=	${CURDIR}/../../../..
 # Override normal settings
 #
 
-WARNS=		0
+WARNS?=		2
+KLINK_MACHINE=	sparc64
 
 PROG?=		ofwboot
-SRCS=		srt0.s Locore.c boot.c ofdev.c alloc.c net.c netif_of.c vers.c
-SRCS+=		bootinfo.c loadfile_machdep.c promlib.c prf.c
-.PATH:		${S}/arch/sparc64/sparc64
+SRCS=		srt0.s Locore.c boot.c ofdev.c alloc.c net.c netif_of.c
+SRCS+=		bootinfo.c loadfile_machdep.c promlib.c prf.c isfloppy.c
+.if ${MACHINE_ARCH} == "sparc64"
+SRCS+=		hvcall.S
+CPPFLAGS+=	-DSUN4V
+.endif
+.PATH:		${S}/arch/sparc64/sparc64 ${S}/arch/sparc/stand/common
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
+LIBCRTI=
 LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
-COPTS+=		-ffreestanding
+COPTS+=		-ffreestanding -mcpu=v9
 CWARNFLAGS+=	-Wno-main
-CFLAGS+=	${COPTS} ${CEXTRAFLAGS}
-CPPFLAGS+=	-D_STANDALONE -DSUN4U
+CFLAGS+=	${COPTS}
+CPPFLAGS+=	-D_STANDALONE
 CPPFLAGS+=	-DBOOT_ELF32 -DBOOT_ELF64 -DBOOT_AOUT
 CPPFLAGS+=	-DNETBOOT
 CPPFLAGS+=	-DSUPPORT_DHCP
@@ -49,6 +57,7 @@ RELOC=		100000
 ENTRY=		_start
 
 CPPFLAGS+=	-I${CURDIR}/../../.. -I${CURDIR}/../../../.. -I${CURDIR} -I.
+CPPFLAGS+=	-I${CURDIR}/../../../../../common/include
 CPPFLAGS+=	-DRELOC=0x${RELOC}
 
 #
@@ -58,7 +67,7 @@ CPPFLAGS+=	-DSPARC_BOOT_AOUT
 CPPFLAGS+=	-DSPARC_BOOT_ELF
 CPPFLAGS+=	-DSPARC_BOOT_UFS
 CPPFLAGS+=	-DSPARC_BOOT_NFS
-#CPPFLAGS+=	-DSPARC_BOOT_CD9660
+CPPFLAGS+=	-DSPARC_BOOT_CD9660
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -77,54 +86,36 @@ SAMISCCPPFLAGS+= -DCOMPAT_SOLARIS_UFS
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	@([ -h machine ] || ln -s ${S}/arch/sparc64/include machine)
-	@([ -h sparc64 ] || ln -s ${S}/arch/sparc64/include sparc64)
-	@([ -h sparc ] || ln -s ${S}/arch/sparc/include sparc)
-.NOPATH: machine sparc64 sparc
-.endif
-CLEANFILES+= machine sparc64 sparc
+.include "${S}/conf/newvers_stand.mk"
 
-cleandir distclean: cleanlibdir
-
-cleanlibdir:
-	-rm -rf lib
-
-vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${CURDIR}/version "sparc64" ${NEWVERSWHAT}
-
-CLEANFILES+= vers.c
+.include <bsd.own.mk>
+.include <bsd.klinks.mk>
 
 .if CROSS
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
+	${_MKTARGET_LINK}
 	${LD} -N -p -Ttext ${RELOC} -e ${ENTRY} >lderr -o ${PROG} \
 	    ${OBJS} -L${SADST} -lsa -L${ZDST} -lz -L${KERNDST} -lkern # solaris linker
 .else
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${LD} -X -N -Ttext ${RELOC} -e ${ENTRY} -o ${PROG} \
+	${_MKTARGET_LINK}
+	${LD} -X -N -S -Ttext ${RELOC} -e ${ENTRY} -o ${PROG} \
 	    ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}	# native linker
 .endif
 
 .include <bsd.prog.mk>
 
-.if ${MACHINE_ARCH} == "sparc64"
+CPUFLAGS+=		-mcpu=v9
 AFLAGS+=		-Wa,-Av9a
-CEXTRAFLAGS?=		-D_LP64
-.else
-AFLAGS+=		-Wa,-Av8plusa
-.endif
+AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__
 
-.if CROSS
-AFLAGS+=		-x assembler-with-cpp -traditional-cpp -D_LOCORE -D__ELF__
-CEXTRAFLAGS?=		-D_LP64
-.else
-AFLAGS+=		-x assembler-with-cpp -traditional-cpp -D_LOCORE -D__ELF__ ${CEXTRAFLAGS}
-.endif
-
-NORMAL_S=	${CC} ${AFLAGS} ${CPPFLAGS} -c $<
+NORMAL_S=	${CC} ${AFLAGS} ${AFLAGS.${<:T}}  ${CPPFLAGS} -c $<
 srt0.o: srt0.s
 	${NORMAL_S}
+
+hvcall.o: hvcall.S
+	${NORMAL_S}
+
 
 # Explicit dependency for this.
 boot.o: boot.c

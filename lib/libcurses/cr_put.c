@@ -1,4 +1,4 @@
-/*	$NetBSD: cr_put.c,v 1.25 2007/05/28 15:01:54 blymn Exp $	*/
+/*	$NetBSD: cr_put.c,v 1.33 2017/03/20 18:19:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cr_put.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: cr_put.c,v 1.25 2007/05/28 15:01:54 blymn Exp $");
+__RCSID("$NetBSD: cr_put.c,v 1.33 2017/03/20 18:19:34 christos Exp $");
 #endif
 #endif				/* not lint */
 
@@ -58,10 +58,10 @@ mvcur(int ly, int lx, int y, int x)
 	return (__mvcur(ly, lx, y, x, 0));
 }
 
-static void fgoto __P((int));
-static int plod __P((int, int));
-static int plodput __P((int));
-static int tabcol __P((int, int));
+static void fgoto(int);
+static int plod(int, int);
+static int plodput(int);
+static int tabcol(int, int);
 
 static int outcol, outline, destcol, destline;
 
@@ -86,11 +86,10 @@ __mvcur(int ly, int lx, int y, int x, int in_refresh)
 }
 
 static void
-fgoto(in_refresh)
-	int	 in_refresh;
+fgoto(int in_refresh)
 {
 	int	 c, l;
-	char   cgp[128];
+	char	*cgp;
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "fgoto: in_refresh=%d\n", in_refresh);
@@ -103,16 +102,17 @@ fgoto(in_refresh)
 		l = (outcol + 1) / COLS;
 		outline += l;
 		outcol %= COLS;
-		if (__tc_am == 0) {
+		if (auto_left_margin == 0) {
 			while (l > 0) {
 				if (__pfast) {
-					if (__tc_cr)
-						tputs(__tc_cr, 0, __cputchar);
+					if (carriage_return)
+						tputs(carriage_return,
+							0, __cputchar);
 					else
 						__cputchar('\r');
 				}
-				if (__tc_nl)
-					tputs(__tc_nl, 0, __cputchar);
+				if (cursor_down)
+					tputs(cursor_down, 0, __cputchar);
 				else
 					__cputchar('\n');
 				l--;
@@ -129,7 +129,7 @@ fgoto(in_refresh)
 		destline = LINES - 1;
 		if (outline < LINES - 1) {
 			c = destcol;
-			if (__pfast == 0 && !__CA)
+			if (__pfast == 0 && !cursor_address)
 				destcol = 0;
 			fgoto(in_refresh);
 			destcol = c;
@@ -151,8 +151,8 @@ fgoto(in_refresh)
 			 * linefeed to scroll since down arrow won't go past
 			 * memory end. I turned this off after recieving Paul
 			 * Eggert's Superbee description which wins better. */
-			if (__tc_nl /* && !__tc_xb */ && __pfast)
-				tputs(__tc_nl, 0, __cputchar);
+			if (cursor_down /* && !__tc_xb */ && __pfast)
+				tputs(cursor_down, 0, __cputchar);
 			else
 				__cputchar('\n');
 			l--;
@@ -160,10 +160,12 @@ fgoto(in_refresh)
 				outcol = 0;
 		}
 	}
-	if (destline < outline && !(__CA || __tc_up))
+	if (destline < outline && !(cursor_address || cursor_up))
 		destline = outline;
-	if (__CA && t_goto(NULL, __tc_cm, destcol, destline, cgp,
-	    sizeof(cgp) - 1) != -1) {
+
+	if (cursor_address &&
+	    (cgp = tiparm(cursor_address, destline, destcol)))
+	{
 		/*
 		 * Need this condition due to inconsistent behavior
 		 * of backspace on the last column.
@@ -181,6 +183,7 @@ fgoto(in_refresh)
 	outline = destline;
 	outcol = destcol;
 }
+
 /*
  * Move (slowly) to destination.
  * Hard thing here is using home cursor on really deficient terminals.
@@ -194,19 +197,17 @@ fgoto(in_refresh)
 static int plodcnt, plodflg;
 
 static int
-plodput(c)
-	int	 c;
+plodput(int c)
 {
 	if (plodflg)
 		--plodcnt;
 	else
 		__cputchar(c);
-	return (0);
+	return 0;
 }
 
 static int
-plod(cnt, in_refresh)
-	int	 cnt, in_refresh;
+plod(int cnt, int in_refresh)
 {
 	int	 i, j, k, soutcol, soutline;
 
@@ -217,11 +218,12 @@ plod(cnt, in_refresh)
 	plodcnt = plodflg = cnt;
 	soutcol = outcol;
 	soutline = outline;
+
 	/*
 	 * Consider homing and moving down/right from there, vs. moving
 	 * directly with local motions to the right spot.
 	 */
-	if (__tc_ho) {
+	if (cursor_home) {
 		/*
 		 * i is the cost to home and tab/space to the right to get to
 		 * the proper column.  This assumes nd space costs 1 char.  So
@@ -241,7 +243,7 @@ plod(cnt, in_refresh)
 				j = destcol - outcol;
 		} else
 			/* leftward motion only works if we can backspace. */
-			if (outcol - destcol <= i && (__tc_bs || __tc_bc))
+			if (outcol - destcol <= i)
 				/* Cheaper to backspace. */
 				i = j = outcol - destcol;
 			else
@@ -255,38 +257,38 @@ plod(cnt, in_refresh)
 		j += k;
 
 		/* Decision.  We may not have a choice if no up. */
-		if (i + destline < j || (!__tc_up && destline < outline)) {
+		if (i + destline < j || (!cursor_up && destline < outline)) {
 			/*
 			 * Cheaper to home.  Do it now and pretend it's a
 			 * regular local motion.
 			 */
-			tputs(__tc_ho, 0, plodput);
+			tputs(cursor_home, 0, plodput);
 			outcol = outline = 0;
 		} else
-			if (__tc_ll) {
+			if (cursor_to_ll) {
 				/*
 				 * Quickly consider homing down and moving from
 				 * there.  Assume cost of ll is 2.
 				 */
 				k = (LINES - 1) - destline;
-				if (i + k + 2 < j && (k <= 0 || __tc_up)) {
-					tputs(__tc_ll, 0, plodput);
+				if (i + k + 2 < j && (k <= 0 || cursor_up)) {
+					tputs(cursor_to_ll, 0, plodput);
 					outcol = 0;
 					outline = LINES - 1;
 				}
 			}
 	} else
 		/* No home and no up means it's impossible. */
-		if (!__tc_up && destline < outline)
+		if (!cursor_up && destline < outline)
 			return (-1);
 	if (__GT)
 		i = destcol % HARDTABS + destcol / HARDTABS;
 	else
 		i = destcol;
 #ifdef notdef
-	if (__tc_bt && outcol > destcol &&
+	if (back_tab && outcol > destcol &&
 	    (j = (((outcol + 7) & ~7) - destcol - 1) >> 3)) {
-		j *= (k = strlen(__tc_bt));
+		j *= (k = strlen(back_tab));
 		if ((k += (destcol & 7)) > 4)
 			j += 8 - (destcol & 7);
 		else
@@ -306,25 +308,25 @@ plod(cnt, in_refresh)
 	 * If the terminal will do a \r\n and there isn't room for it, then
 	 * we can't afford a \r.
 	 */
-	if (__tc_nc && outline >= destline)
+	if (!carriage_return && outline >= destline)
 		goto dontcr;
 
 	/*
 	 * If it will be cheaper, or if we can't back up, then send a return
 	 * preliminarily.
 	 */
-	if (j > i + 1 || (outcol > destcol && !__tc_bs && !__tc_bc)) {
+	if (j > i + 1 || outcol > destcol) {
 		/*
 		 * BUG: this doesn't take the (possibly long) length of cr
 		 * into account.
 		 */
-		if (__tc_cr)
-			tputs(__tc_cr, 0, plodput);
+		if (carriage_return)
+			tputs(carriage_return, 0, plodput);
 		else
 			plodput('\r');
-		if (__tc_nc) {
-			if (__tc_nl)
-				tputs(__tc_nl, 0, plodput);
+		if (!carriage_return) {
+			if (cursor_down)
+				tputs(cursor_down, 0, plodput);
 			else
 				plodput('\n');
 			outline++;
@@ -333,8 +335,8 @@ plod(cnt, in_refresh)
 	}
 dontcr:while (outline < destline) {
 		outline++;
-		if (__tc_nl)
-			tputs(__tc_nl, 0, plodput);
+		if (cursor_down)
+			tputs(cursor_down, 0, plodput);
 		else
 			plodput('\n');
 		if (plodcnt < 0)
@@ -342,28 +344,30 @@ dontcr:while (outline < destline) {
 		if (__NONL || __pfast == 0)
 			outcol = 0;
 	}
-	if (__tc_bt)
-		k = (int) strlen(__tc_bt);
+#ifdef notdef
+	if (back_tab)
+		k = (int) strlen(back_tab);
+#endif
 	while (outcol > destcol) {
 		if (plodcnt < 0)
 			goto out;
 #ifdef notdef
-		if (__tc_bt && outcol - destcol > k + 4) {
-			tputs(__tc_bt, 0, plodput);
+		if (back_tab && outcol - destcol > k + 4) {
+			tputs(back_tab, 0, plodput);
 			outcol--;
 			outcol &= ~7;
 			continue;
 		}
 #endif
 		outcol--;
-		if (__tc_bc)
-			tputs(__tc_bc, 0, plodput);
+		if (cursor_left)
+			tputs(cursor_left, 0, plodput);
 		else
 			plodput('\b');
 	}
 	while (outline > destline) {
 		outline--;
-		tputs(__tc_up, 0, plodput);
+		tputs(cursor_up, 0, plodput);
 		if (plodcnt < 0)
 			goto out;
 	}
@@ -372,22 +376,22 @@ dontcr:while (outline < destline) {
 			i = tabcol(outcol, HARDTABS);
 			if (i > destcol)
 				break;
-			if (__tc_ta)
-				tputs(__tc_ta, 0, plodput);
+			if (tab)
+				tputs(tab, 0, plodput);
 			else
 				plodput('\t');
 			outcol = i;
 		}
-		if (destcol - outcol > 4 && i < COLS && (__tc_bc || __tc_bs)) {
-			if (__tc_ta)
-				tputs(__tc_ta, 0, plodput);
+		if (destcol - outcol > 4 && i < COLS) {
+			if (tab)
+				tputs(tab, 0, plodput);
 			else
 				plodput('\t');
 			outcol = i;
 			while (outcol > destcol) {
 				outcol--;
-				if (__tc_bc)
-					tputs(__tc_bc, 0, plodput);
+				if (cursor_left)
+					tputs(cursor_left, 0, plodput);
 				else
 					plodput('\b');
 			}
@@ -403,18 +407,19 @@ dontcr:while (outline < destline) {
 				plodcnt--;
 			else {
 #ifndef HAVE_WCHAR
-				i = curscr->lines[outline]->line[outcol].ch
+				i = curscr->alines[outline]->line[outcol].ch
 				    & __CHARTEXT;
-				if (curscr->lines[outline]->line[outcol].attr
+				if (curscr->alines[outline]->line[outcol].attr
 				    == curscr->wattr)
 					__cputchar(i);
 #else
-				if ((curscr->lines[outline]->line[outcol].attr
+				if ((curscr->alines[outline]->line[outcol].attr
 				    & WA_ATTRIBUTES)
-				    == curscr->wattr ) {
-					if (WCOL(curscr->lines[outline]->line[outcol]) > 0) {
-						__cputwchar(curscr->lines[outline]->line[outcol].ch);
-						__cursesi_putnsp(curscr->lines[outline]->line[outcol].nsp,
+				    == curscr->wattr) {
+					switch (WCOL(curscr->alines[outline]->line[outcol])) {
+					case 1:
+						__cputwchar(curscr->alines[outline]->line[outcol].ch);
+						__cursesi_putnsp(curscr->alines[outline]->line[outcol].nsp,
 								outline,
 								outcol);
 #ifdef DEBUG
@@ -422,9 +427,14 @@ dontcr:while (outline < destline) {
 						    "plod: (%d,%d)WCOL(%d), "
 						    "putwchar(%x)\n",
 						    outline, outcol,
-						    WCOL(curscr->lines[outline]->line[outcol]),
-						    curscr->lines[outline]->line[outcol].ch);
+						    WCOL(curscr->alines[outline]->line[outcol]),
+						    curscr->alines[outline]->line[outcol].ch);
 #endif /* DEBUG */
+					/*FALLTHROUGH*/
+					case 0:
+						break;
+					default:
+						goto nondes;
 					}
 				}
 #endif /* HAVE_WCHAR */
@@ -432,10 +442,10 @@ dontcr:while (outline < destline) {
 					goto nondes;
 			}
 		else
-	nondes:	if (__tc_nd)
-				tputs(__tc_nd, 0, plodput);
-			else
-				plodput(' ');
+	nondes:	if (cursor_right)
+			tputs(cursor_right, 0, plodput);
+		else
+			plodput(' ');
 		outcol++;
 		if (plodcnt < 0)
 			goto out;
@@ -448,16 +458,16 @@ out:	if (plodflg) {
 #ifdef DEBUG
 	__CTRACE(__CTRACE_OUTPUT, "plod: returns %d\n", plodcnt);
 #endif /* DEBUG */
-	return (plodcnt);
+	return plodcnt;
 }
+
 /*
  * Return the column number that results from being in column col and
  * hitting a tab, where tabs are set every ts columns.  Work right for
  * the case where col > COLS, even if ts does not divide COLS.
  */
 static int
-tabcol(col, ts)
-	int	 col, ts;
+tabcol(int col, int ts)
 {
 	int	 offset;
 

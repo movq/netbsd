@@ -1,4 +1,4 @@
-/*	$NetBSD: cardslot.c,v 1.39 2007/12/16 21:28:31 dyoung Exp $	*/
+/*	$NetBSD: cardslot.c,v 1.56 2016/09/24 23:54:49 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999 and 2000
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by HAYAKAWA Koichi.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.39 2007/12/16 21:28:31 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.56 2016/09/24 23:54:49 mrg Exp $");
 
 #include "opt_cardslot.h"
 
@@ -51,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.39 2007/12/16 21:28:31 dyoung Exp $")
 #include <dev/cardbus/cardbusvar.h>
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
-#include <dev/ic/i82365var.h>
 
 #include "locators.h"
 
@@ -63,24 +56,35 @@ __KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.39 2007/12/16 21:28:31 dyoung Exp $")
 #define DPRINTF(a)
 #endif
 
+int pcmcia_error(device_t);
+int
+pcmcia_error(device_t dev)
+{
+
+	return 1;
+}
+__weak_alias(pcmcia_card_attach, pcmcia_error);
+__weak_alias(pcmcia_card_deactivate, pcmcia_error);
+__weak_alias(pcmcia_card_detach, pcmcia_error);
 
 
-STATIC void cardslotattach(struct device *, struct device *, void *);
+STATIC void cardslotchilddet(device_t, device_t);
+STATIC void cardslotattach(device_t, device_t, void *);
 STATIC int cardslotdetach(device_t, int);
 
-STATIC int cardslotmatch(struct device *, struct cfdata *, void *);
+STATIC int cardslotmatch(device_t, cfdata_t, void *);
 static void cardslot_event_thread(void *arg);
 
 STATIC int cardslot_cb_print(void *aux, const char *pcic);
 static int cardslot_16_print(void *, const char *);
-static int cardslot_16_submatch(struct device *, struct cfdata *,
-				     const int *, void *);
+static int cardslot_16_submatch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(cardslot, sizeof(struct cardslot_softc),
-    cardslotmatch, cardslotattach, cardslotdetach, NULL);
+CFATTACH_DECL3_NEW(cardslot, sizeof(struct cardslot_softc),
+    cardslotmatch, cardslotattach, cardslotdetach, NULL, NULL, cardslotchilddet,
+    DVF_DETACH_SHUTDOWN);
 
 STATIC int
-cardslotmatch(struct device *parent, struct cfdata *cf,
+cardslotmatch(device_t parent, cfdata_t cf,
     void *aux)
 {
 	struct cardslot_attach_args *caa = aux;
@@ -93,11 +97,22 @@ cardslotmatch(struct device *parent, struct cfdata *cf,
 	return 1;
 }
 
+STATIC void
+cardslotchilddet(device_t self, device_t child)
+{
+	struct cardslot_softc *sc = device_private(self);
 
+	KASSERT(sc->sc_cb_softc == device_private(child) ||
+	    sc->sc_16_softc == child);
+
+	if (sc->sc_cb_softc == device_private(child))
+		sc->sc_cb_softc = NULL;
+	else if (sc->sc_16_softc == child)
+		sc->sc_16_softc = NULL;
+}
 
 STATIC void
-cardslotattach(struct device *parent, struct device *self,
-    void *aux)
+cardslotattach(device_t parent, device_t self, void *aux)
 {
 	struct cardslot_softc *sc = device_private(self);
 	struct cardslot_attach_args *caa = aux;
@@ -108,49 +123,45 @@ cardslotattach(struct device *parent, struct device *self,
 	struct cardbus_softc *csc = NULL;
 	struct pcmcia_softc *psc = NULL;
 
-	sc->sc_slot = device_unit(&sc->sc_dev);
+	sc->sc_dev = self;
+
 	sc->sc_cb_softc = NULL;
 	sc->sc_16_softc = NULL;
 	SIMPLEQ_INIT(&sc->sc_events);
 	sc->sc_th_enable = 0;
 
 	aprint_naive("\n");
-	aprint_normal(" slot %d flags %x\n", sc->sc_slot,
-	       device_cfdata(&sc->sc_dev)->cf_flags);
+	aprint_normal("\n");
 
-	DPRINTF(("%s attaching CardBus bus...\n", sc->sc_dev.dv_xname));
+	DPRINTF(("%s attaching CardBus bus...\n", device_xname(self)));
 	if (cba != NULL) {
-		csc = (void *)config_found_ia(self, "cbbus", cba,
-					      cardslot_cb_print);
+		csc = device_private(config_found_ia(self, "cbbus", cba,
+				     cardslot_cb_print));
 		if (csc) {
 			/* cardbus found */
 			DPRINTF(("%s: found cardbus on %s\n", __func__,
-				 sc->sc_dev.dv_xname));
+				 device_xname(self)));
 			sc->sc_cb_softc = csc;
 		}
 	}
 
 	if (pa != NULL) {
-		psc = (void *)config_found_sm_loc(self, "pcmciabus", NULL, pa,
-			cardslot_16_print, cardslot_16_submatch);
-		if (psc) {
+		sc->sc_16_softc = config_found_sm_loc(self, "pcmciabus", NULL,
+						      pa, cardslot_16_print,
+						      cardslot_16_submatch);
+		if (sc->sc_16_softc) {
 			/* pcmcia 16-bit bus found */
 			DPRINTF(("%s: found 16-bit pcmcia bus\n", __func__));
-			sc->sc_16_softc = psc;
-			/*
-			 * XXX:
-			 * dirty.  This code should be removed to achieve MI.
-			 */
-			caa->caa_ph->pcmcia = (struct device *)psc;
+			psc = device_private(sc->sc_16_softc);
 		}
 	}
 
 	if (csc != NULL || psc != NULL) {
-		config_pending_incr();
+		config_pending_incr(self);
 		if (kthread_create(PRI_NONE, 0, NULL, cardslot_event_thread,
-		    sc, &sc->sc_event_thread, "%s", sc->sc_dev.dv_xname)) {
-			printf("%s: unable to create thread for slot %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_slot);
+		    sc, &sc->sc_event_thread, "%s", device_xname(self))) {
+			aprint_error_dev(sc->sc_dev,
+					 "unable to create thread\n");
 			panic("cardslotattach");
 		}
 		sc->sc_th_enable = 1;
@@ -208,7 +219,7 @@ cardslot_cb_print(void *aux, const char *pnp)
 
 
 static int
-cardslot_16_submatch(struct device *parent, struct cfdata *cf,
+cardslot_16_submatch(device_t parent, cfdata_t cf,
     const int *ldesc, void *aux)
 {
 
@@ -217,7 +228,7 @@ cardslot_16_submatch(struct device *parent, struct cfdata *cf,
 		return 0;
 	}
 
-	if ((cf->cf_loc[PCMCIABUSCF_CONTROLLER] == PCMCIABUSCF_CONTROLLER_DEFAULT)) {
+	if (cf->cf_loc[PCMCIABUSCF_CONTROLLER] == PCMCIABUSCF_CONTROLLER_DEFAULT) {
 		return (config_match(parent, cf, aux));
 	}
 
@@ -281,8 +292,7 @@ cardslot_event_throw(struct cardslot_softc *sc, int ev)
  *
  */
 static void
-cardslot_event_thread(arg)
-	void *arg;
+cardslot_event_thread(void *arg)
 {
 	struct cardslot_softc *sc = arg;
 	struct cardslot_event *ce;
@@ -298,7 +308,7 @@ cardslot_event_thread(arg)
 			splx(s);
 			if (first) {
 				first = 0;
-				config_pending_decr();
+				config_pending_decr(sc->sc_dev);
 			}
 			(void) tsleep(&sc->sc_events, PWAIT, "cardslotev", 0);
 			continue;
@@ -361,7 +371,8 @@ cardslot_event_thread(arg)
 					    CARDSLOT_STATUS_NOTWORK);
 				}
 			} else {
-				panic("no cardbus on %s", sc->sc_dev.dv_xname);
+				panic("no cardbus on %s",
+				      device_xname(sc->sc_dev));
 			}
 
 			break;
@@ -379,7 +390,7 @@ cardslot_event_thread(arg)
 			}
 			if (sc->sc_16_softc) {
 				CARDSLOT_SET_CARDTYPE(sc->sc_status, CARDSLOT_STATUS_CARD_16);
-				if (pcmcia_card_attach((struct device *)sc->sc_16_softc)) {
+				if (pcmcia_card_attach(sc->sc_16_softc)) {
 					/* Do not attach */
 					CARDSLOT_SET_WORK(sc->sc_status,
 					    CARDSLOT_STATUS_NOTWORK);
@@ -389,7 +400,8 @@ cardslot_event_thread(arg)
 					    CARDSLOT_STATUS_WORKING);
 				}
 			} else {
-				panic("no 16-bit pcmcia on %s", sc->sc_dev.dv_xname);
+				panic("no 16-bit pcmcia on %s",
+				      device_xname(sc->sc_dev));
 			}
 
 			break;
@@ -416,18 +428,20 @@ cardslot_event_thread(arg)
 			break;
 
 		case CARDSLOT_EVENT_REMOVAL_16:
-			DPRINTF(("%s: removal event\n", sc->sc_dev.dv_xname));
+			DPRINTF(("%s: removal event\n", device_xname(sc->sc_dev)));
 			if (CARDSLOT_CARDTYPE(sc->sc_status) != CARDSLOT_STATUS_CARD_16) {
 				/* 16-bit card has not been inserted. */
 				break;
 			}
 			if ((sc->sc_16_softc != NULL)
 			    && (CARDSLOT_WORK(sc->sc_status) == CARDSLOT_STATUS_WORKING)) {
-				struct pcmcia_softc *psc = sc->sc_16_softc;
+				struct pcmcia_softc *psc =
+					device_private(sc->sc_16_softc);
 
-				pcmcia_card_deactivate((struct device *)psc);
+				pcmcia_card_deactivate(sc->sc_16_softc);
 				pcmcia_chip_socket_disable(psc->pct, psc->pch);
-				pcmcia_card_detach((struct device *)psc, DETACH_FORCE);
+				pcmcia_card_detach(sc->sc_16_softc,
+						   DETACH_FORCE);
 			}
 			CARDSLOT_SET_CARDTYPE(sc->sc_status, CARDSLOT_STATUS_CARD_NONE);
 			CARDSLOT_SET_WORK(sc->sc_status, CARDSLOT_STATUS_NOTWORK);

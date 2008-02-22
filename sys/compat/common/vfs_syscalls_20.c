@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_20.c,v 1.25 2008/01/30 11:46:59 ad Exp $	*/
+/*	$NetBSD: vfs_syscalls_20.c,v 1.40 2017/04/13 09:41:28 hannken Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,11 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.25 2008/01/30 11:46:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.40 2017/04/13 09:41:28 hannken Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
-#include "opt_compat_43.h"
-#include "fss.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.25 2008/01/30 11:46:59 ad Exp 
 
 #include <compat/sys/mount.h>
 
-#ifdef COMPAT_09
 #define MOUNTNO_NONE	0
 #define MOUNTNO_UFS	1		/* UNIX "Fast" Filesystem */
 #define MOUNTNO_NFS	2		/* Network Filesystem */
@@ -86,14 +85,12 @@ static const struct {
 	{ MOUNT_KERNFS, MOUNTNO_KERNFS },
 	{ MOUNT_AFS, MOUNTNO_AFS },
 };
-#endif
 
 static int
 vfs2fs(struct statfs12 *bfs, const struct statvfs *fs)
 {
 	struct statfs12 ofs;
-#ifdef COMPAT_09
-	int i = 0;
+	int i;
 	ofs.f_type = 0;
 	ofs.f_oflags = (short)fs->f_flag;
 
@@ -103,9 +100,6 @@ vfs2fs(struct statfs12 *bfs, const struct statvfs *fs)
 			break;
 		}
 	}
-#else
-	ofs.f_type = 0;
-#endif
 #define CLAMP(a)	(long)(((a) & ~LONG_MAX) ? LONG_MAX : (a))
 	ofs.f_bsize = CLAMP(fs->f_frsize);
 	ofs.f_iosize = CLAMP(fs->f_iosize);
@@ -145,15 +139,15 @@ compat_20_sys_statfs(struct lwp *l, const struct compat_20_sys_statfs_args *uap,
 	} */
 	struct mount *mp;
 	struct statvfs *sbuf;
-	int error = 0;
-	struct nameidata nd;
+	int error;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG(uap, path),
+			NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return error;
 
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 
 	sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
 	if ((error = dostatvfs(mp, sbuf, l, 0, 1)) != 0)
@@ -161,7 +155,7 @@ compat_20_sys_statfs(struct lwp *l, const struct compat_20_sys_statfs_args *uap,
 
 	error = vfs2fs(SCARG(uap, buf), sbuf);
 done:
-	vrele(nd.ni_vp);
+	vrele(vp);
 	free(sbuf, M_TEMP);
 	return error;
 }
@@ -177,22 +171,21 @@ compat_20_sys_fstatfs(struct lwp *l, const struct compat_20_sys_fstatfs_args *ua
 		syscallarg(int) fd;
 		syscallarg(struct statfs12 *) buf;
 	} */
-	struct proc *p = l->l_proc;
 	struct file *fp;
 	struct mount *mp;
 	struct statvfs *sbuf;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
 	if ((error = dostatvfs(mp, sbuf, l, 0, 1)) != 0)
 		goto out;
 	error = vfs2fs(SCARG(uap, buf), sbuf);
  out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	free(sbuf, M_TEMP);
 	return error;
 }
@@ -210,7 +203,8 @@ compat_20_sys_getfsstat(struct lwp *l, const struct compat_20_sys_getfsstat_args
 		syscallarg(int) flags;
 	} */
 	int root = 0;
-	struct mount *mp, *nmp;
+	mount_iterator_t *iter;
+	struct mount *mp;
 	struct statvfs *sbuf;
 	struct statfs12 *sfsp;
 	size_t count, maxcount;
@@ -219,36 +213,21 @@ compat_20_sys_getfsstat(struct lwp *l, const struct compat_20_sys_getfsstat_args
 	sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
 	maxcount = (size_t)SCARG(uap, bufsize) / sizeof(struct statfs12);
 	sfsp = SCARG(uap, buf);
-	mutex_enter(&mountlist_lock);
 	count = 0;
-	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
-	     mp = nmp) {
-		if (vfs_trybusy(mp, RW_READER, &mountlist_lock)) {
-			nmp = CIRCLEQ_NEXT(mp, mnt_list);
-			continue;
-		}
+	mountlist_iterator_init(&iter);
+	while ((mp = mountlist_iterator_next(iter)) != NULL) {
 		if (sfsp && count < maxcount) {
 			error = dostatvfs(mp, sbuf, l, SCARG(uap, flags), 0);
-			if (error) {
-				mutex_enter(&mountlist_lock);
-				nmp = CIRCLEQ_NEXT(mp, mnt_list);
-				vfs_unbusy(mp, false);
+			if (error) 
 				continue;
-			}
 			error = vfs2fs(sfsp, sbuf);
-			if (error) {
-				vfs_unbusy(mp, false);
+			if (error)
 				goto out;
-			}
 			sfsp++;
 			root |= strcmp(sbuf->f_mntonname, "/") == 0;
 		}
 		count++;
-		mutex_enter(&mountlist_lock);
-		nmp = CIRCLEQ_NEXT(mp, mnt_list);
-		vfs_unbusy(mp, false);
 	}
-	mutex_exit(&mountlist_lock);
 	if (root == 0 && l->l_proc->p_cwdi->cwdi_rdir) {
 		/*
 		 * fake a root entry
@@ -265,6 +244,7 @@ compat_20_sys_getfsstat(struct lwp *l, const struct compat_20_sys_getfsstat_args
 	else
 		*retval = count;
 out:
+	mountlist_iterator_destroy(iter);
 	free(sbuf, M_TEMP);
 	return error;
 }
@@ -297,7 +277,7 @@ compat_20_sys_fhstatfs(struct lwp *l, const struct compat_20_sys_fhstatfs_args *
 	if ((error = VFS_FHTOVP(mp, (struct fid*)&fh.fh_fid, &vp)))
 		return (error);
 	mp = vp->v_mount;
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	sbuf = malloc(sizeof(*sbuf), M_TEMP, M_WAITOK);
 	if ((error = VFS_STATVFS(mp, sbuf)) != 0)
 		goto out;

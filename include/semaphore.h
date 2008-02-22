@@ -1,4 +1,4 @@
-/* $NetBSD: semaphore.h,v 1.2 2003/01/21 12:27:11 kleink Exp $ */
+/* $NetBSD: semaphore.h,v 1.5 2016/04/24 19:48:29 dholland Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,9 +38,9 @@ struct _sem_st;
 typedef	struct _sem_st *sem_t;
 
 #define	SEM_FAILED	((sem_t *)0)
-#define	SEM_VALUE_MAX	(~0U)
 
-#include <sys/cdefs.h>
+#include <sys/semaphore.h> /* some kernel-only bits */
+#include <sys/time.h>
 
 __BEGIN_DECLS
 int	 sem_close(sem_t *);
@@ -55,6 +48,7 @@ int	 sem_destroy(sem_t *);
 int	 sem_getvalue(sem_t * __restrict, int * __restrict);
 int	 sem_init(sem_t *, int, unsigned int);
 int	 sem_post(sem_t *);
+int	 sem_timedwait(sem_t *, const struct timespec * __restrict);
 int	 sem_trywait(sem_t *);
 int	 sem_unlink(const char *);
 int	 sem_wait(sem_t *);

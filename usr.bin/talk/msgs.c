@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.c,v 1.5 2003/08/07 11:16:05 agc Exp $	*/
+/*	$NetBSD: msgs.c,v 1.7 2011/09/06 18:32:03 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)msgs.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: msgs.c,v 1.5 2003/08/07 11:16:05 agc Exp $");
+__RCSID("$NetBSD: msgs.c,v 1.7 2011/09/06 18:32:03 joerg Exp $");
 #endif /* not lint */
 
 /* 
@@ -49,18 +49,17 @@ __RCSID("$NetBSD: msgs.c,v 1.5 2003/08/07 11:16:05 agc Exp $");
 
 #define MSG_INTERVAL 4
 
-char	*current_state;
+const char *current_state;
 int	current_line = 0;
 
 void
-disp_msg(dummy)
-	int dummy;
+disp_msg(int dummy)
 {
 	message(current_state);
 }
 
 void
-start_msgs()
+start_msgs(void)
 {
 	struct itimerval itimer;
 
@@ -72,7 +71,7 @@ start_msgs()
 }
 
 void
-end_msgs()
+end_msgs(void)
 {
 	struct itimerval itimer;
 

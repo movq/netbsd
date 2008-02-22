@@ -1,4 +1,4 @@
-/*	$NetBSD: gscpcib.c,v 1.10 2008/01/03 04:52:55 dyoung Exp $	*/
+/*	$NetBSD: gscpcib.c,v 1.18 2011/11/13 09:17:56 mbalmer Exp $	*/
 /*	$OpenBSD: gscpcib.c,v 1.3 2004/10/05 19:02:33 grange Exp $	*/
 /*
  * Copyright (c) 2004 Alexander Yurchenko <grange@openbsd.org>
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.10 2008/01/03 04:52:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.18 2011/11/13 09:17:56 mbalmer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -31,7 +31,7 @@ __KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.10 2008/01/03 04:52:55 dyoung Exp $");
 #include <sys/gpio.h>
 #include <sys/kernel.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -40,11 +40,15 @@ __KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.10 2008/01/03 04:52:55 dyoung Exp $");
 #include <dev/gpio/gpiovar.h>
 
 #include <i386/pci/gscpcibreg.h>
+#include <arch/x86/pci/pcibvar.h>
+
+#include "gpio.h"
 
 struct gscpcib_softc {
-	struct device sc_dev;
+	struct pcib_softc sc_pcib;
 
 	bool sc_gpio_present;
+	device_t sc_gpiobus;
 
 	/* GPIO interface */
 	bus_space_tag_t sc_gpio_iot;
@@ -53,34 +57,59 @@ struct gscpcib_softc {
 	gpio_pin_t sc_gpio_pins[GSCGPIO_NPINS];
 };
 
-int	gscpcib_match(device_t, struct cfdata *, void *);
+int	gscpcib_match(device_t, cfdata_t, void *);
 void	gscpcib_attach(device_t, device_t, void *);
 int	gscpcib_detach(device_t, int);
+int	gscpcib_rescan(device_t, const char *, const int *);
 void	gscpcib_childdetached(device_t, device_t);
 
 int	gscpcib_gpio_pin_read(void *, int);
 void	gscpcib_gpio_pin_write(void *, int, int);
 void	gscpcib_gpio_pin_ctl(void *, int, int);
 
-/* arch/i386/pci/pcib.c */
-void    pcibattach(device_t, device_t, void *);
-
-CFATTACH_DECL2(gscpcib, sizeof(struct gscpcib_softc),
-	gscpcib_match, gscpcib_attach, gscpcib_detach, NULL, NULL,
-	gscpcib_childdetached);
+CFATTACH_DECL3_NEW(gscpcib, sizeof(struct gscpcib_softc),
+	gscpcib_match, gscpcib_attach, gscpcib_detach, NULL, gscpcib_rescan,
+	gscpcib_childdetached, DVF_DETACH_SHUTDOWN);
 
 extern struct cfdriver gscpcib_cd;
 
 void
 gscpcib_childdetached(device_t self, device_t child)
 {
-	/* We hold no pointers to child devices, so there is nothing
-	 * to do here.
-	 */
+	struct gscpcib_softc *sc = device_private(self);
+
+	if (sc->sc_gpiobus == child)
+		sc->sc_gpiobus = NULL;
+	else
+		pcibchilddet(self, child);
 }
 
 int
-gscpcib_match(device_t parent, struct cfdata *match, void *aux)
+gscpcib_rescan(device_t self, const char *ifattr, const int *loc)
+{
+#if NGPIO > 0
+	struct gscpcib_softc *sc = device_private(self);
+
+	/* Attach GPIO framework */
+	if (sc->sc_gpio_present && ifattr_match(ifattr, "gpiobus") &&
+	    sc->sc_gpiobus == NULL) {
+		struct gpiobus_attach_args gba;
+
+		gba.gba_gc = &sc->sc_gpio_gc;
+		gba.gba_pins = sc->sc_gpio_pins;
+		gba.gba_npins = GSCGPIO_NPINS;
+
+		sc->sc_gpiobus = config_found_sm_loc(self, "gpiobus", loc,
+		    &gba, gpiobus_print, NULL);
+		return 0;
+	}
+#endif
+
+	return pcibrescan(self, ifattr, loc);
+}
+
+int
+gscpcib_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -100,7 +129,6 @@ gscpcib_attach(device_t parent, device_t self, void *aux)
 {
 	struct gscpcib_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
-	struct gpiobus_attach_args gba;
 	pcireg_t gpiobase;
 	int i;
 
@@ -134,19 +162,13 @@ gscpcib_attach(device_t parent, device_t self, void *aux)
 	sc->sc_gpio_gc.gp_pin_write = gscpcib_gpio_pin_write;
 	sc->sc_gpio_gc.gp_pin_ctl = gscpcib_gpio_pin_ctl;
 
-	gba.gba_gc = &sc->sc_gpio_gc;
-	gba.gba_pins = sc->sc_gpio_pins;
-	gba.gba_npins = GSCGPIO_NPINS;
-
 	sc->sc_gpio_present = true;
 
 corepcib:
 	/* Provide core pcib(4) functionality */
 	pcibattach(parent, self, aux);
 
-	/* Attach GPIO framework */
-	if (sc->sc_gpio_present)
-		config_found_ia(self, "gpiobus", &gba, gpiobus_print);
+	gscpcib_rescan(self, "gpiobus", NULL);
 }
 
 int
@@ -156,6 +178,9 @@ gscpcib_detach(device_t self, int flags)
 	struct gscpcib_softc *sc = device_private(self);
 
 	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+
+	if ((rc = pcibdetach(self, flags)) != 0)
 		return rc;
 
 	if (sc->sc_gpio_present)

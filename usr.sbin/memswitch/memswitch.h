@@ -1,4 +1,4 @@
-/*	$NetBSD: memswitch.h,v 1.1.1.1 1999/06/21 15:56:03 minoura Exp $	*/
+/*	$NetBSD: memswitch.h,v 1.5 2018/01/26 09:38:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,10 +45,10 @@
 
 struct property;
 
-typedef int (*parse_t) __P((struct property*, const char*));
-typedef int (*print_t) __P((struct property*, char*));
-typedef int (*fill_t) __P((struct property*));
-typedef int (*flush_t) __P((struct property*));
+typedef int (*parse_t)(struct property*, const char*);
+typedef int (*print_t)(struct property*, char*);
+typedef int (*fill_t)(struct property*);
+typedef int (*flush_t)(struct property*);
 
 struct property {
 	const char *class;
@@ -86,13 +79,12 @@ extern char *progname;
 extern u_int8_t *current_values;
 extern u_int8_t *modified_values;
 
-void usage __P((void)) __attribute__((noreturn));
-void show_single __P((const char*));
-void show_all __P((void));
-void modify_single __P((const char*));
-void help_single __P((const char*));
-void alloc_current_values __P((void));
-void alloc_modified_values __P((void));
-void flush __P((void));
-int save __P((const char*));
-int restore __P((const char*));
+void show_single(const char*);
+void show_all(void);
+void modify_single(const char*);
+void help_single(const char*);
+void alloc_current_values(void);
+void alloc_modified_values(void);
+void flush(void);
+int save(const char*);
+int restore(const char*);

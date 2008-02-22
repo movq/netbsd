@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_file.c,v 1.24 2006/02/16 20:48:42 christos Exp $	*/
+/*	$NetBSD: kvm_file.c,v 1.29 2014/02/19 20:21:22 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_file.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_file.c,v 1.24 2006/02/16 20:48:42 christos Exp $");
+__RCSID("$NetBSD: kvm_file.c,v 1.29 2014/02/19 20:21:22 dsl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -45,8 +45,10 @@ __RCSID("$NetBSD: kvm_file.c,v 1.24 2006/02/16 20:48:42 christos Exp $");
  * most other applications are interested only in open/close/read/nlist).
  */
 
+#define _KERNEL
+#include <sys/types.h>
+#undef _KERNEL
 #include <sys/param.h>
-#include <sys/user.h>
 #include <sys/lwp.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
@@ -55,7 +57,6 @@ __RCSID("$NetBSD: kvm_file.c,v 1.24 2006/02/16 20:48:42 christos Exp $");
 #undef _KERNEL
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <sys/tty.h>
 #include <nlist.h>
 #include <kvm.h>
 
@@ -70,21 +71,15 @@ __RCSID("$NetBSD: kvm_file.c,v 1.24 2006/02/16 20:48:42 christos Exp $");
 
 #include "kvm_private.h"
 
-#define KREAD(kd, addr, obj) \
-	(kvm_read(kd, (u_long) addr, obj, sizeof(*obj)) != sizeof(*obj))
-
 static int
-kvm_deadfiles __P((kvm_t *, int, int, long, int));
+kvm_deadfiles(kvm_t *, int, int, long, int);
 
 /*
  * Get file structures.
  */
 /*ARGSUSED*/
 static int
-kvm_deadfiles(kd, op, arg, ofhead, numfiles)
-	kvm_t *kd;
-	int op, arg, numfiles;
-	long ofhead;
+kvm_deadfiles(kvm_t *kd, int op, int arg, long ofhead, int numfiles)
 {
 	size_t buflen = kd->argspc_len, n = 0;
 	struct file *fp;
@@ -95,7 +90,7 @@ kvm_deadfiles(kd, op, arg, ofhead, numfiles)
 	 * first copyout filehead
 	 */
 	if (buflen < sizeof(fhead) ||
-	    KREAD(kd, ofhead, &fhead)) {
+	    KREAD(kd, (u_long)ofhead, &fhead)) {
 		_kvm_err(kd, kd->program, "can't read filehead");
 		return (0);
 	}
@@ -108,7 +103,8 @@ kvm_deadfiles(kd, op, arg, ofhead, numfiles)
 	 */
 	for (fp = fhead.lh_first; fp != 0; fp = fp->f_list.le_next) {
 		if (buflen > sizeof(struct file)) {
-			if (KREAD(kd, (long)fp, ((struct file *)(void *)where))) {
+			if (KREAD(kd, (u_long)fp,
+			    ((struct file *)(void *)where))) {
 				_kvm_err(kd, kd->program, "can't read kfp");
 				return (0);
 			}
@@ -126,10 +122,7 @@ kvm_deadfiles(kd, op, arg, ofhead, numfiles)
 }
 
 char *
-kvm_getfiles(kd, op, arg, cnt)
-	kvm_t *kd;
-	int op, arg;
-	int *cnt;
+kvm_getfiles(kvm_t *kd, int op, int arg, int *cnt)
 {
 	size_t size;
 	int mib[2], st;

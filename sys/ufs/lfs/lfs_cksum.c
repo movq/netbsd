@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_cksum.c,v 1.26 2005/12/11 12:25:26 christos Exp $	*/
+/*	$NetBSD: lfs_cksum.c,v 1.30 2015/08/02 18:18:10 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_cksum.c,v 1.26 2005/12/11 12:25:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_cksum.c,v 1.30 2015/08/02 18:18:10 dholland Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL
@@ -77,7 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_cksum.c,v 1.26 2005/12/11 12:25:26 christos Exp 
 # include <stddef.h>
 #endif
 #include <sys/mount.h>
-#include <ufs/ufs/inode.h>
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
@@ -108,10 +100,18 @@ cksum(void *str, size_t len)
 }
 
 u_int32_t
-lfs_sb_cksum(struct dlfs *fs)
+lfs_sb_cksum(struct lfs *fs)
 {
+	void *ptr;
 	size_t size;
 
-	size = (size_t)offsetof(struct dlfs, dlfs_cksum);
-	return cksum(fs, size);
+	if (fs->lfs_is64) {
+		ptr = &fs->lfs_dlfs_u.u_64;
+		size = (size_t)offsetof(struct dlfs64, dlfs_cksum);
+	} else {
+		ptr = &fs->lfs_dlfs_u.u_32;
+		size = (size_t)offsetof(struct dlfs64, dlfs_cksum);
+	}
+
+	return cksum(ptr, size);
 }

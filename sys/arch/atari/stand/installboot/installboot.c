@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.20 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: installboot.c,v 1.36 2017/01/11 18:32:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens
@@ -30,8 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -53,64 +54,70 @@
 
 #include "installboot.h"
 
-static void	usage __P((void));
-static void	oscheck __P((void));
-static u_int	abcksum __P((void *));
-static void	setNVpref __P((void));
-static void	setIDEpar __P((u_int8_t *, size_t));
-static void	mkahdiboot __P((struct ahdi_root *, char *,
-						char *, daddr_t));
-static void	mkbootblock __P((struct bootblock *, char *,
-				char *, struct disklabel *, u_int));
-static void	install_fd __P((char *, struct disklabel *));
-static void	install_sd __P((char *, struct disklabel *));
-static void	install_wd __P((char *, struct disklabel *));
+static void	usage(void);
+#ifdef CHECK_OS_BOOTVERSION
+static void	oscheck(void);
+#endif
+static u_int	abcksum(void *);
+static void	setNVpref(void);
+static void	setIDEpar(u_int8_t *, size_t);
+static void	mkahdiboot(struct ahdi_root *, char *,
+						char *, u_int32_t);
+static void	mkbootblock(struct bootblock *, char *,
+				char *, struct disklabel *, u_int);
+static void	install_fd(char *, struct disklabel *);
+static void	install_sd(char *, struct disklabel *);
+static void	install_wd(char *, struct disklabel *);
 
 static struct bootblock	bootarea;
 static struct ahdi_root ahdiboot;
 static const char	mdecpath[] = PATH_MDEC;
 static const char	stdpath[] = PATH_STD;
 static const char	milanpath[] = PATH_MILAN;
-static int		nowrite = 0;
-static int		verbose = 0;
-static int		trackpercyl = 0;
-static int		secpertrack = 0;
-static int		milan = 0;
+static bool		nowrite;
+static bool		verbose;
+static int		trackpercyl;
+static int		secpertrack;
+static bool		milan;
 
 static void
-usage ()
+usage(void)
 {
 	fprintf(stderr,
 		"usage: installboot [options] device\n"
+#ifndef NO_USAGE
 		"where options are:\n"
 		"\t-N  do not actually write anything on the disk\n"
 		"\t-m  use Milan boot blocks\n"
 		"\t-t  number of tracks per cylinder (IDE disk)\n"
 		"\t-u  number of sectors per track (IDE disk)\n"
-		"\t-v  verbose mode\n");
+		"\t-v  verbose mode\n"
+#endif
+		);
 	exit(EXIT_FAILURE);
 }
 
 int
-main (argc, argv)
-	int	argc;
-	char	*argv[];
+main(int argc, char *argv[])
 {
 	struct disklabel dl;
 	char		 *dn;
+	char		 *devchr;
 	int		 fd, c;
 
+#ifdef CHECK_OS_BOOTVERSION
 	/* check OS bootversion */
 	oscheck();
+#endif
 
 	/* parse options */
 	while ((c = getopt(argc, argv, "Nmt:u:v")) != -1) {
 		switch (c) {
 		  case 'N':
-			nowrite = 1;
+			nowrite = true;
 			break;
 		  case 'm':
-			milan = 1;
+			milan = true;
 			break;
 		  case 't':
 			trackpercyl = atoi(optarg);
@@ -119,7 +126,7 @@ main (argc, argv)
 			secpertrack = atoi(optarg);
 			break;
 		  case 'v':
-			verbose = 1;
+			verbose = true;
 			break;
 		  default:
 			usage();
@@ -131,16 +138,18 @@ main (argc, argv)
 		usage();
 
 	/* get disk label */
-	dn = alloca(sizeof(_PATH_DEV) + strlen(argv[0]) + 8);
+	size_t dnlen = sizeof(_PATH_DEV) + strlen(argv[0]) + 8;
+	dn = alloca(dnlen);
 	if (!strchr(argv[0], '/')) {
-		sprintf(dn, "%sr%s%c", _PATH_DEV, argv[0], RAW_PART + 'a');
+		snprintf(dn, dnlen, "%sr%s%c", _PATH_DEV, argv[0],
+		    RAW_PART + 'a');
 		fd = open(dn, O_RDONLY);
 		if (fd < 0 && errno == ENOENT) {
-			sprintf(dn, "%sr%s", _PATH_DEV, argv[0]);
+			snprintf(dn, dnlen, "%sr%s", _PATH_DEV, argv[0]);
 			fd = open(dn, O_RDONLY);
 		}
 	} else {
-		sprintf(dn, "%s", argv[0]);
+		snprintf(dn, dnlen, "%s", argv[0]);
 		fd = open(dn, O_RDONLY);
 	}
 	if (fd < 0)
@@ -150,33 +159,40 @@ main (argc, argv)
 	if (close(fd))
 		err(EXIT_FAILURE, "%s", dn);
 
-	switch (dl.d_type) {
-		case DTYPE_FLOPPY:
+	/* Eg: in /dev/fd0c, set devchr to point to the 'f' */
+	devchr = strrchr(dn, '/') + 1;
+	if (*devchr == 'r')
+		++devchr;
+
+	switch (*devchr) {
+		case 'f': /* fd */
 			install_fd(dn, &dl);
 			break;
-		case DTYPE_ST506:
-		case DTYPE_ESDI:
+		case 'w': /* wd */
 			install_wd(dn, &dl);
 			setNVpref();
 			break;
-		case DTYPE_SCSI:
+		case 's': /* sd */
 			install_sd(dn, &dl);
 			setNVpref();
 			break;
 		default:
 			errx(EXIT_FAILURE,
-			     "%s: %s: Device type not supported.",
-			     dn, dktypenames[dl.d_type]);
+			     "%s: '%c': Device type not supported.",
+			     dn, *devchr);
 	}
 
 	return(EXIT_SUCCESS);
 }
 
+#ifdef CHECK_OS_BOOTVERSION
 static void
-oscheck ()
+oscheck(void)
 {
-	struct nlist	kbv[] = { { "_bootversion" },
-				  { NULL } };
+	struct nlist kbv[] = {
+		{ .n_name = "_bootversion" },
+		{ .n_name = NULL }
+	};
 	kvm_t		*kd_kern;
 	char		errbuf[_POSIX2_LINE_MAX];
 	u_short		kvers;
@@ -194,19 +210,17 @@ oscheck ()
 		errx(EXIT_FAILURE, "kvm_nlist: %s", kvm_geterr(kd_kern));
 	if (kbv[0].n_value == 0)
 		errx(EXIT_FAILURE, "%s not in namelist", kbv[0].n_name);
-	if (kvm_read(kd_kern, kbv[0].n_value, (char *)&kvers,
-						sizeof(kvers)) == -1)
+	if (kvm_read(kd_kern, kbv[0].n_value, &kvers, sizeof(kvers)) == -1)
 		errx(EXIT_FAILURE, "kvm_read: %s", kvm_geterr(kd_kern));
 	kvm_close(kd_kern);
 	if (kvers != BOOTVERSION)
 		errx(EXIT_FAILURE, "Kern bootversion: %d, expected: %d",
-					kvers, BOOTVERSION);
+		    kvers, BOOTVERSION);
 }
+#endif
 
 static void
-install_fd (devnm, label)
-	char		 *devnm;
-	struct disklabel *label;
+install_fd(char *devnm, struct disklabel *label)
 {
 	const char	 *machpath;
 	char		 *xxboot, *bootxx;
@@ -224,10 +238,11 @@ install_fd (devnm, label)
 		machpath = milanpath;
 	else
 		machpath = stdpath;
-	xxboot = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-	sprintf(xxboot, "%s%sfdboot", mdecpath, machpath);
-	bootxx = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-	sprintf(bootxx, "%s%sbootxx", mdecpath, machpath);
+	size_t xxbootlen = strlen(mdecpath) + strlen(machpath) + 8;
+	xxboot = alloca(xxbootlen);
+	snprintf(xxboot, xxbootlen, "%s%sfdboot", mdecpath, machpath);
+	bootxx = alloca(xxbootlen);
+	snprintf(bootxx, xxbootlen, "%s%sbootxx", mdecpath, machpath);
 
 	/* first used partition (a, b or c) */		/* XXX */
 	for (rootpart = label->d_partitions; ; ++rootpart) {
@@ -260,14 +275,12 @@ install_fd (devnm, label)
 }
 
 static void
-install_sd (devnm, label)
-	char		 *devnm;
-	struct disklabel *label;
+install_sd(char *devnm, struct disklabel *label)
 {
 	const char	 *machpath;
 	char		 *xxb00t, *xxboot, *bootxx;
 	struct disklabel rawlabel;
-	daddr_t		 bbsec;
+	u_int32_t	 bbsec;
 	u_int		 magic;
 
 	if (label->d_partitions[0].p_size == 0)
@@ -287,19 +300,22 @@ install_sd (devnm, label)
 	else
 		machpath = stdpath;
 	if (bbsec) {
-		xxb00t = alloca(strlen(mdecpath) + strlen(machpath) + 14);
-		sprintf(xxb00t, "%s%ssdb00t.ahdi", mdecpath, machpath);
-		xxboot = alloca(strlen(mdecpath) + strlen(machpath) + 14);
-		sprintf(xxboot, "%s%sxxboot.ahdi", mdecpath, machpath);
+		size_t xxb00tlen = strlen(mdecpath) + strlen(machpath) + 14;
+		xxb00t = alloca(xxb00tlen);
+		snprintf(xxb00t, xxb00tlen, "%s%ssdb00t.ahdi", mdecpath, machpath);
+		xxboot = alloca(xxb00tlen);
+		snprintf(xxboot, xxb00tlen, "%s%sxxboot.ahdi", mdecpath, machpath);
 		magic = AHDIMAGIC;
 	} else {
+		size_t xxbootlen = strlen(mdecpath) + strlen(machpath) + 8;
 		xxb00t = NULL;
-		xxboot = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-		sprintf(xxboot, "%s%ssdboot", mdecpath, machpath);
+		xxboot = alloca(xxbootlen);
+		snprintf(xxboot, xxbootlen, "%s%ssdboot", mdecpath, machpath);
 		magic = NBDAMAGIC;
 	}
-	bootxx = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-	sprintf(bootxx, "%s%sbootxx", mdecpath, machpath);
+	size_t bootxxlen = strlen(mdecpath) + strlen(machpath) + 8;
+	bootxx = alloca(bootxxlen);
+	snprintf(bootxx, bootxxlen, "%s%sbootxx", mdecpath, machpath);
 
 	trackpercyl = secpertrack = 0;
 	if (xxb00t)
@@ -307,7 +323,7 @@ install_sd (devnm, label)
 	mkbootblock(&bootarea, xxboot, bootxx, label, magic);
 
 	if (!nowrite) {
-		off_t	bbo = bbsec * AHDI_BSIZE;
+		off_t	bbo = (off_t)bbsec * AHDI_BSIZE;
 		int	fd;
 
 		if ((fd = open(devnm, O_WRONLY)) < 0)
@@ -317,16 +333,17 @@ install_sd (devnm, label)
 		if (write(fd, &bootarea, sizeof(bootarea)) != sizeof(bootarea))
 			err(EXIT_FAILURE, "%s", devnm);
 		if (verbose)
-			printf("Boot block installed on %s (sector %d)\n", devnm,
-								    bbsec);
+			printf("Boot block installed on %s (sector %d)\n",
+			    devnm, bbsec);
 		if (xxb00t) {
 			if (lseek(fd, (off_t)0, SEEK_SET) != 0)
 				err(EXIT_FAILURE, "%s", devnm);
-			if (write(fd, &ahdiboot, sizeof(ahdiboot)) != sizeof(ahdiboot))
+			if (write(fd, &ahdiboot, sizeof(ahdiboot)) !=
+			    sizeof(ahdiboot))
 				err(EXIT_FAILURE, "%s", devnm);
 			if (verbose)
 				printf("AHDI root  installed on %s (0)\n",
-								devnm);
+				    devnm);
 		}
 		if (close(fd))
 			err(EXIT_FAILURE, "%s", devnm);
@@ -334,14 +351,12 @@ install_sd (devnm, label)
 }
 
 static void
-install_wd (devnm, label)
-	char		 *devnm;
-	struct disklabel *label;
+install_wd(char *devnm, struct disklabel *label)
 {
 	const char	 *machpath;
 	char		 *xxb00t, *xxboot, *bootxx;
 	struct disklabel rawlabel;
-	daddr_t		 bbsec;
+	u_int32_t	 bbsec;
 	u_int		 magic;
 
 	if (label->d_partitions[0].p_size == 0)
@@ -361,19 +376,22 @@ install_wd (devnm, label)
 	else
 		machpath = stdpath;
 	if (bbsec) {
-		xxb00t = alloca(strlen(mdecpath) + strlen(machpath) + 14);
-		sprintf(xxb00t, "%s%swdb00t.ahdi", mdecpath, machpath);
-		xxboot = alloca(strlen(mdecpath) + strlen(machpath) + 14);
-		sprintf(xxboot, "%s%sxxboot.ahdi", mdecpath, machpath);
+		size_t xxb00tlen = strlen(mdecpath) + strlen(machpath) + 14;
+		xxb00t = alloca(xxb00tlen);
+		snprintf(xxb00t, xxb00tlen, "%s%swdb00t.ahdi", mdecpath, machpath);
+		xxboot = alloca(xxb00tlen);
+		snprintf(xxboot, xxb00tlen, "%s%sxxboot.ahdi", mdecpath, machpath);
 		magic = AHDIMAGIC;
 	} else {
+		size_t xxbootlen = strlen(mdecpath) + strlen(machpath) + 8;
 		xxb00t = NULL;
-		xxboot = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-		sprintf(xxboot, "%s%swdboot", mdecpath, machpath);
+		xxboot = alloca(xxbootlen);
+		snprintf(xxboot, xxbootlen, "%s%swdboot", mdecpath, machpath);
 		magic = NBDAMAGIC;
 	}
-	bootxx = alloca(strlen(mdecpath) + strlen(machpath) + 8);
-	sprintf(bootxx, "%s%sbootxx", mdecpath, machpath);
+	size_t bootxxlen = strlen(mdecpath) + strlen(machpath) + 8;
+	bootxx = alloca(bootxxlen);
+	snprintf(bootxx, bootxxlen, "%s%sbootxx", mdecpath, machpath);
 
 	if (xxb00t)
 		mkahdiboot(&ahdiboot, xxb00t, devnm, bbsec);
@@ -383,7 +401,7 @@ install_wd (devnm, label)
 		int	fd;
 		off_t	bbo;
 
-		bbo = bbsec * AHDI_BSIZE;
+		bbo = (off_t)bbsec * AHDI_BSIZE;
 		if ((fd = open(devnm, O_WRONLY)) < 0)
 			err(EXIT_FAILURE, "%s", devnm);
 		if (lseek(fd, bbo, SEEK_SET) != bbo)
@@ -391,8 +409,8 @@ install_wd (devnm, label)
 		if (write(fd, &bootarea, sizeof(bootarea)) != sizeof(bootarea))
 			err(EXIT_FAILURE, "%s", devnm);
 		if (verbose)
-			printf("Boot block installed on %s (sector %d)\n", devnm,
-								    bbsec);
+			printf("Boot block installed on %s (sector %d)\n",
+			    devnm, bbsec);
 		if (xxb00t) {
 			if (lseek(fd, (off_t)0, SEEK_SET) != 0)
 				err(EXIT_FAILURE, "%s", devnm);
@@ -400,8 +418,8 @@ install_wd (devnm, label)
 							!= sizeof(ahdiboot))
 				err(EXIT_FAILURE, "%s", devnm);
 			if (verbose)
-				printf("AHDI root  installed on %s (sector 0)\n",
-									devnm);
+				printf("AHDI root installed on %s (sector 0)\n",
+				    devnm);
 		}
 		if (close(fd))
 			err(EXIT_FAILURE, "%s", devnm);
@@ -409,11 +427,8 @@ install_wd (devnm, label)
 }
 
 static void
-mkahdiboot (newroot, xxb00t, devnm, bbsec)
-	struct ahdi_root *newroot;
-	char		 *xxb00t,
-			 *devnm;
-	daddr_t		 bbsec;
+mkahdiboot(struct ahdi_root *newroot, char *xxb00t, char *devnm,
+    u_int32_t bbsec)
 {
 	struct ahdi_root tmproot;
 	struct ahdi_part *pd;
@@ -458,12 +473,8 @@ gotit:	/* copy code from prototype and set new checksum */
 }
 
 static void
-mkbootblock (bb, xxb, bxx, label, magic)
-	struct bootblock *bb;
-	char		 *xxb,
-			 *bxx;
-	u_int		 magic;
-	struct disklabel *label;
+mkbootblock(struct bootblock *bb, char *xxb, char *bxx,
+    struct disklabel *label, u_int magic)
 {
 	int		 fd;
 
@@ -507,9 +518,7 @@ mkbootblock (bb, xxb, bxx, label, magic)
 }
 
 static void
-setIDEpar (start, size)
-	u_int8_t	*start;
-	size_t		size;
+setIDEpar (u_int8_t *start, size_t size)
 {
 	static const u_int8_t	mark[] = { 'N', 'e', 't', 'B', 'S', 'D' };
 
@@ -551,7 +560,7 @@ setIDEpar (start, size)
 }
 
 static void
-setNVpref ()
+setNVpref(void)
 {
 	static const u_char	bootpref = BOOTPREF_NETBSD;
 	static const char	nvrdev[] = PATH_NVRAM;
@@ -573,8 +582,7 @@ setNVpref ()
 }
 
 static u_int
-abcksum (bs)
-	void	*bs;
+abcksum (void *bs)
 {
 	u_int16_t sum  = 0,
 		  *st  = (u_int16_t *)bs,

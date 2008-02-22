@@ -1,29 +1,29 @@
-/*	$NetBSD: db_interface.c,v 1.44 2007/10/17 19:53:31 garbled Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.58 2018/05/28 21:05:00 chs Exp $	*/
 
-/* 
+/*
  * Copyright (c) 1996 Scott K. Stevens
  *
  * Mach Operating System
  * Copyright (c) 1991,1990 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  *
@@ -35,21 +35,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.44 2007/10/17 19:53:31 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.58 2018/05/28 21:05:00 chs Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>	/* just for boothowto */
 #include <sys/exec.h>
+#include <sys/atomic.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <arm/arm32/db_machdep.h>
-#include <arm/arm32/katelib.h>
 #include <arm/undefined.h>
 #include <ddb/db_access.h>
 #include <ddb/db_command.h>
@@ -64,71 +66,21 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.44 2007/10/17 19:53:31 garbled Ex
 #define db_printf	printf
 #endif
 
-static long nil;
+u_int db_fetch_reg(int, db_regs_t *);
 
-int db_access_und_sp __P((const struct db_variable *, db_expr_t *, int));
-int db_access_abt_sp __P((const struct db_variable *, db_expr_t *, int));
-int db_access_irq_sp __P((const struct db_variable *, db_expr_t *, int));
-u_int db_fetch_reg __P((int, db_regs_t *));
-
-int db_trapper __P((u_int, u_int, trapframe_t *, int));
-
-const struct db_variable db_regs[] = {
-	{ "spsr", (long *)&DDB_REGS->tf_spsr, FCN_NULL, },
-	{ "r0", (long *)&DDB_REGS->tf_r0, FCN_NULL, },
-	{ "r1", (long *)&DDB_REGS->tf_r1, FCN_NULL, },
-	{ "r2", (long *)&DDB_REGS->tf_r2, FCN_NULL, },
-	{ "r3", (long *)&DDB_REGS->tf_r3, FCN_NULL, },
-	{ "r4", (long *)&DDB_REGS->tf_r4, FCN_NULL, },
-	{ "r5", (long *)&DDB_REGS->tf_r5, FCN_NULL, },
-	{ "r6", (long *)&DDB_REGS->tf_r6, FCN_NULL, },
-	{ "r7", (long *)&DDB_REGS->tf_r7, FCN_NULL, },
-	{ "r8", (long *)&DDB_REGS->tf_r8, FCN_NULL, },
-	{ "r9", (long *)&DDB_REGS->tf_r9, FCN_NULL, },
-	{ "r10", (long *)&DDB_REGS->tf_r10, FCN_NULL, },
-	{ "r11", (long *)&DDB_REGS->tf_r11, FCN_NULL, },
-	{ "r12", (long *)&DDB_REGS->tf_r12, FCN_NULL, },
-	{ "usr_sp", (long *)&DDB_REGS->tf_usr_sp, FCN_NULL, },
-	{ "usr_lr", (long *)&DDB_REGS->tf_usr_lr, FCN_NULL, },
-	{ "svc_sp", (long *)&DDB_REGS->tf_svc_sp, FCN_NULL, },
-	{ "svc_lr", (long *)&DDB_REGS->tf_svc_lr, FCN_NULL, },
-	{ "pc", (long *)&DDB_REGS->tf_pc, FCN_NULL, },
-	{ "und_sp", &nil, db_access_und_sp, },
-	{ "abt_sp", &nil, db_access_abt_sp, },
-	{ "irq_sp", &nil, db_access_irq_sp, },
-};
-
-const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+int db_trapper(u_int, u_int, trapframe_t *, int);
 
 int	db_active = 0;
 db_regs_t ddb_regs;	/* register state */
+db_regs_t *ddb_regp;
 
-int
-db_access_und_sp(const struct db_variable *vp, db_expr_t *valp, int rw)
-{
+#ifdef MULTIPROCESSOR
+volatile struct cpu_info *db_onproc;
+volatile struct cpu_info *db_newcpu;
+#endif
 
-	if (rw == DB_VAR_GET)
-		*valp = get_stackptr(PSR_UND32_MODE);
-	return(0);
-}
 
-int
-db_access_abt_sp(const struct db_variable *vp, db_expr_t *valp, int rw)
-{
 
-	if (rw == DB_VAR_GET)
-		*valp = get_stackptr(PSR_ABT32_MODE);
-	return(0);
-}
-
-int
-db_access_irq_sp(const struct db_variable *vp, db_expr_t *valp, int rw)
-{
-
-	if (rw == DB_VAR_GET)
-		*valp = get_stackptr(PSR_IRQ32_MODE);
-	return(0);
-}
 
 #ifdef DDB
 /*
@@ -137,12 +89,24 @@ db_access_irq_sp(const struct db_variable *vp, db_expr_t *valp, int rw)
 int
 kdb_trap(int type, db_regs_t *regs)
 {
+	struct cpu_info * const ci = curcpu();
+	db_regs_t dbreg;
 	int s;
 
 	switch (type) {
 	case T_BREAKPOINT:	/* breakpoint */
 	case -1:		/* keyboard interrupt */
 		break;
+#ifdef MULTIPROCESSOR
+	case -2:
+		/*
+		 * We called to enter ddb from another process but by the time
+		 * we got here, no one was in ddb.  So ignore the request.
+		 */
+		if (db_onproc == NULL)
+			return 1;
+		break;
+#endif
 	default:
 		if (db_recover != 0) {
 			/* This will longjmp back into db_command_loop() */
@@ -153,19 +117,82 @@ kdb_trap(int type, db_regs_t *regs)
 
 	/* Should switch to kdb`s own stack here. */
 
-	ddb_regs = *regs;
+#ifdef MULTIPROCESSOR
+	const bool is_mp_p = ncpu > 1;
+	if (is_mp_p) {
+		/*
+		 * Try to take ownership of DDB.  If we do, tell all other
+		 * CPUs to enter DDB too.
+		 */
+		if (atomic_cas_ptr(&db_onproc, NULL, ci) == NULL) {
+			intr_ipi_send(NULL, IPI_DDB);
+		}
+	}
+	for (;;) {
+		if (is_mp_p) {
+			/*
+			 * While we aren't the master, wait until the master
+			 * gives control to us or exits.  If it exited, we
+			 * just exit too.  Otherwise this cpu will enter DDB.
+			 */
+			membar_consumer();
+			while (db_onproc != ci) {
+				if (db_onproc == NULL)
+					return 1;
+#ifdef _ARM_ARCH_6
+				__asm __volatile("wfe");
+				membar_consumer();
+#endif
+				if (db_onproc == ci) {
+					printf("%s: switching to %s\n",
+					    __func__, ci->ci_cpuname);
+				}
+			}
+		}
+#endif
 
-	s = splhigh();
-	db_active++;
-	cnpollc(true);
-	db_trap(type, 0/*code*/);
-	cnpollc(false);
-	db_active--;
-	splx(s);
+		s = splhigh();
+		ci->ci_ddb_regs = &dbreg;
+		ddb_regp = &dbreg;
+		ddb_regs = *regs;
 
-	*regs = ddb_regs;
+		atomic_inc_32(&db_active);
+		cnpollc(true);
+		db_trap(type, 0/*code*/);
+		cnpollc(false);
+		atomic_dec_32(&db_active);
 
-	return (1);
+		ci->ci_ddb_regs = NULL;
+		ddb_regp = &dbreg;
+		*regs = ddb_regs;
+		splx(s);
+
+#ifdef MULTIPROCESSOR
+		if (is_mp_p && db_newcpu != NULL) {
+			db_onproc = db_newcpu;
+			db_newcpu = NULL;
+#ifdef _ARM_ARCH_6
+			membar_producer();
+			__asm __volatile("sev; sev");
+#endif
+			continue;
+		}
+		break;
+	}
+
+	if (is_mp_p) {
+		/*
+		 * We are exiting DDB so there is noone onproc.  Tell
+		 * the other CPUs to exit.
+		 */
+		db_onproc = NULL;
+#ifdef _ARM_ARCH_6
+		__asm __volatile("sev; sev");
+#endif
+	}
+#endif
+
+	return 1;
 }
 #endif
 
@@ -176,11 +203,7 @@ db_validate_address(vaddr_t addr)
 	struct pmap *pmap;
 
 	if (!p || !p->p_vmspace || !p->p_vmspace->vm_map.pmap ||
-#ifndef ARM32_NEW_VM_LAYOUT
-	    addr >= VM_MAXUSER_ADDRESS
-#else
 	    addr >= VM_MIN_KERNEL_ADDRESS
-#endif
 	   )
 		pmap = pmap_kernel();
 	else
@@ -193,10 +216,7 @@ db_validate_address(vaddr_t addr)
  * Read bytes from kernel address space for debugger.
  */
 void
-db_read_bytes(addr, size, data)
-	vaddr_t	addr;
-	size_t	size;
-	char	*data;
+db_read_bytes(vaddr_t addr, size_t size, char *data)
 {
 	char	*src = (char *)addr;
 
@@ -226,88 +246,9 @@ db_read_bytes(addr, size, data)
 
 static void
 db_write_text(vaddr_t addr, size_t size, const char *data)
-{        
-	struct pmap *pmap = pmap_kernel();
-	pd_entry_t *pde, oldpde, tmppde;
-	pt_entry_t *pte, oldpte, tmppte;
-	vaddr_t pgva;
-	size_t limit, savesize;
-	char *dst;
+{
 
-	/* XXX: gcc */
-	oldpte = 0;
-
-	if ((savesize = size) == 0)
-		return;
-
-	dst = (char *) addr;
-
-	do {
-		/* Get the PDE of the current VA. */
-		if (pmap_get_pde_pte(pmap, (vaddr_t) dst, &pde, &pte) == false)
-			goto no_mapping;
-		switch ((oldpde = *pde) & L1_TYPE_MASK) {
-		case L1_TYPE_S:
-			pgva = (vaddr_t)dst & L1_S_FRAME;
-			limit = L1_S_SIZE - ((vaddr_t)dst & L1_S_OFFSET);
-
-			tmppde = oldpde | L1_S_PROT_W;
-			*pde = tmppde;
-			PTE_SYNC(pde);
-			break;
-
-		case L1_TYPE_C:
-			pgva = (vaddr_t)dst & L2_S_FRAME;
-			limit = L2_S_SIZE - ((vaddr_t)dst & L2_S_OFFSET);
-
-			if (pte == NULL)
-				goto no_mapping;
-			oldpte = *pte;
-			tmppte = oldpte | L2_S_PROT_W;
-			*pte = tmppte;
-			PTE_SYNC(pte);
-			break;
-
-		default:
-		no_mapping:
-			printf(" address 0x%08lx not a valid page\n",
-			    (vaddr_t) dst);
-			return;
-		}
-		cpu_tlb_flushD_SE(pgva);
-		cpu_cpwait();
-
-		if (limit > size)
-			limit = size;
-		size -= limit;
-
-		/*
-		 * Page is now writable.  Do as much access as we
-		 * can in this page.
-		 */
-		for (; limit > 0; limit--)
-			*dst++ = *data++;
-
-		/*
-		 * Restore old mapping permissions.
-		 */
-		switch (oldpde & L1_TYPE_MASK) {
-		case L1_TYPE_S:
-			*pde = oldpde;
-			PTE_SYNC(pde);
-			break;
-
-		case L1_TYPE_C:
-			*pte = oldpte;
-			PTE_SYNC(pte);
-			break;
-		}
-		cpu_tlb_flushD_SE(pgva);
-		cpu_cpwait();
-	} while (size != 0);
-
-	/* Sync the I-cache. */
-	cpu_icache_sync_range(addr, savesize);
+	ktext_write((void *)addr, data, size);
 }
 
 /*
@@ -364,15 +305,6 @@ cpu_Debugger(void)
 	__asm(".word	0xe7ffffff");
 }
 
-const struct db_command db_machine_command_table[] = {
-	{ DDB_ADD_CMD("frame",	db_show_frame_cmd,	0, NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("panic",	db_show_panic_cmd,	0, NULL,NULL,NULL) },
-#ifdef ARM32_DB_COMMANDS
-	ARM32_DB_COMMANDS,
-#endif
-	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) }
-};
-
 int
 db_trapper(u_int addr, u_int inst, trapframe_t *frame, int fault_code)
 {
@@ -383,8 +315,8 @@ db_trapper(u_int addr, u_int inst, trapframe_t *frame, int fault_code)
 		else
 			kdb_trap(-1, frame);
 	} else
-		return (1);
-	return (0);
+		return 1;
+	return 0;
 }
 
 extern u_int esym;
@@ -411,37 +343,37 @@ db_fetch_reg(int reg, db_regs_t *regs)
 
 	switch (reg) {
 	case 0:
-		return (regs->tf_r0);
+		return regs->tf_r0;
 	case 1:
-		return (regs->tf_r1);
+		return regs->tf_r1;
 	case 2:
-		return (regs->tf_r2);
+		return regs->tf_r2;
 	case 3:
-		return (regs->tf_r3);
+		return regs->tf_r3;
 	case 4:
-		return (regs->tf_r4);
+		return regs->tf_r4;
 	case 5:
-		return (regs->tf_r5);
+		return regs->tf_r5;
 	case 6:
-		return (regs->tf_r6);
+		return regs->tf_r6;
 	case 7:
-		return (regs->tf_r7);
+		return regs->tf_r7;
 	case 8:
-		return (regs->tf_r8);
+		return regs->tf_r8;
 	case 9:
-		return (regs->tf_r9);
+		return regs->tf_r9;
 	case 10:
-		return (regs->tf_r10);
+		return regs->tf_r10;
 	case 11:
-		return (regs->tf_r11);
+		return regs->tf_r11;
 	case 12:
-		return (regs->tf_r12);
+		return regs->tf_r12;
 	case 13:
-		return (regs->tf_svc_sp);
+		return regs->tf_svc_sp;
 	case 14:
-		return (regs->tf_svc_lr);
+		return regs->tf_svc_lr;
 	case 15:
-		return (regs->tf_pc);
+		return regs->tf_pc;
 	default:
 		panic("db_fetch_reg: botch");
 	}
@@ -458,19 +390,19 @@ branch_taken(u_int insn, u_int pc, db_regs_t *regs)
 		addr = ((insn << 2) & 0x03ffffff);
 		if (addr & 0x02000000)
 			addr |= 0xfc000000;
-		return (pc + 8 + addr);
+		return pc + 8 + addr;
 	case 0x7:	/* ldr pc, [pc, reg, lsl #2] */
 		addr = db_fetch_reg(insn & 0xf, regs);
 		addr = pc + 8 + (addr << 2);
 		db_read_bytes(addr, 4, (char *)&addr);
-		return (addr);
+		return addr;
 	case 0x5:	/* ldr pc, [reg] */
 		addr = db_fetch_reg((insn >> 16) & 0xf, regs);
 		db_read_bytes(addr, 4, (char *)&addr);
-		return (addr);
+		return addr;
 	case 0x1:	/* mov pc, reg */
 		addr = db_fetch_reg(insn & 0xf, regs);
-		return (addr);
+		return addr;
 	case 0x8:	/* ldmxx reg, {..., pc} */
 	case 0x9:
 		addr = db_fetch_reg((insn >> 16) & 0xf, regs);
@@ -493,7 +425,7 @@ branch_taken(u_int insn, u_int pc, db_regs_t *regs)
 			break;
 		}
 		db_read_bytes(addr, 4, (char *)&addr);
-		return (addr);
+		return addr;
 	default:
 		panic("branch_taken: botch");
 	}

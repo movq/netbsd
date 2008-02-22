@@ -1,17 +1,18 @@
-#	$NetBSD: Makefile,v 1.7 2005/12/11 12:17:10 christos Exp $
+#	$NetBSD: Makefile,v 1.12 2013/05/02 03:56:41 matt Exp $
 
-.if ${MACHINE_ARCH} == "arm"
-# Little endian platforms
+.include <bsd.endian.mk>
+
 SUBDIR=  ADI_BRH_flash_0x00140000
+
+.if ${MACHINE_CPU} == "arm" && ${TARGET_ENDIANNESS} == "1234"
+# Little endian platforms
+SUBDIR+= GEMINI_dram_0x01600000
 SUBDIR+= IQ80310_flash_0x00080000
 SUBDIR+= IQ80321_flash_0xf0080000
 SUBDIR+= SMDK2410_flash_0x00000000
 SUBDIR+= SMDK2800_flash_0x00000000
 SUBDIR+= SMDK2800_flash_0x00100000
 SUBDIR+= TS7200_flash_0x60660000
-.else
-# Big endian platforms
-SUBDIR=  ADI_BRH_flash_0x00140000
 .endif
 
 .include <bsd.subdir.mk>

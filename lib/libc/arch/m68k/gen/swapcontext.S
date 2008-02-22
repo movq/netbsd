@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:09:36 thorpej Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.6 2013/07/17 03:05:17 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,20 +30,22 @@
  */
 
 #include "SYS.h"
+#include "assym.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:09:36 thorpej Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.6 2013/07/17 03:05:17 matt Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 ENTRY(swapcontext)
-	movl	%sp@(4),%sp@-		| push oucp on stack
+	movl	4(%sp),-(%sp)		| push oucp on stack
 	jbsr	PIC_PLT(_C_LABEL(_getcontext))	| getcontext(oucp)
 	tstl	%d0			| OK?
 	jne	L1
-	movl	%sp@,%a0
-	addql	#8,%a0@(96)		| adjust saved stack pointer (again)
-	movl	%sp@(4),%a0@(100)	| adjust saved program counter (again)
-	movl	%sp@(12),%sp@		| push ucp on stack
+	movl	(%sp),%a0
+	addql	#8,UC_MCONTEXT_SP(%a0)	| adjust saved stack pointer (again)
+	movl	%sp@(4),UC_MCONTEXT_PC(%a0) | adjust saved program counter (again)
+	movl	12(%sp),(%sp)		| push ucp on stack
 	jbsr	PIC_PLT(_C_LABEL(setcontext))	| setcontext(ucp)
 L1:	addql	#4,%sp			| pop ucp
 	rts
+END(swapcontext)

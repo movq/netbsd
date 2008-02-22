@@ -1,4 +1,4 @@
-/* $NetBSD: pipe.h,v 1.23 2008/01/02 19:16:00 yamt Exp $ */
+/* $NetBSD: pipe.h,v 1.35 2018/06/10 17:54:51 jdolecek Exp $ */
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -26,9 +26,10 @@
 #ifndef _SYS_PIPE_H_
 #define _SYS_PIPE_H_
 
-#ifndef _KERNEL
 #include <sys/selinfo.h>		/* for struct selinfo */
-#endif
+#include <sys/time.h>			/* for struct timespec */
+
+#include <uvm/uvm_extern.h>
 
 /*
  * Pipe buffer size, keep moderate in value, pipes take kva space.
@@ -42,10 +43,9 @@
 #endif
 
 /*
- * Maximum size of kva for direct write transfer. If the amount
+ * Maximum size of transfer for direct write transfer. If the amount
  * of data in buffer is larger, it would be transferred in chunks of this
- * size. This kva memory is freed after use if amount of pipe kva memory
- * is bigger than limitpipekva.
+ * size.
  */
 #ifndef PIPE_DIRECT_CHUNK
 #define PIPE_DIRECT_CHUNK	(1*1024*1024)
@@ -76,10 +76,10 @@ struct pipebuf {
  * Information to support direct transfers between processes for pipes.
  */
 struct pipemapping {
-	vaddr_t		kva;		/* kernel virtual address */
 	vsize_t		cnt;		/* number of chars in buffer */
 	voff_t		pos;		/* current position within page */
-	int		npages;		/* how many pages allocated */
+	u_int		npages;		/* how many pages available */
+	u_int		maxpages;	/* how many pages allocated */
 	struct vm_page	**pgs;		/* pointers to the pages */
 };
 
@@ -95,6 +95,7 @@ struct pipemapping {
 				   pointers/data. */
 #define	PIPE_LWANT	0x200	/* Process wants exclusive access to
 				   pointers/data. */
+#define	PIPE_RESTART	0x400	/* Return ERESTART to blocked syscalls */
 
 /*
  * Per-pipe data structure.
@@ -102,25 +103,28 @@ struct pipemapping {
  */
 struct pipe {
 	kmutex_t *pipe_lock;		/* pipe mutex */
-	kcondvar_t pipe_cv;		/* general synchronization */
+	kcondvar_t pipe_rcv;		/* cv for readers */
+	kcondvar_t pipe_wcv;		/* cv for writers */
+	kcondvar_t pipe_draincv;	/* cv for close */
 	kcondvar_t pipe_lkcv;		/* locking */
 	struct	pipebuf pipe_buffer;	/* data storage */
 	struct	pipemapping pipe_map;	/* pipe mapping for direct I/O */
 	struct	selinfo pipe_sel;	/* for compat with select */
-	struct	timeval pipe_atime;	/* time of last access */
-	struct	timeval pipe_mtime;	/* time of last modify */
-	struct	timeval pipe_ctime;	/* time of status change */
+	struct	timespec pipe_atime;	/* time of last access */
+	struct	timespec pipe_mtime;	/* time of last modify */
+	struct	timespec pipe_btime;	/* time of creation */
 	pid_t	pipe_pgid;		/* process group for sigio */
 	struct	pipe *pipe_peer;	/* link with other direction */
 	u_int	pipe_state;		/* pipe status info */
-	int	pipe_busy;		/* busy flag, mostly to handle rundown sanely */
+	int	pipe_busy;		/* busy flag, to handle rundown */
+	vaddr_t	pipe_kmem;		/* preallocated PIPE_SIZE buffer */
 };
 
 /*
  * KERN_PIPE subtypes
  */
-#define	KERN_PIPE_MAXKVASZ		1	/* maximum kva size */
-#define	KERN_PIPE_LIMITKVA		2	/* */
+#define	KERN_PIPE_MAXKVASZ		1	/* maximum kva size (obsolete) */
+#define	KERN_PIPE_LIMITKVA		2	/* limit kva for laons (obsolete) */
 #define	KERN_PIPE_MAXBIGPIPES		3	/* maximum # of "big" pipes */
 #define	KERN_PIPE_NBIGPIPES		4	/* current number of "big" p. */
 #define	KERN_PIPE_KVASIZE		5	/* current pipe kva size */

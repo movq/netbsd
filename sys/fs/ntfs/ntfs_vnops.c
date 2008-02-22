@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vnops.c,v 1.40 2008/01/30 09:50:20 ad Exp $	*/
+/*	$NetBSD: ntfs_vnops.c,v 1.63 2017/05/26 14:34:20 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.40 2008/01/30 09:50:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.63 2017/05/26 14:34:20 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.40 2008/01/30 09:50:20 ad Exp $");
 #include <fs/ntfs/ntfs.h>
 #include <fs/ntfs/ntfs_inode.h>
 #include <fs/ntfs/ntfs_subr.h>
+#include <fs/ntfs/ntfs_vfsops.h>
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/genfs/genfs.h>
 
@@ -77,8 +78,6 @@ static int	ntfs_lookup(void *);
 static int	ntfs_bmap(void *);
 static int	ntfs_fsync(void *);
 static int	ntfs_pathconf(void *);
-
-extern int prtactive;
 
 /*
  * This is a noop, simply returning what one has been given.
@@ -204,18 +203,17 @@ ntfs_getattr(void *v)
 int
 ntfs_inactive(void *v)
 {
-	struct vop_inactive_args /* {
+	struct vop_inactive_v2_args /* {
 		struct vnode *a_vp;
+		bool *a_recycle;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
+	struct vnode *vp __unused = ap->a_vp;
 #ifdef NTFS_DEBUG
 	struct ntnode *ip = VTONT(vp);
 #endif
 
 	dprintf(("ntfs_inactive: vnode: %p, ntnode: %llu\n", vp,
 	    (unsigned long long)ip->i_number));
-
-	VOP_UNLOCK(vp, 0);
 
 	/* XXX since we don't support any filesystem changes
 	 * right now, nothing more needs to be done
@@ -229,34 +227,39 @@ ntfs_inactive(void *v)
 int
 ntfs_reclaim(void *v)
 {
-	struct vop_reclaim_args /* {
+	struct vop_reclaim_v2_args /* {
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
+	const int attrlen = strlen(fp->f_attrname);
 	int error;
+
+	VOP_UNLOCK(vp);
 
 	dprintf(("ntfs_reclaim: vnode: %p, ntnode: %llu\n", vp,
 	    (unsigned long long)ip->i_number));
 
-	if (prtactive && vp->v_usecount > 1)
-		vprint("ntfs_reclaim: pushing active", vp);
-
 	if ((error = ntfs_ntget(ip)) != 0)
 		return (error);
 
-	/* Purge old data structures associated with the inode. */
-	cache_purge(vp);
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = NULL;
 	}
-
 	genfs_node_destroy(vp);
-	ntfs_frele(fp);
-	ntfs_ntput(ip);
 	vp->v_data = NULL;
+
+	/* Destroy fnode. */
+	if (fp->f_key != &fp->f_smallkey)
+		kmem_free(fp->f_key, NTKEY_SIZE(attrlen));
+	if (fp->f_dirblbuf)
+		free(fp->f_dirblbuf, M_NTFSDIR);
+	kmem_free(fp, sizeof(*fp));
+	ntfs_ntrele(ip);
+
+	ntfs_ntput(ip);
 
 	return (0);
 }
@@ -395,23 +398,9 @@ ntfs_write(void *v)
 	return (error);
 }
 
-int
-ntfs_access(void *v)
+static int
+ntfs_check_possible(struct vnode *vp, struct ntnode *ip, mode_t mode)
 {
-	struct vop_access_args /* {
-		struct vnode *a_vp;
-		int  a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct ntnode *ip = VTONT(vp);
-	kauth_cred_t cred = ap->a_cred;
-	mode_t mask, mode = ap->a_mode;
-	gid_t grp;
-	int i;
-	uint16_t ngroups;
-
-	dprintf(("ntfs_access: %llu\n", (unsigned long long)ip->i_number));
 
 	/*
 	 * Disallow write attempts on read-only file systems;
@@ -429,46 +418,43 @@ ntfs_access(void *v)
 		}
 	}
 
-	/* Otherwise, user id 0 always gets access. */
-	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0)
-		return (0);
+	return 0;
+}
 
-	mask = 0;
+static int
+ntfs_check_permitted(struct vnode *vp, struct ntnode *ip, mode_t mode,
+    kauth_cred_t cred)
+{
+	mode_t file_mode;
 
-	/* Otherwise, check the owner. */
-	if (kauth_cred_geteuid(cred) == ip->i_mp->ntm_uid) {
-		if (mode & VEXEC)
-			mask |= S_IXUSR;
-		if (mode & VREAD)
-			mask |= S_IRUSR;
-		if (mode & VWRITE)
-			mask |= S_IWUSR;
-		return ((ip->i_mp->ntm_mode & mask) == mask ? 0 : EACCES);
-	}
+	file_mode = ip->i_mp->ntm_mode | (S_IXUSR|S_IXGRP|S_IXOTH);
 
-	/* Otherwise, check the groups. */
-	ngroups = kauth_cred_ngroups(cred);
-	for (i = 0; i < ngroups; i++) {
-		grp = kauth_cred_group(cred, i);
-		if (ip->i_mp->ntm_gid == grp) {
-			if (mode & VEXEC)
-				mask |= S_IXGRP;
-			if (mode & VREAD)
-				mask |= S_IRGRP;
-			if (mode & VWRITE)
-				mask |= S_IWGRP;
-			return ((ip->i_mp->ntm_mode&mask) == mask ? 0 : EACCES);
-		}
-	}
+	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode, vp->v_type,
+	    file_mode), vp, NULL, genfs_can_access(vp->v_type, file_mode,
+	    ip->i_mp->ntm_uid, ip->i_mp->ntm_gid, mode, cred));
+}
 
-	/* Otherwise, check everyone else. */
-	if (mode & VEXEC)
-		mask |= S_IXOTH;
-	if (mode & VREAD)
-		mask |= S_IROTH;
-	if (mode & VWRITE)
-		mask |= S_IWOTH;
-	return ((ip->i_mp->ntm_mode & mask) == mask ? 0 : EACCES);
+int
+ntfs_access(void *v)
+{
+	struct vop_access_args /* {
+		struct vnode *a_vp;
+		int  a_mode;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+	struct ntnode *ip = VTONT(vp);
+	int error;
+
+	dprintf(("ntfs_access: %llu\n", (unsigned long long)ip->i_number));
+
+	error = ntfs_check_possible(vp, ip, ap->a_mode);
+	if (error)
+		return error;
+
+	error = ntfs_check_permitted(vp, ip, ap->a_mode, ap->a_cred);
+
+	return error;
 }
 
 /*
@@ -489,7 +475,7 @@ ntfs_open(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct ntnode *ip = VTONT(vp);
 
-	printf("ntfs_open: %llu\n", (unsigned long long)ip->i_number);
+	dprintf(("ntfs_open: %llu\n", (unsigned long long)ip->i_number));
 #endif
 
 	/*
@@ -517,7 +503,7 @@ ntfs_close(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct ntnode *ip = VTONT(vp);
 
-	printf("ntfs_close: %llu\n", (unsigned long long)ip->i_number);
+	dprintf(("ntfs_close: %llu\n", (unsigned long long)ip->i_number));
 #endif
 
 	return (0);
@@ -550,7 +536,7 @@ ntfs_readdir(void *v)
 
 	off = uio->uio_offset;
 
-	MALLOC(cde, struct dirent *, sizeof(struct dirent), M_TEMP, M_WAITOK);
+	cde = malloc(sizeof(struct dirent), M_TEMP, M_WAITOK);
 
 	/* Simulate . in every dir except ROOT */
 	if (ip->i_number != NTFS_ROOTINO
@@ -661,14 +647,14 @@ ntfs_readdir(void *v)
 	    *ap->a_eofflag = VTONT(ap->a_vp)->i_size <= uio->uio_offset;
 */
     out:
-	FREE(cde, M_TEMP);
+	free(cde, M_TEMP);
 	return (error);
 }
 
 int
 ntfs_lookup(void *v)
 {
-	struct vop_lookup_args /* {
+	struct vop_lookup_v2_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
@@ -680,8 +666,8 @@ ntfs_lookup(void *v)
 	kauth_cred_t cred = cnp->cn_cred;
 	int error;
 
-	dprintf(("ntfs_lookup: \"%.*s\" (%ld bytes) in %llu\n",
-	    (int)cnp->cn_namelen, cnp->cn_nameptr, cnp->cn_namelen,
+	dprintf(("ntfs_lookup: \"%.*s\" (%lld bytes) in %llu\n",
+	    (int)cnp->cn_namelen, cnp->cn_nameptr, (long long)cnp->cn_namelen,
 	    (unsigned long long)dip->i_number));
 
 	error = VOP_ACCESS(dvp, VEXEC, cred);
@@ -701,14 +687,16 @@ ntfs_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if ((error = cache_lookup(ap->a_dvp, ap->a_vpp, cnp)) >= 0)
-		return (error);
+	if (cache_lookup(ap->a_dvp, cnp->cn_nameptr, cnp->cn_namelen,
+			 cnp->cn_nameiop, cnp->cn_flags, NULL, ap->a_vpp)) {
+		return *ap->a_vpp == NULLVP ? ENOENT : 0;
+	}
 
 	if(cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
 		dprintf(("ntfs_lookup: faking . directory in %llu\n",
 		    (unsigned long long)dip->i_number));
 
-		VREF(dvp);
+		vref(dvp);
 		*ap->a_vpp = dvp;
 		error = 0;
 	} else if (cnp->cn_flags & ISDOTDOT) {
@@ -717,19 +705,17 @@ ntfs_lookup(void *v)
 		dprintf(("ntfs_lookup: faking .. directory in %llu\n",
 		    (unsigned long long)dip->i_number));
 
-		VOP_UNLOCK(dvp, 0);
 		error = ntfs_ntvattrget(ntmp, dip, NTFS_A_NAME, NULL, 0, &vap);
 		if (error) {
-			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 			return (error);
 		}
 
 		dprintf(("ntfs_lookup: parentdir: %d\n",
 			 vap->va_a_name->n_pnumber));
-		error = VFS_VGET(ntmp->ntm_mountp,
-				 vap->va_a_name->n_pnumber,ap->a_vpp);
+		error = ntfs_vgetex(ntmp->ntm_mountp,
+				 vap->va_a_name->n_pnumber,
+				 NTFS_A_DATA, "", 0, ap->a_vpp);
 		ntfs_ntvattrrele(vap);
-		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
 			return (error);
 		}
@@ -744,10 +730,10 @@ ntfs_lookup(void *v)
 		    (unsigned long long)VTONT(*ap->a_vpp)->i_number));
 	}
 
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(dvp, *ap->a_vpp, cnp);
+	cache_enter(dvp, *ap->a_vpp, cnp->cn_nameptr, cnp->cn_namelen,
+		    cnp->cn_flags);
 
-	return (error);
+	return error;
 }
 
 /*
@@ -767,16 +753,12 @@ ntfs_fsync(void *v)
 		off_t offhi;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
-	int wait;
 
 	if (ap->a_flags & FSYNC_CACHE) {
 		return EOPNOTSUPP;
 	}
 
-	wait = (ap->a_flags & FSYNC_WAIT) != 0;
-	vflushbuf(vp, wait);
-
-	return 0;
+	return vflushbuf(vp, ap->a_flags);
 }
 
 /*
@@ -836,6 +818,8 @@ const struct vnodeopv_entry_desc ntfs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, genfs_eopnotsupp },	/* setattr */
 	{ &vop_read_desc, (vop_t *) ntfs_read },	/* read */
 	{ &vop_write_desc, (vop_t *) ntfs_write },	/* write */
+	{ &vop_fallocate_desc, genfs_eopnotsupp },	/* fallocate */
+	{ &vop_fdiscard_desc, genfs_eopnotsupp },	/* fdiscard */
 	{ &vop_fcntl_desc, genfs_fcntl },		/* fcntl */
 	{ &vop_ioctl_desc, genfs_enoioctl },		/* ioctl */
 	{ &vop_poll_desc, genfs_poll },			/* poll */

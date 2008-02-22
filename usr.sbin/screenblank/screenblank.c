@@ -1,4 +1,4 @@
-/*	$NetBSD: screenblank.c,v 1.26 2006/09/24 01:57:03 uwe Exp $	*/
+/*	$NetBSD: screenblank.c,v 1.29 2011/08/30 20:33:30 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,10 +35,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1996-2002 \
-	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: screenblank.c,v 1.26 2006/09/24 01:57:03 uwe Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1996-2002\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: screenblank.c,v 1.29 2011/08/30 20:33:30 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -76,9 +68,9 @@ __RCSID("$NetBSD: screenblank.c,v 1.26 2006/09/24 01:57:03 uwe Exp $");
 
 #include "pathnames.h"
 
-u_long	setvideo = WSDISPLAYIO_SVIDEO;		/* "set video" ioctl */
-int	videoon  = WSDISPLAYIO_VIDEO_ON;	/* value for "on" */
-int	videooff = WSDISPLAYIO_VIDEO_OFF;	/* value for "off" */
+static u_long	setvideo = WSDISPLAYIO_SVIDEO;		/* "set video" ioctl */
+static int	videoon  = WSDISPLAYIO_VIDEO_ON;	/* value for "on" */
+static int	videooff = WSDISPLAYIO_VIDEO_OFF;	/* value for "off" */
 
 struct	dev_stat {
 	LIST_ENTRY(dev_stat) ds_link;	/* linked list */
@@ -87,15 +79,14 @@ struct	dev_stat {
 	time_t	ds_atime;		/* time device last accessed */
 	time_t	ds_mtime;		/* time device last modified */
 };
-LIST_HEAD(ds_list, dev_stat) ds_list;
+static LIST_HEAD(ds_list, dev_stat) ds_list;
 
-int	main(int, char *[]);
 static	void add_dev(const char *, int);
 static	void change_state(int);
 static	void cvt_arg(char *, struct timespec *);
-static	void sighandler(int);
+__dead static	void sighandler(int);
 static	int is_graphics_fb(struct dev_stat *);
-static	void usage(void);
+__dead static	void usage(void);
 
 int
 main(int argc, char *argv[])

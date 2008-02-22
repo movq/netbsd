@@ -1,7 +1,7 @@
-/*	$NetBSD: play.c,v 1.48 2007/12/15 19:44:48 perry Exp $	*/
+/*	$NetBSD: play.c,v 1.55 2015/08/05 06:54:39 mrg Exp $	*/
 
 /*
- * Copyright (c) 1999 Matthew R. Green
+ * Copyright (c) 1999, 2000, 2001, 2002, 2010 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +28,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: play.c,v 1.48 2007/12/15 19:44:48 perry Exp $");
+__RCSID("$NetBSD: play.c,v 1.55 2015/08/05 06:54:39 mrg Exp $");
 #endif
 
 
@@ -53,35 +51,32 @@ __RCSID("$NetBSD: play.c,v 1.48 2007/12/15 19:44:48 perry Exp $");
 
 #include "libaudio.h"
 
-int main(int, char *[]);
-void usage(void);
-void play(char *);
-void play_fd(const char *, int);
-ssize_t audioctl_write_fromhdr(void *, size_t, int, size_t *, const char *);
-void cleanup(int) __dead;
+static void usage(void) __dead;
+static void play(char *);
+static void play_fd(const char *, int);
+static ssize_t audioctl_write_fromhdr(void *, size_t, int, off_t *, const char *);
+static void cleanup(int) __dead;
 
-audio_info_t	info;
-int	volume;
-int	balance;
-int	port;
-int	fflag;
-int	qflag;
+static audio_info_t	info;
+static int	volume;
+static int	balance;
+static int	port;
+static int	fflag;
+static int	qflag;
 int	verbose;
-int	sample_rate;
-int	encoding;
-char	*encoding_str;
-int	precision;
-int	channels;
+static int	sample_rate;
+static int	encoding;
+static char	*encoding_str;
+static int	precision;
+static int	channels;
 
-char	const *play_errstring = NULL;
-size_t	bufsize;
-int	audiofd;
-int	exitstatus = EXIT_SUCCESS;
+static char	const *play_errstring = NULL;
+static size_t	bufsize;
+static int	audiofd;
+static int	exitstatus = EXIT_SUCCESS;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	size_t	len;
 	int	ch;
@@ -89,12 +84,16 @@ main(argc, argv)
 	const char *defdevice = _PATH_SOUND;
 	const char *device = NULL;
 
-	while ((ch = getopt(argc, argv, "b:C:c:d:e:fhip:P:qs:Vv:")) != -1) {
+	while ((ch = getopt(argc, argv, "b:B:C:c:d:e:fhip:P:qs:Vv:")) != -1) {
 		switch (ch) {
 		case 'b':
 			decode_int(optarg, &balance);
 			if (balance < 0 || balance > 64)
 				errx(1, "balance must be between 0 and 63");
+			break;
+		case 'B':
+			bufsize = strsuftoll("write buffer size", optarg,
+					     1, UINT_MAX);
 			break;
 		case 'c':
 			decode_int(optarg, &channels);
@@ -182,9 +181,11 @@ main(argc, argv)
 
 	if (ioctl(audiofd, AUDIO_GETINFO, &info) < 0)
 		err(1, "failed to get audio info");
-	bufsize = info.play.buffer_size;
-	if (bufsize < 32 * 1024)
-		bufsize = 32 * 1024;
+	if (bufsize == 0) {
+		bufsize = info.play.buffer_size;
+		if (bufsize < 32 * 1024)
+			bufsize = 32 * 1024;
+	}
 
 	signal(SIGINT, cleanup);
 	signal(SIGTERM, cleanup);
@@ -200,9 +201,8 @@ main(argc, argv)
 	cleanup(0);
 }
 
-void
-cleanup(signo)
-	int signo;
+static void
+cleanup(int signo)
 {
 
 	(void)ioctl(audiofd, AUDIO_FLUSH, NULL);
@@ -214,15 +214,14 @@ cleanup(signo)
 	exit(exitstatus);
 }
 
-void
-play(file)
-	char *file;
+static void
+play(char *file)
 {
 	struct stat sb;
 	void *addr, *oaddr;
 	off_t	filesize;
 	size_t	sizet_filesize;
-	size_t datasize = 0;
+	off_t datasize = 0;
 	ssize_t	hdrlen;
 	int fd;
 
@@ -260,11 +259,9 @@ play(file)
 
 	/*
 	 * give the VM system a bit of a hint about the type
-	 * of accesses we will make.
+	 * of accesses we will make.  we don't care about errors.
 	 */
-	if (madvise(addr, sizet_filesize, MADV_SEQUENTIAL) < 0 &&
-	    !qflag)
-		warn("madvise failed, ignoring");
+	madvise(addr, sizet_filesize, MADV_SEQUENTIAL);
 
 	/*
 	 * get the header length and set up the audio device
@@ -285,13 +282,13 @@ play(file)
 		datasize = filesize;
 	}
 
-	while (datasize > bufsize) {
-		if (write(audiofd, addr, bufsize) != bufsize)
+	while ((uint64_t)datasize > bufsize) {
+		if ((size_t)write(audiofd, addr, bufsize) != bufsize)
 			err(1, "write failed");
 		addr = (char *)addr + bufsize;
 		datasize -= bufsize;
 	}
-	if (write(audiofd, addr, (size_t)datasize) != (ssize_t)datasize)
+	if ((off_t)write(audiofd, addr, datasize) != datasize)
 		err(1, "final write failed");
 
 	if (ioctl(audiofd, AUDIO_DRAIN) < 0 && !qflag)
@@ -305,16 +302,14 @@ play(file)
 /*
  * play the file on the file descriptor fd
  */
-void
-play_fd(file, fd)
-	const char *file;
-	int     fd;
+static void
+play_fd(const char *file, int fd)
 {
 	char    *buffer = malloc(bufsize);
 	ssize_t hdrlen;
 	int     nr, nw;
-	size_t	datasize = 0;
-	size_t	dataout = 0;
+	off_t	datasize = 0;
+	off_t	dataout = 0;
 
 	if (buffer == NULL)
 		err(1, "malloc of read buffer failed");
@@ -371,13 +366,8 @@ write_error:
  * XXX this should probably be mostly part of libaudio, but it
  * uses the local "info" variable. blah... fix me!
  */
-ssize_t
-audioctl_write_fromhdr(hdr, fsz, fd, datasize, file)
-	void	*hdr;
-	size_t	fsz;
-	int	fd;
-	size_t	*datasize;
-	const char	*file;
+static ssize_t
+audioctl_write_fromhdr(void *hdr, size_t fsz, int fd, off_t *datasize, const char *file)
 {
 	sun_audioheader	*sunhdr;
 	ssize_t	hdr_len = 0;
@@ -399,7 +389,7 @@ audioctl_write_fromhdr(hdr, fsz, fd, datasize, file)
 		info.play.channels = ntohl(sunhdr->channels);
 		hdr_len = ntohl(sunhdr->hdr_size);
 
-		*datasize = ntohl(sunhdr->data_size);
+		*datasize = (off_t)ntohl(sunhdr->data_size);
 		goto set_audio_mode;
 	}
 
@@ -466,13 +456,13 @@ set_audio_mode:
 	return (hdr_len);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
 	fprintf(stderr, "Usage: %s [-hiqV] [options] files\n", getprogname());
 	fprintf(stderr, "Options:\n\t"
-	    "-C audio control device\n\t"
+	    "-B buffer size\n\t"
 	    "-b balance (0-63)\n\t"
 	    "-d audio device\n\t"
 	    "-f force settings\n\t"

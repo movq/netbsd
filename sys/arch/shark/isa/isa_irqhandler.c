@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_irqhandler.c,v 1.20 2008/01/06 03:01:59 matt Exp $	*/
+/*	$NetBSD: isa_irqhandler.c,v 1.27 2014/09/21 15:48:29 christos Exp $	*/
 
 /*
  * Copyright 1997
@@ -75,25 +75,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_irqhandler.c,v 1.20 2008/01/06 03:01:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_irqhandler.c,v 1.27 2014/09/21 15:48:29 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
+#include <sys/intr.h>
 
-#include <uvm/uvm_extern.h>
+#include <arm/locore.h>
 
-#include <machine/intr.h>
 #include <machine/irqhandler.h>
-#include <machine/cpu.h>
 
 irqhandler_t *irqhandlers[NIRQS];
 
 u_int current_mask;
 u_int actual_mask;
 u_int disabled_mask;
-u_int irqmasks[IPL_LEVELS];
+u_int irqmasks[NIPL];
 
 /* Prototypes */
 
@@ -110,7 +109,7 @@ void stray_irqhandler(u_int);
  */
 
 void
-irq_init()
+irq_init(void)
 {
 	int loop;
 
@@ -124,7 +123,7 @@ irq_init()
 	 * We will start with no bits set and these will be updated as handlers
 	 * are installed at different IPL's.
 	 */
-	for (loop = 0; loop < IPL_LEVELS; ++loop)
+	for (loop = 0; loop < NIPL; ++loop)
 		irqmasks[loop] = 0;
 
 	current_mask = 0x00000000;
@@ -145,11 +144,7 @@ irq_init()
  */
 
 int
-irq_claim(irq, handler, group, name)
-	int irq;
-	irqhandler_t *handler;
-	const char *group;
-	const char *name;
+irq_claim(int irq, irqhandler_t *handler, const char *group, const char *name)
 {
 
 #ifdef DIAGNOSTIC
@@ -172,7 +167,7 @@ irq_claim(irq, handler, group, name)
 		return(-1);
 
 	/* Make sure the level is valid */
-	if (handler->ih_level < 0 || handler->ih_level >= IPL_LEVELS)
+	if (handler->ih_level < 0 || handler->ih_level >= NIPL)
     	        return(-1);
 
 	/* Attach evcnt */
@@ -211,9 +206,7 @@ irq_claim(irq, handler, group, name)
  */
 
 int
-irq_release(irq, handler)
-	int irq;
-	irqhandler_t *handler;
+irq_release(int irq, irqhandler_t *handler)
 {
 	irqhandler_t *irqhand;
 	irqhandler_t **prehand;
@@ -275,7 +268,7 @@ irq_release(irq, handler)
  * happen very much anyway.
  */
 void
-irq_calculatemasks()
+irq_calculatemasks(void)
 {
 	int          irq, level;
 	irqhandler_t *ptr;
@@ -290,7 +283,7 @@ irq_calculatemasks()
 	}
 
 	/* Then figure out which IRQs use each level. */
-	for (level = 0; level < IPL_LEVELS; level++) {
+	for (level = 0; level < NIPL; level++) {
 		int irqs = 0;
 		for (irq = 0; irq < NIRQS; irq++)
 			if (irqlevel[irq] & (1 << level))
@@ -302,6 +295,7 @@ irq_calculatemasks()
 	 * Enforce a hierarchy that gives slow devices a better chance at not
 	 * dropping data.
 	 */
+	KASSERT(irqmasks[IPL_NONE] == ~0);
 	irqmasks[IPL_SOFTCLOCK] &= irqmasks[IPL_NONE];
 	irqmasks[IPL_SOFTBIO] &= irqmasks[IPL_SOFTCLOCK];
 	irqmasks[IPL_SOFTNET] &= irqmasks[IPL_SOFTBIO];
@@ -313,13 +307,7 @@ irq_calculatemasks()
 
 
 void *
-intr_claim(irq, level, ih_func, ih_arg, group, name)
-	int irq;
-	int level;
-	int (*ih_func)(void *);
-	void *ih_arg;
-	const char *group;
-	const char *name;
+intr_claim(int irq, int level, int (*ih_func)(void *), void *ih_arg, const char *group, const char *name)
 {
 	irqhandler_t *ih;
 
@@ -332,15 +320,16 @@ intr_claim(irq, level, ih_func, ih_arg, group, name)
 	ih->ih_arg = ih_arg;
 	ih->ih_flags = 0;
 
-	if (irq_claim(irq, ih, group, name) != 0) 
+	if (irq_claim(irq, ih, group, name) != 0) {
+		free(ih, M_DEVBUF);
 		return(NULL);
+	}
 
 	return(ih);
 }
 
 int
-intr_release(arg)
-	void *arg;
+intr_release(void *arg)
 {
 	irqhandler_t *ih = (irqhandler_t *)arg;
 
@@ -359,8 +348,7 @@ intr_release(arg)
  */
 
 void
-disable_irq(irq)
-	int irq;
+disable_irq(int irq)
 {
 	u_int oldirqstate; 
 
@@ -380,8 +368,7 @@ disable_irq(irq)
  */
 
 void
-enable_irq(irq)
-	int irq;
+enable_irq(int irq)
 {
 	u_int oldirqstate; 
 
@@ -400,8 +387,7 @@ enable_irq(irq)
  */
 
 void
-stray_irqhandler(mask)
-	u_int mask;
+stray_irqhandler(u_int mask)
 {
 	static u_int stray_irqs = 0;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.17 2017/11/04 15:24:42 cherry Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.17 2017/11/04 15:24:42 cherry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,32 +61,50 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill 
 #include <machine/mpbiosvar.h>
 #endif
 
+#ifdef __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
 void *
-pciide_machdep_compat_intr_establish(struct device *dev,
-    struct pci_attach_args *pa, int chan, int (*func)(void *),
+pciide_machdep_compat_intr_establish(device_t dev,
+    const struct pci_attach_args *pa, int chan, int (*func)(void *),
     void *arg)
 {
 	int irq;
 	void *cookie;
 #if NIOAPIC > 0
-	int mpih;
+	intr_handle_t mpih;
+	char buf[PCI_INTRSTR_LEN];
 #endif
+	char intr_xname[64];
+
+	snprintf(intr_xname, sizeof(intr_xname), "%s %s",
+	    device_xname(dev), PCIIDE_CHANNEL_NAME(chan));
 
 	irq = PCIIDE_COMPAT_IRQ(chan);
-	cookie = isa_intr_establish(NULL, irq, IST_EDGE, IPL_BIO, func, arg);
+	cookie = isa_intr_establish_xname(NULL, irq, IST_EDGE, IPL_BIO,
+	    func, arg, intr_xname);
 	if (cookie == NULL)
-		return (NULL);
+		return NULL;
 #if NIOAPIC > 0
 	if (mp_busses != NULL &&
 	    (intr_find_mpmapping(mp_isa_bus, irq, &mpih) == 0 ||
 	     intr_find_mpmapping(mp_eisa_bus, irq, &mpih) == 0)) {
 		mpih |= irq;
-		aprint_normal("%s: %s channel interrupting at %s\n",
-		    dev->dv_xname, PCIIDE_CHANNEL_NAME(chan),
-		    intr_string(mpih));
+		aprint_normal_dev(dev, "%s channel interrupting at %s\n",
+		    PCIIDE_CHANNEL_NAME(chan),
+		    intr_string(mpih, buf, sizeof(buf)));
 	} else
 #endif
-	aprint_normal("%s: %s channel interrupting at irq %d\n", dev->dv_xname,
+	aprint_normal_dev(dev, "%s channel interrupting at irq %d\n",
 	    PCIIDE_CHANNEL_NAME(chan), irq);
-	return (cookie);
+	return cookie;
 }
+#endif /* __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH */
+
+#ifdef __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_DISESTABLISH
+void
+pciide_machdep_compat_intr_disestablish(device_t dev, pci_chipset_tag_t pc,
+    int chan, void *cookie)
+{
+	isa_intr_disestablish(NULL, cookie);
+	return;
+}
+#endif /* __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_DISESTABLISH */

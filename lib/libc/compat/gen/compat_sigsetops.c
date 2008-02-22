@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigsetops.c,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: compat_sigsetops.c,v 1.3 2012/03/20 17:05:59 matt Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -36,13 +36,15 @@
 #if 0
 static char sccsid[] = "@(#)sigsetops.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: compat_sigsetops.c,v 1.1 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: compat_sigsetops.c,v 1.3 2012/03/20 17:05:59 matt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #define	__LIBC12_SOURCE__
 
 #include <errno.h>
+#include <sys/time.h>
+#include <compat/sys/time.h>
 #include <signal.h>
 #include <compat/include/signal.h>
 
@@ -64,25 +66,21 @@ __warn_references(sigismember,
     "warning: reference to compatibility sigismember(); include <signal.h> for correct reference")
 
 int
-sigemptyset(set)
-	sigset13_t *set;
+sigemptyset(sigset13_t *set)
 {
 	*set = 0;
 	return (0);
 }
 
 int
-sigfillset(set)
-	sigset13_t *set;
+sigfillset(sigset13_t *set)
 {
 	*set = ~(sigset13_t)0;
 	return (0);
 }
 
 int
-sigaddset(set, signo)
-	sigset13_t *set;
-	int signo;
+sigaddset(sigset13_t *set, int signo)
 {
 	if (signo <= 0 || signo >= NSIG13) {
 		errno = EINVAL;
@@ -93,9 +91,7 @@ sigaddset(set, signo)
 }
 
 int
-sigdelset(set, signo)
-	sigset13_t *set;
-	int signo;
+sigdelset(sigset13_t *set, int signo)
 {
 	if (signo <= 0 || signo >= NSIG13) {
 		errno = EINVAL;
@@ -106,9 +102,7 @@ sigdelset(set, signo)
 }
 
 int
-sigismember(set, signo)
-	const sigset13_t *set;
-	int signo;
+sigismember(const sigset13_t *set, int signo)
 {
 	if (signo <= 0 || signo >= NSIG13) {
 		errno = EINVAL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_unix.c,v 1.11 2006/05/30 19:48:07 jnemeth Exp $	*/
+/*	$NetBSD: pam_unix.c,v 1.17 2018/05/16 13:55:39 joerg Exp $	*/
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
@@ -40,7 +40,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_unix/pam_unix.c,v 1.49 2004/02/10 10:13:21 des Exp $");
 #else
-__RCSID("$NetBSD: pam_unix.c,v 1.11 2006/05/30 19:48:07 jnemeth Exp $");
+__RCSID("$NetBSD: pam_unix.c,v 1.17 2018/05/16 13:55:39 joerg Exp $");
 #endif
 
 
@@ -111,12 +111,11 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 				return (PAM_SUCCESS);
 			realpw = "*";
 		}
-		lc = login_getpwclass(pwd);
 	} else {
 		PAM_LOG("Doing dummy authentication");
 		realpw = "*";
-		lc = login_getclass(NULL);
 	}
+	lc = login_getpwclass(pwd);
 	retval = pam_get_authtok(pamh, PAM_AUTHTOK, &pass, NULL);
 	login_close(lc);
 	if (retval != PAM_SUCCESS)
@@ -249,6 +248,7 @@ yp_set_password(pam_handle_t *pamh, struct passwd *opwd,
 {
 	char *master;
 	int r, rpcport, status;
+	enum clnt_stat r2;
 	struct yppasswd yppwd;
 	CLIENT *client;
 	uid_t uid;
@@ -300,8 +300,8 @@ yp_set_password(pam_handle_t *pamh, struct passwd *opwd,
 		goto malloc_failure;
 	if ((yppwd.newpw.pw_name = strdup(pwd->pw_name)) == NULL)
 		goto malloc_failure;
-	yppwd.newpw.pw_uid = pwd->pw_uid;
-	yppwd.newpw.pw_gid = pwd->pw_gid;
+	yppwd.newpw.pw_uid = (int)pwd->pw_uid;
+	yppwd.newpw.pw_gid = (int)pwd->pw_gid;
 	if ((yppwd.newpw.pw_gecos = strdup(pwd->pw_gecos)) == NULL)
 		goto malloc_failure;
 	if ((yppwd.newpw.pw_dir = strdup(pwd->pw_dir)) == NULL)
@@ -319,9 +319,9 @@ yp_set_password(pam_handle_t *pamh, struct passwd *opwd,
 	client->cl_auth = authunix_create_default();
 	tv.tv_sec = 2;
 	tv.tv_usec = 0;
-	r = clnt_call(client, YPPASSWDPROC_UPDATE,
+	r2 = clnt_call(client, YPPASSWDPROC_UPDATE,
 	    xdr_yppasswd, &yppwd, xdr_int, &status, tv);
-	if (r)
+	if (r2 != RPC_SUCCESS)
 		pam_error(pamh, "RPC to yppasswdd failed.");
 	else if (status)
 		pam_error(pamh, "Couldn't change NIS password.");
@@ -508,6 +508,14 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 				/* Root doesn't need the old password. */
 				return (pam_set_item(pamh, PAM_OLDAUTHTOK, ""));
 			}
+			/*
+			 * Apparently we're not root, so let's forbid editing
+			 * root.
+			 * XXX Check for some flag to indicate if this
+			 * XXX is the desired behavior.
+			 */
+			if (pwd->pw_uid == 0)
+				return (PAM_PERM_DENIED);
 		}
 
 		if (pwd->pw_passwd[0] == '\0') {
@@ -535,7 +543,7 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 
 		PAM_LOG("UPDATE round");
 
-		if ((lc = login_getclass(pwd->pw_class)) != NULL) {
+		if ((lc = login_getpwclass(pwd)) != NULL) {
 			min_pw_len = (int) login_getcapnum(lc,
 			    "minpasswordlen", (quad_t)0, (quad_t)0);
 			pw_expiry = (int) login_getcapnum(lc,
@@ -549,7 +557,6 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 
 		/* Get the new password. */
 		for (tries = 0;;) {
-			pam_set_item(pamh, PAM_AUTHTOK, NULL);
 			retval = pam_get_authtok(pamh, PAM_AUTHTOK, &new_pass,
 			    NULL);
 			if (retval == PAM_TRY_AGAIN) {
@@ -566,14 +573,14 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 				pam_info(pamh, "Password unchanged.");
 				return (PAM_SUCCESS);
 			}
-			if (min_pw_len > 0 && strlen(new_pass) < min_pw_len) {
+			if (min_pw_len > 0 && strlen(new_pass) < (size_t)min_pw_len) {
 				pam_error(pamh, "Password is too short.");
-				continue;
+				goto retry;
 			}
 			if (strlen(new_pass) <= 5 && ++tries < 2) {
 				pam_error(pamh,
 				    "Please enter a longer password.");
-				continue;
+				goto retry;
 			}
 			for (p = new_pass; *p && islower((unsigned char)*p); ++p);
 			if (!*p && ++tries < 2) {
@@ -582,10 +589,12 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 				    "password.\nUnusual capitalization, "
 				    "control characters or digits are "
 				    "suggested.");
-				continue;
+				goto retry;
 			}
 			/* Password is OK. */
 			break;
+retry:
+			pam_set_item(pamh, PAM_AUTHTOK, NULL);
 		}
 		pw_getpwconf(option, sizeof(option), pwd, 
 #ifdef YP

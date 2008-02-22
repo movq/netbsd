@@ -1,4 +1,4 @@
-/* $NetBSD: kvm_alpha.c,v 1.23 2008/01/15 13:57:41 ad Exp $ */
+/* $NetBSD: kvm_alpha.c,v 1.27 2014/02/19 20:21:22 dsl Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -30,16 +30,17 @@
 #define	__KVM_ALPHA_PRIVATE		/* see <machine/pte.h> */
 
 #include <sys/param.h>
-#include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <machine/kcore.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <nlist.h>
 #include <kvm.h>
 
 #include <uvm/uvm_extern.h>
+
+#include <machine/kcore.h>
 #include <machine/pmap.h>
 #include <machine/vmparam.h>
 
@@ -49,27 +50,24 @@
 
 #include "kvm_private.h"
 
+__RCSID("$NetBSD: kvm_alpha.c,v 1.27 2014/02/19 20:21:22 dsl Exp $");
+
 /*ARGSUSED*/
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 	return;
 }
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 	return (0);
 }
 
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	alpha_pt_entry_t pte;
@@ -156,9 +154,7 @@ lose:
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t *kd;
-	u_long pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	phys_ram_seg_t *ramsegs;
@@ -187,8 +183,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 
 	kd->usrstack = USRSTACK;

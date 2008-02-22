@@ -1,4 +1,4 @@
-/* $NetBSD: wskbdvar.h,v 1.14 2007/03/04 06:02:51 christos Exp $ */
+/* $NetBSD: wskbdvar.h,v 1.19 2012/09/02 21:14:56 he Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,6 +33,7 @@
 /*
  * WSKBD interfaces.
  */
+#include <dev/wscons/wsksymvar.h>
 
 /*
  * Keyboard access functions (must be provided by all keyboards).
@@ -88,9 +89,26 @@ int	wskbddevprint(void *, const char *);
 /*
  * Callbacks from the keyboard driver to the wskbd interface driver.
  */
-void	wskbd_input(struct device *, u_int, int);
+void	wskbd_input(device_t, u_int, int);
 /* for WSDISPLAY_COMPAT_RAWKBD */
-void	wskbd_rawinput(struct device *, u_char *, int);
+void	wskbd_rawinput(device_t, u_char *, int);
+
+/*
+ * Callbacks for (ACPI) hotkey drivers which generate
+ * keycodes.
+ */
+struct wskbd_softc;
+typedef int (wskbd_hotkey_plugin)(struct wskbd_softc *, void *, u_int, int);
+
+device_t wskbd_hotkey_register(device_t, void *, wskbd_hotkey_plugin *);
+void	 wskbd_hotkey_deregister(device_t);
+
+/*
+ * set a translation table for scancodes in event mode
+ * parameters are a pointer to the table and its length
+ * pass length zero to turn translation off
+ */
+void	wskbd_set_evtrans(device_t, keysym_t *, int);
 
 /*
  * Console interface.

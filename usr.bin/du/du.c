@@ -1,4 +1,4 @@
-/*	$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $	*/
+/*	$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -34,18 +34,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)du.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $");
+__RCSID("$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -53,6 +54,7 @@ __RCSID("$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
+#include <inttypes.h>
 #include <util.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,12 +62,15 @@ __RCSID("$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $");
 #include <unistd.h>
 #include <limits.h>
 
-int	linkchk(dev_t, ino_t);
-void	prstat(const char *, int64_t);
-void	usage(void);
+/* Count inodes or file size */
+#define	COUNT	(iflag ? 1 : p->fts_statp->st_blocks)
 
-int hflag;
-long blocksize;
+static int	linkchk(dev_t, ino_t);
+static void	prstat(const char *, int64_t);
+__dead static void	usage(void);
+
+static int hflag, iflag;
+static long blocksize;
 
 int
 main(int argc, char *argv[])
@@ -73,7 +78,7 @@ main(int argc, char *argv[])
 	FTS *fts;
 	FTSENT *p;
 	int64_t totalblocks;
-	int ftsoptions, listdirs, listfiles;
+	int ftsoptions, listfiles;
 	int depth;
 	int Hflag, Lflag, aflag, ch, cflag, dflag, gkmflag, nflag, rval, sflag;
 	const char *noargv[2];
@@ -82,7 +87,7 @@ main(int argc, char *argv[])
 	totalblocks = 0;
 	ftsoptions = FTS_PHYSICAL;
 	depth = INT_MAX;
-	while ((ch = getopt(argc, argv, "HLPacd:ghkmnrsx")) != -1)
+	while ((ch = getopt(argc, argv, "HLPacd:ghikmnrsx")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -116,6 +121,9 @@ main(int argc, char *argv[])
 			break;
 		case 'h':
 			hflag = 1;
+			break;
+		case 'i':
+			iflag = 1;
 			break;
 		case 'k':
 			blocksize = 1024;
@@ -162,17 +170,15 @@ main(int argc, char *argv[])
 		ftsoptions |= FTS_LOGICAL;
 	}
 
+	listfiles = 0;
 	if (aflag) {
 		if (sflag || dflag)
 			usage();
-		listdirs = listfiles = 1;
+		listfiles = 1;
 	} else if (sflag) {
 		if (dflag)
 			usage();
-		listdirs = listfiles = depth = 0;
-	} else {
-		listfiles = 0;
-		listdirs = 1;
+		depth = 0;
 	}
 
 	if (!*argv) {
@@ -207,21 +213,16 @@ main(int argc, char *argv[])
 			break;
 		case FTS_DP:
 			p->fts_parent->fts_number += 
-			    p->fts_number += p->fts_statp->st_blocks;
-
-			if (p->fts_level > depth) {
-				fts_set(fts, p, FTS_SKIP);
-				continue;
-			}
-
+			    p->fts_number += COUNT;
 			if (cflag)
-				totalblocks += p->fts_statp->st_blocks;
+				totalblocks += COUNT;
 			/*
 			 * If listing each directory, or not listing files
 			 * or directories and this is post-order of the
 			 * root of a traversal, display the total.
 			 */
-			if (listdirs || (!listfiles && !p->fts_level))
+			if (p->fts_level <= depth
+			    || (!listfiles && !p->fts_level))
 				prstat(p->fts_path, p->fts_number);
 			break;
 		case FTS_DC:			/* Ignore. */
@@ -241,10 +242,10 @@ main(int argc, char *argv[])
 			 * the root of a traversal, display the total.
 			 */
 			if (listfiles || !p->fts_level)
-				prstat(p->fts_path, p->fts_statp->st_blocks);
-			p->fts_parent->fts_number += p->fts_statp->st_blocks;
+				prstat(p->fts_path, COUNT);
+			p->fts_parent->fts_number += COUNT;
 			if (cflag)
-				totalblocks += p->fts_statp->st_blocks;
+				totalblocks += COUNT;
 		}
 	}
 	if (errno)
@@ -254,9 +255,14 @@ main(int argc, char *argv[])
 	exit(rval);
 }
 
-void
+static void
 prstat(const char *fname, int64_t blocks)
 {
+	if (iflag) {
+		(void)printf("%" PRId64 "\t%s\n", blocks, fname);
+		return;
+	}
+
 	if (hflag) {
 		char buf[5];
 		int64_t sz = blocks * 512;
@@ -266,12 +272,12 @@ prstat(const char *fname, int64_t blocks)
 
 		(void)printf("%s\t%s\n", buf, fname);
 	} else
-		(void)printf("%lld\t%s\n",
-		    (long long)howmany(blocks, (int64_t)blocksize),
+		(void)printf("%" PRId64 "\t%s\n",
+		    howmany(blocks, (int64_t)blocksize),
 		    fname);
 }
 
-int
+static int
 linkchk(dev_t dev, ino_t ino)
 {
 	static struct entry {
@@ -346,11 +352,11 @@ linkchk(dev_t dev, ino_t ino)
 	return 0;
 }
 
-void
+static void
 usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghkmnrx] [file ...]\n");
+		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghikmnrx] [file ...]\n");
 	exit(1);
 }

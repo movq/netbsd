@@ -1,4 +1,4 @@
-/*	$NetBSD: ucb1200var.h,v 1.4 2000/10/22 10:42:32 uch Exp $ */
+/*	$NetBSD: ucb1200var.h,v 1.6 2012/10/27 17:17:53 chs Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,8 @@ struct ucb1200_attach_args {
 	tx_chipset_tag_t ucba_tc;
 	int ucba_snd_rate;
 	int ucba_tel_rate;
-	struct device *ucba_sib;
-	struct device *ucba_ucb;
+	device_t ucba_sib;
+	device_t ucba_ucb;
 };
 
 #define UCB1200_TP_MODULE	0
@@ -49,6 +42,6 @@ struct ucb1200_attach_args {
 #define UCB1200_TEL_MODULE	2
 #define UCB1200_MODULE_MAX	3
 
-void	ucb1200_state_install(struct device *, int (*)(void *), void *, int);
-int	ucb1200_state_idle(struct device *);
+void	ucb1200_state_install(device_t, int (*)(void *), void *, int);
+int	ucb1200_state_idle(device_t);
 

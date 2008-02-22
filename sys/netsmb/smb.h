@@ -1,4 +1,4 @@
-/*	$NetBSD: smb.h,v 1.17 2005/12/11 06:25:32 christos Exp $	*/
+/*	$NetBSD: smb.h,v 1.20 2012/11/30 23:24:22 nakayama Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -374,6 +374,7 @@ enum smb_dialects {
  */
 #define	SMB_SET_FILE_BASIC_INFO		0x101
 #define	SMB_SET_FILE_END_OF_FILE_INFO	0x104
+#define	SMB_SET_FILE_BASIC_INFORMATION	1004
 
 /*
  * LOCKING_ANDX LockType flags
@@ -394,7 +395,7 @@ enum smb_dialects {
 #define	SMB_MAXSHARENAMELEN	128
 #define	SMB_MAXPKTLEN		0x1FFFF
 #define	SMB_MAXCHALLENGELEN	8
-#define	SMB_MAXFNAMELEN		255	/* Keep in sync with MAXNAMLEN */
+#define	SMB_MAXNAMLEN	255
 
 #define	SMB_MAXRCN		3	/* number of reconnect attempts */
 

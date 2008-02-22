@@ -1,4 +1,4 @@
-/*	$NetBSD: sbusvar.h,v 1.24 2005/12/11 12:23:44 christos Exp $ */
+/*	$NetBSD: sbusvar.h,v 1.27 2009/09/17 16:28:12 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,15 +39,6 @@
 #include <machine/bsd_openprom.h>
 
 struct sbus_softc;
-
-/*
- * S-bus variables.
- */
-struct sbusdev {
-	struct	device *sd_dev;		/* backpointer to generic */
-	struct	sbusdev *sd_bchain;	/* forward link in bus chain */
-	void	(*sd_reset)(struct device *);
-};
 
 typedef u_int32_t sbus_slot_t;
 typedef u_int32_t sbus_offset_t;
@@ -89,8 +73,6 @@ void	sbus_attach_common(struct sbus_softc *, const char *, int,
 				const char * const *);
 int	sbus_print(void *, const char *);
 
-void	sbus_establish(struct sbusdev *, struct device *);
-
 int	sbus_setup_attach_args(
 		struct sbus_softc *,
 		bus_space_tag_t,
@@ -109,11 +91,10 @@ void	sbus_promaddr_to_handle(bus_space_tag_t, u_int,
 #if notyet
 /* variables per Sbus */
 struct sbus_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
 	int	sc_clockfreq;		/* clock frequency (in Hz) */
-	struct	sbusdev *sc_sbdev;	/* list of all children */
 	struct	openprom_range *sc_range;
 	int	sc_nrange;
 	int	sc_burst;		/* burst transfer sizes supported */

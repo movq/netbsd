@@ -1,4 +1,4 @@
-/*	$NetBSD: iwic_pci.c,v 1.11 2007/10/19 12:00:51 ad Exp $	*/
+/*	$NetBSD: iwic_pci.c,v 1.20 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Dave Boyce. All rights reserved.
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwic_pci.c,v 1.11 2007/10/19 12:00:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwic_pci.c,v 1.20 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -59,11 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: iwic_pci.c,v 1.11 2007/10/19 12:00:51 ad Exp $");
 #define IWIC_PCI_IOBA (PCI_MAPREG_START+0x04)
 
 static int iwic_pci_intr(void *sc);
-static int iwic_pci_probe(struct device * dev, struct cfdata * match, void *aux);
-static void iwic_pci_attach(struct device * parent, struct device * dev, void *aux);
-static int iwic_pci_activate(struct device * dev, enum devact);
+static int iwic_pci_probe(device_t  dev, cfdata_t  match, void *aux);
+static void iwic_pci_attach(device_t  parent, device_t  dev, void *aux);
+static int iwic_pci_activate(device_t  dev, enum devact);
 
-CFATTACH_DECL(iwic_pci, sizeof(struct iwic_softc),
+CFATTACH_DECL_NEW(iwic_pci, sizeof(struct iwic_softc),
     iwic_pci_probe, iwic_pci_attach, NULL, iwic_pci_activate);
 
 static int iwic_attach_bri(struct iwic_softc * sc);
@@ -122,6 +122,9 @@ static struct winids {
 		"ASUSCOM P-IN100-ST-D"
 	},
 	{
+#ifndef PCI_VENDOR_CITICORP
+#define PCI_VENDOR_CITICORP	PCI_VENDOR_FUJITSU4
+#endif
 		PCI_ID_CODE(PCI_VENDOR_CITICORP,0x105E),
 		-1,
 		-1,
@@ -211,8 +214,8 @@ iwic_find_card(const struct pci_attach_args * pa)
  *	iwic PCI probe
  *---------------------------------------------------------------------------*/
 static int
-iwic_pci_probe(struct device * dev,
-	struct cfdata * match, void *aux)
+iwic_pci_probe(device_t  dev,
+	cfdata_t  match, void *aux)
 {
 	if (iwic_find_card(aux))
 		return 1;
@@ -223,42 +226,45 @@ iwic_pci_probe(struct device * dev,
  *	PCI attach
  *---------------------------------------------------------------------------*/
 static void
-iwic_pci_attach(struct device * parent, struct device * dev, void *aux)
+iwic_pci_attach(device_t  parent, device_t  dev, void *aux)
 {
-	struct iwic_softc *sc = (void *) dev;
+	struct iwic_softc *sc = device_private(dev);
 	struct iwic_bchan *bchan;
 	pci_intr_handle_t ih;
 	const char *intrstr;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
+	char intrbuf[PCI_INTRSTR_LEN];
 
+	aprint_naive("\n");
+	sc->sc_dev = dev;
 	sc->sc_cardname = iwic_find_card(pa);
 
 	if (!sc->sc_cardname)
 		return;		/* Huh? */
 
-	printf(": %s\n", sc->sc_cardname);
+	aprint_normal(": %s\n", sc->sc_cardname);
 
 	if (pci_mapreg_map(pa, IWIC_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_io_bt, &sc->sc_io_bh, &sc->sc_iobase, &sc->sc_iosize)) {
-		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map registers\n");
 		return;
 	}
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, iwic_pci_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	sc->sc_pc = pc;
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* disable interrupts */
 	IWIC_WRITE(sc, IWIC_IMASK, 0xff);
@@ -316,7 +322,7 @@ iwic_pci_intr(void *p)
 }
 
 static int
-iwic_pci_activate(struct device * dev, enum devact act)
+iwic_pci_activate(device_t  dev, enum devact act)
 {
 	int error = EOPNOTSUPP;
 
@@ -333,7 +339,8 @@ struct isdn_layer1_isdnif_driver iwic_bri_driver = {
 	iwic_mph_command_req
 };
 
-void iwic_set_link(void *, int channel, const struct isdn_l4_driver_functions * l4_driver, void *l4_driver_softc);
+void iwic_set_link(void *, int channel,
+    const struct isdn_l4_driver_functions * l4_driver, void *l4_driver_softc);
 isdn_link_t *iwic_ret_linktab(void *, int channel);
 
 /* XXX Should be prototyped in some header, not here XXX */
@@ -360,7 +367,7 @@ iwic_attach_bri(struct iwic_softc * sc)
 {
 	struct isdn_l3_driver *drv;
 
-	drv = isdn_attach_isdnif(sc->sc_dev.dv_xname, sc->sc_cardname,
+	drv = isdn_attach_isdnif(device_xname(sc->sc_dev), sc->sc_cardname,
 	    &sc->sc_l2, &iwic_l3_driver, NBCH_BRI);
 
 	sc->sc_l3token = drv;
@@ -433,7 +440,8 @@ iwic_ret_linktab(void *t, int channel)
 }
 
 void
-iwic_set_link(void *t, int channel, const struct isdn_l4_driver_functions * l4_driver, void *l4_driver_softc)
+iwic_set_link(void *t, int channel,
+    const struct isdn_l4_driver_functions * l4_driver, void *l4_driver_softc)
 {
 	struct l2_softc *l2sc = t;
 	struct iwic_softc *sc = l2sc->l1_token;

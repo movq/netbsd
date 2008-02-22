@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uralvar.h,v 1.8 2007/06/09 12:13:12 kiyohara Exp $ */
+/*	$NetBSD: if_uralvar.h,v 1.12 2016/04/23 10:15:31 skrll Exp $ */
 /*	$OpenBSD: if_ralvar.h,v 1.2 2005/05/13 18:42:50 damien Exp $  */
 
 /*-
@@ -57,7 +57,7 @@ struct ural_softc;
 
 struct ural_tx_data {
 	struct ural_softc	*sc;
-	usbd_xfer_handle	xfer;
+	struct usbd_xfer	*xfer;
 	uint8_t			*buf;
 	struct mbuf		*m;
 	struct ieee80211_node	*ni;
@@ -65,21 +65,21 @@ struct ural_tx_data {
 
 struct ural_rx_data {
 	struct ural_softc	*sc;
-	usbd_xfer_handle	xfer;
+	struct usbd_xfer	*xfer;
 	uint8_t			*buf;
 	struct mbuf		*m;
 };
 
 struct ural_softc {
-	USBBASEDEVICE		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ec;
 #define sc_if	sc_ec.ec_if
 	struct ieee80211com	sc_ic;
 	int			(*sc_newstate)(struct ieee80211com *,
 				    enum ieee80211_state, int);
 
-	usbd_device_handle	sc_udev;
-	usbd_interface_handle	sc_iface;
+	struct usbd_device *	sc_udev;
+	struct usbd_interface *	sc_iface;
 
 	int			sc_rx_no;
 	int			sc_tx_no;
@@ -87,10 +87,10 @@ struct ural_softc {
 	uint32_t		asic_rev;
 	uint8_t			rf_rev;
 
-	usbd_xfer_handle	amrr_xfer;
+	struct usbd_xfer *	amrr_xfer;
 
-	usbd_pipe_handle	sc_rx_pipeh;
-	usbd_pipe_handle	sc_tx_pipeh;
+	struct usbd_pipe *	sc_rx_pipeh;
+	struct usbd_pipe *	sc_tx_pipeh;
 
 	enum ieee80211_state	sc_state;
 	struct usb_task		sc_task;
@@ -104,8 +104,8 @@ struct ural_softc {
 
 	struct ieee80211_beacon_offsets sc_bo;
 
-	usb_callout_t		sc_scan_ch;
-	usb_callout_t		sc_amrr_ch;
+	struct callout		sc_scan_ch;
+	struct callout		sc_amrr_ch;
 
 	int			sc_tx_timer;
 
@@ -124,8 +124,7 @@ struct ural_softc {
 	int			tx_ant;
 	int			nb_ant;
 
-#if NBPFILTER > 0
-	void *			sc_drvbpf;
+	struct bpf_if *		sc_drvbpf;
 
 	union {
 		struct ural_rx_radiotap_header th;
@@ -140,5 +139,4 @@ struct ural_softc {
 	}			sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
-#endif
 };

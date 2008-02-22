@@ -1,4 +1,4 @@
-/*	$NetBSD: pdinfo.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: pdinfo.c,v 1.5 2014/01/22 16:32:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdinfo.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdinfo.c,v 1.5 2014/01/22 16:32:09 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -78,16 +71,16 @@ pdinfo_valid(const struct pdinfo_sector *disk)
 bool
 pdinfo_sanity(const struct pdinfo_sector *disk)
 {
-	const struct disk_geometory *geom;
-	const struct disk_ux *ux;
 
 	if (!pdinfo_valid(disk)) {
 		DPRINTF("no physical disk info.\n");
 		return false;
 	}
 
-	geom = &disk->geometory;
-	ux = &disk->ux;
+#ifdef PDINFO_DEBUG
+	const struct disk_geometory *geom = &disk->geometory;
+	const struct disk_ux *ux = &disk->ux;
+#endif
 	DPRINTF("physical disk sector size %dbyte\n", sizeof *disk);
 	DPRINTF("[disk]\n");
 	DPRINTF("drive_id = %#x\n", disk->drive_id);

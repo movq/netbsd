@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.5 2007/12/03 15:34:31 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.9 2014/07/27 08:55:39 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Wasabi Systems, Inc.
@@ -64,25 +64,8 @@
 #define IST_EDGE_RISING  5
 #define IST_EDGE_BOTH    6
 
-#ifdef __OLD_INTERRUPT_CODE	/* XXX XXX XXX */
-
-/* Software interrupt priority levels */
-
-#define SOFTIRQ_CLOCK   0
-#define SOFTIRQ_NET     1
-#define SOFTIRQ_SERIAL  2
-
-#define SOFTIRQ_BIT(x)  (1 << x)
-
-#include <arm/arm32/psl.h>
-
-#else /* ! __OLD_INTERRUPT_CODE */
-
-#define	__NEWINTR	/* enables new hooks in cpu_fork()/cpu_switch() */
-
 #ifndef _LOCORE
 
-#include <sys/device.h>
 #include <sys/queue.h>
 
 #if defined(_LKM)
@@ -90,7 +73,6 @@
 int	_splraise(int);
 int	_spllower(int);
 void	splx(int);
-void	_setsoftintr(int);
 
 #else	/* _LKM */
 
@@ -104,7 +86,6 @@ void	_setsoftintr(int);
  * int	_splraise(int);
  * int	_spllower(int);
  * void	splx(int);
- * void	_setsoftintr(int);
  *
  * These may be defined as functions, static inline functions, or macros,
  * but there must be a _spllower() and splx() defined as functions callable
@@ -165,12 +146,7 @@ splraiseipl(ipl_cookie_t icookie)
 
 #include <sys/spl.h>
 
-/* Use generic software interrupt support. */
-#include <arm/softintr.h>
-
 #endif /* ! _LOCORE */
-
-#endif /* __OLD_INTERRUPT_CODE */
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: alias.c,v 1.12 2003/08/07 09:05:29 agc Exp $	*/
+/*	$NetBSD: alias.c,v 1.16 2017/07/24 12:34:45 kre Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)alias.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: alias.c,v 1.12 2003/08/07 09:05:29 agc Exp $");
+__RCSID("$NetBSD: alias.c,v 1.16 2017/07/24 12:34:45 kre Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: alias.c,v 1.12 2003/08/07 09:05:29 agc Exp $");
 #include "mystring.h"
 #include "alias.h"
 #include "options.h"	/* XXX for argptr (should remove?) */
+#include "builtins.h"
 #include "var.h"
 
 #define ATABSIZE 39
@@ -58,7 +59,7 @@ struct alias *atab[ATABSIZE];
 
 STATIC void setalias(char *, char *);
 STATIC int unalias(char *);
-STATIC struct alias **hashalias(char *);
+STATIC struct alias **hashalias(const char *);
 
 STATIC
 void
@@ -80,6 +81,7 @@ setalias(char *name, char *val)
 	INTOFF;
 	ap = ckmalloc(sizeof (struct alias));
 	ap->name = savestr(name);
+	ap->flag = 0;
 	/*
 	 * XXX - HACK: in order that the parser will not finish reading the
 	 * alias value off the input before processing the next alias, we
@@ -176,7 +178,7 @@ rmaliases(void)
 }
 
 struct alias *
-lookupalias(char *name, int check)
+lookupalias(const char *name, int check)
 {
 	struct alias *ap = *hashalias(name);
 
@@ -191,8 +193,8 @@ lookupalias(char *name, int check)
 	return (NULL);
 }
 
-char *
-get_alias_text(char *name)
+const char *
+alias_text(void *dummy __unused, const char *name)
 {
 	struct alias *ap;
 
@@ -262,12 +264,12 @@ unaliascmd(int argc, char **argv)
 }
 
 STATIC struct alias **
-hashalias(char *p)
+hashalias(const char *p)
 {
 	unsigned int hashval;
 
-	hashval = *p << 4;
+	hashval = *(const unsigned char *)p << 4;
 	while (*p)
-		hashval+= *p++;
+		hashval += *p++;
 	return &atab[hashval % ATABSIZE];
 }

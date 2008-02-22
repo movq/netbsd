@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_open.c,v 1.21 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_open.c,v 1.29 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_open.c	8.10 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_open.c,v 1.21 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_open.c,v 1.29 2016/09/24 21:31:25 christos Exp $");
 
 /*
  * Implementation of btree access method for 4.4BSD.
@@ -73,7 +71,6 @@ __RCSID("$NetBSD: bt_open.c,v 1.21 2007/02/03 23:46:09 christos Exp $");
 
 static int byteorder(void);
 static int nroot(BTREE *);
-static int tmp(void);
 
 /*
  * __BT_OPEN -- Open a btree.
@@ -163,7 +160,7 @@ __bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
 		goto einval;
 
 	/* Allocate and initialize DB and BTREE structures. */
-	if ((t = (BTREE *)malloc(sizeof(BTREE))) == NULL)
+	if ((t = malloc(sizeof(*t))) == NULL)
 		goto err;
 	memset(t, 0, sizeof(BTREE));
 	t->bt_fd = -1;			/* Don't close unopened fd on error. */
@@ -173,7 +170,7 @@ __bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
 	t->bt_pfx = b.prefix;
 	t->bt_rfd = -1;
 
-	if ((t->bt_dbp = dbp = (DB *)malloc(sizeof(DB))) == NULL)
+	if ((t->bt_dbp = dbp = malloc(sizeof(*dbp))) == NULL)
 		goto err;
 	memset(t->bt_dbp, 0, sizeof(DB));
 	if (t->bt_lorder != machine_lorder)
@@ -204,24 +201,17 @@ __bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
 		default:
 			goto einval;
 		}
-		
-		if ((t->bt_fd = open(fname, flags, mode)) == -1)
-			goto err;
-		if (fcntl(t->bt_fd, F_SETFD, FD_CLOEXEC) == -1)
+		if ((t->bt_fd = __dbopen(fname, flags, mode, &sb)) == -1)
 			goto err;
 	} else {
 		if ((flags & O_ACCMODE) != O_RDWR)
 			goto einval;
-		if ((t->bt_fd = tmp()) == -1)
+		if ((t->bt_fd = __dbtemp("bt.", &sb)) == -1)
 			goto err;
 		F_SET(t, B_INMEM);
 	}
 
-	if (fcntl(t->bt_fd, F_SETFD, FD_CLOEXEC) == -1)
-		goto err;
 
-	if (fstat(t->bt_fd, &sb))
-		goto err;
 	if (sb.st_size) {
 		if ((nr = read(t->bt_fd, &m, sizeof(BTMETA))) < 0)
 			goto err;
@@ -306,9 +296,11 @@ __bt_open(const char *fname, int flags, mode_t mode, const BTREEINFO *openinfo,
 	    (sizeof(indx_t) + NBLEAFDBT(0, 0));
 	_DBFIT(temp, indx_t);
 	t->bt_ovflsize = (indx_t)temp;
-	if (t->bt_ovflsize < NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t))
-		t->bt_ovflsize =
-		    NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t);
+	if (t->bt_ovflsize < NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t)) {
+		size_t l = NBLEAFDBT(NOVFLSIZE, NOVFLSIZE) + sizeof(indx_t);
+		_DBFIT(l, indx_t);
+		t->bt_ovflsize = (indx_t)l;
+	}
 
 	/* Initialize the buffer pool. */
 	if ((t->bt_mp =
@@ -362,18 +354,25 @@ nroot(BTREE *t)
 	PAGE *meta, *root;
 	pgno_t npg;
 
-	if ((meta = mpool_get(t->bt_mp, 0, 0)) != NULL) {
-		mpool_put(t->bt_mp, meta, 0);
-		return (RET_SUCCESS);
+	if ((root = mpool_get(t->bt_mp, 1, 0)) != NULL) {
+		if (root->lower == 0 &&
+		    root->pgno == 0 &&
+		    root->linp[0] == 0) {
+			mpool_delete(t->bt_mp, root);
+			errno = EINVAL;
+		} else {
+			mpool_put(t->bt_mp, root, 0);
+			return RET_SUCCESS;
+		}
 	}
 	if (errno != EINVAL)		/* It's OK to not exist. */
 		return (RET_ERROR);
 	errno = 0;
 
-	if ((meta = mpool_new(t->bt_mp, &npg)) == NULL)
+	if ((meta = mpool_newf(t->bt_mp, &npg, MPOOL_PAGE_NEXT)) == NULL)
 		return (RET_ERROR);
 
-	if ((root = mpool_new(t->bt_mp, &npg)) == NULL)
+	if ((root = mpool_newf(t->bt_mp, &npg, MPOOL_PAGE_NEXT)) == NULL)
 		return (RET_ERROR);
 
 	if (npg != P_ROOT)
@@ -390,42 +389,13 @@ nroot(BTREE *t)
 }
 
 static int
-tmp(void)
-{
-	sigset_t set, oset;
-	size_t len;
-	int fd;
-	char *envtmp;
-	char path[PATH_MAX];
-
-	if (issetugid())
-		envtmp = NULL;
-	else
-		envtmp = getenv("TMPDIR");
-
-	len = snprintf(path,
-	    sizeof(path), "%s/bt.XXXXXX", envtmp ? envtmp : _PATH_TMP);
-	if (len >= sizeof(path))
-		return -1;
-	
-	(void)sigfillset(&set);
-	(void)sigprocmask(SIG_BLOCK, &set, &oset);
-	if ((fd = mkstemp(path)) != -1) {
-		(void)unlink(path);
-		(void)fcntl(fd, F_SETFD, FD_CLOEXEC);
-	}
-	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
-	return(fd);
-}
-
-static int
 byteorder(void)
 {
-	u_int32_t x;
-	u_char *p;
+	uint32_t x;
+	uint8_t *p;
 
 	x = 0x01020304;
-	p = (u_char *)(void *)&x;
+	p = (uint8_t *)(void *)&x;
 	switch (*p) {
 	case 1:
 		return (BIG_ENDIAN);

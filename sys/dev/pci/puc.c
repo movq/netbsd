@@ -1,4 +1,4 @@
-/*	$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $	*/
+/*	$NetBSD: puc.c,v 1.39 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998, 1999
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.39 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,16 +62,15 @@ __KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $");
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
+#include <dev/pci/pcidevs.h>
 #include <sys/termios.h>
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 
 #include "locators.h"
-#include "opt_puccn.h"
+#include "com.h"
 
 struct puc_softc {
-	struct device		sc_dev;
-
 	/* static configuration data */
 	const struct puc_device_description *sc_desc;
 
@@ -87,7 +86,7 @@ struct puc_softc {
 
 	/* per-port dynamic data */
         struct {
-		struct device	*dev;
+		device_t 	dev;
 
                 /* filled in by port attachments */
                 int             (*ihand)(void *);
@@ -100,8 +99,7 @@ static int	puc_print(void *, const char *);
 static const char *puc_port_type_name(int);
 
 static int
-puc_match(struct device *parent, struct cfdata *match,
-    void *aux)
+puc_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct puc_device_description *desc;
@@ -141,19 +139,14 @@ puc_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-puc_attach(struct device *parent, struct device *self, void *aux)
+puc_attach(device_t parent, device_t self, void *aux)
 {
-	struct puc_softc *sc = (struct puc_softc *)self;
+	struct puc_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct puc_attach_args paa;
 	pci_intr_handle_t intrhandle;
 	pcireg_t subsys;
 	int i, barindex;
-	bus_addr_t base;
-	bus_space_tag_t tag;
-#ifdef PUCCN
-	bus_space_handle_t ioh;
-#endif
 	int locs[PUCCF_NLOCS];
 
 	subsys = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
@@ -170,28 +163,28 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 #else
 		printf(": unknown PCI communications device\n");
 		printf("%s: compile kernel with PUC_PRINT_REGS and larger\n",
-		    sc->sc_dev.dv_xname);
-		printf("%s: mesage buffer (via 'options MSGBUFSIZE=...'),\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
+		printf("%s: message buffer (via 'options MSGBUFSIZE=...'),\n",
+		    device_xname(self));
 		printf("%s: and report the result with send-pr\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 #endif
 		return;
 	}
 
-	printf(": %s (", sc->sc_desc->name);
+	aprint_naive("\n");
+	aprint_normal(": %s (", sc->sc_desc->name);
 	for (i = 0; PUC_PORT_VALID(sc->sc_desc, i); i++)
-		printf("%s%s", i ? ", " : "",
+		aprint_normal("%s%s", i ? ", " : "",
 		    puc_port_type_name(sc->sc_desc->ports[i].type));
-	printf(")\n");
+	aprint_normal(")\n");
 
 	for (i = 0; i < 6; i++) {
 		pcireg_t bar, type;
 
 		sc->sc_bar_mappings[i].mapped = 0;
 
-		bar = pci_conf_read(pa->pa_pc, pa->pa_tag,
-		    PCI_MAPREG_START + 4 * i);	/* XXX const */
+		bar = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_BAR(i));
 		if (bar == 0)			/* BAR not implemented(?) */
 			continue;
 
@@ -199,37 +192,30 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 		    PCI_MAPREG_TYPE_IO : PCI_MAPREG_MEM_TYPE(bar));
 
 		if (type == PCI_MAPREG_TYPE_IO) {
-			tag = pa->pa_iot;
-			base =  PCI_MAPREG_IO_ADDR(bar);
+			sc->sc_bar_mappings[i].t = pa->pa_iot;
+			sc->sc_bar_mappings[i].a = PCI_MAPREG_IO_ADDR(bar);
+			sc->sc_bar_mappings[i].s = PCI_MAPREG_IO_SIZE(bar);
 		} else {
-			tag = pa->pa_memt;
-			base =  PCI_MAPREG_MEM_ADDR(bar);
+			sc->sc_bar_mappings[i].t = pa->pa_memt;
+			sc->sc_bar_mappings[i].a = PCI_MAPREG_MEM_ADDR(bar);
+			sc->sc_bar_mappings[i].s = PCI_MAPREG_MEM_SIZE(bar);
 		}
-#ifdef PUCCN
-		if (com_is_console(tag, base, &ioh)) {
-			sc->sc_bar_mappings[i].mapped = 1;
-			sc->sc_bar_mappings[i].a = base;
-			sc->sc_bar_mappings[i].s = COM_NPORTS;
-			sc->sc_bar_mappings[i].t = tag;
-			sc->sc_bar_mappings[i].h = ioh;
-			continue;
-		}
-#endif
+
 		sc->sc_bar_mappings[i].mapped = (pci_mapreg_map(pa,
-		    PCI_MAPREG_START + 4 * i, type, 0,
+		    PCI_BAR(i), type, 0,
 		    &sc->sc_bar_mappings[i].t, &sc->sc_bar_mappings[i].h,
 		    &sc->sc_bar_mappings[i].a, &sc->sc_bar_mappings[i].s)
 		      == 0);
 		if (sc->sc_bar_mappings[i].mapped)
 			continue;
 
-		printf("%s: couldn't map BAR at offset 0x%lx\n",
-		    sc->sc_dev.dv_xname, (long)(PCI_MAPREG_START + 4 * i));
+		aprint_debug_dev(self, "couldn't map BAR at offset 0x%lx\n",
+		    (long)(PCI_MAPREG_START + 4 * i));
 	}
 
 	/* Map interrupt. */
 	if (pci_intr_map(pa, &intrhandle)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	/*
@@ -248,15 +234,48 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 	 * XXX It's not pretty, but hey, what is?
 	 */
 
+	/* SB16C10xx board specific initialization */
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SYSTEMBASE &&
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYSTEMBASE_SB16C1050 ||
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYSTEMBASE_SB16C1054 ||
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYSTEMBASE_SB16C1058)) {
+		if (!sc->sc_bar_mappings[1].mapped) {
+			aprint_error_dev(self,
+			    "optional register is not mapped\n");
+			return;
+		}
+#define SB16C105X_OPT_IMRREG0 0x0000000c
+		/* enable port 0-7 interrupt */
+		bus_space_write_1(sc->sc_bar_mappings[1].t,
+		    sc->sc_bar_mappings[1].h, SB16C105X_OPT_IMRREG0, 0xff);
+	} else {
+		if (!pmf_device_register(self, NULL, NULL))
+	                aprint_error_dev(self,
+			    "couldn't establish power handler\n");
+	}
+
 	/* Configure each port. */
 	for (i = 0; PUC_PORT_VALID(sc->sc_desc, i); i++) {
+		barindex = PUC_PORT_BAR_INDEX(sc->sc_desc->ports[i].bar);
 		bus_space_handle_t subregion_handle;
+		int is_console = 0;
 
 		/* make sure the base address register is mapped */
-		barindex = PUC_PORT_BAR_INDEX(sc->sc_desc->ports[i].bar);
+#if NCOM > 0
+		is_console = com_is_console(sc->sc_bar_mappings[barindex].t,
+		    sc->sc_bar_mappings[barindex].a +
+		    sc->sc_desc->ports[i].offset, &subregion_handle);
+		if (is_console) {
+			sc->sc_bar_mappings[barindex].mapped = 1;
+#if defined(amd64) || defined(i386)
+			sc->sc_bar_mappings[barindex].h = subregion_handle -
+			    sc->sc_desc->ports[i].offset;	/* XXX hack */
+#endif
+		}
+#endif
 		if (!sc->sc_bar_mappings[barindex].mapped) {
-			printf("%s: %s port uses unmapped BAR (0x%x)\n",
-			    sc->sc_dev.dv_xname,
+			aprint_error_dev(self,
+			    "%s port uses unmapped BAR (0x%x)\n",
 			    puc_port_type_name(sc->sc_desc->ports[i].type),
 			    sc->sc_desc->ports[i].bar);
 			continue;
@@ -269,34 +288,29 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 		paa.pc = pa->pa_pc;
 		paa.tag = pa->pa_tag;
 		paa.intrhandle = intrhandle;
-		paa.a = sc->sc_bar_mappings[barindex].a;
+		paa.a = sc->sc_bar_mappings[barindex].a +
+		    sc->sc_desc->ports[i].offset;
 		paa.t = sc->sc_bar_mappings[barindex].t;
 		paa.dmat = pa->pa_dmat;
 		paa.dmat64 = pa->pa_dmat64;
 
-		if (
-#ifdef PUCCN
-		    !com_is_console(sc->sc_bar_mappings[barindex].t,
-		    sc->sc_bar_mappings[barindex].a, &subregion_handle)
-		   &&
-#endif
+		if (!is_console &&
 		    bus_space_subregion(sc->sc_bar_mappings[barindex].t,
 		    sc->sc_bar_mappings[barindex].h,
 		    sc->sc_desc->ports[i].offset,
 		    sc->sc_bar_mappings[barindex].s -
 		      sc->sc_desc->ports[i].offset,
 		    &subregion_handle) != 0) {
-			printf("%s: couldn't get subregion for port %d\n",
-			    sc->sc_dev.dv_xname, i);
+			aprint_error_dev(self,
+			    "couldn't get subregion for port %d\n", i);
 			continue;
 		}
 		paa.h = subregion_handle;
 
 #if 0
 		printf("%s: port %d: %s @ (index %d) 0x%x (0x%lx, 0x%lx)\n",
-		    sc->sc_dev.dv_xname, paa.port,
-		    puc_port_type_name(paa.type), barindex, (int)paa.a,
-		    (long)paa.t, (long)paa.h);
+		    device_xname(self), paa.port, puc_port_type_name(paa.type),
+		    barindex, (int)paa.a, (long)paa.t, (long)paa.h);
 #endif
 
 		locs[PUCCF_PORT] = i;
@@ -307,7 +321,7 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-CFATTACH_DECL(puc, sizeof(struct puc_softc),
+CFATTACH_DECL_NEW(puc, sizeof(struct puc_softc),
     puc_match, puc_attach, NULL, NULL);
 
 static int

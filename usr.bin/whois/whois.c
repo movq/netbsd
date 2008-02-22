@@ -1,4 +1,4 @@
-/*      $NetBSD: whois.c,v 1.32 2007/12/15 19:44:54 perry Exp $   */
+/*      $NetBSD: whois.c,v 1.36 2013/02/20 09:27:52 ws Exp $   */
 /*	$OpenBSD: whois.c,v 1.28 2003/09/18 22:16:15 fgsch Exp $	*/
 
 /*
@@ -33,15 +33,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static const char sccsid[] = "@(#)whois.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: whois.c,v 1.32 2007/12/15 19:44:54 perry Exp $");
+__RCSID("$NetBSD: whois.c,v 1.36 2013/02/20 09:27:52 ws Exp $");
 #endif
 #endif /* not lint */
 
@@ -88,13 +88,13 @@ static const char *ip_whois[] =
 
 static void usage(void) __dead;
 static int whois(const char *, const char *, const char *, int);
-static char *choose_server(const char *, const char *);
+static const char *choose_server(const char *, const char *);
 
 int
 main(int argc, char *argv[])
 {
 	int ch, flags, rval;
-	char *host, *name, *country;
+	const char *host, *name, *country;
 
 #ifdef SOCKS
 	SOCKSinit(argv[0]);
@@ -216,15 +216,15 @@ whois(const char *query, const char *server, const char *port, int flags)
 
 	if (strcmp(server, "whois.denic.de") == 0 ||
 	    strcmp(server, "de.whois-servers.net") == 0)
-		fmt = "-T dn,ace -C ISO-8859-1 %s\r\n";
+		fmt = "-T dn,ace -C ISO-8859-1 ";
 	else
-		fmt = "%s\r\n";
+		fmt = "";
 
 	sfi = fdopen(s, "r");
 	sfo = fdopen(s, "w");
 	if (sfi == NULL || sfo == NULL)
 		err(1, "fdopen");
-	(void)fprintf(sfo, fmt, query);
+	(void)fprintf(sfo, "%s%s\r\n", fmt, query);
 	(void)fflush(sfo);
 	nhost = NULL;
 	while ((buf = fgetln(sfi, &len)) != NULL) {
@@ -288,7 +288,7 @@ whois(const char *query, const char *server, const char *port, int flags)
  * (starts with '!') or a CORE handle (COCO-[0-9]+ or COHO-[0-9]+).
  * Fall back to NICHOST for the non-handle case.
  */
-static char *
+static const char *
 choose_server(const char *name, const char *country)
 {
 	static char *server;

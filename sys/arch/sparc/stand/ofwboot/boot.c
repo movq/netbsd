@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.18 2007/10/17 19:57:16 garbled Exp $	*/
+/*	$NetBSD: boot.c,v 1.35 2017/09/15 13:25:34 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 Eduardo E. Horvath.  All rights reserved.
@@ -44,6 +44,7 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/bootcfg.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
@@ -55,6 +56,7 @@
 #include <machine/cpu.h>
 #include <machine/promlib.h>
 #include <machine/bootinfo.h>
+#include <sparc/stand/common/isfloppy.h>
 
 #include "boot.h"
 #include "ofdev.h"
@@ -89,9 +91,12 @@ const char *kernelnames[] = {
 };
 
 char bootdev[PROM_MAX_PATH];
+bool root_fs_quickseekable = true;	/* unset for tftp boots */
+static bool bootinfo_pass_bootdev = false;
 
 int debug  = 0;
 int compatmode = 0;
+extern char twiddle_toggle;
 
 #if 0
 static void
@@ -136,7 +141,7 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 		}
 		end1 = ap;
 
-		while (*ap != '\0' && *ap == ' ') {
+		while (*ap == ' ') {
 			ap++;
 		}
 
@@ -187,6 +192,7 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 		kernel[end2 - start2] = '\0';
 	}
 
+	twiddle_toggle = 1;
 	strcpy(options, ap);
 	while (*ap != '\0' && *ap != ' ' && *ap != '\t' && *ap != '\n') {
 		BOOT_FLAG(*ap, v);
@@ -196,6 +202,9 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 			break;
 		case 'C':
 			compatmode = 1;
+			break;
+		case 'T':
+			twiddle_toggle = 1 - twiddle_toggle;
 			break;
 		default:
 			break;
@@ -222,8 +231,8 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 static void
 ksyms_copyout(void **ssym, void **esym)
 {
-	void *addr;
-	int kssize = (int)(long)(*esym - *ssym + 1);
+	uint8_t *addr;
+	int kssize = (int)(long)((char *)*esym - (char *)*ssym + 1);
 
 	DPRINTF(("ksyms_copyout(): ssym = %p, esym = %p, kssize = %d\n",
 				*ssym, *esym, kssize));
@@ -243,15 +252,16 @@ ksyms_copyout(void **ssym, void **esym)
  * Prepare boot information and jump directly to the kernel.
  */
 static void
-jump_to_kernel(u_long *marks, char *kernel, char *args, void *ofw)
+jump_to_kernel(u_long *marks, char *kernel, char *args, void *ofw,
+	int boothowto)
 {
-	extern char end[];
 	int l, machine_tag;
 	long newargs[4];
 	void *ssym, *esym;
 	vaddr_t bootinfo;
 	struct btinfo_symtab bi_sym;
 	struct btinfo_kernend bi_kend;
+	struct btinfo_boothowto bi_howto;
 	char *cp;
 	char bootline[PROM_MAX_PATH * 2];
 
@@ -272,6 +282,22 @@ jump_to_kernel(u_long *marks, char *kernel, char *args, void *ofw)
 	bi_add(&bi_sym, BTINFO_SYMTAB, sizeof(bi_sym));
 	bi_kend.addr= bootinfo + BOOTINFO_SIZE;
 	bi_add(&bi_kend, BTINFO_KERNEND, sizeof(bi_kend));
+	bi_howto.boothowto = boothowto;
+	bi_add(&bi_howto, BTINFO_BOOTHOWTO, sizeof(bi_howto));
+	if (bootinfo_pass_bootunit)
+		bi_add(&bi_unit, BTINFO_BOOTDEV_UNIT,
+		    sizeof(bi_unit));
+	if (bootinfo_pass_bootdev) {
+		struct {
+			struct btinfo_common common;
+			char name[256];
+		} info;
+		
+		strcpy(info.name, bootdev);
+		bi_add(&info, BTINFO_BOOTDEV, strlen(bootdev)
+			+sizeof(struct btinfo_bootdev));
+	}
+
 	sparc64_finalize_tlb(marks[MARK_DATA]);
 	sparc64_bi_add();
 
@@ -297,14 +323,14 @@ jump_to_kernel(u_long *marks, char *kernel, char *args, void *ofw)
 	 * strings.
 	 */
 	l = strlen(args) + 1;
-	bcopy(&esym, args + l, sizeof(esym));
+	memcpy(args + l, &esym, sizeof(esym));
 	l += sizeof(esym);
 
 	/*
 	 * Tell the kernel we're an OpenFirmware system.
 	 */
 	machine_tag = SPARC_MACHINE_OPENFIRMWARE;
-	bcopy(&machine_tag, args + l, sizeof(machine_tag));
+	memcpy(args + l, &machine_tag, sizeof(machine_tag));
 	l += sizeof(machine_tag);
 
 	/* 
@@ -337,10 +363,15 @@ jump_to_kernel(u_long *marks, char *kernel, char *args, void *ofw)
 }
 
 static void
-start_kernel(char *kernel, char *bootline, void *ofw)
+start_kernel(char *kernel, char *bootline, void *ofw, int isfloppy,
+	int boothowto)
 {
 	int fd;
-	u_long marks[MARK_MAX];
+	u_long marks[MARK_MAX] = {0};
+	int flags = LOAD_ALL;
+
+	if (isfloppy)
+		flags &= ~LOAD_BACKWARDS;
 
 	/*
 	 * First, load headers using default allocator and check whether kernel
@@ -358,8 +389,9 @@ start_kernel(char *kernel, char *bootline, void *ofw)
 		}
 		(void)printf("Loading %s: ", kernel);
 
-		if (fdloadfile(fd, marks, LOAD_ALL) != -1) {
-			jump_to_kernel(marks, kernel, bootline, ofw);
+		if (fdloadfile(fd, marks, flags) != -1) {
+			close(fd);
+			jump_to_kernel(marks, kernel, bootline, ofw, boothowto);
 		}
 	}
 	(void)printf("Failed to load '%s'.\n", kernel);
@@ -382,10 +414,38 @@ help(void)
 		"  disk:a netbsd -s\n");
 }
 
+static void
+do_config_command(const char *cmd, char *arg)
+{
+	DPRINTF(("do_config_command: %s\n", cmd));
+	if (strcmp(cmd, "bootpartition") == 0) {
+		char *c;
+
+		DPRINTF(("switching boot partition to %s from %s\n",
+		    arg, bootdev));
+		c = strrchr(bootdev, ':');
+		if (!c) return;
+		if (c[1] == 0) return;
+		if (strlen(arg) > strlen(c)) return;
+		strcpy(c, arg);
+		DPRINTF(("new boot device: %s\n", bootdev));
+		bootinfo_pass_bootdev = true;
+	}
+}
+
+static void
+check_boot_config(void)
+{
+	if (!root_fs_quickseekable)
+		return;
+
+	perform_bootcfg(BOOTCFG_FILENAME, &do_config_command, 32768);
+}
+
 void
 main(void *ofw)
 {
-	int boothowto, i = 0;
+	int boothowto, i = 0, isfloppy, kboothowto;
 
 	char kernel[PROM_MAX_PATH];
 	char bootline[PROM_MAX_PATH];
@@ -395,18 +455,19 @@ main(void *ofw)
 	prom_init();
 
 	printf("\r>> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	DPRINTF((">> (%s, %s)\n", bootprog_maker, bootprog_date));
 
 	/* Figure boot arguments */
 	strncpy(bootdev, prom_getbootpath(), sizeof(bootdev) - 1);
-	boothowto = bootoptions(prom_getbootargs(), bootdev, kernel, bootline);
+	kboothowto = boothowto =
+	    bootoptions(prom_getbootargs(), bootdev, kernel, bootline);
+	isfloppy = bootdev_isfloppy(bootdev);
 
 	for (;; *kernel = '\0') {
 		if (boothowto & RB_ASKNAME) {
-			char *cp, cmdline[PROM_MAX_PATH];
+			char cmdline[PROM_MAX_PATH];
 
 			printf("Boot: ");
-			gets(cmdline);
+			kgets(cmdline, sizeof(cmdline));
 
 			if (!strcmp(cmdline,"exit") ||
 			    !strcmp(cmdline,"halt")) {
@@ -437,7 +498,8 @@ main(void *ofw)
 			boothowto |= RB_ASKNAME;
 		}
 
-		start_kernel(kernel, bootline, ofw);
+		check_boot_config();
+		start_kernel(kernel, bootline, ofw, isfloppy, kboothowto);
 
 		/*
 		 * Try next name from kernel name list if not in askname mode,

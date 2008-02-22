@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_general.h,v 1.17 2006/04/14 22:40:09 christos Exp $	*/
+/*	$NetBSD: rf_general.h,v 1.22 2016/12/10 23:03:27 maya Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -41,8 +41,7 @@
 
 /* error reporting and handling */
 
-#include <sys/systm.h>		/* printf, sprintf, and friends */
-#include <uvm/uvm_extern.h>	/* PAGE_SIZE, PAGE_MASK */
+#include <sys/systm.h>		/* printf, snprintf, and friends */
 
 #define RF_ERRORMSG(s)            printf((s))
 #define RF_ERRORMSG1(s,a)         printf((s),(a))
@@ -55,18 +54,16 @@ void rf_print_unable_to_init_mutex(const char *, int, int);
 void rf_print_unable_to_add_shutdown(const char *, int, int);
 
 
-extern char rf_panicbuf[];
-#define RF_PANIC() {rf_print_panic_message(__LINE__,__FILE__); panic(rf_panicbuf);}
+#define RF_PANIC() {rf_print_panic_message(__LINE__,__FILE__);}
 
 #if defined(RAID_DIAGNOSTIC) || defined(__COVERITY__)
 #define RF_ASSERT(_x_) { \
   if (!(_x_)) { \
     rf_print_assert_panic_message(__LINE__, __FILE__, #_x_); \
-    panic(rf_panicbuf); \
   } \
 }
 #else /* RAID_DIAGNOSTIC */
-#define RF_ASSERT(x) {/*noop*/}
+#define RF_ASSERT(x) { /*noop*/ (void)(x); }
 #endif /* RAID_DIAGNOSTIC */
 
 /* random stuff */

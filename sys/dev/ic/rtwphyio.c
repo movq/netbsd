@@ -1,4 +1,4 @@
-/* $NetBSD: rtwphyio.c,v 1.15 2007/10/19 12:00:00 ad Exp $ */
+/* $NetBSD: rtwphyio.c,v 1.19 2016/10/09 14:42:30 christos Exp $ */
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -35,11 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtwphyio.c,v 1.15 2007/10/19 12:00:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtwphyio.c,v 1.19 2016/10/09 14:42:30 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/types.h>
+#include <sys/device.h>
 
 #include <sys/bus.h>
 
@@ -87,7 +85,7 @@ rtw_bbp_write(struct rtw_regs *regs, u_int addr, u_int val)
 	KASSERT((val & ~__SHIFTOUT_MASK(RTW_BB_WR_MASK)) == 0);
 
 	wrbbp = __SHIFTIN(addr, RTW_BB_ADDR_MASK) | RTW_BB_WREN |
-	    __SHIFTIN(val, RTW_BB_WR_MASK) | RTW_BB_RD_MASK,
+	    __SHIFTIN(val, RTW_BB_WR_MASK) | RTW_BB_RD_MASK;
 
 	rdbbp = __SHIFTIN(addr, RTW_BB_ADDR_MASK) |
 	    RTW_BB_WR_MASK | RTW_BB_RD_MASK;
@@ -226,6 +224,7 @@ rtw_grf5101_mac_crypt(u_int addr, uint32_t val)
 #undef EXTRACT_NIBBLE
 }
 
+#ifdef RTW_DEBUG
 static inline const char *
 rtw_rfchipid_string(enum rtw_rfchipid rfchipid)
 {
@@ -244,6 +243,7 @@ rtw_rfchipid_string(enum rtw_rfchipid rfchipid)
 		return "unknown";
 	}
 }
+#endif
 
 /* Bang bits over the 3-wire interface. */
 int

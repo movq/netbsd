@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.23 2017/11/06 03:47:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,14 +65,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2017/11/06 03:47:47 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_kloader.h"
 #include "opt_kloader_kernel_path.h"
 #include "opt_memsize.h"
-#include "fs_mfs.h"
+#include "opt_modular.h"
 
 #include "ksyms.h"
 #include "scif.h"
@@ -87,11 +80,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $")
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
+#include <sys/module.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 #include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
@@ -107,8 +102,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $")
 #include <sh3/cache_sh4.h>
 #include <sh3/mmu_sh4.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bootinfo.h>
+#include <machine/pcb.h>
 
 #include <landisk/landisk/landiskreg.h>
 
@@ -121,14 +117,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $")
 #include <sh3/dev/scifvar.h>
 #endif
 
-#if NKSYMS || defined(LKM) || defined(DDB)
+#if NKSYMS || defined(MODULAR) || defined(DDB)
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
-#ifndef	DB_ELFSIZE
-#error Must define DB_ELFSIZE!
-#endif
-#define	ELFSIZE	DB_ELFSIZE
 #include <sys/exec_elf.h>
 #endif
 
@@ -151,7 +143,7 @@ cpu_startup(void)
 {
 
 	/* XXX: show model (LANDISK/USL-5P) */
-	strcpy(cpu_model, "Model: I-O DATA LANDISK\n");
+	cpu_setmodel("Model: I-O DATA LANDISK");
 
         sh_startup();
 }
@@ -162,16 +154,18 @@ landisk_startup(int howto, void *bi)
 	extern char edata[], end[];
 	vaddr_t kernend;
 	size_t symbolsize;
-	int i;
 
 	/* Clear bss */
 	memset(edata, 0, end - edata);
 
 	/* Symbol table size */
 	symbolsize = 0;
+#if NKSYMS || defined(MODULAR) || defined(DDB)
 	if (memcmp(&end, ELFMAG, SELFMAG) == 0) {
 		Elf_Ehdr *eh = (void *)end;
 		Elf_Shdr *sh = (void *)(end + eh->e_shoff);
+		int i;
+
 		for (i = 0; i < eh->e_shnum; i++, sh++) {
 			if (sh->sh_offset > 0 &&
 			    (sh->sh_offset + sh->sh_size) > symbolsize) {
@@ -179,6 +173,7 @@ landisk_startup(int howto, void *bi)
 			}
 		}
 	}
+#endif
 
 	/* Start to determine heap area */
 	kernend = (vaddr_t)sh3_round_page(end + symbolsize);
@@ -198,7 +193,6 @@ landisk_startup(int howto, void *bi)
 	/* Initialize console */
 	consinit();
 
-#ifdef MFS
 	/*
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
@@ -211,7 +205,6 @@ landisk_startup(int howto, void *bi)
 #endif
 		kernend += fssz;
 	}
-#endif /* MFS */
 
 #ifdef KLOADER
 	/* copy boot parameter for kloader */
@@ -222,7 +215,7 @@ landisk_startup(int howto, void *bi)
 	physmem = atop(IOM_RAM_SIZE);
 	kernend = atop(round_page(SH3_P1SEG_TO_PHYS(kernend)));
 	uvm_page_physload(
-		physmem, atop(IOM_RAM_BEGIN + IOM_RAM_SIZE),
+		kernend, atop(IOM_RAM_BEGIN + IOM_RAM_SIZE),
 		kernend, atop(IOM_RAM_BEGIN + IOM_RAM_SIZE),
 		VM_FREELIST_DEFAULT);
 
@@ -233,9 +226,9 @@ landisk_startup(int howto, void *bi)
 	pmap_bootstrap();
 
 	/* Debugger. */
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(MODULAR) || defined(DDB)
 	if (symbolsize != 0) {
-		ksyms_init(symbolsize, &end, end + symbolsize);
+		ksyms_addsyms_elf(symbolsize, &end, end + symbolsize);
 	}
 #endif
 #if defined(DDB)
@@ -343,6 +336,8 @@ cpu_reboot(int howto, char *bootstr)
 haltsys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		_reg_write_1(LANDISK_PWRMNG, PWRMNG_POWEROFF);
 		delay(1 * 1000 * 1000);
@@ -368,11 +363,7 @@ haltsys:
 
 	printf("rebooting...\n");
 	machine_reset();
-
 	/*NOTREACHED*/
-	for (;;) {
-		continue;
-	}
 }
 
 void
@@ -380,8 +371,7 @@ machine_reset(void)
 {
 
 	_cpu_exception_suspend();
-	_reg_write_4(SH_(EXPEVT), EXPEVT_RESET_MANUAL);
-	(void)*(volatile uint32_t *)0x80000001;	/* CPU shutdown */
+	asm("trapa #0");
 
 	/*NOTREACHED*/
 	for (;;) {
@@ -509,3 +499,14 @@ InitializeBsc(void)
 	_reg_write_2(SH4_FRQCR, FRQCR_VAL);
 }
 #endif /* !DONT_INIT_BSC */
+
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the boot loader.
+ */
+void
+module_init_md(void)
+{
+}
+#endif /* MODULAR */

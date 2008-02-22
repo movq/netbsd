@@ -1,4 +1,4 @@
-/*	$NetBSD: mailwrapper.c,v 1.9 2003/03/09 08:10:43 mjl Exp $	*/
+/*	$NetBSD: mailwrapper.c,v 1.11 2018/01/23 21:06:25 sevan Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -41,17 +41,14 @@
 
 struct arglist {
 	size_t argc, maxc;
-	char **argv;
+	const char **argv;
 };
 
-int main __P((int, char *[], char *[]));
-
-static void initarg __P((struct arglist *));
-static void addarg __P((struct arglist *, const char *, int));
+static void initarg(struct arglist *);
+static void addarg(struct arglist *, const char *, int);
 
 static void
-initarg(al)
-	struct arglist *al;
+initarg(struct arglist *al)
 {
 	al->argc = 0;
 	al->maxc = 10;
@@ -68,10 +65,7 @@ initarg(al)
 }
 
 static void
-addarg(al, arg, copy)
-	struct arglist *al;
-	const char *arg;
-	int copy;
+addarg(struct arglist *al, const char *arg, int copy)
 {
 	if (al->argc == al->maxc) {
 	    al->maxc <<= 1;
@@ -83,14 +77,11 @@ addarg(al, arg, copy)
 		if ((al->argv[al->argc++] = strdup(arg)) == NULL)
 			err(1, "mailwrapper:");
 	} else
-		al->argv[al->argc++] = (char *)arg;
+		al->argv[al->argc++] = arg;
 }
 
 int
-main(argc, argv, envp)
-	int argc;
-	char *argv[];
-	char *envp[];
+main(int argc, char *argv[], char *envp[])
 {
 	FILE *config;
 	char *line, *cp, *from, *to, *ap;
@@ -147,7 +138,7 @@ main(argc, argv, envp)
 		addarg(&al, argv[i], 0);
 
 	addarg(&al, NULL, 0);
-	execve(to, al.argv, envp);
+	execve(to, __UNCONST(al.argv), envp);
 	err(1, "mailwrapper: execing %s", to);
 	/*NOTREACHED*/
 parse_error:

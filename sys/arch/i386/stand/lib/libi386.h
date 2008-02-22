@@ -1,4 +1,4 @@
-/*	$NetBSD: libi386.h,v 1.23 2005/12/11 12:17:48 christos Exp $	*/
+/*	$NetBSD: libi386.h,v 1.42 2017/03/12 05:33:48 nonaka Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -26,6 +26,9 @@
  *
  */
 
+#ifndef	__I386_STAND_LIBI386_H__
+#define	__I386_STAND_LIBI386_H__
+
 typedef unsigned long physaddr_t;
 
 /* this is in startup code */
@@ -35,9 +38,12 @@ void pbzero(void *, size_t);
 physaddr_t vtophys(void *);
 
 ssize_t pread(int, void *, size_t);
-void startprog(physaddr_t, int, unsigned long *, physaddr_t);
+void startprog(physaddr_t, uint32_t, uint32_t *, physaddr_t);
+void multiboot(physaddr_t, physaddr_t, physaddr_t);
 
-int exec_netbsd(const char *, physaddr_t, int);
+int exec_netbsd(const char *, physaddr_t, int, int, void (*)(void));
+int exec_multiboot(const char *, char *);
+int count_netbsd(const char *, u_long *);
 
 void delay(int);
 int getbasemem(void);
@@ -53,6 +59,7 @@ void printmemlist(void);
 void reboot(void);
 void gateA20(void);
 
+void clear_pc_screen(void);
 void initio(int);
 #define CONSDEV_PC 0
 #define CONSDEV_COM0 1
@@ -66,6 +73,7 @@ void initio(int);
 #define CONSDEV_AUTO (-1)
 int iskey(int);
 char awaitkey(int, int);
+void wait_sec(int);
 
 /* this is in "user code"! */
 int parsebootfile(const char *, char **, char **, int *, int *, const char **);
@@ -89,38 +97,37 @@ struct bootblk_command {
 void bootmenu(void);
 void docommand(char *);
 
-/* getsecs.c */
-time_t getsecs(void);
-
 /* in "user code": */
 void command_help(char *);
 extern const struct bootblk_command commands[];
 
 /* asm bios/dos calls */
-int biosdisk_extread(int, void *);
+__compactcall int biosdisk_extread(int, void *);
 int biosdisk_read(int, int, int, int, int, void *);
-int biosdisk_reset(int);
+__compactcall int biosdisk_reset(int);
 
-int biosgetrtc(u_long *);
+__compactcall int biosgetrtc(u_long *);
 int biosgetsystime(void);
 int comgetc(int);
 void cominit(int);
-int computc(int, int);
+__compactcall int computc(int, int);
 int comstatus(int);
 int congetc(void);
 int conisshift(void);
 int coniskey(void);
-void conputc(int);
+__compactcall void conputc(int);
+void conclr(void);
 
 int getextmem2(int *);
-int getextmemps2(void *);
+__compactcall int getextmemps2(void *);
 int getmementry(int *, int *);
 
-int biosdisk_int13ext(int);
-int biosdisk_getinfo(int);
+__compactcall int biosdisk_int13ext(int);
+__compactcall int biosdisk_getinfo(int);
 struct biosdisk_extinfo;
-void biosdisk_getextinfo(int, struct biosdisk_extinfo *);
+__compactcall int biosdisk_getextinfo(int, struct biosdisk_extinfo *);
 int get_harddrives(void);
+void biosdisk_probe(void);
 
 int pcibios_cfgread(unsigned int, int, int *);
 int pcibios_cfgwrite(unsigned int, int, int);
@@ -132,3 +139,14 @@ int dosopen(char *);
 int dosread(int, char *, int);
 int dosseek(int, int, int);
 extern int doserrno;	/* in dos_file.S */
+
+void module_add(char *);
+void splash_add(char *);
+void rnd_add(char *);
+void fs_add(char *);
+void userconf_add(char *);
+
+struct btinfo_framebuffer;
+void framebuffer_configure(struct btinfo_framebuffer *);
+
+#endif	/* __I386_STAND_LIBI386_H__ */

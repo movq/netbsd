@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.41 2007/05/28 12:06:29 tls Exp $
+#	$NetBSD: Makefile,v 1.46 2018/02/25 00:16:49 mrg Exp $
 #	from: @(#)Makefile    8.3 (Berkeley) 4/2/94
 
 .include <bsd.own.mk>
@@ -13,26 +13,28 @@ CPPFLAGS+=-I${.CURDIR} -DLOGIN_CAP
 .if (${USE_YP} != "no")
 SRCS+=	yp_passwd.c
 CPPFLAGS+=-DYP
-DPADD+=	${LIBRPCSVC}
 LDADD+=	-lrpcsvc
+DPADD+=	${LIBRPCSVC}
 LINKS+=	${BINDIR}/passwd ${BINDIR}/yppasswd
 MAN+=	yppasswd.1
 .endif
 
-DPADD+= ${LIBCRYPT} ${LIBUTIL}
 LDADD+= -lcrypt -lutil
+DPADD+= ${LIBCRYPT} ${LIBUTIL}
 
 BINOWN=	root
 BINMODE=4555
 
 .if (${USE_KERBEROS} != "no")
-CPPFLAGS+= -DKERBEROS5 -I${DESTDIR}/usr/include/krb5
+CPPFLAGS+= -DKERBEROS5
 SRCS+=	krb5_passwd.c
 
-DPADD+=	${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} ${LIBROKEN} ${LIBCRYPT}
-LDADD+=	-lkrb5 -lcrypto -lasn1 -lcom_err -lroken -lcrypt
+LDADD+=	${LIBKRB5_LDADD}
+DPADD+=	${LIBKRB5_DPADD}
+.ifdef OVERRIDE_HEIMDAL_KPASSWD
 LINKS+=	${BINDIR}/passwd ${BINDIR}/kpasswd
 MAN+=	kpasswd.1
+.endif
 .endif
 
 .if (${USE_PAM} != "no")

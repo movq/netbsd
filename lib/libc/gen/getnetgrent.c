@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgrent.c,v 1.39 2007/02/07 19:12:44 oster Exp $	*/
+/*	$NetBSD: getnetgrent.c,v 1.43 2016/05/31 03:43:10 dholland Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getnetgrent.c,v 1.39 2007/02/07 19:12:44 oster Exp $");
+__RCSID("$NetBSD: getnetgrent.c,v 1.43 2016/05/31 03:43:10 dholland Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -147,8 +142,7 @@ getstring(char **pp, int del, char __aconst **str)
  * getnetgroup(): Parse a netgroup, and advance the pointer
  */
 static struct netgroup *
-getnetgroup(pp)
-	char	**pp;
+getnetgroup(char **pp)
 {
 	struct netgroup *ng;
 
@@ -172,8 +166,8 @@ getnetgroup(pp)
 #ifdef DEBUG_NG
 	{
 		char buf[1024];
-		(void) fprintf(stderr, "netgroup %s\n",
-		    _ng_print(buf, sizeof(buf), ng));
+		_ng_print(buf, sizeof(buf), ng);
+		(void) fprintf(stderr, "netgroup %s\n", buf);
 	}
 #endif
 	return ng;
@@ -900,7 +894,7 @@ setnetgrent(const char *ng)
 		NS_NULL_CB
 	};
 
-	(void ) nsdispatch(NULL, dtab, NSDB_NETGROUP, "setnetgrent",
+	(void) nsdispatch(NULL, dtab, NSDB_NETGROUP, "setnetgrent",
 			   __nsdefaultnis, ng);
 }
 #else

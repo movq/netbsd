@@ -1,4 +1,4 @@
-/* $NetBSD: bbstart.s,v 1.11 2002/01/26 13:18:58 aymeric Exp $ */
+/* $NetBSD: bbstart.s,v 1.13 2010/07/06 05:59:57 mrg Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <machine/asm.h>
-#include "aout2bb.h"
+#include "elf2bb.h"
 
 #define LVOAllocMem	-0x0c6
 #define LVODoIO		-0x1c8
@@ -58,7 +51,7 @@ Lzero:	.asciz "DOS"			| "DOS type"
 Lzero:	.ascii	"BOOT"			| Secondary Boot
 #endif
 	/*
-	 * We put the relocator version here, for aout2bb, which replaces
+	 * We put the relocator version here, for elf2bb, which replaces
 	 * it with the bootblock checksum.
 	 */
 Chksum:	.long RELVER_RELATIVE_BYTES_FORWARD
@@ -77,7 +70,7 @@ ENTRY_NOPROFILE(start)
 #endif
 
 Lreltab:
-	.word 0			| aout2bb puts the reloc table address here
+	.word 0			| elf2bb puts the reloc table address here
 
 	.globl _C_LABEL(default_command)
 _C_LABEL(default_command):

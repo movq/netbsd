@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_specific.c,v 1.17 2008/01/08 20:55:58 christos Exp $	*/
+/*	$NetBSD: pthread_specific.c,v 1.26 2013/03/21 16:49:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,23 +30,34 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_specific.c,v 1.17 2008/01/08 20:55:58 christos Exp $");
+__RCSID("$NetBSD: pthread_specific.c,v 1.26 2013/03/21 16:49:12 christos Exp $");
 
 /* Functions and structures dealing with thread-specific data */
 
 #include "pthread.h"
 #include "pthread_int.h"
+#include "reentrant.h"
 
+#include <string.h>
 #include <sys/lwpctl.h>
+
+#include "../libc/include/extern.h" /* for _sys_setcontext() */
+
+int	pthread_setcontext(const ucontext_t *);
 
 __strong_alias(__libc_thr_setspecific,pthread_setspecific)
 __strong_alias(__libc_thr_getspecific,pthread_getspecific)
 __strong_alias(__libc_thr_curcpu,pthread_curcpu_np)
 
+__strong_alias(setcontext,pthread_setcontext)
+
 int
 pthread_setspecific(pthread_key_t key, const void *value)
 {
 	pthread_t self;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_setspecific_stub(key, value);
 
 	self = pthread__self();
 	/*
@@ -62,28 +66,50 @@ pthread_setspecific(pthread_key_t key, const void *value)
 	 * and return it from functions that are const void *, without
 	 * generating a warning. 
 	 */
-	/*LINTED const cast*/
-	self->pt_specific[key] = (void *) value;
-	self->pt_havespecific = 1;
-
-	return 0;
+	return pthread__add_specific(self, key, value);
 }
 
 void *
 pthread_getspecific(pthread_key_t key)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_getspecific_stub(key);
 
-	return pthread__self()->pt_specific[key];
+	return pthread__self()->pt_specific[key].pts_value;
 }
 
 unsigned int
 pthread_curcpu_np(void)
 {
-	unsigned int cpu = pthread__self()->pt_lwpctl->lc_curcpu;
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_curcpu_stub();
 
-	/* for pthread__dummy_lwpctl */
-	if (cpu == (unsigned int)LWPCTL_CPU_NONE)
-		return 0;
+	{
+		const int curcpu = pthread__self()->pt_lwpctl->lc_curcpu;
 
-	return cpu;
+		pthread__assert(curcpu != LWPCTL_CPU_NONE);
+		pthread__assert(curcpu != LWPCTL_CPU_EXITED);
+		pthread__assert(curcpu >= 0);
+		return curcpu;
+	}
+}
+
+/*
+ * Override setcontext so that pthread private pointer is preserved
+ */
+int
+pthread_setcontext(const ucontext_t *ucp)
+{
+#ifdef _UC_TLSBASE
+	ucontext_t uc;
+	/*
+	 * Only copy and clear _UC_TLSBASE if it is set.
+	 */
+	if (ucp->uc_flags & _UC_TLSBASE) {
+		uc = *ucp;
+		uc.uc_flags &= ~_UC_TLSBASE;
+		ucp = &uc;
+	}
+#endif /* _UC_TLSBASE */
+	return _sys_setcontext(ucp);
 }

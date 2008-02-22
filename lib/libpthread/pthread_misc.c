@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_misc.c,v 1.7 2008/02/10 18:50:54 ad Exp $	*/
+/*	$NetBSD: pthread_misc.c,v 1.15 2013/03/21 16:49:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_misc.c,v 1.7 2008/02/10 18:50:54 ad Exp $");
+__RCSID("$NetBSD: pthread_misc.c,v 1.15 2013/03/21 16:49:12 christos Exp $");
 
 #include <errno.h>
 #include <string.h>
@@ -53,14 +46,13 @@ __RCSID("$NetBSD: pthread_misc.c,v 1.7 2008/02/10 18:50:54 ad Exp $");
 
 #include "pthread.h"
 #include "pthread_int.h"
+#include "reentrant.h"
 
 int	pthread__sched_yield(void);
 
 int	_sys___sigprocmask14(int, const sigset_t *, sigset_t *);
-int	_sys_nanosleep(const struct timespec *, struct timespec *);
 int	_sys_sched_yield(void);
 
-__strong_alias(_nanosleep, nanosleep)
 __strong_alias(__libc_thr_sigsetmask,pthread_sigmask)
 __strong_alias(__sigprocmask14,pthread_sigmask)
 __strong_alias(__libc_thr_yield,pthread__sched_yield)
@@ -143,26 +135,17 @@ pthread_kill(pthread_t thread, int sig)
 		return EINVAL;
 	if (pthread__find(thread) != 0)
 		return ESRCH;
-
-	return _lwp_kill(thread->pt_lid, sig);
+	if (_lwp_kill(thread->pt_lid, sig))
+		return errno;
+	return 0;
 }
 
 int
 pthread_sigmask(int how, const sigset_t *set, sigset_t *oset)
 {
-
-	return _sys___sigprocmask14(how, set, oset);
-}
-
-int
-nanosleep(const struct timespec *rqtp, struct timespec *rmtp)
-{
-
-	/*
-	 * For now, just nanosleep.  In the future, maybe pass a ucontext_t
-	 * to _lwp_nanosleep() and allow it to recycle our kernel stack.
-	 */
-	return  _sys_nanosleep(rqtp, rmtp);
+	if (_sys___sigprocmask14(how, set, oset))
+		return errno;
+	return 0;
 }
 
 int
@@ -170,6 +153,9 @@ pthread__sched_yield(void)
 {
 	pthread_t self;
 	int error;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_yield();
 
 	self = pthread__self();
 

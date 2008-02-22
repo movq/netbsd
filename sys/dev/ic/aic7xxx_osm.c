@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_osm.c,v 1.26 2008/01/28 16:08:37 macallan Exp $	*/
+/*	$NetBSD: aic7xxx_osm.c,v 1.38 2016/10/30 23:56:05 mlelstv Exp $	*/
 
 /*
  * Bus independent FreeBSD shim for the aic7xxx based adaptec SCSI controllers
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.26 2008/01/28 16:08:37 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.38 2016/10/30 23:56:05 mlelstv Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>
@@ -49,8 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.26 2008/01/28 16:08:37 macallan Ex
 #endif
 
 
-static void	ahc_action(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg);
-static void	ahc_execute_scb(void *arg, bus_dma_segment_t *dm_segs, int nsegments);
+static void	ahc_action(struct scsipi_channel *chan,
+			   scsipi_adapter_req_t req, void *arg);
+static void	ahc_execute_scb(void *arg, bus_dma_segment_t *dm_segs,
+				int nsegments);
 static int	ahc_poll(struct ahc_softc *ahc, int wait);
 static void	ahc_setup_data(struct ahc_softc *ahc,
 			       struct scsipi_xfer *xs, struct scb *scb);
@@ -58,6 +60,9 @@ static void	ahc_set_recoveryscb(struct ahc_softc *ahc, struct scb *scb);
 static int	ahc_ioctl(struct scsipi_channel *channel, u_long cmd,
 			  void *addr, int flag, struct proc *p);
 
+static bool	ahc_pmf_suspend(device_t, const pmf_qual_t *);
+static bool	ahc_pmf_resume(device_t, const pmf_qual_t *);
+static bool	ahc_pmf_shutdown(device_t, int);
 
 
 /*
@@ -76,7 +81,7 @@ ahc_attach(struct ahc_softc *ahc)
 
 	ahc_lock(ahc, &s);
 
-	ahc->sc_adapter.adapt_dev = &ahc->sc_dev;
+	ahc->sc_adapter.adapt_dev = ahc->sc_dev;
 	ahc->sc_adapter.adapt_nchannels = (ahc->features & AHC_TWIN) ? 2 : 1;
 
 	ahc->sc_adapter.adapt_openings = ahc->scb_data->numscbs - 1;
@@ -101,19 +106,19 @@ ahc_attach(struct ahc_softc *ahc)
 	}
 
 	ahc_controller_info(ahc, ahc_info, sizeof(ahc_info));
-	printf("%s: %s\n", ahc->sc_dev.dv_xname, ahc_info);
+	printf("%s: %s\n", device_xname(ahc->sc_dev), ahc_info);
 
 	if ((ahc->flags & AHC_PRIMARY_CHANNEL) == 0) {
-		ahc->sc_child = config_found((void *)&ahc->sc_dev,
+		ahc->sc_child = config_found(ahc->sc_dev,
 		    &ahc->sc_channel, scsiprint);
 		if (ahc->features & AHC_TWIN)
-			ahc->sc_child_b = config_found((void *)&ahc->sc_dev,
+			ahc->sc_child_b = config_found(ahc->sc_dev,
 			    &ahc->sc_channel_b, scsiprint);
 	} else {
 		if (ahc->features & AHC_TWIN)
-			ahc->sc_child = config_found((void *)&ahc->sc_dev,
+			ahc->sc_child = config_found(ahc->sc_dev,
 			    &ahc->sc_channel_b, scsiprint);
-		ahc->sc_child_b = config_found((void *)&ahc->sc_dev,
+		ahc->sc_child_b = config_found(ahc->sc_dev,
 		    &ahc->sc_channel, scsiprint);
 	}
 
@@ -124,8 +129,53 @@ ahc_attach(struct ahc_softc *ahc)
 	if ((ahc->features & AHC_TWIN) && ahc->flags & AHC_RESET_BUS_B)
 		ahc_reset_channel(ahc, 'B', TRUE);
 
+	if (!pmf_device_register1(ahc->sc_dev,
+	    ahc_pmf_suspend, ahc_pmf_resume, ahc_pmf_shutdown))
+		aprint_error_dev(ahc->sc_dev,
+		    "couldn't establish power handler\n");
+
 	ahc_unlock(ahc, &s);
 	return (1);
+}
+
+/*
+ * XXX we should call the real suspend and resume functions here
+ *     but pmf(9) stuff on cardbus backend is untested yet
+ */
+
+static bool
+ahc_pmf_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	struct ahc_softc *sc = device_private(dev);
+#if 0
+	return (ahc_suspend(sc) == 0);
+#else
+	ahc_shutdown(sc);
+	return true;
+#endif
+}
+
+static bool
+ahc_pmf_resume(device_t dev, const pmf_qual_t *qual)
+{
+#if 0
+	struct ahc_softc *sc = device_private(dev);
+
+	return (ahc_resume(sc) == 0);
+#else
+	return true;
+#endif
+}
+
+static bool
+ahc_pmf_shutdown(device_t dev, int howto)
+{
+	struct ahc_softc *sc = device_private(dev);
+
+	/* Disable all interrupt sources by resetting the controller */
+	ahc_shutdown(sc);
+
+	return true;
 }
 
 /*
@@ -136,7 +186,7 @@ ahc_platform_intr(void *arg)
 {
 	struct	ahc_softc *ahc;
 
-	ahc = (struct ahc_softc *)arg;
+	ahc = arg;
 	ahc_intr(ahc);
 }
 
@@ -208,6 +258,10 @@ ahc_done(struct ahc_softc *ahc, struct scb *scb)
 		scsipi_printaddr(xs->xs_periph);
 		printf("%s: no longer in timeout, status = %x\n",
 		       ahc_name(ahc), xs->status);
+
+		scsipi_channel_thaw(&ahc->sc_channel, 1);
+		if (ahc->features & AHC_TWIN)
+			scsipi_channel_thaw(&ahc->sc_channel_b, 1);
 	}
 
 	/* Don't clobber any existing error state */
@@ -246,8 +300,10 @@ static int
 ahc_ioctl(struct scsipi_channel *channel, u_long cmd, void *addr,
     int flag, struct proc *p)
 {
-	struct ahc_softc *ahc = (void *)channel->chan_adapter->adapt_dev;
+	struct ahc_softc *ahc;
 	int s, ret = ENOTTY;
+
+	ahc = device_private(channel->chan_adapter->adapt_dev);
 
 	switch (cmd) {
 	case SCBUSIORESET:
@@ -272,7 +328,7 @@ ahc_action(struct scsipi_channel *chan, scsipi_adapter_req_t req, void *arg)
 	struct ahc_initiator_tinfo *tinfo;
 	struct ahc_tmode_tstate *tstate;
 
-	ahc  = (void *)chan->chan_adapter->adapt_dev;
+	ahc  = device_private(chan->chan_adapter->adapt_dev);
 
 	switch (req) {
 
@@ -468,14 +524,15 @@ ahc_execute_scb(void *arg, bus_dma_segment_t *dm_segs, int nsegments)
 	struct	ahc_tmode_tstate *tstate;
 
 	u_int	mask;
-	long	s;
+	u_long	s;
 
 	scb = (struct scb *)arg;
 	xs = scb->xs;
 	xs->error = 0;
 	xs->status = 0;
 	xs->xs_status = 0;
-	ahc = (void *)xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
+	ahc = device_private(
+	    xs->xs_periph->periph_channel->chan_adapter->adapt_dev);
 
 	if (nsegments != 0) {
 		struct ahc_dma_seg *sg;
@@ -652,7 +709,7 @@ ahc_poll(struct ahc_softc *ahc, int wait)
 		return (EIO);
 	}
 
-	ahc_intr((void *)ahc);
+	ahc_intr(ahc);
 	return (0);
 }
 
@@ -747,7 +804,7 @@ ahc_timeout(void *arg)
 {
 	struct	scb *scb;
 	struct	ahc_softc *ahc;
-	long	s;
+	u_long	s;
 	int	found;
 	u_int	last_phase;
 	int	target;
@@ -755,8 +812,8 @@ ahc_timeout(void *arg)
 	int	i;
 	char	channel;
 
-	scb = (struct scb *)arg;
-	ahc = (struct ahc_softc *)scb->ahc_softc;
+	scb = arg;
+	ahc = scb->ahc_softc;
 
 	ahc_lock(ahc, &s);
 
@@ -1037,11 +1094,9 @@ ahc_softc_comp(struct ahc_softc *lahc, struct ahc_softc *rahc)
 }
 
 int
-ahc_detach(struct device *self, int flags)
+ahc_detach(struct ahc_softc *ahc, int flags)
 {
 	int rv = 0;
-
-	struct ahc_softc *ahc = (struct ahc_softc*)self;
 
 	ahc_intr_enable(ahc, FALSE);
 	if (ahc->sc_child != NULL)
@@ -1049,7 +1104,7 @@ ahc_detach(struct device *self, int flags)
 	if (rv == 0 && ahc->sc_child_b != NULL)
 		rv = config_detach(ahc->sc_child_b, flags);
 
-	pmf_device_deregister(self);
+	pmf_device_deregister(ahc->sc_dev);
 	ahc_free(ahc);
 
 	return (rv);

@@ -1,4 +1,4 @@
-/*	$NetBSD: int_mwgwtypes.h,v 1.5 2005/12/24 20:07:10 perry Exp $	*/
+/*	$NetBSD: int_mwgwtypes.h,v 1.8 2014/07/28 11:22:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,10 @@
 
 #ifndef _I386_INT_MWGWTYPES_H_
 #define _I386_INT_MWGWTYPES_H_
+
+#ifdef __UINT_FAST64_TYPE__
+#include <sys/common_int_mwgwtypes.h>
+#else
 
 /*
  * 7.18.1 Integer types
@@ -63,8 +60,8 @@ typedef	unsigned long long int	uint_least64_t;
 
 /* 7.18.1.3 Fastest minimum-width integer types */
 
-typedef	signed char		   int_fast8_t;
-typedef	unsigned char		  uint_fast8_t;
+typedef	int			   int_fast8_t;
+typedef	unsigned int		  uint_fast8_t;
 typedef	int			  int_fast16_t;
 typedef	unsigned int		 uint_fast16_t;
 typedef	int			  int_fast32_t;
@@ -89,6 +86,8 @@ typedef	unsigned __COMPILER_INT64__  uintmax_t;
 typedef	long long int		      intmax_t;
 /* LONGLONG */
 typedef	unsigned long long int	     uintmax_t;
+#endif
+
 #endif
 
 #endif /* !_I386_INT_MWGWTYPES_H_ */

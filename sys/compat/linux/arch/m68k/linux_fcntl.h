@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_fcntl.h,v 1.2 2001/09/30 16:04:03 manu Exp $	*/
+/*	$NetBSD: linux_fcntl.h,v 1.5 2014/06/25 16:30:42 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,17 +39,21 @@
 /* read/write mode for open(2) defined in common/linux_fcntl.h */
 
 /* flags used in open(2) */
-#define LINUX_O_CREAT		0x0040
-#define LINUX_O_EXCL		0x0080
-#define LINUX_O_NOCTTY		0x0100
-#define LINUX_O_TRUNC		0x0200
-#define LINUX_O_APPEND		0x0400
-#define LINUX_O_NDELAY		0x0800
-#define LINUX_O_SYNC		0x1000
-#define LINUX_O_DIRECTORY	0x4000
-#define LINUX_O_NOFOLLOW	0x8000
-
-#define LINUX_FASYNC		0x2000
+#define LINUX_O_CREAT		0x00040
+#define LINUX_O_EXCL		0x00080
+#define LINUX_O_NOCTTY		0x00100
+#define LINUX_O_TRUNC		0x00200
+#define LINUX_O_APPEND		0x00400
+#define LINUX_O_NONBLOCK	0x00800
+#define LINUX_O_NDELAY		LINUX_O_NONBLOCK
+#define LINUX_O_SYNC		0x01000
+#define LINUX_FASYNC		0x02000
+#define LINUX_O_DIRECTORY	0x04000
+#define LINUX_O_NOFOLLOW	0x08000
+#define LINUX_O_DIRECT		0x10000
+#define LINUX_O_LARGEFILE	0x20000
+#define LINUX_O_NOATIME		0x40000
+#define LINUX_O_CLOEXEC		0x80000
 
 /* fcntl(2) operations */
 #define LINUX_F_DUPFD		0
@@ -86,4 +83,5 @@
 #define LINUX_F_GETLK64		12
 #define LINUX_F_SETLK64		13
 #define LINUX_F_SETLKW64	14
+
 #endif /* !_M68K_LINUX_FCNTL_H */

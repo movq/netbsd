@@ -1,34 +1,20 @@
-/*	$NetBSD: pci_machdep.c,v 1.4 2005/12/11 12:17:11 christos Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.6 2011/07/01 18:46:35 dyoung Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.4 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.6 2011/07/01 18:46:35 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 
 #define _MIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /*
  * PCI doesn't have any special needs; just use
  * the generic versions of these functions.
  */
 struct mips_bus_dma_tag pci_bus_dma_tag = {
-	NULL,	/* cookie */
-	0,	/* _wbase */
-	0,	/* _physbase */
-	0,	/* _wsize */
-	_bus_dmamap_create, 
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
+	._dmamap_ops = _BUS_DMAMAP_OPS_INITIALIZER,
+	._dmamem_ops = _BUS_DMAMEM_OPS_INITIALIZER,
+	._dmatag_ops = _BUS_DMATAG_OPS_INITIALIZER,
 };

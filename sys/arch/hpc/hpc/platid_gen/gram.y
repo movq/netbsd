@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.3 2001/03/03 12:51:44 takemura Exp $	*/
+/*	$NetBSD: gram.y,v 1.5 2014/03/26 17:54:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -37,8 +37,10 @@
 
 #include <stdio.h>
 #include <strings.h>
+#include <ctype.h>
 
 #include "platid_gen.h"
+#include "gram.h"
 
 #define LIST_NEW(l)	{ \
 	(l) = new_node(N_LIST, 0, NULL, NULL, NULL); \
@@ -130,6 +132,8 @@ sym:
 
 %%
 
+extern int YYLEX_DECL();
+
 char*
 touppers(s)
 	char *s;
@@ -180,7 +184,7 @@ dump_node(prefix, n)
 	char prefix2[1024];
 	node_t *np;
 
-	sprintf(prefix2, "%s    ", prefix);
+	snprintf(prefix2, sizeof(prefix2), "%s    ", prefix);
 
 	switch (n->type) {
 	case N_LABEL:

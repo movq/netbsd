@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.13 2002/04/09 19:37:22 scw Exp $
+#	$NetBSD: Makefile,v 1.15 2014/11/21 20:13:18 christos Exp $
 
 #
 # sboot would like a newer GNU ld because it can generate S-Records.
 # Until then, we convert.
 #
 
-COMPILE.s= $(CC) -x assembler-with-cpp -traditional-cpp \
+COMPILE.s= $(CC) -x assembler-with-cpp \
 	$(ASFLAGS) $(CPPFLAGS) $(INCPATH) -c -o $*.o
 
 RELOC=		0x4000
@@ -13,7 +13,7 @@ SRCS=		start.s clock.c console.c etherfun.c le_poll.c \
 		oc_cksum.s sboot.c
 SRTOBJ=
 PROG=		sboot
-LIBS=		${LIBSA}
+LIBS=		${LIBSA} ${LIBKERN}
 DPADD=		${LIBS}
 CLEANFILES+=	sboot.srec
 

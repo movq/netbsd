@@ -1,4 +1,4 @@
-/*	$NetBSD: tulipreg.h,v 1.33 2005/12/24 20:27:30 perry Exp $	*/
+/*	$NetBSD: tulipreg.h,v 1.37 2012/01/16 17:58:02 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -161,11 +154,11 @@
  * be a multiple of 4.
  */
 struct tulip_desc {
-	volatile u_int32_t td_status;	  /* Status */
-	volatile u_int32_t td_ctl;	  /* Control and Byte Counts */
-	volatile u_int32_t td_bufaddr1; /* Buffer Address 1 */
-	volatile u_int32_t td_bufaddr2; /* Buffer Address 2 */
-};
+	volatile uint32_t td_status;	  /* Status */
+	volatile uint32_t td_ctl;	  /* Control and Byte Counts */
+	volatile uint32_t td_bufaddr1; /* Buffer Address 1 */
+	volatile uint32_t td_bufaddr2; /* Buffer Address 2 */
+} __packed __aligned(4);
 
 /*
  * Descriptor Status bits common to transmit and receive.
@@ -915,6 +908,23 @@ struct tulip_desc {
 #define GPP_COGENT_EM1x0_PINS	0x3f	/* General Purpose Pin directions */
 #define GPP_COGENT_EM1x0_INIT	0x09	/* No loopback --- point-to-point */
 
+/*
+ * Digital EB140 21140 reference design.
+ * MC68832 + ML6671 for 100Mb/s.  LXT901 for 10Mb/s.
+ *
+ * (From document EC-QD2SA-TE, figure 1-3.)
+ */
+#define	GPP_EB140_OUTPUTS	0x1f	/* these GPP pins are driven */
+#define	GPP_EB140_MC68832_LB	0x01	/* 100Mb/s loopback disable 1 */
+#define	GPP_EB140_ML6671_LB	0x02	/* 100Mb/s loopback disable 2 */
+#define	GPP_EB140_LXT901_ILB	0x04	/* 10Mb/s internal LB enable */
+#define	GPP_EB140_LXT901_ELB	0x08	/* 10Mb/s external LB disable */
+#define	GPP_EB140_RESERVED	0x10	/* media switch relay on other boards */
+#define	GPP_EB140_MC68836_SYNC	0x20	/* synced to 100Mb/s PHY */
+#define	GPP_EB140_MC68836_LINK	0x40	/* 100Mb/s signal detect */
+#define	GPP_EB140_LXT901_LINK	0x80	/* 10Mb/s link pass */
+
+#define	GPP_EB140_INIT	(GPP_EB140_LXT901_ELB|GPP_EB140_ML6671_LB|GPP_EB140_MC68832_LB)
 
 /*
  * Digital Semiconductor 21040 registers.

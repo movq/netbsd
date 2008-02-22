@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.120 2008/01/19 13:11:11 chris Exp $
+# $NetBSD: GENERIC,v 1.166 2018/01/23 14:47:54 sevan Exp $
 #
 # GENERIC machine description file
 # 
@@ -18,7 +18,7 @@
 # of each device driver in this file see the section 4 man page for the
 # device.
 
-include		"arch/cats/conf/std.cats"
+include 	"arch/cats/conf/std.cats"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -37,8 +37,8 @@ options 	NTP		# NTP phase/frequency locked loop
 #options	ABLEELF
 #makeoptions	ABLEELF="1"
 
-# Enable experimental buffer queue strategy for better responsiveness under 
-# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
@@ -47,41 +47,41 @@ options 	NTP		# NTP phase/frequency locked loop
 # For StrongARM systems
 options 	CPU_SA110	# Support the SA110 core
 makeoptions	CPUFLAGS="-march=armv4 -mtune=strongarm"
-
-# FPA options
-
-#options 	ARMFPE		# ARM Ltd FPE
+#options 	VERBOSE_INIT_ARM
+#options 	FCOM_INIT_ARM	# early console attach
 
 # File systems
 
 file-system	FFS		# UFS
-file-system	LFS		# log-structured file system
+#file-system	LFS		# log-structured file system
 file-system	MFS		# memory file system
 file-system	NFS		# Network file system
-file-system 	ADOSFS		# AmigaDOS-compatible file system
-file-system 	EXT2FS		# second extended file system (linux)
+#file-system 	ADOSFS		# AmigaDOS-compatible file system
+#file-system 	EXT2FS		# second extended file system (linux)
 file-system	CD9660		# ISO 9660 + Rock Ridge file system
 file-system	MSDOSFS		# MS-DOS file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
-file-system 	OVERLAY		# overlay filesystem
-file-system	PORTAL		# portal filesystem (still experimental)
+#file-system 	OVERLAY		# overlay filesystem
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	PROCFS		# /proc
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
-file-system	CODA		# Coda File System; also needs vcode (below)
+#file-system	CODA		# Coda File System; also needs vcode (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 options 	NFSSERVER
-options 	SOFTDEP		# FFS soft updates support
+options 	WAPBL		# File system journaling support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
 
 # Networking options
 
@@ -89,20 +89,16 @@ options 	SOFTDEP		# FFS soft updates support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
-options 	NETATALK	# AppleTalk networking
-options 	PFIL_HOOKS	# pfil(9) packet filter hooks
+#options 	NETATALK	# AppleTalk networking
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -125,26 +121,14 @@ options 	NFS_BOOT_DHCP
 
 # Compatibility options
 
-#options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_20	# NetBSD 2.0 compatibility.
-options 	COMPAT_16	# NetBSD 1.6 compatibility.
-options 	COMPAT_15	# NetBSD 1.5 compatibility.
-options 	COMPAT_14	# NetBSD 1.4 compatibility.
-options 	COMPAT_13	# NetBSD 1.3 compatibility.
-#options 	COMPAT_12	# NetBSD 1.2 compatibility.
-#options 	COMPAT_11	# NetBSD 1.1 compatibility.
-#options 	COMPAT_10	# NetBSD 1.0 compatibility.
-#options 	COMPAT_09	# NetBSD 0.9 compatibility.
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd13.config"
+options 	COMPAT_NETBSD32	# allow running arm (e.g. non-earm) binaries
 
 # Shared memory options
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -154,9 +138,7 @@ options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
-options 	IRQSTATS	# manage IRQ statistics
-#options 	LKM		# loadable kernel modules
-#options 	KMEMSTATS	# kernel memory statistics
+#options 	IRQSTATS	# manage IRQ statistics
 options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	PCIVERBOSE	# Verbose PCI descriptions
 options 	MIIVERBOSE	# verbose PHY autoconfig messages
@@ -177,7 +159,7 @@ options 	WSEMUL_VT100		# VT100 / VT220 emulation
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# VT handling
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # see dev/wscons/wskbdmap_mfii.h for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
@@ -185,12 +167,12 @@ options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # Development and Debugging options
 
 #options 	PORTMASTER	# Enable PortMaster only options
-#options 	DIAGNOSTIC	# internally consistency checks
+#options 	DIAGNOSTIC	# internal consistency checks
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-#options		SYMTAB_SPACE=380000
+#makeoptions	COPY_SYMTAB=1
 
 config		netbsd	root on ? type ?
 
@@ -223,8 +205,8 @@ ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 # Cryptographic Devices
 
 # PCI cryptographic devices
-hifn*	at pci? dev ? function ?	# Hifn 7755/7811/795x
-ubsec*	at pci? dev ? function ?	# Broadcom 5501/5601/580x/582x
+#hifn*	at pci? dev ? function ?	# Hifn 7755/7811/795x
+#ubsec*	at pci? dev ? function ?	# Broadcom 5501/5601/580x/582x
 
 
 # PCI serial interfaces
@@ -235,29 +217,29 @@ ubsec*	at pci? dev ? function ?	# Broadcom 5501/5601/580x/582x
 #lpt*	at puc? port ?			# || ports on "universal" comm boards
 
 # PCI SCSI Controllers and Buses
-adv*	at pci? dev ? function ?	# AdvanSys 1200[A,B], ULTRA SCSI
-scsibus* at adv?
+#adv*	at pci? dev ? function ?	# AdvanSys 1200[A,B], ULTRA SCSI
+#scsibus* at adv?
 #adw*	at pci? dev ? function ?	# AdvanSys 9xxUW SCSI
 #scsibus* at adw?
-ahc*	at pci? dev ? function ?	# Adaptec [23]94x, aic78x0 SCSI controllers
-scsibus* at ahc?
+#ahc*	at pci? dev ? function ?	# Adaptec [23]94x, aic78x0 SCSI controllers
+#scsibus* at ahc?
 #bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 #scsibus* at bha?
-iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
-scsibus* at iha?
-isp*	at pci? dev ? function ?	# Qlogic ISP 10x0 SCSI controllers
-scsibus* at isp?
-pcscp*	at pci? dev ? function ?	# AMD 53c974 PCscsi-PCI SCSI
-scsibus* at pcscp?
-siop*	at pci? dev ? function ?	# NCR 53c8xx SCSI
-scsibus* at siop?
-esiop*	at pci? dev ? function ?	# NCR 53c875 SCSI and newer
-scsibus* at esiop?
+#iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
+#scsibus* at iha?
+#isp*	at pci? dev ? function ?	# Qlogic ISP 10x0 SCSI controllers
+#scsibus* at isp?
+#pcscp*	at pci? dev ? function ?	# AMD 53c974 PCscsi-PCI SCSI
+#scsibus* at pcscp?
+#siop*	at pci? dev ? function ?	# NCR 53c8xx SCSI
+#scsibus* at siop?
+#esiop*	at pci? dev ? function ?	# NCR 53c875 SCSI and newer
+#scsibus* at esiop?
 
 # SCSI devices
-sd*	at scsibus? target ? lun ?	# SCSI disk drives
-st*	at scsibus? target ? lun ?	# SCSI tape drives
-cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
+#sd*	at scsibus? target ? lun ?	# SCSI disk drives
+#st*	at scsibus? target ? lun ?	# SCSI tape drives
+#cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 #ch*	at scsibus? target ? lun ?	# SCSI auto-changers
 #uk*	at scsibus? target ? lun ?	# SCSI unknown device
 #ss*	at scsibus? target ? lun ?	# SCSI scanner
@@ -267,20 +249,20 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 # The 0x0001 flag force the driver to use DMA, even if the driver doesn't know
 # how to set up DMA modes for this chip. This may work, or may cause
 # a machine hang with some controllers.
-pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
-acardide*	at pci? dev ? function ?	# Acard IDE controllers
+#pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
+#acardide*	at pci? dev ? function ?	# Acard IDE controllers
 aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
-artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
-cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
-cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
-hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
-optiide* 	at pci? dev ? function ?	# Opti IDE controllers
-pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
-pdcsata* 	at pci? dev ? function ?	# Promise SATA150 controllers
-satalink*	at pci? dev ? function ?	# SiI SATALink controllers
-siside* 	at pci? dev ? function ?	# SiS IDE controllers
-slide*  	at pci? dev ? function ?	# Symphony Labs IDE controllers
-viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
+#artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
+#cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
+#cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+#hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
+#optiide* 	at pci? dev ? function ?	# Opti IDE controllers
+#pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
+#pdcsata* 	at pci? dev ? function ?	# Promise SATA150 controllers
+#satalink*	at pci? dev ? function ?	# SiI SATALink controllers
+#siside* 	at pci? dev ? function ?	# SiS IDE controllers
+#slide*  	at pci? dev ? function ?	# Symphony Labs IDE controllers
+#viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 
 # ATA (IDE) bus support
 atabus* at ata?
@@ -430,7 +412,7 @@ ukyopon* at uhub? port ?
 ucom*	at ukyopon? portno ?
 
 # USB scanners
-uscanner* at uhub? port ?
+#uscanner* at uhub? port ?
 
 # USB scanners that use SCSI emulation, e.g., HP5300
 usscanner* at uhub? port ?
@@ -504,7 +486,8 @@ lpt1	at isa? port 0x278 irq 5
 #ep*	at isa? port ? irq ?
 
 # The spkr driver provides a simple tone interface to the built in speaker.
-spkr0	at pcppi?			# PC speaker
+spkr*	at pcppi?			# PC speaker
+spkr*	at audio?			# PC speaker (synthesized)
 
 ds1687rtc0	at isa? port 0x72	# Dallas 1687 RTC
 
@@ -541,26 +524,27 @@ joy*	at isapnp?			# Game ports (usually on audio cards)
 
 # Pseudo-Devices
 
-pseudo-device 	crypto			# /dev/crypto device
-pseudo-device	swcrypto		# software crypto implementation
+#pseudo-device 	crypto			# /dev/crypto device
+#pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-pseudo-device	ccd		2	# concatenated/striped disk devices
-pseudo-device	fss		4	# file system snapshot device
-#pseudo-device	cgd		2	# cryptographic disk devices
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	ccd			# concatenated/striped disk devices
+pseudo-device	fss			# file system snapshot device
+#pseudo-device	cgd			# cryptographic disk devices
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
+pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
-pseudo-device	ipfilter		# IP filter (firewall) and NAT
+#pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	loop			# network loopback
 pseudo-device	ppp			# Point-to-Point Protocol
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
-pseudo-device	sl			# Serial Line IP
-pseudo-device	strip			# Starmode Radio IP (Metricom)
+#pseudo-device	sl			# Serial Line IP
+#pseudo-device	strip			# Starmode Radio IP (Metricom)
 pseudo-device	tun			# network tunneling over tty
 pseudo-device	tap			# virtual Ethernet
 pseudo-device	gre			# generic L3 over IP tunnel
@@ -572,15 +556,19 @@ pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	sequencer		# MIDI sequencer
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+#pseudo-device	vcoda			# coda minicache <-> venus comm.
 
 # mouse & keyboard multiplexor pseudo-devices
 pseudo-device	wsmux
@@ -592,15 +580,12 @@ pseudo-device	ksyms			# /dev/ksyms
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5

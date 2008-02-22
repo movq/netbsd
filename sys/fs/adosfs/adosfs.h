@@ -1,4 +1,4 @@
-/*	$NetBSD: adosfs.h,v 1.8 2005/12/03 17:34:43 christos Exp $	*/
+/*	$NetBSD: adosfs.h,v 1.13 2014/08/05 08:50:54 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -73,7 +73,6 @@ enum anode_type { AROOT, ADIR, AFILE, ALDIR, ALFILE, ASLINK };
  */
 struct anode {
 	struct genfs_node gnode;
-	LIST_ENTRY(anode) link;
 	enum anode_type type;
 	char name[ADMAXNAMELEN+1];	/* (r/d/f) name for object */
 	struct datestamp mtimev;	/* (r) volume modified */
@@ -112,11 +111,9 @@ struct anode {
 #define ANODEHASHSZ (512)
 
 struct adosfsmount {
-	LIST_HEAD(anodechain, anode) anodetab[ANODEHASHSZ];
 	struct mount *mp;	/* owner mount */
 	u_int32_t dostype;	/* type of volume */
 	u_long rootb;		/* root block number */
-	u_long secsperblk;	/* sectors per block */
 	u_long bsize;		/* size of blocks */
 	u_long nwords;		/* size of blocks in long words */
 	u_long dbsize;		/* data bytes per block */
@@ -159,27 +156,23 @@ extern struct pool adosfs_node_pool;
  * utility protos
  */
 #if BYTE_ORDER != BIG_ENDIAN
-u_int32_t adoswordn __P((struct buf *, int));
+u_int32_t adoswordn(struct buf *, int);
 #else
 #define adoswordn(bp,wn) (*((u_int32_t *)(bp)->b_data + (wn)))
 #endif
 
-u_int32_t adoscksum __P((struct buf *, int));
-int adoscaseequ __P((const u_char *, const u_char *, int, int));
-int adoshash __P((const u_char *, int, int, int));
-int adunixprot __P((int));
-int adosfs_getblktype __P((struct adosfsmount *, struct buf *));
+u_int32_t adoscksum(struct buf *, int);
+int adoscaseequ(const u_char *, const u_char *, int, int);
+int adoshash(const u_char *, int, int, int);
+int adunixprot(int);
+int adosfs_getblktype(struct adosfsmount *, struct buf *);
 
-struct vnode *adosfs_ahashget __P((struct mount *, ino_t));
-void adosfs_ainshash __P((struct adosfsmount *, struct anode *));
-void adosfs_aremhash __P((struct anode *));
+int adosfs_lookup(void *);
 
-int adosfs_lookup __P((void *));
+extern int (**adosfs_vnodeop_p)(void *);
 
-extern int (**adosfs_vnodeop_p) __P((void *));
+/* Should print a vnode or the vnode-op's arguments? */
+#define advopprint(p) /* XXX */
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_adosfs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 #endif /* _KERNEL */
 #endif /* _ADOSFS_ADOSFS_H_ */

@@ -1,6 +1,7 @@
-/*	$NetBSD: grf.c,v 1.34 2008/01/30 14:10:25 tsutsui Exp $	*/
+/*	$NetBSD: grf.c,v 1.45 2014/12/14 23:48:58 chs Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)grf.c	8.4 (Berkeley) 1/12/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: grf.c 1.36 93/08/13$
- *
- *	@(#)grf.c	8.4 (Berkeley) 1/12/94
- */
 
 /*
  * Graphics display driver for the X68K machines.
@@ -83,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf.c,v 1.34 2008/01/30 14:10:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf.c,v 1.45 2014/12/14 23:48:58 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,21 +53,16 @@ __KERNEL_RCSID(0, "$NetBSD: grf.c,v 1.34 2008/01/30 14:10:25 tsutsui Exp $");
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/ioctl.h>
-#include <sys/file.h>
 #include <sys/malloc.h>
-#include <sys/vnode.h>
-#include <sys/mman.h>
 #include <sys/conf.h>
 
+#include <machine/cpu.h>
 #include <machine/grfioctl.h>
 
 #include <x68k/dev/grfvar.h>
 #include <x68k/dev/itevar.h>
 
-#include <machine/cpu.h>
-
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_map.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -138,21 +95,32 @@ dev_type_ioctl(grfioctl);
 dev_type_mmap(grfmmap);
 
 const struct cdevsw grf_cdevsw = {
-	grfopen, grfclose, nullread, nullwrite, grfioctl,
-	nostop, notty, nopoll, grfmmap, nokqfilter,
+	.d_open = grfopen,
+	.d_close = grfclose,
+	.d_read = nullread,
+	.d_write = nullwrite,
+	.d_ioctl = grfioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = grfmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /*ARGSUSED*/
 int
 grfopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	int unit = GRFUNIT(dev);
 	struct grf_softc *gp;
 	int error = 0;
 
-	if (unit >= grf_cd.cd_ndevs ||
-	    (gp = grf_cd.cd_devs[unit]) == NULL ||
-	    (gp->g_flags & GF_ALIVE) == 0)
+	gp = device_lookup_private(&grf_cd, GRFUNIT(dev));
+	if (gp == NULL)
+		return ENXIO;
+
+	if ((gp->g_flags & GF_ALIVE) == 0)
 		return ENXIO;
 
 	if ((gp->g_flags & (GF_OPEN|GF_EXCLUDE)) == (GF_OPEN|GF_EXCLUDE))
@@ -174,7 +142,7 @@ grfopen(dev_t dev, int flags, int mode, struct lwp *l)
 int
 grfclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	struct grf_softc *gp = grf_cd.cd_devs[GRFUNIT(dev)];
+	struct grf_softc *gp = device_lookup_private(&grf_cd, GRFUNIT(dev));
 
 	if ((gp->g_flags & GF_ALIVE) == 0)
 		return ENXIO;
@@ -190,7 +158,7 @@ int
 grfioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = GRFUNIT(dev);
-	struct grf_softc *gp = grf_cd.cd_devs[unit];
+	struct grf_softc *gp = device_lookup_private(&grf_cd, GRFUNIT(dev));
 	int error;
 
 	if ((gp->g_flags & GF_ALIVE) == 0)
@@ -238,13 +206,13 @@ paddr_t
 grfmmap(dev_t dev, off_t off, int prot)
 {
 
-	return grfaddr(grf_cd.cd_devs[GRFUNIT(dev)], off);
+	return grfaddr(device_lookup_private(&grf_cd, GRFUNIT(dev)), off);
 }
 
 int
 grfon(struct grf_softc *gp)
 {
-	int unit = device_unit(&gp->g_device);
+	int unit = device_unit(gp->g_device);
 
 	/*
 	 * XXX: iteoff call relies on devices being in same order
@@ -259,7 +227,7 @@ grfon(struct grf_softc *gp)
 int
 grfoff(struct grf_softc *gp)
 {
-	int unit = device_unit(&gp->g_device);
+	int unit = device_unit(gp->g_device);
 	int error;
 
 #if 0				/* always fails in EINVAL... */
@@ -293,10 +261,9 @@ grfaddr(struct grf_softc *gp, off_t off)
 int
 grfmap(dev_t dev, void **addrp, struct proc *p)
 {
-	struct grf_softc *gp = grf_cd.cd_devs[GRFUNIT(dev)];
-	int len, error;
-	struct vnode vn;
-	int flags;
+	struct grf_softc *gp = device_lookup_private(&grf_cd, GRFUNIT(dev));
+	size_t len;
+	int error;
 
 #ifdef DEBUG
 	if (grfdebug & GDB_MMAP)
@@ -304,18 +271,8 @@ grfmap(dev_t dev, void **addrp, struct proc *p)
 #endif
 
 	len = gp->g_display.gd_regsize + gp->g_display.gd_fbsize;
-	flags = MAP_SHARED;
-	if (*addrp)
-		flags |= MAP_FIXED;
-	else
-		*addrp =
-		    (void *)VM_DEFAULT_ADDRESS(p->p_vmspace->vm_daddr, len);
-	vn.v_type = VCHR;			/* XXX */
-	vn.v_rdev = dev;			/* XXX */
-	error = uvm_mmap(&p->p_vmspace->vm_map, (vaddr_t *)addrp,
-			 (vsize_t)len, VM_PROT_ALL, VM_PROT_ALL,
-			 flags, (void *)&vn, 0,
-			 p->p_rlimit[RLIMIT_MEMLOCK].rlim_cur);
+
+	error = uvm_mmap_dev(p, addrp, len, dev, 0);
 	if (error == 0)
 		(void) (*gp->g_sw->gd_mode)(gp, GM_MAP, *addrp);
 
@@ -325,12 +282,14 @@ grfmap(dev_t dev, void **addrp, struct proc *p)
 int
 grfunmap(dev_t dev, void *addr, struct proc *p)
 {
-	struct grf_softc *gp = grf_cd.cd_devs[GRFUNIT(dev)];
+	struct grf_softc *gp = device_lookup_private(&grf_cd, GRFUNIT(dev));
 	vsize_t size;
 
 #ifdef DEBUG
-	if (grfdebug & GDB_MMAP)
-		printf("grfunmap(%d): dev %x addr %p\n", p->p_pid, dev, addr);
+	if (grfdebug & GDB_MMAP) {
+		printf("grfunmap(%d): dev %x addr %p\n",
+			p->p_pid, GRFUNIT(dev), addr);
+	}
 #endif
 	if (addr == 0)
 		return EINVAL;		/* XXX: how do we deal with this? */

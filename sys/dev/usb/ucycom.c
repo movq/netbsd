@@ -1,11 +1,11 @@
-/*	$NetBSD: ucycom.c,v 1.20 2007/12/11 12:16:34 lukem Exp $	*/
+/*	$NetBSD: ucycom.c,v 1.46 2017/12/10 17:03:07 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Nick Hudson 
+ * by Nick Hudson
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,19 +38,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.20 2007/12/11 12:16:34 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.46 2017/12/10 17:03:07 bouyer Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/device.h>
 #include <sys/sysctl.h>
 #include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -66,27 +64,27 @@ __KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.20 2007/12/11 12:16:34 lukem Exp $");
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uhidev.h>
-#include <dev/usb/hid.h>
+#include <dev/hid/hid.h>
 
 #include "ioconf.h"
 
 #ifdef UCYCOM_DEBUG
-#define DPRINTF(x)	if (ucycomdebug) logprintf x
-#define DPRINTFN(n, x)	if (ucycomdebug > (n)) logprintf x
-int	ucycomdebug = 0;
+#define DPRINTF(x)	if (ucycomdebug) printf x
+#define DPRINTFN(n, x)	if (ucycomdebug > (n)) printf x
+int	ucycomdebug = 20;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
 #endif
 
 
-#define UCYCOMUNIT_MASK		0x3ffff
-#define UCYCOMDIALOUT_MASK	0x80000
-#define UCYCOMCALLUNIT_MASK	0x40000
+#define	UCYCOMCALLUNIT_MASK	TTCALLUNIT_MASK
+#define	UCYCOMUNIT_MASK		TTUNIT_MASK
+#define	UCYCOMDIALOUT_MASK	TTDIALOUT_MASK
 
-#define UCYCOMUNIT(x)		(minor(x) & UCYCOMUNIT_MASK)
-#define UCYCOMDIALOUT(x)	(minor(x) & UCYCOMDIALOUT_MASK)
-#define UCYCOMCALLUNIT(x)	(minor(x) & UCYCOMCALLUNIT_MASK)
+#define	UCYCOMCALLUNIT(x)	TTCALLUNIT(x)
+#define	UCYCOMUNIT(x)		TTUNIT(x)
+#define	UCYCOMDIALOUT(x)	TTDIALOUT(x)
 
 /* Configuration Byte */
 #define UCYCOM_RESET		0x80
@@ -123,12 +121,15 @@ struct ucycom_softc {
 
 	struct tty		*sc_tty;
 
+	kmutex_t sc_lock;	/* protects refcnt, others */
+
 	/* uhidev parameters */
 	size_t			sc_flen; /* feature report length */
 	size_t			sc_ilen; /* input report length */
 	size_t			sc_olen; /* output report length */
 
 	uint8_t			*sc_obuf;
+	int			sc_wlen;
 
 	/* settings */
 	uint32_t		sc_baud;
@@ -151,12 +152,23 @@ dev_type_tty(ucycomtty);
 dev_type_poll(ucycompoll);
 
 const struct cdevsw ucycom_cdevsw = {
-	ucycomopen, ucycomclose, ucycomread, ucycomwrite, ucycomioctl,
-	ucycomstop, ucycomtty, ucycompoll, nommap, ttykqfilter, D_TTY
+	.d_open = ucycomopen,
+	.d_close = ucycomclose,
+	.d_read = ucycomread,
+	.d_write = ucycomwrite,
+	.d_ioctl = ucycomioctl,
+	.d_stop = ucycomstop,
+	.d_tty = ucycomtty,
+	.d_poll = ucycompoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 Static int ucycomparam(struct tty *, struct termios *);
 Static void ucycomstart(struct tty *);
+Static void ucycomwritecb(struct usbd_xfer *, void *, usbd_status);
 Static void ucycom_intr(struct uhidev *, void *, u_int);
 Static int ucycom_configure(struct ucycom_softc *, uint32_t, uint8_t);
 Static void tiocm_to_ucycom(struct ucycom_softc *, u_long, int);
@@ -166,7 +178,7 @@ Static void ucycom_dtr(struct ucycom_softc *, int);
 #if 0
 Static void ucycom_rts(struct ucycom_softc *, int);
 #endif
-Static void ucycom_cleanup(struct ucycom_softc *sc);
+Static void ucycom_cleanup(struct ucycom_softc *);
 
 #ifdef UCYCOM_DEBUG
 Static void ucycom_get_cfg(struct ucycom_softc *);
@@ -178,26 +190,32 @@ Static const struct usb_devno ucycom_devs[] = {
 };
 #define ucycom_lookup(v, p) usb_lookup(ucycom_devs, v, p)
 
-USB_DECLARE_DRIVER(ucycom);
+int	ucycom_match(device_t, cfdata_t, void *);
+void	ucycom_attach(device_t, device_t, void *);
+int	ucycom_detach(device_t, int);
+int	ucycom_activate(device_t, enum devact);
+extern struct cfdriver ucycom_cd;
+CFATTACH_DECL_NEW(ucycom, sizeof(struct ucycom_softc), ucycom_match,
+    ucycom_attach, ucycom_detach, ucycom_activate);
 
 int
-ucycom_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ucycom_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct uhidev_attach_arg *uha = aux;
 
-	return (ucycom_lookup(uha->uaa->vendor, uha->uaa->product) != NULL ?
-	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
+	return ucycom_lookup(uha->uiaa->uiaa_vendor, uha->uiaa->uiaa_product)
+	    != NULL ? UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
 }
 
 void
-ucycom_attach(struct device *parent, struct device *self, void *aux)
+ucycom_attach(device_t parent, device_t self, void *aux)
 {
-	struct ucycom_softc *sc = (struct ucycom_softc *)self;
+	struct ucycom_softc *sc = device_private(self);
 	struct uhidev_attach_arg *uha = aux;
 	int size, repid;
 	void *desc;
 
+	sc->sc_hdev.sc_dev = self;
 	sc->sc_hdev.sc_intr = ucycom_intr;
 	sc->sc_hdev.sc_parent = uha->parent;
 	sc->sc_hdev.sc_report_id = uha->reportid;
@@ -211,7 +229,7 @@ ucycom_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_msr = sc->sc_mcr = 0;
 
 	/* set up tty */
-	sc->sc_tty = ttymalloc();
+	sc->sc_tty = tty_alloc();
 	sc->sc_tty->t_sc = sc;
 	sc->sc_tty->t_oproc = ucycomstart;
 	sc->sc_tty->t_param = ucycomparam;
@@ -219,15 +237,14 @@ ucycom_attach(struct device *parent, struct device *self, void *aux)
 	tty_attach(sc->sc_tty);
 
 	/* Nothing interesting to report */
-	printf("\n");
-
+	aprint_normal("\n");
 }
 
 
 int
-ucycom_detach(struct device *self, int flags)
+ucycom_detach(device_t self, int flags)
 {
-	struct ucycom_softc *sc = (struct ucycom_softc *)self;
+	struct ucycom_softc *sc = device_private(self);
 	struct tty *tp = sc->sc_tty;
 	int maj, mn;
 	int s;
@@ -245,7 +262,7 @@ ucycom_detach(struct device *self, int flags)
 		mutex_spin_exit(&tty_lock);
 	}
 	/* Wait for processes to go away. */
-	usb_detach_wait(USBDEV(sc->sc_hdev.sc_dev));
+	usb_detach_waitold(sc->sc_hdev.sc_dev);
 	splx(s);
 
 	/* locate the major number */
@@ -263,7 +280,7 @@ ucycom_detach(struct device *self, int flags)
 	if (tp != NULL) {
 		DPRINTF(("ucycom_detach: tty_detach %p\n", tp));
 		tty_detach(tp);
-		ttyfree(tp);
+		tty_free(tp);
 		sc->sc_tty = NULL;
 	}
 
@@ -271,21 +288,19 @@ ucycom_detach(struct device *self, int flags)
 }
 
 int
-ucycom_activate(device_ptr_t self, enum devact act)
+ucycom_activate(device_t self, enum devact act)
 {
-	struct ucycom_softc *sc = (struct ucycom_softc *)self;
+	struct ucycom_softc *sc = device_private(self);
 
 	DPRINTFN(5,("ucycom_activate: %d\n", act));
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (0);
 }
 
 #if 0
@@ -309,34 +324,29 @@ ucycom_shutdown(struct ucycom_softc *sc)
 int
 ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = UCYCOMUNIT(dev);
-	struct ucycom_softc *sc;
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp;
 	int s, err;
 
-	DPRINTF(("ucycomopen: unit=%d\n", unit));
-
-	if (unit >= ucycom_cd.cd_ndevs)
-		return (ENXIO);
-	sc = ucycom_cd.cd_devs[unit];
-
+	DPRINTF(("ucycomopen: unit=%d\n", UCYCOMUNIT(dev)));
 	DPRINTF(("ucycomopen: sc=%p\n", sc));
- 
+
 	if (sc == NULL)
-		return (ENXIO);
+		return ENXIO;
 
 	if (sc->sc_dying)
-		return (EIO);
+		return EIO;
 
-	if (!device_is_active(&sc->sc_hdev.sc_dev))
-		return (ENXIO);
+	if (!device_is_active(sc->sc_hdev.sc_dev))
+		return ENXIO;
 
 	tp = sc->sc_tty;
 
 	DPRINTF(("ucycomopen: tp=%p\n", tp));
 
 	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
-		return (EBUSY);
+		return EBUSY;
 
 	s = spltty();
 
@@ -349,7 +359,7 @@ ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		if (err) {
 			/* Any cleanup? */
 			splx(s);
-			return (err);
+			return err;
 		}
 
 		/*
@@ -365,7 +375,7 @@ ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 			SET(t.c_cflag, CRTSCTS);
 		if (ISSET(sc->sc_swflags, TIOCFLAG_MDMBUF))
 			SET(t.c_cflag, MDMBUF);
-		
+
 		tp->t_ospeed = 0;
 		(void) ucycomparam(tp, &t);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -375,13 +385,14 @@ ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		ttsetwater(tp);
 
 		/* Allocate an output report buffer */
-		sc->sc_obuf = malloc(sc->sc_olen, M_USBDEV, M_WAITOK);
-	
+		sc->sc_obuf = kmem_alloc(sc->sc_olen, KM_SLEEP);
+
 		DPRINTF(("ucycomopen: sc->sc_obuf=%p\n", sc->sc_obuf));
 
 #if 0
-		/* XXX Don't do this as for some reason trying to do an interrupt
-		 * XXX out transfer at this point means everything gets stuck!?!
+		/* XXX Don't do this as for some reason trying to do an
+		 * XXX interrupt out transfer at this point means everything
+		 * XXX gets stuck!?!
 		 */
 		/*
 		 * Turn on DTR.  We must always do this, even if carrier is not
@@ -409,7 +420,7 @@ ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (err)
 		goto bad;
 
-	return (0);
+	return 0;
 
 bad:
 	if (!ISSET(tp->t_state, TS_ISOPEN) && tp->t_wopen == 0) {
@@ -420,7 +431,7 @@ bad:
 		ucycom_cleanup(sc);
 	}
 
-	return (err);
+	return err;
 
 }
 
@@ -428,12 +439,13 @@ bad:
 int
 ucycomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	DPRINTF(("ucycomclose: unit=%d\n", UCYCOMUNIT(dev)));
 	if (!ISSET(tp->t_state, TS_ISOPEN))
-		return (0);
+		return 0;
 
 	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
@@ -447,15 +459,17 @@ ucycomclose(dev_t dev, int flag, int mode, struct lwp *l)
 		ucycom_cleanup(sc);
 	}
 
-	return (0);
+	return 0;
 }
 
 Static void
 ucycomstart(struct tty *tp)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(tp->t_dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(tp->t_dev));
+	usbd_status err __unused;
 	u_char *data;
-	int cnt, len, err, s;
+	int cnt, len, s;
 
 	if (sc->sc_dying)
 		return;
@@ -485,7 +499,7 @@ ucycomstart(struct tty *tp)
 	}
 
 	SET(tp->t_state, TS_BUSY);
-	
+
 	/*
 	 * The 8 byte output report uses byte 0 for control and byte
 	 * count.
@@ -493,7 +507,7 @@ ucycomstart(struct tty *tp)
 	 * The 32 byte output report uses byte 0 for control. Byte 1
 	 * is used for byte count.
 	 */
-	memset(sc->sc_obuf, 0, sc->sc_olen);	
+	memset(sc->sc_obuf, 0, sc->sc_olen);
 	len = cnt;
 	switch (sc->sc_olen) {
 	case 8:
@@ -501,15 +515,16 @@ ucycomstart(struct tty *tp)
 			DPRINTF(("ucycomstart(8): big buffer %d chars\n", len));
 			len = sc->sc_olen - 1;
 		}
-	
+
 		memcpy(sc->sc_obuf + 1, data, len);
 		sc->sc_obuf[0] = len | sc->sc_mcr;
 
-		DPRINTF(("ucycomstart(8): sc->sc_obuf[0] = %d | %d = %d\n", len, sc->sc_mcr, sc->sc_obuf[0]));
+		DPRINTF(("ucycomstart(8): sc->sc_obuf[0] = %d | %d = %d\n",
+		    len, sc->sc_mcr, sc->sc_obuf[0]));
 #ifdef UCYCOM_DEBUG
 		if (ucycomdebug > 10) {
-			u_int32_t i;
-			u_int8_t *d = data;
+			uint32_t i;
+			uint8_t *d = data;
 
 			DPRINTF(("ucycomstart(8): data ="));
 			for (i = 0; i < len; i++)
@@ -518,21 +533,23 @@ ucycomstart(struct tty *tp)
 		}
 #endif
 		break;
-	
+
 	case 32:
 		if (cnt > sc->sc_olen - 2) {
-			DPRINTF(("ucycomstart(32): big buffer %d chars\n", len));
+			DPRINTF(("ucycomstart(32): big buffer %d chars\n",
+			    len));
 			len = sc->sc_olen - 2;
 		}
-		
+
 		memcpy(sc->sc_obuf + 2, data, len);
 		sc->sc_obuf[0] = sc->sc_mcr;
 		sc->sc_obuf[1] = len;
-		DPRINTF(("ucycomstart(32): sc->sc_obuf[0] = %d\nsc->sc_obuf[1] = %d\n", sc->sc_obuf[0], sc->sc_obuf[1]));
+		DPRINTF(("ucycomstart(32): sc->sc_obuf[0] = %d\n"
+		    "sc->sc_obuf[1] = %d\n", sc->sc_obuf[0], sc->sc_obuf[1]));
 #ifdef UCYCOM_DEBUG
 		if (ucycomdebug > 10) {
-			u_int32_t i;
-			u_int8_t *d = data;
+			uint32_t i;
+			uint8_t *d = data;
 
 			DPRINTF(("ucycomstart(32): data ="));
 			for (i = 0; i < len; i++)
@@ -541,46 +558,85 @@ ucycomstart(struct tty *tp)
 		}
 #endif
 		break;
-	
+
 	default:
-        	DPRINTFN(2,("ucycomstart: unknown output report size (%zd)\n",
+		DPRINTFN(2,("ucycomstart: unknown output report size (%zd)\n",
 		    sc->sc_olen));
 		goto out;
 	}
 	splx(s);
+	sc->sc_wlen = len;
 
 #ifdef UCYCOM_DEBUG
 	if (ucycomdebug > 5) {
 		int i;
 
 		if (len != 0) {
-			DPRINTF(("ucycomstart: sc->sc_obuf[0..%zd) =", sc->sc_olen));
+			DPRINTF(("ucycomstart: sc->sc_obuf[0..%zd) =",
+			    sc->sc_olen));
 			for (i = 0; i < sc->sc_olen; i++)
 				DPRINTF((" %02x", sc->sc_obuf[i]));
 			DPRINTF(("\n"));
 		}
 	}
 #endif
-	err = uhidev_write(sc->sc_hdev.sc_parent, sc->sc_obuf, sc->sc_olen);
+	DPRINTFN(4,("ucycomstart: %d chars\n", len));
+	usbd_setup_xfer(sc->sc_hdev.sc_parent->sc_oxfer, sc, sc->sc_obuf,
+	    sc->sc_olen, 0, USBD_NO_TIMEOUT, ucycomwritecb);
 
-	if (err) {
-		DPRINTF(("ucycomstart: error doing uhidev_write = %d\n", err));
-	}
+	/* What can we do on error? */
+	err = usbd_transfer(sc->sc_hdev.sc_parent->sc_oxfer);
 
 #ifdef UCYCOM_DEBUG
-	ucycom_get_cfg(sc);
+	if (err != USBD_IN_PROGRESS)
+		DPRINTF(("ucycomstart: err=%s\n", usbd_errstr(err)));
 #endif
-	DPRINTFN(4,("ucycomstart: req %d chars did %d chars\n", cnt, len));
+	return;
 
- 	s = spltty();
+out:
+	splx(s);
+}
+
+Static void
+ucycomwritecb(struct usbd_xfer *xfer, void *p, usbd_status status)
+{
+	struct ucycom_softc *sc = (struct ucycom_softc *)p;
+	struct tty *tp = sc->sc_tty;
+	usbd_status stat;
+	int len, s;
+
+	if (status == USBD_CANCELLED || sc->sc_dying)
+		goto error;
+
+	if (status) {
+		DPRINTF(("ucycomwritecb: status=%d\n", status));
+		usbd_clear_endpoint_stall(sc->sc_hdev.sc_parent->sc_opipe);
+		/* XXX we should restart after some delay. */
+		goto error;
+	}
+
+	usbd_get_xfer_status(xfer, NULL, NULL, &len, &stat);
+
+	if (status != USBD_NORMAL_COMPLETION) {
+		DPRINTFN(4,("ucycomwritecb: status = %d\n", status));
+		goto error;
+	}
+
+	DPRINTFN(4,("ucycomwritecb: did %d/%d chars\n", sc->sc_wlen, len));
+
+	s = spltty();
 	CLR(tp->t_state, TS_BUSY);
 	if (ISSET(tp->t_state, TS_FLUSH))
 		CLR(tp->t_state, TS_FLUSH);
 	else
-		ndflush(&tp->t_outq, len);
+		ndflush(&tp->t_outq, sc->sc_wlen);
 	(*tp->t_linesw->l_start)(tp);
+	splx(s);
+	return;
 
-out:
+error:
+	s = spltty();
+	CLR(tp->t_state, TS_BUSY);
 	splx(s);
 }
 
@@ -594,12 +650,12 @@ ucycomparam(struct tty *tp, struct termios *t)
 
 	if (t->c_ospeed < 0) {
 		DPRINTF(("ucycomparam: c_ospeed < 0\n"));
-		return (EINVAL);
+		return EINVAL;
 	}
 
 	/* Check requested parameters. */
 	if (t->c_ispeed && t->c_ispeed != t->c_ospeed)
-		return (EINVAL);
+		return EINVAL;
 
 	/*
 	 * For the console, always force CLOCAL and !HUPCL, so that the port
@@ -617,7 +673,7 @@ ucycomparam(struct tty *tp, struct termios *t)
 	 */
 	if (tp->t_ospeed == t->c_ospeed &&
 	    tp->t_cflag == t->c_cflag)
-		return (0);
+		return 0;
 
 	/* XXX lcr = ISSET(sc->sc_lcr, LCR_SBREAK) | cflag2lcr(t->c_cflag); */
 
@@ -647,7 +703,7 @@ ucycomparam(struct tty *tp, struct termios *t)
 			cfg |= UCYCOM_DATA_BITS_5;
 			break;
 		default:
-			return (EINVAL);
+			return EINVAL;
 		}
 		cfg |= ISSET(t->c_cflag, CSTOPB) ?
 		    UCYCOM_STOP_BITS_2 : UCYCOM_STOP_BITS_1;
@@ -666,7 +722,7 @@ ucycomparam(struct tty *tp, struct termios *t)
 	(void) (*tp->t_linesw->l_modem)(tp, 1 /* XXX carrier */ );
 
 	err = ucycom_configure(sc, baud, cfg);
-	return (err);
+	return err;
 }
 
 void
@@ -678,65 +734,71 @@ ucycomstop(struct tty *tp, int flag)
 int
 ucycomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int err;
 
-	DPRINTF(("ucycomread: sc=%p, tp=%p, uio=%p, flag=%d\n", sc, tp, uio, flag));
+	DPRINTF(("ucycomread: sc=%p, tp=%p, uio=%p, flag=%d\n", sc, tp, uio,
+	    flag));
 	if (sc->sc_dying)
-		return (EIO);
+		return EIO;
 
 	err = ((*tp->t_linesw->l_read)(tp, uio, flag));
-	return (err);
+	return err;
 }
 
 
 int
 ucycomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int err;
 
-	DPRINTF(("ucycomwrite: sc=%p, tp=%p, uio=%p, flag=%d\n", sc, tp, uio, flag));
+	DPRINTF(("ucycomwrite: sc=%p, tp=%p, uio=%p, flag=%d\n", sc, tp, uio,
+	    flag));
 	if (sc->sc_dying)
-		return (EIO);
+		return EIO;
 
 	err = ((*tp->t_linesw->l_write)(tp, uio, flag));
-	return (err);
+	return err;
 }
 
 struct tty *
 ucycomtty(dev_t dev)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	DPRINTF(("ucycomtty: sc=%p, tp=%p\n", sc, tp));
 
-	return (tp);
+	return tp;
 }
 
 int
 ucycomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int err;
 	int s;
 
 	if (sc->sc_dying)
-		return (EIO);
+		return EIO;
 
 	DPRINTF(("ucycomioctl: sc=%p, tp=%p, data=%p\n", sc, tp, data));
 
 	err = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
 	if (err != EPASSTHROUGH)
-		return (err);
+		return err;
 
 	err = ttioctl(tp, cmd, data, flag, l);
 	if (err != EPASSTHROUGH)
-		return (err);
+		return err;
 
 	err = 0;
 
@@ -789,23 +851,25 @@ ucycomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 	splx(s);
 
-	return (err);
+	return err;
 }
 
 int
 ucycompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct ucycom_softc *sc = ucycom_cd.cd_devs[UCYCOMUNIT(dev)];
+	struct ucycom_softc *sc =
+	    device_lookup_private(&ucycom_cd, UCYCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int err;
-	
-	DPRINTF(("ucycompoll: sc=%p, tp=%p, events=%d, lwp=%p\n", sc, tp, events, l));
+
+	DPRINTF(("ucycompoll: sc=%p, tp=%p, events=%d, lwp=%p\n", sc, tp,
+	    events, l));
 
 	if (sc->sc_dying)
-		return (EIO);
+		return EIO;
 
 	err = ((*tp->t_linesw->l_poll)(tp, events, l));
-	return (err);
+	return err;
 }
 
 Static int
@@ -834,7 +898,7 @@ ucycom_configure(struct ucycom_softc *sc, uint32_t baud, uint8_t cfg)
 #endif
 		break;
 	default:
-		return (EINVAL);
+		return EINVAL;
 	}
 
 	DPRINTF(("ucycom_configure: setting %d baud, %d-%c-%d (%d)\n", baud,
@@ -857,6 +921,10 @@ ucycom_configure(struct ucycom_softc *sc, uint32_t baud, uint8_t cfg)
 	sc->sc_baud = baud;
 	sc->sc_cfg = cfg;
 
+#ifdef UCYCOM_DEBUG
+	ucycom_get_cfg(sc);
+#endif
+
 	return 0;
 }
 
@@ -868,7 +936,7 @@ ucycom_intr(struct uhidev *addr, void *ibuf, u_int len)
 	int (*rint)(int , struct tty *) = tp->t_linesw->l_rint;
 	uint8_t *cp = ibuf;
 	int s, n, st, chg;
-	
+
 	/* We understand 8 byte and 32 byte input records */
 	switch (len) {
 	case 8:
@@ -890,7 +958,7 @@ ucycom_intr(struct uhidev *addr, void *ibuf, u_int len)
 
 #ifdef UCYCOM_DEBUG
 	if (ucycomdebug > 5) {
-		u_int32_t i;
+		uint32_t i;
 
 		if (n != 0) {
 			DPRINTF(("ucycom_intr: ibuf[0..%d) =", n));
@@ -900,14 +968,15 @@ ucycom_intr(struct uhidev *addr, void *ibuf, u_int len)
 		}
 	}
 #endif
-	s = spltty();
 
 	/* Give characters to tty layer. */
+	s = spltty();
 	while (n-- > 0) {
 		DPRINTFN(7,("ucycom_intr: char=0x%02x\n", *cp));
 		if ((*rint)(*cp++, tp) == -1) {
 			/* XXX what should we do? */
-			printf("%s: lost a character\n", USBDEVNAME(sc->sc_hdev.sc_dev));
+			aprint_error_dev(sc->sc_hdev.sc_dev,
+			    "lost a character\n");
 			break;
 		}
 	}
@@ -974,20 +1043,20 @@ ucycom_to_tiocm(struct ucycom_softc *sc)
 	if (ISSET(combits, UCYCOM_RI))
 		SET(ttybits, TIOCM_RI);
 
-	return (ttybits);
+	return ttybits;
 }
 
 Static void
 ucycom_dtr(struct ucycom_softc *sc, int set)
 {
 	uint8_t old;
-	
+
 	old = sc->sc_mcr;
 	if (set)
 		SET(sc->sc_mcr, UCYCOM_DTR);
 	else
 		CLR(sc->sc_mcr, UCYCOM_DTR);
-	
+
 	if (old ^ sc->sc_mcr)
 		ucycom_set_status(sc);
 }
@@ -997,13 +1066,13 @@ Static void
 ucycom_rts(struct ucycom_softc *sc, int set)
 {
 	uint8_t old;
-	
+
 	old = sc->sc_msr;
 	if (set)
 		SET(sc->sc_mcr, UCYCOM_RTS);
 	else
 		CLR(sc->sc_mcr, UCYCOM_RTS);
-	
+
 	if (old ^ sc->sc_mcr)
 		ucycom_set_status(sc);
 }
@@ -1015,11 +1084,11 @@ ucycom_set_status(struct ucycom_softc *sc)
 	int err;
 
 	if (sc->sc_olen != 8 && sc->sc_olen != 32) {
-		DPRINTFN(2,("ucycom_set_status: unknown output report size (%zd)\n",
-		    sc->sc_olen));
+		DPRINTFN(2,("ucycom_set_status: unknown output report "
+		    "size (%zd)\n", sc->sc_olen));
 		return;
 	}
-	
+
 	DPRINTF(("ucycom_set_status: %d\n", sc->sc_mcr));
 
 	memset(sc->sc_obuf, 0, sc->sc_olen);
@@ -1037,13 +1106,18 @@ ucycom_get_cfg(struct ucycom_softc *sc)
 {
 	int err, cfg, baud;
 	uint8_t report[5];
-	
+
 	err = uhidev_get_report(&sc->sc_hdev, UHID_FEATURE_REPORT,
 	    report, sc->sc_flen);
+	if (err) {
+		DPRINTF(("%s: failed\n", __func__));
+		return;
+	}
 	cfg = report[4];
-	baud = (report[3] << 24) + (report[2] << 16) + (report[1] << 8) + report[0];
-	DPRINTF(("ucycom_configure: device reports %d baud, %d-%c-%d (%d)\n", baud,
-	    5 + (cfg & UCYCOM_DATA_MASK),
+	baud = (report[3] << 24) + (report[2] << 16) + (report[1] << 8) +
+	    report[0];
+	DPRINTF(("ucycom_get_cfg: device reports %d baud, %d-%c-%d (%d)\n",
+	    baud, 5 + (cfg & UCYCOM_DATA_MASK),
 	    (cfg & UCYCOM_PARITY_MASK) ?
 		((cfg & UCYCOM_PARITY_TYPE_MASK) ? 'O' : 'E') : 'N',
 	    (cfg & UCYCOM_STOP_MASK) ? 2 : 1, cfg));
@@ -1053,9 +1127,14 @@ ucycom_get_cfg(struct ucycom_softc *sc)
 Static void
 ucycom_cleanup(struct ucycom_softc *sc)
 {
+	uint8_t	*obuf;
+
 	DPRINTF(("ucycom_cleanup: closing uhidev\n"));
 
-	if (sc->sc_obuf !=NULL)
-		free (sc->sc_obuf, M_USBDEV);
+	obuf = sc->sc_obuf;
+	sc->sc_obuf = NULL;
 	uhidev_close(&sc->sc_hdev);
+
+	if (obuf != NULL)
+		kmem_free(obuf, sc->sc_olen);
 }

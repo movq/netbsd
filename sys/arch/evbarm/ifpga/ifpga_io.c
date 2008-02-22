@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga_io.c,v 1.8 2005/11/24 13:08:33 yamt Exp $ */
+/*	$NetBSD: ifpga_io.c,v 1.13 2018/03/16 17:56:33 ryo Exp $ */
 
 /*
  * Copyright (c) 1997 Causality Limited
@@ -41,14 +41,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga_io.c,v 1.8 2005/11/24 13:08:33 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga_io.c,v 1.13 2018/03/16 17:56:33 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <uvm/uvm_extern.h>
 
 #include <evbarm/ifpga/ifpgavar.h>
+#include <evbarm/ifpga/ifpgamem.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -63,92 +64,169 @@ bs_unmap_proto(ifpga_mem);
 
 struct bus_space ifpga_bs_tag = {
 	/* cookie */
-	(void *) 0,			/* Physical base address */
+	.bs_cookie = (void *) 0,		/* Physical base address */
 
 	/* mapping/unmapping */
-	ifpga_bs_map,
-	ifpga_bs_unmap,
-	ifpga_bs_subregion,
+	.bs_map = ifpga_bs_map,
+	.bs_unmap = ifpga_bs_unmap,
+	.bs_subregion = ifpga_bs_subregion,
 
 	/* allocation/deallocation */
-	ifpga_bs_alloc,
-	ifpga_bs_free,
+	.bs_alloc = ifpga_bs_alloc,
+	.bs_free = ifpga_bs_free,
 
 	/* get kernel virtual address */
-	ifpga_bs_vaddr,
+	.bs_vaddr = ifpga_bs_vaddr,
 
 	/* mmap */
-	bs_notimpl_bs_mmap,
+	.bs_mmap = bs_notimpl_bs_mmap,
 
 	/* barrier */
-	ifpga_bs_barrier,
+	.bs_barrier = ifpga_bs_barrier,
 
 	/* read (single) */
-	generic_bs_r_1,
-	generic_armv4_bs_r_2,
-	generic_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = generic_bs_r_1,
+	.bs_r_2 = generic_armv4_bs_r_2,
+	.bs_r_4 = generic_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	generic_bs_rm_1,
-	generic_armv4_bs_rm_2,
-	generic_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = generic_bs_rm_1,
+	.bs_rm_2 = generic_armv4_bs_rm_2,
+	.bs_rm_4 = generic_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	bs_notimpl_bs_rr_1,
-	generic_armv4_bs_rr_2,
-	generic_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = bs_notimpl_bs_rr_1,
+	.bs_rr_2 = generic_armv4_bs_rr_2,
+	.bs_rr_4 = generic_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	generic_bs_w_1,
-	generic_armv4_bs_w_2,
-	generic_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = generic_bs_w_1,
+	.bs_w_2 = generic_armv4_bs_w_2,
+	.bs_w_4 = generic_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	generic_bs_wm_1,
-	generic_armv4_bs_wm_2,
-	generic_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = generic_bs_wm_1,
+	.bs_wm_2 = generic_armv4_bs_wm_2,
+	.bs_wm_4 = generic_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	bs_notimpl_bs_wr_1,
-	generic_armv4_bs_wr_2,
-	generic_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = bs_notimpl_bs_wr_1,
+	.bs_wr_2 = generic_armv4_bs_wr_2,
+	.bs_wr_4 = generic_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	generic_armv4_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = generic_armv4_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	generic_armv4_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = generic_armv4_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
-void ifpga_create_io_bs_tag(t, cookie)
-	struct bus_space *t;
-	void *cookie;
+/* This is a preinitialized version of ifpga_bs_tag */
+
+struct bus_space ifpga_common_bs_tag = {
+	/* cookie */
+	.bs_cookie = (void *) IFPGA_IO_BASE,	/* Physical base address */
+
+	/* mapping/unmapping */
+	.bs_map = ifpga_mem_bs_map,
+	.bs_unmap = ifpga_mem_bs_unmap,
+	.bs_subregion = ifpga_bs_subregion,
+
+	/* allocation/deallocation */
+	.bs_alloc = ifpga_bs_alloc,
+	.bs_free = ifpga_bs_free,
+
+	/* get kernel virtual address */
+	.bs_vaddr = ifpga_bs_vaddr,
+
+	/* mmap */
+	.bs_mmap = bs_notimpl_bs_mmap,
+
+	/* barrier */
+	.bs_barrier = ifpga_bs_barrier,
+
+	/* read (single) */
+	.bs_r_1 = generic_bs_r_1,
+	.bs_r_2 = generic_armv4_bs_r_2,
+	.bs_r_4 = generic_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
+
+	/* read multiple */
+	.bs_rm_1 = generic_bs_rm_1,
+	.bs_rm_2 = generic_armv4_bs_rm_2,
+	.bs_rm_4 = generic_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
+
+	/* read region */
+	.bs_rr_1 = bs_notimpl_bs_rr_1,
+	.bs_rr_2 = generic_armv4_bs_rr_2,
+	.bs_rr_4 = generic_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
+
+	/* write (single) */
+	.bs_w_1 = generic_bs_w_1,
+	.bs_w_2 = generic_armv4_bs_w_2,
+	.bs_w_4 = generic_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
+
+	/* write multiple */
+	.bs_wm_1 = generic_bs_wm_1,
+	.bs_wm_2 = generic_armv4_bs_wm_2,
+	.bs_wm_4 = generic_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
+
+	/* write region */
+	.bs_wr_1 = bs_notimpl_bs_wr_1,
+	.bs_wr_2 = generic_armv4_bs_wr_2,
+	.bs_wr_4 = generic_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
+
+	/* set multiple */
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
+
+	/* set region */
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = generic_armv4_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
+
+	/* copy */
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = generic_armv4_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
+};
+
+void
+ifpga_create_io_bs_tag(struct bus_space *t, void *cookie)
 {
 	*t = ifpga_bs_tag;
 	t->bs_cookie = cookie;
 }
 
-void ifpga_create_mem_bs_tag(t, cookie)
-	struct bus_space *t;
-	void *cookie;
+void
+ifpga_create_mem_bs_tag(struct bus_space *t, void *cookie)
 {
 	*t = ifpga_bs_tag;
 	t->bs_map = ifpga_mem_bs_map;
@@ -159,28 +237,26 @@ void ifpga_create_mem_bs_tag(t, cookie)
 /* bus space functions */
 
 int
-ifpga_bs_map(t, bpa, size, cacheable, bshp)
-	void *t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int cacheable;
-	bus_space_handle_t *bshp;
+ifpga_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
 {
-        /* The cookie is the base address for the I/O area */
-        *bshp = bpa + (bus_addr_t)t;
+	/* The cookie is the base address for the I/O area */
+	*bshp = bpa + (bus_addr_t)t;
 	return 0;
 }
 
 int
-ifpga_mem_bs_map(t, bpa, size, cacheable, bshp)
-	void *t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int cacheable;
-	bus_space_handle_t *bshp;
+ifpga_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
 {
 	bus_addr_t startpa, endpa;
 	vaddr_t va;
+	const struct pmap_devmap *pd;
+	bus_addr_t pa = bpa + (bus_addr_t) t;
+
+	if ((pd = pmap_devmap_find_pa(pa, size)) != NULL) {
+		/* Device was statically mapped. */
+		*bshp = pd->pd_va + (pa - pd->pd_pa);
+		return 0;
+	}
 
 	/* Round the allocation to page boundries */
 	startpa = trunc_page(bpa);
@@ -211,35 +287,29 @@ ifpga_mem_bs_map(t, bpa, size, cacheable, bshp)
 }
 
 int
-ifpga_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
-    bpap, bshp)
-	void *t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int cacheable;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+ifpga_bs_alloc(void *t, bus_addr_t rstart, bus_addr_t rend, bus_size_t size,
+	bus_size_t alignment, bus_size_t boundary, int cacheable,
+	bus_addr_t *bpap, bus_space_handle_t *bshp)
 {
 	panic("ifpga_alloc(): Help!");
 }
 
 
 void
-ifpga_bs_unmap(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+ifpga_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 	/* Nothing to do for an io map.  */
 }
 
 void
-ifpga_mem_bs_unmap(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+ifpga_mem_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 	vaddr_t startva, endva;
+
+	if (pmap_devmap_find_va(bsh, size) != NULL) {
+		/* Device was statically mapped; nothing to do. */
+		return;
+	}
 
 	startva = trunc_page(bsh);
 	endva = round_page(bsh + size);
@@ -250,10 +320,7 @@ ifpga_mem_bs_unmap(t, bsh, size)
 }
 
 void    
-ifpga_bs_free(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+ifpga_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	panic("ifpga_free(): Help!");
@@ -262,11 +329,7 @@ ifpga_bs_free(t, bsh, size)
 }
 
 int
-ifpga_bs_subregion(t, bsh, offset, size, nbshp)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+ifpga_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + (offset << ((int)t));
@@ -274,19 +337,13 @@ ifpga_bs_subregion(t, bsh, offset, size, nbshp)
 }
 
 void *
-ifpga_bs_vaddr(t, bsh)
-	void *t;
-	bus_space_handle_t bsh;
+ifpga_bs_vaddr(void *t, bus_space_handle_t bsh)
 {
 
 	return ((void *)bsh);
 }
 
 void
-ifpga_bs_barrier(t, bsh, offset, len, flags)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, len;
-	int flags;
+ifpga_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
 {
 }	

@@ -1,4 +1,4 @@
-/*	$NetBSD: pckbc_pnpbios.c,v 1.13 2008/01/04 18:25:42 ad Exp $	*/
+/*	$NetBSD: pckbc_pnpbios.c,v 1.18 2014/03/23 02:57:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc_pnpbios.c,v 1.13 2008/01/04 18:25:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc_pnpbios.c,v 1.18 2014/03/23 02:57:58 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: pckbc_pnpbios.c,v 1.13 2008/01/04 18:25:42 ad Exp $"
 
 #include <i386/pnpbios/pnpbiosvar.h>
 
-int	pckbc_pnpbios_match(struct device *, struct cfdata *, void *);
-void	pckbc_pnpbios_attach(struct device *, struct device *, void *);
+int	pckbc_pnpbios_match(device_t, cfdata_t, void *);
+void	pckbc_pnpbios_attach(device_t, device_t, void *);
 
 struct pckbc_pnpbios_softc {
 	struct pckbc_softc sc_pckbc;
@@ -86,14 +79,14 @@ static struct pckbc_pnpbios_softc *first;
 
 extern struct cfdriver pckbc_cd;
 
-CFATTACH_DECL(pckbc_pnpbios, sizeof(struct pckbc_pnpbios_softc),
+CFATTACH_DECL_NEW(pckbc_pnpbios, sizeof(struct pckbc_pnpbios_softc),
     pckbc_pnpbios_match, pckbc_pnpbios_attach, NULL, NULL);
 
 void	pckbc_pnpbios_intr_establish(struct pckbc_softc *, pckbc_slot_t);
+static void pckbc_pnpbios_finish_attach(device_t);
 
 int
-pckbc_pnpbios_match(struct device *parent,
-    struct cfdata *match, void *aux)
+pckbc_pnpbios_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -107,35 +100,31 @@ pckbc_pnpbios_match(struct device *parent,
 }
 
 void
-pckbc_pnpbios_attach(struct device *parent, struct device *self,
-    void *aux)
+pckbc_pnpbios_attach(device_t parent, device_t self, void *aux)
 {
-	struct pckbc_pnpbios_softc *psc = (void *) self;
+	struct pckbc_pnpbios_softc *psc = device_private(self);
 	struct pckbc_softc *sc = &psc->sc_pckbc;
 	struct pckbc_internal *t;
 	struct pnpbiosdev_attach_args *aa = aux;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh_d, ioh_c;
-	pckbc_slot_t peer;
 	int iobase;
 
+	sc->sc_dv = self;
 	if (strncmp(aa->idstr, "PNP03", 5) == 0) {
 		psc->sc_slot = PCKBC_KBD_SLOT;
-		peer = PCKBC_AUX_SLOT;
 	} else if (strcmp(aa->idstr, "PNP0F13") == 0) {
 		psc->sc_slot = PCKBC_AUX_SLOT;
-		peer = PCKBC_KBD_SLOT;
 	} else {
-		printf(": unknown port!\n");
+		aprint_error(": unknown port!\n");
 		panic("pckbc_pnpbios_attach: impossible");
 	}
 
-	printf(": %s port\n", pckbc_slot_names[psc->sc_slot]);
+	aprint_normal(": %s port\n", pckbc_slot_names[psc->sc_slot]);
 
 	if (pnpbios_getirqnum(aa->pbt, aa->resc, 0, &psc->sc_irq,
 	    &psc->sc_ist) != 0) {
-		printf("%s: unable to get IRQ number or type\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "unable to get IRQ number or type\n");
 		return;
 	}
 
@@ -177,9 +166,16 @@ pckbc_pnpbios_attach(struct device *parent, struct device *self,
 		first->sc_pckbc.id = t;
 
 		first->sc_pckbc.intr_establish = pckbc_pnpbios_intr_establish;
-		config_defer(&first->sc_pckbc.sc_dv,
-			     (void(*)(struct device *))pckbc_attach);
+		config_defer(first->sc_pckbc.sc_dv,
+			     pckbc_pnpbios_finish_attach);
 	}
+}
+
+static void
+pckbc_pnpbios_finish_attach(device_t dv)
+{
+
+	pckbc_attach(device_private(dv));
 }
 
 void
@@ -196,7 +192,7 @@ pckbc_pnpbios_intr_establish(struct pckbc_softc *sc,
 	 * Note we're always called with sc == first.
 	 */
 	for (i = 0; i < pckbc_cd.cd_ndevs; i++) {
-		psc = pckbc_cd.cd_devs[i];
+		psc = device_lookup_private(&pckbc_cd, i);
 		if (psc && psc->sc_slot == slot) {
 			irq = psc->sc_irq;
 			ist = psc->sc_ist;
@@ -207,10 +203,11 @@ pckbc_pnpbios_intr_establish(struct pckbc_softc *sc,
 	if (i < pckbc_cd.cd_ndevs)
 		rv = isa_intr_establish(ic, irq, ist, IPL_TTY, pckbcintr, sc);
 	if (rv == NULL) {
-		printf("%s: unable to establish interrupt for %s slot\n",
-		    sc->sc_dv.dv_xname, pckbc_slot_names[slot]);
+		aprint_error_dev(sc->sc_dv,
+		    "unable to establish interrupt for %s slot\n",
+		    pckbc_slot_names[slot]);
 	} else {
-		printf("%s: using irq %d for %s slot\n", sc->sc_dv.dv_xname,
+		aprint_normal_dev(sc->sc_dv, "using irq %d for %s slot\n",
 		    irq, pckbc_slot_names[slot]);
 	}
 }

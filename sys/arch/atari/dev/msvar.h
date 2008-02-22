@@ -1,4 +1,4 @@
-/*	$NetBSD: msvar.h,v 1.2 2000/03/23 06:36:04 thorpej Exp $	*/
+/*	$NetBSD: msvar.h,v 1.4 2009/10/20 19:10:10 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Leo Weppelman.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -58,8 +52,8 @@ struct ms_softc {
 };
 
 #ifdef _KERNEL
-void	mouse_soft __P((REL_MOUSE *, int, int));
-int	mouseattach __P((int));
+void	mouse_soft(REL_MOUSE *, int, int);
+int	mouseattach(int);
 #endif /* _KERNEL */
 
 #endif /* _MSVAR_H */

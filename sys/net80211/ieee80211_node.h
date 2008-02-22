@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_node.h,v 1.23 2007/12/22 00:51:07 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_node.h,v 1.30 2018/04/19 21:50:10 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -35,6 +35,7 @@
 #ifndef _NET80211_IEEE80211_NODE_H_
 #define _NET80211_IEEE80211_NODE_H_
 
+#include <sys/atomic.h>
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_ioctl.h>		/* for ieee80211_nodestats */
 
@@ -46,7 +47,7 @@
  * (waiting for a response to a management frame when operating
  * as a station), and node inactivity processing (when operating
  * as an AP).  For inactivity processing each node has a timeout
- * set in it's ni_inact field that is decremented on each timeout
+ * set in its ni_inact field that is decremented on each timeout
  * and the node is reclaimed when the counter goes to zero.  We
  * use different inactivity timeout values depending on whether
  * the node is associated and authorized (either by 802.1x or
@@ -158,20 +159,6 @@ MALLOC_DECLARE(M_80211_NODE);
 #define	IEEE80211_NODE_STAT(ni,stat)	(ni->ni_stats.ns_##stat++)
 #define	IEEE80211_NODE_STAT_ADD(ni,stat,v)	(ni->ni_stats.ns_##stat += v)
 #define	IEEE80211_NODE_STAT_SET(ni,stat,v)	(ni->ni_stats.ns_##stat = v)
-
-static __inline struct ieee80211_node *
-ieee80211_ref_node(struct ieee80211_node *ni)
-{
-	ieee80211_node_incref(ni);
-	return ni;
-}
-
-static __inline void
-ieee80211_unref_node(struct ieee80211_node **ni)
-{
-	ieee80211_node_decref(*ni);
-	*ni = NULL;			/* guard against use */
-}
 
 struct ieee80211com;
 
@@ -309,23 +296,74 @@ u_int8_t ieee80211_getrssi(struct ieee80211com *ic);
  * All multi-byte values must be in host byte order.
  */
 struct ieee80211_scanparams {
-	u_int16_t	capinfo;	/* 802.11 capabilities */
-	u_int16_t	fhdwell;	/* FHSS dwell interval */
-	u_int8_t	chan;		/* */
-	u_int8_t	bchan;
-	u_int8_t	fhindex;
-	u_int8_t	erp;
-	u_int16_t	bintval;
-	u_int8_t	timoff;
-	u_int8_t	*tim;
-	u_int8_t	*tstamp;
-	u_int8_t	*country;
-	u_int8_t	*ssid;
-	u_int8_t	*rates;
-	u_int8_t	*xrates;
-	u_int8_t	*wpa;
-	u_int8_t	*wme;
+	u_int16_t	sp_capinfo;	/* 802.11 capabilities */
+	u_int16_t	sp_fhdwell;	/* FHSS dwell interval */
+	u_int8_t	sp_chan;		/* */
+	u_int8_t	sp_bchan;
+	u_int8_t	sp_fhindex;
+	u_int8_t	sp_erp;
+	u_int16_t	sp_bintval;
+	u_int16_t	sp_timoff;
+	u_int8_t	*sp_tim;
+	u_int8_t	*sp_tstamp;
+	u_int8_t	*sp_country;
+	u_int8_t	*sp_ssid;
+	u_int8_t	*sp_rates;
+	u_int8_t	*sp_xrates;
+	u_int8_t	*sp_wpa;
+	u_int8_t	*sp_wme;
 };
+
+/*
+ * Node reference counting definitions.
+ *
+ * ieee80211_node_initref	initialize the reference count to 1
+ * ieee80211_node_incref	add a reference
+ * ieee80211_node_decref	remove a reference
+ * ieee80211_node_dectestref	remove a reference and return 1 if this
+ *				is the last reference, otherwise 0
+ * ieee80211_node_refcnt	reference count for printing (only)
+ */
+
+static __inline void
+ieee80211_node_initref(struct ieee80211_node *ni)
+{
+	ni->ni_refcnt = 1;
+}
+
+static __inline void
+ieee80211_node_incref(struct ieee80211_node *ni)
+{
+	atomic_inc_uint(&ni->ni_refcnt);
+}
+
+static __inline void
+ieee80211_node_decref(struct ieee80211_node *ni)
+{
+	atomic_dec_uint(&ni->ni_refcnt);
+}
+
+int ieee80211_node_dectestref(struct ieee80211_node *ni);
+
+static __inline unsigned int
+ieee80211_node_refcnt(const struct ieee80211_node *ni)
+{
+	return ni->ni_refcnt;
+}
+
+static __inline struct ieee80211_node *
+ieee80211_ref_node(struct ieee80211_node *ni)
+{
+	ieee80211_node_incref(ni);
+	return ni;
+}
+
+static __inline void
+ieee80211_unref_node(struct ieee80211_node **ni)
+{
+	ieee80211_node_decref(*ni);
+	*ni = NULL;			/* guard against use */
+}
 
 void	ieee80211_add_scan(struct ieee80211com *,
 		const struct ieee80211_scanparams *,

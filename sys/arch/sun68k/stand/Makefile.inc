@@ -1,5 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.13 2006/09/17 06:15:40 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.27 2016/09/03 15:18:21 christos Exp $
 
+NOSSP=	# defined
+NOPIE=	# defined
 # Must have S=/usr/src/sys (or equivalent)
 # But note: this is w.r.t. a subdirectory
 S=	${.CURDIR}/../../../..
@@ -8,21 +10,33 @@ S=	${.CURDIR}/../../../..
 
 .include <bsd.own.mk>
 
+WARNS?=	2
+
 LIBSA!=cd ${.CURDIR}/../libsa && ${PRINTOBJDIR}
 
 MDEC_DIR?=/usr/mdec
 
+.if ${MACHINE} == "sun3"
+RELOC?= 280000
+.else
 RELOC?= 240000
+.endif
 DEFS?= -Dsun3 -D_STANDALONE -D__daddr_t=int32_t
 INCL?= -I. -I${.CURDIR} -I${.CURDIR}/../libsa -I${S}/lib/libsa -I${S}
 
+.if defined(HAVE_GCC)
+# gcc 4.8 convers -mc68000 to -mcpu=68000 and that breaks gas
+# which works for -march=68010 but breaks for -mcpu=68010
+CPUFLAGS= -march=68010
+.else
 CPUFLAGS= -mc68000 -Wa,-mc68010
-COPTS= -Os -fno-defer-pop -ffreestanding
+.endif
+COPTS= -Os -fno-defer-pop -ffreestanding -fno-unwind-tables
 CFLAGS= -msoft-float
 CPPFLAGS= ${DEFS} ${DEBUG} ${INCL}
 
 SRTOBJ= ${LIBSA}/SRT0.o ${LIBSA}/SRT1.o
-SRTLIB= ${LIBSA}/libsa.a
+SRTLIB= ${LIBSA}/lib/sa/libsa.a ${LIBSA}/lib/kern/libkern.a
 
 CLEANFILES+= ${SA_PROG} ${SA_PROG}.bin
 
@@ -32,7 +46,7 @@ ${SA_PROG}.bin : ${SA_PROG}
 
 ${SA_PROG} : ${OBJS} ${DPADD} ${SRTLIB}
 	${LD} -N -Ttext ${RELOC} -e start ${SA_LDFLAGS} -o $@ \
-	  ${SRTOBJ} ${OBJS} ${LDADD} ${SRTLIB}
+	    ${SRTOBJ} ${OBJS} ${LDADD} ${SRTLIB}
 	@${SIZE} $@
 
 .if !target(proginstall)
@@ -44,20 +58,11 @@ proginstall: ${SA_PROG}.bin
 
 .endif	# defined(SA_PROG)
 
-CLEANFILES+= machine m68k sun68k
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN: machine m68k sun68k
-.NOPATH: machine m68k sun68k
-.endif
+.include <bsd.klinks.mk>
 
-machine :
-	-rm -f $@
-	ln -s ${S}/arch/${MACHINE}/include $@
-
-m68k :
-	-rm -f $@
-	ln -s ${S}/arch/m68k/include $@
-
-sun68k :
-	-rm -f $@
-	ln -s ${S}/arch/sun68k/include $@
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBCRTI=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=

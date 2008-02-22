@@ -1,4 +1,4 @@
-/* $NetBSD: cgd_crypto.h,v 1.5 2007/01/21 23:00:08 cbiere Exp $ */
+/* $NetBSD: cgd_crypto.h,v 1.10 2017/01/02 14:28:29 alnsn Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,18 +35,25 @@
 #ifdef _KERNEL
 #define CGD_CIPHER_DECRYPT	1
 #define CGD_CIPHER_ENCRYPT	2
+#define CGD_AES_BLOCK_SIZE	16
+#define CGD_3DES_BLOCK_SIZE	8
+#define CGD_BF_BLOCK_SIZE	8
 
 typedef void *(cfunc_init)(size_t, const void *, size_t *);
 typedef void  (cfunc_destroy)(void *);
-typedef void  (cfunc_cipher)(void *, struct uio *, struct uio *, void *, int);
+typedef void  (cfunc_cipher)(void *, struct uio *, struct uio *, const void *,
+				int);
+typedef void  (cfunc_cipher_prep)(void *, char *, const char *, size_t, int);
 
 struct cryptfuncs {
-	cfunc_init	 *cf_init;	/* Initialisation function */
-	cfunc_destroy	 *cf_destroy;	/* destruction function */
-	cfunc_cipher	 *cf_cipher;	/* the cipher itself */
+	const char		 *cf_name;	/* cipher name */
+	cfunc_init		 *cf_init;	/* Initialisation function */
+	cfunc_destroy		 *cf_destroy;	/* destruction function */
+	cfunc_cipher		 *cf_cipher;	/* the cipher itself */
+	cfunc_cipher_prep	 *cf_cipher_prep; /* prepare to cipher */
 };
 
-struct cryptfuncs	*cryptfuncs_find(const char *);
+const struct cryptfuncs	*cryptfuncs_find(const char *);
 #endif /* _KERNEL */
 
 #endif /* _DEV_CGD_CRYPTO_H_ */

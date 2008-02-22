@@ -1,4 +1,4 @@
-.\"     $NetBSD: intro.4,v 1.11 2005/06/20 13:25:24 peter Exp $
+.\"     $NetBSD: intro.4,v 1.15 2017/02/17 22:24:45 christos Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 19, 2001
+.Dd February 17, 2017
 .Dt INTRO 4 alpha
 .Os
 .Sh NAME
@@ -89,16 +82,15 @@ To enable a device which did not autoconfigure, the
 system must be rebooted.
 .Pp
 The autoconfiguration system is described in
-.Xr autoconf 4 .
+.Xr alpha/autoconf 4 .
 A list of the supported devices is given below.
 .Sh SEE ALSO
 .Xr config 1 ,
-.Xr autoconf 4
+.Xr alpha/autoconf 4
 .Sh HARDWARE
 .\" http://www.support.compaq.com/alpha-tools/info/system-codes.html
 .\" http://members.tripod.com/kmi9000/kmi_proc.htm
 .\" http://www.phys.ufl.edu/~prescott/linux/alpha/dec3000-sysinfo.html
-.Pp
 .Tn DEC
 and
 .Tn Compaq
@@ -138,7 +130,6 @@ process used to make the chips.
 stands for Low Cost Alpha, and
 .Qq PCA
 stands for PC-architecture Alpha.
-.Pp
 .Bl -hang -width 9n
 .It 21064
 .Sy EV4
@@ -337,7 +328,6 @@ Universal Desktop Box AXPpci233MT
 .Tn MHz ,
 0.50 micron
 .Pc
-.Pp
 .Bl -hang -width 4n
 .It Alcor family
 .br
@@ -389,7 +379,6 @@ AlphaServer 8200 and 8400
 .Tn MHz ,
 0.35 micron, BWX
 .Pc
-.Pp
 .Bl -hang -width 4n
 .It Alcor family
 .br
@@ -523,6 +512,8 @@ AlphaServer GS140
 .Tn MHz ,
 0.18 micron
 .Pc
+.Pp
+AlphaServer DS20L
 .El
 .Sh LIST OF DEVICES
 The devices listed below are supported in this incarnation of the system.
@@ -560,6 +551,8 @@ TURBOchannel host bus support
 AlphaServer 8x00 TurboLaser System bus
 .It tsc
 DECchip 21272 Core Logic chipset
+.It tsciic
+DECchip 21272 Core Logic chipset I2C controller
 .It tsp
 DECchip 21272 Core Logic chipset PCI controller
 .It ttwoga
@@ -586,6 +579,10 @@ bus and associated device drivers.
 .Pp
 PCMCIA devices are supported through the
 .Xr pcmcia 4
+bus and associated device drivers.
+.Pp
+I2C devices are supported through the
+.Xr iic 4
 bus and associated device drivers.
 .Pp
 Console devices using ISA, EISA, or PCI video adaptors and standard AT

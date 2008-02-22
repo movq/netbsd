@@ -1,4 +1,4 @@
-/*	$NetBSD: xmalloc.c,v 1.7 2007/10/05 22:21:07 ad Exp $	*/
+/*	$NetBSD: xmalloc.c,v 1.12 2013/01/24 17:57:29 christos Exp $	*/
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -77,7 +77,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: xmalloc.c,v 1.7 2007/10/05 22:21:07 ad Exp $");
+__RCSID("$NetBSD: xmalloc.c,v 1.12 2013/01/24 17:57:29 christos Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -96,8 +96,9 @@ __RCSID("$NetBSD: xmalloc.c,v 1.7 2007/10/05 22:21:07 ad Exp $");
  * Pre-allocate mmap'ed pages
  */
 #define	NPOOLPAGES	(32*1024/pagesz)
-static caddr_t		pagepool_start, pagepool_end;
+static char 		*pagepool_start, *pagepool_end;
 static int		morepages(int);
+#define PAGEPOOL_SIZE	(size_t)(pagepool_end - pagepool_start)
 
 /*
  * The overhead on a block is at least 4 bytes.  When free, this space
@@ -125,7 +126,7 @@ union	overhead {
 #define	ov_size		ovu.ovu_size
 };
 
-static void morecore(int);
+static void morecore(size_t);
 static void *imalloc(size_t);
 
 #define	MAGIC		0xef		/* magic # on accounting info */
@@ -145,8 +146,9 @@ static void *imalloc(size_t);
 #define	NBUCKETS 30
 static	union overhead *nextf[NBUCKETS];
 
-static	int pagesz;			/* page size */
-static	int pagebucket;			/* page size bucket */
+static	size_t pagesz;			/* page size */
+static	size_t pagebucket;		/* page size bucket */
+static	size_t pageshift;		/* page size shift */
 
 #ifdef MSTATS
 /*
@@ -159,8 +161,7 @@ static	u_int nmalloc[NBUCKETS];
 #if defined(MALLOC_DEBUG) || defined(RCHECK)
 #define	ASSERT(p)   if (!(p)) botch("p")
 static void
-botch(
-    const char *s)
+botch(const char *s)
 {
     xwarnx("\r\nassertion botched: %s\r\n", s);
     abort();
@@ -174,10 +175,10 @@ botch(
 static void *
 imalloc(size_t nbytes)
 {
-  	register union overhead *op;
-  	register int bucket;
-	register long n;
-	register unsigned amt;
+  	union overhead *op;
+  	size_t bucket;
+	size_t n, m;
+	unsigned amt;
 
 	/*
 	 * First time malloc is called, setup page size and
@@ -188,9 +189,11 @@ imalloc(size_t nbytes)
 		if (morepages(NPOOLPAGES) == 0)
 			return NULL;
 		op = (union overhead *)(pagepool_start);
-  		n = n - sizeof (*op) - (((char *)op - (char *)NULL) & (n - 1));
-		if (n < 0)
-			n += pagesz;
+		m = sizeof (*op) - (((char *)op - (char *)NULL) & (n - 1));
+		if (n < m)
+			n += pagesz - m;
+		else
+			n -= m;
   		if (n) {
 			pagepool_start += n;
 		}
@@ -201,6 +204,7 @@ imalloc(size_t nbytes)
 			bucket++;
 		}
 		pagebucket = bucket;
+		pageshift = ffs(pagesz) - 1;
 	}
 	/*
 	 * Convert amount of memory requested into closest block size
@@ -258,12 +262,12 @@ imalloc(size_t nbytes)
  * Allocate more memory to the indicated bucket.
  */
 static void
-morecore(int bucket)
+morecore(size_t bucket)
 {
-  	register union overhead *op;
-	register int sz;		/* size of desired block */
-  	int amt;			/* amount to allocate */
-  	int nblks;			/* how many blocks we get */
+  	union overhead *op;
+	size_t sz;		/* size of desired block */
+  	size_t amt;		/* amount to allocate */
+  	size_t nblks;		/* how many blocks we get */
 
 	/*
 	 * sbrk_size <= 0 only for big, FLUFFY, requests (about
@@ -272,19 +276,16 @@ morecore(int bucket)
 	sz = 1 << (bucket + 3);
 #ifdef MALLOC_DEBUG
 	ASSERT(sz > 0);
-#else
-	if (sz <= 0)
-		return;
 #endif
 	if (sz < pagesz) {
 		amt = pagesz;
-  		nblks = amt / sz;
+		nblks = amt >> (bucket + 3);
 	} else {
 		amt = sz + pagesz;
 		nblks = 1;
 	}
-	if (amt > pagepool_end - pagepool_start)
-		if (morepages(amt/pagesz + NPOOLPAGES) == 0)
+	if (amt > PAGEPOOL_SIZE)
+		if (morepages((amt >> pageshift) + NPOOLPAGES) == 0)
 			return;
 	op = (union overhead *)pagepool_start;
 	pagepool_start += amt;
@@ -301,11 +302,10 @@ morecore(int bucket)
 }
 
 void
-xfree(cp)
-	void *cp;
+xfree(void *cp)
 {
-  	register int size;
-	register union overhead *op;
+  	int size;
+	union overhead *op;
 
   	if (cp == NULL)
   		return;
@@ -332,8 +332,8 @@ xfree(cp)
 static void *
 irealloc(void *cp, size_t nbytes)
 {
-  	register u_int onb;
-	register int i;
+  	size_t onb;
+	size_t i;
 	union overhead *op;
   	char *res;
 
@@ -343,7 +343,7 @@ irealloc(void *cp, size_t nbytes)
 	if (op->ov_magic != MAGIC) {
 		static const char *err_str =
 		    "memory corruption or double free in realloc\n";
-		extern const char *__progname;
+		extern char *__progname;
 	        write(STDERR_FILENO, __progname, strlen(__progname));
 		write(STDERR_FILENO, err_str, strlen(err_str));
 		abort();
@@ -369,12 +369,13 @@ irealloc(void *cp, size_t nbytes)
 		*(u_short *)((caddr_t)(op + 1) + op->ov_size) = RMAGIC;
 #endif
 		return(cp);
-	} else
-		xfree(cp);
+	}
   	if ((res = imalloc(nbytes)) == NULL)
   		return (NULL);
-  	if (cp != res)		/* common optimization if "compacting" */
+  	if (cp != res) {	/* common optimization if "compacting" */
 		memcpy(res, cp, (nbytes < onb) ? nbytes : onb);
+		xfree(cp);
+	}
   	return (res);
 }
 
@@ -386,10 +387,11 @@ irealloc(void *cp, size_t nbytes)
  * for each size category, the second showing the number of mallocs -
  * frees for each size category.
  */
+void
 mstats(char *s)
 {
-  	register int i, j;
-  	register union overhead *p;
+  	int i, j;
+  	union overhead *p;
   	int totfree = 0,
   	totused = 0;
 
@@ -423,7 +425,7 @@ morepages(int n)
 		xerr(1, "/dev/zero");
 #endif
 
-	if (pagepool_end - pagepool_start > pagesz) {
+	if (PAGEPOOL_SIZE > pagesz) {
 		caddr_t	addr = (caddr_t)
 			(((long)pagepool_start + pagesz - 1) & ~(pagesz - 1));
 		if (munmap(addr, pagepool_end - addr) != 0)

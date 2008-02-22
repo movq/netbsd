@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_exec.c,v 1.4 2005/02/26 22:45:52 christos Exp $	*/
+/*	$NetBSD: pam_exec.c,v 1.7 2013/12/29 22:54:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001,2003 Networks Associates Technology, Inc.
@@ -38,7 +38,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_exec/pam_exec.c,v 1.4 2005/02/01 10:37:07 des Exp $");
 #else
-__RCSID("$NetBSD: pam_exec.c,v 1.4 2005/02/26 22:45:52 christos Exp $");
+__RCSID("$NetBSD: pam_exec.c,v 1.7 2013/12/29 22:54:58 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -70,8 +70,10 @@ static int
 _pam_exec(pam_handle_t *pamh __unused, int flags __unused,
     int argc, const char *argv[])
 {
-	int childerr, envlen, i, nitems, pam_err, status;
+	size_t envlen, i, nitems;
+	int pam_err, status;
 	char **envlist, **tmp;
+	volatile int childerr;
 	pid_t pid;
 
 	if (argc < 1)
@@ -90,7 +92,7 @@ _pam_exec(pam_handle_t *pamh __unused, int flags __unused,
 	for (envlen = 0; envlist[envlen] != NULL; ++envlen)
 		/* nothing */ ;
 	nitems = sizeof(env_items) / sizeof(*env_items);
-	tmp = realloc(envlist, (envlen + nitems + 1) * sizeof **envlist);
+	tmp = realloc(envlist, (envlen + nitems + 1) * sizeof(*envlist));
 	if (tmp == NULL) {
 		openpam_free_envlist(envlist);
 		return (PAM_BUF_ERR);
@@ -127,15 +129,15 @@ _pam_exec(pam_handle_t *pamh __unused, int flags __unused,
 	}
 	openpam_free_envlist(envlist);
 	if (pid == -1) {
-		openpam_log(PAM_LOG_ERROR, "vfork(): %m");
+		openpam_log(PAM_LOG_ERROR, "vfork(): %s", strerror(errno));
 		return (PAM_SYSTEM_ERR);
 	}
 	if (waitpid(pid, &status, 0) == -1) {
-		openpam_log(PAM_LOG_ERROR, "waitpid(): %m");
+		openpam_log(PAM_LOG_ERROR, "waitpid(): %s", strerror(errno));
 		return (PAM_SYSTEM_ERR);
 	}
 	if (childerr != 0) {
-		openpam_log(PAM_LOG_ERROR, "execve(): %m");
+		openpam_log(PAM_LOG_ERROR, "execve(): %s", strerror(errno));
 		return (PAM_SYSTEM_ERR);
 	}
 	if (WIFSIGNALED(status)) {

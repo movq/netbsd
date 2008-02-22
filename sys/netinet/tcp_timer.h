@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_timer.h,v 1.25 2007/06/20 15:29:19 christos Exp $	*/
+/*	$NetBSD: tcp_timer.h,v 1.29 2018/01/19 07:53:01 ozaki-r Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2005 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -121,6 +114,7 @@
 
 /*
  * Time constants.
+ * All TCPTV_* constants are in units of slow ticks (typically 500 ms).
  */
 #define	TCPTV_MSL	( 30*PR_SLOWHZ)		/* max seg lifetime (hah!) */
 #define	TCPTV_SRTTBASE	0			/* base roundtrip time;
@@ -142,6 +136,7 @@
 
 #define	TCP_MAXRXTSHIFT	12			/* maximum retransmits */
 
+/* Acks are delayed for 1 second; constant is in fast ticks. */
 #define	TCP_DELACK_TICKS (hz / PR_FASTHZ)	/* time to delay ACK */
 
 #ifdef	TCPTIMERS
@@ -156,6 +151,10 @@ const char *tcptimers[] =
 	callout_setfunc(&(tp)->t_timer[(timer)],			\
 	    tcp_timer_funcs[(timer)], (tp))
 
+/*
+ * nticks is given in units of slow timeouts,
+ * typically 500 ms (with PR_SLOWHZ at 2).
+ */
 #define	TCP_TIMER_ARM(tp, timer, nticks)				\
 	callout_schedule(&(tp)->t_timer[(timer)],			\
 	    (nticks) * (hz / PR_SLOWHZ))
@@ -191,6 +190,7 @@ extern int tcp_ttl;			/* time to live for TCP segs */
 extern const int tcp_backoff[];
 
 void	tcp_timer_init(void);
+void	tcp_slowtimo_init(void);
 #endif
 
 #endif /* !_NETINET_TCP_TIMER_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: mhzc.c,v 1.40 2007/10/19 12:01:06 ad Exp $	*/
+/*	$NetBSD: mhzc.c,v 1.51 2018/06/22 04:17:42 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,10 +39,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.40 2007/10/19 12:01:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.51 2018/06/22 04:17:42 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.40 2007/10/19 12:01:06 ad Exp $");
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -75,12 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.40 2007/10/19 12:01:06 ad Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
-#endif
-
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <sys/intr.h>
@@ -102,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.40 2007/10/19 12:01:06 ad Exp $");
 #include "mhzc.h"
 
 struct mhzc_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 
 	struct pcmcia_function *sc_pf;	/* our PCMCIA function */
 	void *sc_ih;			/* interrupt handle */
@@ -112,14 +99,14 @@ struct mhzc_softc {
 	/*
 	 * Data for the Modem portion.
 	 */
-	struct device *sc_modem;
+	device_t sc_modem;
 	struct pcmcia_io_handle sc_modem_pcioh;
 	int sc_modem_io_window;
 
 	/*
 	 * Data for the Ethernet portion.
 	 */
-	struct device *sc_ethernet;
+	device_t sc_ethernet;
 	struct pcmcia_io_handle sc_ethernet_pcioh;
 	int sc_ethernet_io_window;
 
@@ -134,13 +121,13 @@ struct mhzc_softc {
 #define	MHZC_MODEM_ALLOCED	0x10
 #define	MHZC_ETHERNET_ALLOCED	0x20
 
-int	mhzc_match(struct device *, struct cfdata *, void *);
-void	mhzc_attach(struct device *, struct device *, void *);
-int	mhzc_detach(struct device *, int);
-int	mhzc_activate(struct device *, enum devact);
+int	mhzc_match(device_t, cfdata_t, void *);
+void	mhzc_attach(device_t, device_t, void *);
+void	mhzc_childdet(device_t, device_t);
+int	mhzc_detach(device_t, int);
 
-CFATTACH_DECL(mhzc, sizeof(struct mhzc_softc),
-    mhzc_match, mhzc_attach, mhzc_detach, mhzc_activate);
+CFATTACH_DECL2_NEW(mhzc, sizeof(struct mhzc_softc),
+    mhzc_match, mhzc_attach, mhzc_detach, NULL, NULL, mhzc_childdet);
 
 int	mhzc_em3336_enaddr(struct mhzc_softc *, u_int8_t *);
 int	mhzc_em3336_enable(struct mhzc_softc *);
@@ -172,8 +159,7 @@ void	mhzc_disable(struct mhzc_softc *, int);
 int	mhzc_intr(void *);
 
 int
-mhzc_match(struct device *parent, struct cfdata *match,
-    void *aux)
+mhzc_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -184,13 +170,14 @@ mhzc_match(struct device *parent, struct cfdata *match,
 }
 
 void
-mhzc_attach(struct device *parent, struct device *self, void *aux)
+mhzc_attach(device_t parent, device_t self, void *aux)
 {
-	struct mhzc_softc *sc = (void *)self;
+	struct mhzc_softc *sc = device_private(self);
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	int error;
 
+	sc->sc_dev = self;
 	sc->sc_pf = pa->pf;
 
 	sc->sc_product = pcmcia_product_lookup(pa, mhzc_products,
@@ -226,14 +213,12 @@ mhzc_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 	if (cfe == NULL) {
-		aprint_error("%s: unable to find suitable config table entry\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "unable to find suitable config table entry\n");
 		goto fail;
 	}
 
 	if (mhzc_alloc_ethernet(sc, cfe) == 0) {
-		aprint_error("%s: unable to allocate space for Ethernet portion\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "unable to allocate space for Ethernet portion\n");
 		goto fail;
 	}
 
@@ -242,16 +227,14 @@ mhzc_attach(struct device *parent, struct device *self, void *aux)
 
 	if (pcmcia_io_map(sc->sc_pf, PCMCIA_WIDTH_IO8, &sc->sc_modem_pcioh,
 	    &sc->sc_modem_io_window)) {
-		aprint_error("%s: unable to map I/O space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map I/O space\n");
 		goto fail;
 	}
 	sc->sc_flags |= MHZC_MODEM_MAPPED;
 
 	if (pcmcia_io_map(sc->sc_pf, PCMCIA_WIDTH_AUTO, &sc->sc_ethernet_pcioh,
 	    &sc->sc_ethernet_io_window)) {
-		aprint_error("%s: unable to map I/O space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map I/O space\n");
 		goto fail;
 	}
 	sc->sc_flags |= MHZC_ETHERNET_MAPPED;
@@ -274,9 +257,7 @@ fail:
 }
 
 int
-mhzc_check_cfe(sc, cfe)
-	struct mhzc_softc *sc;
-	struct pcmcia_config_entry *cfe;
+mhzc_check_cfe(struct mhzc_softc *sc, struct pcmcia_config_entry *cfe)
 {
 
 	if (cfe->num_memspace != 0)
@@ -299,9 +280,7 @@ mhzc_check_cfe(sc, cfe)
 }
 
 int
-mhzc_alloc_ethernet(sc, cfe)
-	struct mhzc_softc *sc;
-	struct pcmcia_config_entry *cfe;
+mhzc_alloc_ethernet(struct mhzc_softc *sc, struct pcmcia_config_entry *cfe)
 {
 	bus_addr_t addr, maxaddr;
 
@@ -328,9 +307,7 @@ mhzc_alloc_ethernet(sc, cfe)
 }
 
 int
-mhzc_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mhzc_print(void *aux, const char *pnp)
 {
 	const char *name = aux;
 
@@ -340,26 +317,31 @@ mhzc_print(aux, pnp)
 	return (UNCONF);
 }
 
-int
-mhzc_detach(self, flags)
-	struct device *self;
-	int flags;
+void
+mhzc_childdet(device_t self, device_t child)
 {
-	struct mhzc_softc *sc = (void *)self;
+	struct mhzc_softc *sc = device_private(self);
+
+	if (sc->sc_ethernet == child)
+		sc->sc_ethernet = NULL;
+	if (sc->sc_modem == child)
+		sc->sc_modem = NULL;
+}
+
+int
+mhzc_detach(device_t self, int flags)
+{
+	struct mhzc_softc *sc = device_private(self);
 	int rv;
 
 	if (sc->sc_ethernet != NULL) {
-		rv = config_detach(sc->sc_ethernet, flags);
-		if (rv != 0)
-			return (rv);
-		sc->sc_ethernet = NULL;
+		if ((rv = config_detach(sc->sc_ethernet, flags)) != 0)
+			return rv;
 	}
 
 	if (sc->sc_modem != NULL) {
-		rv = config_detach(sc->sc_modem, flags);
-		if (rv != 0)
-			return (rv);
-		sc->sc_modem = NULL;
+		if ((rv = config_detach(sc->sc_modem, flags)) != 0)
+			return rv;
 	}
 
 	/* Unmap our i/o windows. */
@@ -376,45 +358,11 @@ mhzc_detach(self, flags)
 
 	sc->sc_flags = 0;
 
-	return (0);
+	return 0;
 }
 
 int
-mhzc_activate(self, act)
-	struct device *self;
-	enum devact act;
-{
-	struct mhzc_softc *sc = (void *)self;
-	int s, rv = 0;
-
-	s = splhigh();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_ethernet != NULL) {
-			rv = config_deactivate(sc->sc_ethernet);
-			if (rv != 0)
-				goto out;
-		}
-
-		if (sc->sc_modem != NULL) {
-			rv = config_deactivate(sc->sc_modem);
-			if (rv != 0)
-				goto out;
-		}
-		break;
-	}
- out:
-	splx(s);
-	return (rv);
-}
-
-int
-mhzc_intr(arg)
-	void *arg;
+mhzc_intr(void *arg)
 {
 	struct mhzc_softc *sc = arg;
 	int rval = 0;
@@ -435,14 +383,12 @@ mhzc_intr(arg)
 }
 
 int
-mhzc_enable(sc, flag)
-	struct mhzc_softc *sc;
-	int flag;
+mhzc_enable(struct mhzc_softc *sc, int flag)
 {
 	int error;
 
 	if ((sc->sc_flags & flag) == flag) {
-		printf("%s: already enabled\n", sc->sc_dev.dv_xname);
+		printf("%s: already enabled\n", device_xname(sc->sc_dev));
 		return (0);
 	}
 
@@ -488,13 +434,11 @@ mhzc_enable(sc, flag)
 }
 
 void
-mhzc_disable(sc, flag)
-	struct mhzc_softc *sc;
-	int flag;
+mhzc_disable(struct mhzc_softc *sc, int flag)
 {
 
 	if ((sc->sc_flags & flag) == 0) {
-		printf("%s: already disabled\n", sc->sc_dev.dv_xname);
+		printf("%s: already disabled\n", device_xname(sc->sc_dev));
 		return;
 	}
 
@@ -515,16 +459,14 @@ int	mhzc_em3336_lannid_ciscallback(struct pcmcia_tuple *, void *);
 int	mhzc_em3336_ascii_enaddr(const char *cisstr, u_int8_t *);
 
 int
-mhzc_em3336_enaddr(sc, myla)
-	struct mhzc_softc *sc;
-	u_int8_t *myla;
+mhzc_em3336_enaddr(struct mhzc_softc *sc, u_int8_t *myla)
 {
 
 	/* Get the station address from CIS tuple 0x81. */
-	if (pcmcia_scan_cis(device_parent(&sc->sc_dev),
+	if (pcmcia_scan_cis(device_parent(sc->sc_dev),
 	    mhzc_em3336_lannid_ciscallback, myla) != 1) {
 		printf("%s: unable to get Ethernet address from CIS\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return (0);
 	}
 
@@ -532,8 +474,7 @@ mhzc_em3336_enaddr(sc, myla)
 }
 
 int
-mhzc_em3336_enable(sc)
-	struct mhzc_softc *sc;
+mhzc_em3336_enable(struct mhzc_softc *sc)
 {
 	struct pcmcia_mem_handle memh;
 	bus_size_t memoff;
@@ -547,15 +488,13 @@ mhzc_em3336_enable(sc)
 
 	/* Map the ISRPOWEREG. */
 	if (pcmcia_mem_alloc(sc->sc_pf, 0x1000, &memh) != 0) {
-		printf("%s: unable to allocate memory space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to allocate memory space\n");
 		return (1);
 	}
 
 	if (pcmcia_mem_map(sc->sc_pf, PCMCIA_MEM_ATTR, 0, 0x1000,
 	    &memh, &memoff, &memwin)) {
-		printf("%s: unable to map memory space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map memory space\n");
 		pcmcia_mem_free(sc->sc_pf, &memh);
 		return (1);
 	}
@@ -588,9 +527,7 @@ mhzc_em3336_enable(sc)
 }
 
 int
-mhzc_em3336_lannid_ciscallback(tuple, arg)
-	struct pcmcia_tuple *tuple;
-	void *arg;
+mhzc_em3336_lannid_ciscallback(struct pcmcia_tuple *tuple, void *arg)
 {
 	u_int8_t *myla = arg, addr_str[ETHER_ADDR_LEN * 2];
 	int i;
@@ -616,9 +553,7 @@ mhzc_em3336_lannid_ciscallback(tuple, arg)
 
 /* XXX This should be shared w/ if_sm_pcmcia.c */
 int
-mhzc_em3336_ascii_enaddr(cisstr, myla)
-	const char *cisstr;
-	u_int8_t *myla;
+mhzc_em3336_ascii_enaddr(const char *cisstr, u_int8_t *myla)
 {
 	u_int8_t digit;
 	int i;
@@ -651,20 +586,19 @@ mhzc_em3336_ascii_enaddr(cisstr, myla)
 /****** Here begins the com attachment code. ******/
 
 #if NCOM_MHZC > 0
-int	com_mhzc_match(struct device *, struct cfdata *, void *);
-void	com_mhzc_attach(struct device *, struct device *, void *);
-int	com_mhzc_detach(struct device *, int);
+int	com_mhzc_match(device_t, cfdata_t , void *);
+void	com_mhzc_attach(device_t, device_t, void *);
+int	com_mhzc_detach(device_t, int);
 
 /* No mhzc-specific goo in the softc; it's all in the parent. */
-CFATTACH_DECL(com_mhzc, sizeof(struct com_softc),
-    com_mhzc_match, com_mhzc_attach, com_detach, com_activate);
+CFATTACH_DECL_NEW(com_mhzc, sizeof(struct com_softc),
+    com_mhzc_match, com_mhzc_attach, com_detach, NULL);
 
 int	com_mhzc_enable(struct com_softc *);
 void	com_mhzc_disable(struct com_softc *);
 
 int
-com_mhzc_match(struct device *parent, struct cfdata *match,
-    void *aux)
+com_mhzc_match(device_t parent, cfdata_t match, void *aux)
 {
 	extern struct cfdriver com_cd;
 	const char *name = aux;
@@ -677,11 +611,12 @@ com_mhzc_match(struct device *parent, struct cfdata *match,
 }
 
 void
-com_mhzc_attach(struct device *parent, struct device *self, void *aux)
+com_mhzc_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_softc *sc = (void *)self;
-	struct mhzc_softc *msc = (void *)parent;
+	struct com_softc *sc = device_private(self);
+	struct mhzc_softc *msc = device_private(parent);
 
+	sc->sc_dev = self;
 	aprint_normal("\n");
 
 	COM_INIT_REGS(sc->sc_regs, 
@@ -696,7 +631,7 @@ com_mhzc_attach(struct device *parent, struct device *self, void *aux)
 	sc->enable = com_mhzc_enable;
 	sc->disable = com_mhzc_disable;
 
-	aprint_normal("%s", sc->sc_dev.dv_xname);
+	aprint_normal("%s", device_xname(self));
 
 	com_attach_subr(sc);
 
@@ -704,20 +639,18 @@ com_mhzc_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-com_mhzc_enable(sc)
-	struct com_softc *sc;
+com_mhzc_enable(struct com_softc *sc)
 {
 
-	return (mhzc_enable((struct mhzc_softc *)device_parent(&sc->sc_dev),
+	return (mhzc_enable(device_private(device_parent(sc->sc_dev)),
 	    MHZC_MODEM_ENABLED));
 }
 
 void
-com_mhzc_disable(sc)
-	struct com_softc *sc;
+com_mhzc_disable(struct com_softc *sc)
 {
 
-	mhzc_disable((struct mhzc_softc *)device_parent(&sc->sc_dev),
+	mhzc_disable(device_private(device_parent(sc->sc_dev)),
 	    MHZC_MODEM_ENABLED);
 }
 
@@ -726,19 +659,18 @@ com_mhzc_disable(sc)
 /****** Here begins the sm attachment code. ******/
 
 #if NSM_MHZC > 0
-int	sm_mhzc_match(struct device *, struct cfdata *, void *);
-void	sm_mhzc_attach(struct device *, struct device *, void *);
+int	sm_mhzc_match(device_t, cfdata_t, void *);
+void	sm_mhzc_attach(device_t, device_t, void *);
 
 /* No mhzc-specific goo in the softc; it's all in the parent. */
-CFATTACH_DECL(sm_mhzc, sizeof(struct smc91cxx_softc),
+CFATTACH_DECL_NEW(sm_mhzc, sizeof(struct smc91cxx_softc),
     sm_mhzc_match, sm_mhzc_attach, smc91cxx_detach, smc91cxx_activate);
 
 int	sm_mhzc_enable(struct smc91cxx_softc *);
 void	sm_mhzc_disable(struct smc91cxx_softc *);
 
 int
-sm_mhzc_match(struct device *parent, struct cfdata *match,
-    void *aux)
+sm_mhzc_match(device_t parent, cfdata_t match, void *aux)
 {
 	extern struct cfdriver sm_cd;
 	const char *name = aux;
@@ -751,14 +683,15 @@ sm_mhzc_match(struct device *parent, struct cfdata *match,
 }
 
 void
-sm_mhzc_attach(struct device *parent, struct device *self, void *aux)
+sm_mhzc_attach(device_t parent, device_t self, void *aux)
 {
-	struct smc91cxx_softc *sc = (void *)self;
-	struct mhzc_softc *msc = (void *)parent;
+	struct smc91cxx_softc *sc = device_private(self);
+	struct mhzc_softc *msc = device_private(parent);
 	u_int8_t myla[ETHER_ADDR_LEN];
 
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_bst = msc->sc_ethernet_pcioh.iot;
 	sc->sc_bsh = msc->sc_ethernet_pcioh.ioh;
 
@@ -773,21 +706,19 @@ sm_mhzc_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-sm_mhzc_enable(sc)
-	struct smc91cxx_softc *sc;
+sm_mhzc_enable(struct smc91cxx_softc *sc)
 {
+	struct mhzc_softc *xsc = device_private(device_parent(sc->sc_dev));
 
-	return (mhzc_enable((struct mhzc_softc *)device_parent(&sc->sc_dev),
-	    MHZC_ETHERNET_ENABLED));
+	return mhzc_enable(xsc, MHZC_ETHERNET_ENABLED);
 }
 
 void
-sm_mhzc_disable(sc)
-	struct smc91cxx_softc *sc;
+sm_mhzc_disable(struct smc91cxx_softc *sc)
 {
+	struct mhzc_softc *xsc = device_private(device_parent(sc->sc_dev));
 
-	mhzc_disable((struct mhzc_softc *)device_parent(&sc->sc_dev),
-	    MHZC_ETHERNET_ENABLED);
+	mhzc_disable(xsc, MHZC_ETHERNET_ENABLED);
 }
 
 #endif /* NSM_MHZC > 0 */

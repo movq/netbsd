@@ -1,4 +1,4 @@
-/*	$NetBSD: dest6.c,v 1.15 2006/11/16 01:33:45 christos Exp $	*/
+/*	$NetBSD: dest6.c,v 1.22 2018/04/13 11:01:14 maxv Exp $	*/
 /*	$KAME: dest6.c,v 1.25 2001/02/22 01:39:16 itojun Exp $	*/
 
 /*
@@ -31,26 +31,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dest6.c,v 1.15 2006/11/16 01:33:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dest6.c,v 1.22 2018/04/13 11:01:14 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/domain.h>
-#include <sys/protosw.h>
-#include <sys/socket.h>
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 
 #include <net/if.h>
-#include <net/route.h>
 
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet/icmp6.h>
 
 /*
@@ -60,7 +56,7 @@ int
 dest6_input(struct mbuf **mp, int *offp, int proto)
 {
 	struct mbuf *m = *mp;
-	int off = *offp, dstoptlen, optlen;
+	int off = *offp, erroff, dstoptlen, optlen;
 	struct ip6_dest *dstopts;
 	u_int8_t *opt;
 
@@ -81,7 +77,7 @@ dest6_input(struct mbuf **mp, int *offp, int proto)
 	for (optlen = 0; dstoptlen > 0; dstoptlen -= optlen, opt += optlen) {
 		if (*opt != IP6OPT_PAD1 &&
 		    (dstoptlen < IP6OPT_MINLEN || *(opt + 1) + 2 > dstoptlen)) {
-			ip6stat.ip6s_toosmall++;
+			IP6_STATINC(IP6_STAT_TOOSMALL);
 			goto bad;
 		}
 
@@ -93,19 +89,19 @@ dest6_input(struct mbuf **mp, int *offp, int proto)
 			optlen = *(opt + 1) + 2;
 			break;
 		default:		/* unknown option */
-			optlen = ip6_unknown_opt(opt, m,
-			    opt - mtod(m, u_int8_t *));
+			erroff = *offp + (opt - (u_int8_t *)dstopts);
+			optlen = ip6_unknown_opt(opt, m, erroff);
 			if (optlen == -1)
-				return (IPPROTO_DONE);
+				return IPPROTO_DONE;
 			optlen += 2;
 			break;
 		}
 	}
 
 	*offp = off;
-	return (dstopts->ip6d_nxt);
+	return dstopts->ip6d_nxt;
 
-  bad:
+bad:
 	m_freem(m);
-	return (IPPROTO_DONE);
+	return IPPROTO_DONE;
 }

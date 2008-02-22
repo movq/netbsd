@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.25 2007/03/04 06:00:56 christos Exp $ */
+/*	$NetBSD: autoconf.c,v 1.29 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,6 +31,7 @@
 #include <sys/param.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/net.h>
 
 #include "../include/mtpr.h"
 #include "../include/sid.h"
@@ -49,7 +45,6 @@ void autoconf(void);
 void findcpu(void);
 void consinit(void);
 void scbinit(void);
-int getsecs(void);
 void scb_stray(void *);
 void longjmp(int *, int);
 void rtimer(void *);
@@ -62,7 +57,7 @@ long *bootregs;
  */
 
 void
-autoconf()
+autoconf(void)
 {
 	int copyrpb = 1;
 	int fromnet = (bootregs[12] != -1);
@@ -111,10 +106,10 @@ autoconf()
 
 	if (copyrpb) {
 		struct rpb *prpb = (struct rpb *)bootregs[11];
-		bcopy((void *)prpb, &bootrpb, sizeof(struct rpb));
+		memcpy(&bootrpb, (void *)prpb, sizeof(struct rpb));
 		if (prpb->iovec) {
 			bootrpb.iovec = (int)alloc(prpb->iovecsz);
-			bcopy((void *)prpb->iovec, (void *)bootrpb.iovec,
+			memcpy((void *)bootrpb.iovec, (void *)prpb->iovec,
 			    prpb->iovecsz);
 		}
 	}
@@ -126,8 +121,8 @@ autoconf()
 
 volatile int tickcnt;
 
-int
-getsecs()
+satime_t
+getsecs(void)
 {
 	return tickcnt/100;
 }
@@ -152,7 +147,7 @@ mcheck(void *arg)
  * to detect unwanted interrupts.
  */
 void
-scbinit()
+scbinit(void)
 {
 	int i, addr;
 

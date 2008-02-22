@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_bus_mem.c,v 1.8 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: tsp_bus_mem.c,v 1.13 2014/01/19 03:44:13 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.8 2005/12/11 12:16:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.13 2014/01/19 03:44:13 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,9 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.8 2005/12/11 12:16:17 christos Exp
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 
@@ -55,14 +53,18 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.8 2005/12/11 12:16:17 christos Exp
 
 #define	CHIP_EX_MALLOC_SAFE(v)  (((struct tsp_config *)(v))->pc_mallocsafe)
 #define CHIP_MEM_EXTENT(v)       (((struct tsp_config *)(v))->pc_mem_ex)
+#define	CHIP_MEM_EX_STORE(v)	(((struct tsp_config *)(v))->pc_mem_exstorage)
+#define	CHIP_MEM_EX_STORE_SIZE(v)					\
+	(sizeof (((struct tsp_config *)(v))->pc_mem_exstorage))
 
-#define CHIP_MEM_SYS_START(v)    (((struct tsp_config *)(v))->pc_iobase)
+#define CHIP_MEM_SYS_START(v)						\
+	(((struct tsp_config *)(v))->pc_iobase | P_PCI_MEM)
 
-/* 
- * Tsunami core logic appears on EV6.  We require at least EV56          
+/*
+ * Tsunami core logic appears on EV6.  We require at least EV56
  * support for the assembler to emit BWX opcodes.
- */                                                                      
-__asm(".arch ev6");                                                      
+ */
+__asm(".arch ev6");
 
 #include <alpha/pci/pci_bwx_bus_mem_chipdep.c>
 

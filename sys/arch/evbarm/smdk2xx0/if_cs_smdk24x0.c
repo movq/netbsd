@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_smdk24x0.c,v 1.2 2005/12/11 12:17:09 christos Exp $ */
+/*	$NetBSD: if_cs_smdk24x0.c,v 1.7 2015/04/13 21:18:41 riastradh Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -72,23 +72,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_smdk24x0.c,v 1.2 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_smdk24x0.c,v 1.7 2015/04/13 21:18:41 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
 #include <sys/device.h>
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arch/arm/s3c2xx0/s3c2410reg.h>
@@ -100,8 +95,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_smdk24x0.c,v 1.2 2005/12/11 12:17:09 christos 
 #include "locators.h"
 #include "opt_smdk2xx0.h"		/* SMDK24X0_ETHER_ADDR_FIXED */
 
-int	cs_ssextio_probe(struct device *, struct cfdata *, void *);
-void	cs_ssextio_attach(struct device *, struct device *, void *);
+int	cs_ssextio_probe(device_t, cfdata_t, void *);
+void	cs_ssextio_attach(device_t, device_t, void *);
 
 /*
  * I/O access is done when A24==1.
@@ -109,11 +104,11 @@ void	cs_ssextio_attach(struct device *, struct device *, void *);
  */
 #define IOADDR(base)	(base + (1<<24) + 0x0300)
 
-CFATTACH_DECL(cs_ssextio, sizeof(struct cs_softc),
+CFATTACH_DECL_NEW(cs_ssextio, sizeof(struct cs_softc),
     cs_ssextio_probe, cs_ssextio_attach, NULL, NULL);
 
 int 
-cs_ssextio_probe(struct device *parent, struct cfdata *cf, void *aux)
+cs_ssextio_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct s3c2xx0_attach_args *sa = aux;
 	bus_space_tag_t iot = sa->sa_iot;
@@ -182,17 +177,18 @@ static int cs_media[] = {
 };
 
 void 
-cs_ssextio_attach(struct device *parent, struct device *self, void *aux)
+cs_ssextio_attach(device_t parent, device_t self, void *aux)
 {
-	struct cs_softc *sc = (struct cs_softc *) self;
+	struct cs_softc *sc = device_private(self);
 	struct s3c2xx0_attach_args *sa = aux;
 	vaddr_t ioaddr;
 #ifdef	SMDK24X0_ETHER_ADDR_FIXED
-	static u_int8_t enaddr[ETHER_ADDR_LEN] = {SMDK24X0_ETHER_ADDR_FIXED};
+	static uint8_t enaddr[ETHER_ADDR_LEN] = {SMDK24X0_ETHER_ADDR_FIXED};
 #else
 #define enaddr NULL
 #endif
 
+	sc->sc_dev = self;
 	sc->sc_iot = sc->sc_memt = sa->sa_iot;
 	/* sc_irq is an IRQ number in ISA world. set 10 for INTRQ0 of CS8900A */
 	sc->sc_irq = 10;

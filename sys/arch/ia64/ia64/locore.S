@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: locore.S,v 1.7 2017/04/08 17:45:22 scole Exp $	*/
 	
 /*-
  * Copyright (c) 1998 Doug Rabson
@@ -28,27 +28,21 @@
  * $FreeBSD$
  */
 
-#include "assym.h"
-	
-	
+#include "opt_multiprocessor.h"
+
 #include <machine/asm.h>
-#include <machine/ia64_cpu.h>
-#include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pte.h>
 #include <machine/elf_machdep.h>
 #include <sys/syscall.h>
 
-//XXX:	 ??? why ifndef ???
-//#ifndef EVCNT_COUNTERS
-#include <machine/intrcnt.h>
-//#endif
+#include "assym.h"
 
 	.section .data.proc0,"aw"
-	.global	kstack
 	.align	PAGE_SIZE
+	.global	kstack
 kstack:	.space KSTACK_PAGES * PAGE_SIZE
-
+	.global kstack_top
+kstack_top:
+	
 	.text
 
 /*
@@ -100,12 +94,14 @@ ENTRY_NOPROFILE(start, 1)
 	;;
 	br.call.sptk.many rp=ia64_init
 	;;
+	br.call.sptk.many rp=main
+	;;
 	/* NOTREACHED */
 1:	br.cond.sptk.few 1b
 END(start)
 
 
-#ifdef SMP
+#ifdef MULTIPROCESSOR
 /*
  * AP wake-up entry point. The handoff state is similar as for the BSP,
  * as described on page 3-9 of the IPF SAL Specification. The difference
@@ -220,33 +216,7 @@ ENTRY_NOPROFILE(os_boot_rendez,0)
 }
 END(os_boot_rendez)
 
-#endif /* !SMP */
-
-/*
- * Create a default interrupt name table. The first entry (vector 0) is
- * hardwaired to the clock interrupt.
- */
-	.data
-	.align 8
-EXPORT(intrnames)
-	.ascii "clock"
-	.fill INTRNAME_LEN - 5 - 1, 1, ' '
-	.byte 0
-intr_n = 0
-.rept INTRCNT_COUNT - 1
-	.ascii "#"
-	.byte intr_n / 100 + '0'
-	.byte (intr_n % 100) / 10 + '0'
-	.byte intr_n % 10 + '0'
-	.fill INTRNAME_LEN - 1 - 3 - 1, 1, ' '
-	.byte 0
-	intr_n = intr_n + 1
-.endr
-EXPORT(eintrnames)
-	.align 8
-EXPORT(intrcnt)
-	.fill INTRCNT_COUNT, 8, 0
-EXPORT(eintrcnt)
+#endif /* MULTIPROCESSOR */
 
 	.text
 	// in0:	image base

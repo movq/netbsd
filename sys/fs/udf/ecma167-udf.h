@@ -1,7 +1,8 @@
-/* $NetBSD: ecma167-udf.h,v 1.7 2007/12/25 18:33:44 perry Exp $ */
+/* $NetBSD: ecma167-udf.h,v 1.14 2011/07/07 17:45:38 reinoud Exp $ */
 
 /*-
- * Copyright (c) 2003, 2004, 2005, 2006 Reinoud Zandijk <reinoud@netbsd.org>
+ * Copyright (c) 2003, 2004, 2005, 2006, 2008, 2009
+ * 	Reinoud Zandijk * <reinoud@NetBSD.org>
  * Copyright (c) 2001, 2002 Scott Long <scottl@freebsd.org>
  * All rights reserved.
  *
@@ -28,9 +29,9 @@
  *
  * 
  * Extended and adapted for UDFv2.50+ bij Reinoud Zandijk based on the
- * origional by Scott Long.
+ * original by Scott Long.
  * 
- * 20030508 Made some small typo and explainatory comments
+ * 20030508 Made some small typo and explanatory comments
  * 20030510 Added UDF 2.01 structures
  * 20030519 Added/correct comments on multi-partitioned logical volume space
  * 20050616 Added pseudo overwrite
@@ -59,7 +60,7 @@
 */
 
 #ifndef __packed
-#define __packed __packed
+#define __packed __attribute__((packed))
 #endif
 
 
@@ -101,13 +102,13 @@ enum {
 	TAGID_FSD =		256,
 	TAGID_FID =		257,
 	TAGID_ALLOCEXTENT = 	258,
-	TAGID_INDIRECT_ENTRY =	259,
+	TAGID_INDIRECTENTRY =	259,
 	TAGID_ICB_TERM =	260,
 	TAGID_FENTRY =		261,
 	TAGID_EXTATTR_HDR =	262,
 	TAGID_UNALL_SP_ENTRY =	263,
 	TAGID_SPACE_BITMAP = 	264,
-	TAGID_PART_INTEGRETY = 	265,
+	TAGID_PART_INTEGRITY = 	265,
 	TAGID_EXTFENTRY =	266,
 	TAGID_MAX =		266
 };
@@ -121,11 +122,11 @@ enum {
 
 enum {
 	UDF_ACCESSTYPE_NOT_SPECIFIED   = 0,	/* unknown				*/
-	UDF_ACCESSTYPE_PSEUDO_OVERWITE = 0,	/* Pseudo overwritable, f.e. BD-R's LOW */
+	UDF_ACCESSTYPE_PSEUDO_OVERWITE = 0,	/* pseudo overwritable, e.g. BD-R's LOW */
 	UDF_ACCESSTYPE_READ_ONLY       = 1,	/* really only readable			*/
 	UDF_ACCESSTYPE_WRITE_ONCE      = 2,	/* write once and you're done		*/
 	UDF_ACCESSTYPE_REWRITEABLE     = 3,	/* may need extra work to rewrite	*/
-	UDF_ACCESSTYPE_OVERWRITABLE    = 4	/* no limits on rewriting; harddisc f.e.*/
+	UDF_ACCESSTYPE_OVERWRITABLE    = 4	/* no limits on rewriting; e.g. harddisc*/
 };
 
 
@@ -178,7 +179,7 @@ struct long_ad {
 	union {
 		uint8_t	bytes[6];
 		struct UDF_ADImp_use im_used;
-	} __packed impl;
+	} impl;
 } __packed;
 #define longad_uniqueid impl.im_used.unique_id
 
@@ -198,7 +199,7 @@ union icb {
 	struct short_ad	s_ad;
 	struct long_ad	l_ad;
 	struct ext_ad	e_ad;
-} __packed;
+};
 
 
 /* short/long/ext extent have flags encoded in length */
@@ -209,6 +210,7 @@ union icb {
 #define UDF_EXT_REDIRECT               (3<<30)
 #define UDF_EXT_FLAGS(len) ((len) & (3<<30))
 #define UDF_EXT_LEN(len)   ((len) & ((1<<30)-1))
+#define UDF_EXT_MAXLEN     ((1<<30)-1)
 
 
 /* Character set spec [1/7.2.1] */
@@ -216,6 +218,21 @@ struct charspec {
 	uint8_t		type;
 	uint8_t		inf[63];
 } __packed;
+
+
+struct pathcomp {
+	uint8_t		type;
+	uint8_t		l_ci;
+	uint16_t	comp_filever;
+	uint8_t		ident[256];
+} __packed;
+#define	UDF_PATH_COMP_SIZE 4
+#define UDF_PATH_COMP_RESERVED		0
+#define UDF_PATH_COMP_ROOT		1
+#define UDF_PATH_COMP_MOUNTROOT		2
+#define UDF_PATH_COMP_PARENTDIR		3
+#define UDF_PATH_COMP_CURDIR		4
+#define UDF_PATH_COMP_NAME		5
 
 
 /* Timestamp [1/7.3] */
@@ -231,6 +248,7 @@ struct timestamp {
 	uint8_t		hund_usec;
 	uint8_t		usec;
 } __packed;
+#define UDF_TIMESTAMP_SIZE 12
 
 
 /* Entity Identifier [1/7.4] */
@@ -286,6 +304,7 @@ struct icb_tag {
 #define UDF_ICB_FILETYPE_REALTIME	249
 #define UDF_ICB_FILETYPE_META_MAIN	250
 #define UDF_ICB_FILETYPE_META_MIRROR	251
+#define UDF_ICB_FILETYPE_META_BITMAP	252
 
 
 /* Anchor Volume Descriptor Pointer [3/10.2] */
@@ -308,7 +327,7 @@ struct vol_desc_ptr {
 struct pri_vol_desc {
 	struct desc_tag		tag;
 	uint32_t		seq_num;		/* MAX prevail */
-	uint32_t		pvd_num;		/* assigned by author; 0 is special as in it may only occure once */
+	uint32_t		pvd_num;		/* assigned by author; 0 is special as in it may only occur once */
 	char			vol_id[32];		/* KEY ; main identifier of this disc */
 	uint16_t		vds_num;		/* volume descriptor number; i.e. what volume number is it */
 	uint16_t		max_vol_seq;		/* maximum volume descriptor number known */
@@ -326,7 +345,7 @@ struct pri_vol_desc {
 	struct regid		imp_id;
 	uint8_t			imp_use[64];
 	uint32_t		prev_vds_loc;		/* location of predecessor _lov ? */
-	uint16_t		flags;			/* bit 0 : if set indicates volume set name is meaningfull */
+	uint16_t		flags;			/* bit 0 : if set indicates volume set name is meaningful */
 	uint8_t			reserved[22];
 } __packed;
 
@@ -353,7 +372,7 @@ struct impvol_desc {
 	union {
 		struct udf_lv_info	lv_info;
 		char			impl_use[460];
-	} __packed _impl_use;
+	} _impl_use;
 } __packed;
 
 
@@ -368,7 +387,7 @@ struct logvol_desc {
 	union {
 		struct long_ad	fsd_loc;		/* to fileset descriptor SEQUENCE */
 		uint8_t		logvol_content_use[16];
-	} __packed _lvd_use;
+	} _lvd_use;
 	uint32_t		mt_l;			/* Partition map length */
 	uint32_t		n_pm;			/* Number of partition maps */
 	struct regid		imp_id;
@@ -445,7 +464,7 @@ struct part_map_meta {
 	uint32_t		meta_mirror_file_lbn;
 	uint32_t		meta_bitmap_file_lbn;
 	uint32_t		alloc_unit_size;	/* allocation unit size in blocks */
-	uint16_t		alignment_unit_size;	/* alignment nessisary in blocks  */
+	uint16_t		alignment_unit_size;	/* alignment necessary in blocks  */
 	uint8_t			flags;
 	uint8_t			reserved1[5];
 } __packed;
@@ -459,13 +478,13 @@ union udf_pmap {
 	struct part_map_virt	pmv;
 	struct part_map_spare	pms;
 	struct part_map_meta	pmm;
-} __packed;
+};
 
 
 /* Sparing Map Entry [UDF 2.01/2.2.11] */
 struct spare_map_entry {
-	uint32_t		org;			/* partion relative address  */
-	uint32_t		map;			/* absolute disc address (!) can be in partion, but doesn't have to be */
+	uint32_t		org;			/* partition relative address  */
+	uint32_t		map;			/* absolute disc address (!) can be in partition, but doesn't have to be */
 } __packed;
 
 
@@ -526,7 +545,7 @@ struct space_entry_desc {
 struct part_hdr_desc {
 	struct short_ad		unalloc_space_table;
 	struct short_ad		unalloc_space_bitmap;
-	struct short_ad		part_integrety_table;	/* has to be ZERO for UDF */
+	struct short_ad		part_integrity_table;	/* has to be ZERO for UDF */
 	struct short_ad		freed_space_table;
 	struct short_ad		freed_space_bitmap;
 	uint8_t			reserved[88];
@@ -545,7 +564,7 @@ struct part_desc {
 		uint8_t			contents_use[128];
 	} _impl_use;
 	uint32_t		access_type;		/* R/W, WORM etc. */
-	uint32_t		start_loc;		/* start of partion with given length */
+	uint32_t		start_loc;		/* start of partition with given length */
 	uint32_t		part_len;
 	struct regid		imp_id;
 	uint8_t			imp_use[128];
@@ -589,7 +608,7 @@ struct logvol_int_desc {
 	union {
 		struct logvolhdr  logvolhdr;
 		int8_t		  reserved[32];
-	} __packed _impl_use;
+	} _impl_use;
 	uint32_t		num_part;
 	uint32_t		l_iu;
 	uint32_t		tables[1];	/* Freespace table, Sizetable, Implementation use */
@@ -629,7 +648,7 @@ struct fileid_desc {
 	uint8_t			l_fi;	/* Length of file identifier area */
 	struct long_ad		icb;
 	uint16_t		l_iu;	/* Length of implementation use area */
-	uint8_t			data[1];
+	uint8_t			data[0];
 } __packed;
 #define	UDF_FID_SIZE	38
 #define	UDF_FILE_CHAR_VIS	(1 << 0) /* Invisible */
@@ -681,9 +700,14 @@ struct filetimes_extattr_entry {
 	struct extattr_entry    hdr;
 	uint32_t		d_l;		/* length of times[] data following */
 	uint32_t		existence;	/* bitmask */
-	struct timestamp	times[1];	/* in order of assending bits */
+	struct timestamp	times[1];	/* in order of ascending bits */
 } __packed;
 #define UDF_FILETIMES_ATTR_NO	5
+#define UDF_FILETIMES_FILE_CREATION	1
+#define UDF_FILETIMES_FILE_DELETION	4
+#define UDF_FILETIMES_FILE_EFFECTIVE	8
+#define UDF_FILETIMES_FILE_BACKUPED	16
+#define UDF_FILETIMES_ATTR_SIZE(no)	(20 + (no)*sizeof(struct timestamp))
 
 
 /* Device Specification Extended Attribute [4/4.10.7] */
@@ -764,6 +788,7 @@ struct extfile_entry {
 	uint32_t		l_ad;	/* Length of allocation descriptors */
 	uint8_t			data[1];
 } __packed;
+#define	UDF_EXTFENTRY_SIZE	216
 
 
 /* Indirect entry [ecma 48.7] */
@@ -774,7 +799,7 @@ struct indirect_entry {
 } __packed;
 
 
-/* Allocation extent descritor [ecma 48.5] */
+/* Allocation extent descriptor [ecma 48.5] */
 struct alloc_ext_entry {
 	struct desc_tag		tag;
 	uint32_t		prev_entry;
@@ -803,15 +828,7 @@ union dscrptr {
 	struct udf_sparing_table spt;
 	struct space_bitmap_desc sbd;
 	struct space_entry_desc	 sed;
-} __packed;
-
-
-/* Useful defines */
-
-#define	GETICB(ad_type, fentry, offset)	\
-	(struct ad_type *)&fentry->data[offset]
-
-#define	GETICBLEN(ad_type, icb)	((struct ad_type *)(icb))->len
+};
 
 
 #endif /* !_FS_UDF_ECMA167_UDF_H_ */

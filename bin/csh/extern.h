@@ -1,4 +1,4 @@
-/* $NetBSD: extern.h,v 1.22 2007/12/24 16:11:50 perry Exp $ */
+/* $NetBSD: extern.h,v 1.30 2017/07/15 14:35:55 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,12 +42,15 @@
 int gethdir(Char *);
 void dosource(Char **, struct command *);
 __dead void exitstat(void);
-void goodbye(void);
+__dead void goodbye(void);
 void importpath(Char *);
 void initdesc(void);
-void pintr(int);
+__dead void pintr(int);
 __dead void pintr1(int);
 void printprompt(void);
+#ifdef EDIT
+char *printpromptstr(EditLine *);
+#endif
 void process(int);
 void rechist(void);
 void untty(void);
@@ -108,7 +111,7 @@ int exp0(Char ***, int);
  * file.c
  */
 #ifdef FILEC
-int tenex(Char *, int);
+ssize_t tenex(Char *, size_t);
 #endif
 
 /*
@@ -128,8 +131,8 @@ void doglob(Char **, struct command *);
 void dogoto(Char **, struct command *);
 void doif(Char **, struct command *);
 void dolimit(Char **, struct command *);
-void dologin(Char **, struct command *);
-void dologout(Char **, struct command *);
+__dead void dologin(Char **, struct command *);
+__dead void dologout(Char **, struct command *);
 void donohup(Char **, struct command *);
 void doonintr(Char **, struct command *);
 void doprintf(Char **, struct command *);
@@ -172,6 +175,9 @@ int sortscmp(const ptr_t, const ptr_t);
  */
 void dohist(Char **, struct command *);
 struct Hist *enthist(int, struct wordent *, int);
+#ifdef EDIT
+void loadhist(struct Hist *);
+#endif
 void savehist(struct wordent *);
 
 /*
@@ -186,6 +192,9 @@ Char *domod(Char *, int);
 void freelex(struct wordent *);
 int lex(struct wordent *);
 void prlex(FILE *, struct wordent *);
+#ifdef EDIT
+int sprlex(char **, struct wordent *);
+#endif
 int readc(int);
 void settell(void);
 void unreadc(int);
@@ -207,7 +216,7 @@ int dcopy(int, int);
 int dmove(int, int);
 void donefds(void);
 Char lastchr(Char *);
-void lshift(Char **, int);
+void lshift(Char **, size_t);
 int number(Char *);
 int prefix(Char *, Char *);
 Char **saveblk(Char **);
@@ -288,8 +297,10 @@ void plist(struct varent *);
  */
 void donice(Char **, struct command *);
 void dotime(Char **, struct command *);
-void prusage(FILE *, struct rusage *, struct rusage *, struct timeval *,
-             struct timeval *);
+void prusage1(FILE *, const char *, struct rusage *, struct rusage *,
+	     struct timespec *, struct timespec *);
+void prusage(FILE *, struct rusage *, struct rusage *, struct timespec *,
+             struct timespec *);
 void ruadd(struct rusage *, struct rusage *);
 void settimes(void);
 void psecs(long);
@@ -301,33 +312,32 @@ void Free(ptr_t);
 ptr_t Malloc(size_t);
 ptr_t Realloc(ptr_t, size_t);
 ptr_t Calloc(size_t, size_t);
-void showall(Char **, struct command *);
 
 /*
  * str.c:
  */
 #ifdef SHORT_STRINGS
-Char *s_strchr(Char *, int);
-Char *s_strrchr(Char *, int);
-Char *s_strcat(Char *, Char *);
+Char *s_strchr(const Char *, int);
+Char *s_strrchr(const Char *, int);
+Char *s_strcat(Char *, const Char *);
 #ifdef NOTUSED
-Char *s_strncat(Char *, Char *, size_t);
+Char *s_strncat(Char *, const Char *, size_t);
 #endif
-Char *s_strcpy(Char *, Char *);
-Char *s_strncpy(Char *, Char *, size_t);
-Char *s_strspl(Char *, Char *);
-size_t s_strlen(Char *);
-int s_strcmp(Char *, Char *);
-int s_strncmp(Char *, Char *, size_t);
-Char *s_strsave(Char *);
-Char *s_strend(Char *);
-Char *s_strstr(Char *, Char *);
+Char *s_strcpy(Char *, const Char *);
+Char *s_strncpy(Char *, const Char *, size_t);
+Char *s_strspl(const Char *, const Char *);
+size_t s_strlen(const Char *);
+int s_strcmp(const Char *, const Char *);
+int s_strncmp(const Char *, const Char *, size_t);
+Char *s_strsave(const Char *);
+Char *s_strend(const Char *);
+Char *s_strstr(const Char *, const Char *);
 Char *str2short(const char *);
 Char **blk2short(char **);
-char *short2str(Char *);
-char **short2blk(Char **);
+char *short2str(const Char *);
+char **short2blk(Char * const *);
 #endif
-char *short2qstr(Char *);
-char *vis_str(Char *);
+char *short2qstr(const Char *);
+char *vis_str(const Char *);
 
 #endif /* !_EXTERN_H_ */

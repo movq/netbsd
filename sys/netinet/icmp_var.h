@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp_var.h,v 1.25 2005/12/10 23:36:23 elad Exp $	*/
+/*	$NetBSD: icmp_var.h,v 1.30 2015/02/18 17:00:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -38,21 +38,26 @@
  * Variables related to this implementation
  * of the internet control message protocol.
  */
-struct	icmpstat {
-/* statistics related to icmp packets generated */
-	u_quad_t icps_error;		/* # of calls to icmp_error */
-	u_quad_t icps_oldshort;		/* no error 'cuz old ip too short */
-	u_quad_t icps_oldicmp;		/* no error 'cuz old was icmp */
-	u_quad_t icps_outhist[ICMP_MAXTYPE + 1];
-/* statistics related to input messages processed */
-	u_quad_t icps_badcode;		/* icmp_code out of range */
-	u_quad_t icps_tooshort;		/* packet < ICMP_MINLEN */
-	u_quad_t icps_checksum;		/* bad checksum */
-	u_quad_t icps_badlen;		/* calculated bound mismatch */
-	u_quad_t icps_reflect;		/* number of responses */
-	u_quad_t icps_inhist[ICMP_MAXTYPE + 1];
-	u_quad_t icps_pmtuchg;		/* path MTU changes */
-};
+
+/*
+ * ICMP stastistics.
+ * Each counter is an unsigned 64-bit value.
+ */
+#define	ICMP_STAT_ERROR		0	/* # of calls to icmp_error */
+#define	ICMP_STAT_OLDSHORT	1	/* no error (old ip too short) */
+#define	ICMP_STAT_OLDICMP	2	/* no error (old was icmp) */
+#define	ICMP_STAT_BADCODE	3	/* icmp_code out of range */
+#define	ICMP_STAT_TOOSHORT	4	/* packet < ICMP_MINLEN */
+#define	ICMP_STAT_CHECKSUM	5	/* bad checksum */
+#define	ICMP_STAT_BADLEN	6	/* calculated bound mismatch */
+#define	ICMP_STAT_REFLECT	7	/* number of responses */
+#define	ICMP_STAT_PMTUCHG	8	/* path MTU changes */
+#define	ICMP_STAT_BMCASTECHO	9	/* b/mcast echo requests dropped */
+#define	ICMP_STAT_BMCASTTSTAMP	10	/* b/mcast tstamp requests dropped */
+#define	ICMP_STAT_LAST		16	/* Allow for 5 spare ones */
+#define	ICMP_STAT_OUTHIST	ICMP_STAT_LAST
+#define	ICMP_STAT_INHIST	(ICMP_STAT_LAST + ICMP_NTYPES)
+#define	ICMP_NSTATS		(ICMP_STAT_LAST + 2 * ICMP_NTYPES)
 
 /*
  * Names for ICMP sysctl objects
@@ -66,7 +71,8 @@ struct	icmpstat {
 #define ICMPCTL_REDIRACCEPT	5	/* Accept redirects from routers */
 #define ICMPCTL_REDIRTIMEOUT	6	/* Remove routes added via redirects */
 #define	ICMPCTL_STATS		7	/* ICMP statistics */
-#define ICMPCTL_MAXID		8
+#define ICMPCTL_BMCASTECHO	8	/* allow broad/mult-cast echo */
+#define ICMPCTL_MAXID		9
 
 #define ICMPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -77,16 +83,13 @@ struct	icmpstat {
 	{ "rediraccept", CTLTYPE_INT }, \
 	{ "redirtimeout", CTLTYPE_INT }, \
 	{ "stats", CTLTYPE_STRUCT }, \
+	{ "bmcastecho", CTLTYPE_INT }, \
 }
 
 #ifdef _KERNEL
-extern struct	icmpstat icmpstat;
 
-#ifdef __NO_STRICT_ALIGNMENT
-#define	ICMP_HDR_ALIGNED_P(ic)	1
-#else
-#define	ICMP_HDR_ALIGNED_P(ic)	((((vaddr_t) (ic)) & 3) == 0)
-#endif
+void	icmp_statinc(u_int stat);
+
 #endif /* _KERNEL_ */
 
 #endif /* !_NETINET_ICMP_VAR_H_ */

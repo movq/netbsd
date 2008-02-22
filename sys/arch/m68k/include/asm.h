@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.24 2006/01/20 22:02:40 christos Exp $	*/
+/*	$NetBSD: asm.h,v 1.33 2013/09/12 15:36:17 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,36 +73,40 @@
 #ifndef _M68K_ASM_H_
 #define _M68K_ASM_H_
 
-#if defined(__ELF__) && defined(PIC)
-#define PIC_PLT(name)	name@PLTPC
+#define __IMMEDIATE		#
+
+#ifdef __PIC__
+#define PIC_PLT(name)		name@PLTPC
+#ifdef __mcoldfire__
+#define LEA_LCL(name,reg) \
+	movl	__IMMEDIATE name - .,reg ; \
+	lea	(-6,%pc,reg),reg
+#define GOT_SETUP(reg) \
+	movl	__IMMEDIATE _GLOBAL_OFFSET_TABLE_@GOTPC,reg ; \
+	lea	(-6,%pc,reg),reg
 #else
-#define PIC_PLT(name)	name
+#define LEA_LCL(name,reg)	lea	(name,%pc),reg
+#define GOT_SETUP(reg)		lea	(_GLOBAL_OFFSET_TABLE_@GOTPC,%pc),reg
+#endif
+#else
+#define PIC_PLT(name)		name
+#define LEA_LCL(name,reg)	movl	__IMMEDIATE name,reg
+#define GOT_SETUP(reg)		/* nothing */
 #endif
 
-#ifdef __ELF__
-# if __STDC__
-#  define _C_LABEL(name)	name
-# else
-#  define _C_LABEL(name)	name
+#if __STDC__
+# define _C_LABEL(name)	name
+#else
+# define _C_LABEL(name)	name
 #endif /* __STDC__ */
-#else /* __ELF__ */
-# if __STDC__
-#  define _C_LABEL(name)	_ ## name
-# else
-#  define _C_LABEL(name)	_/**/name
-# endif /* __STDC__ */
-#endif /* __ELF__ */
 
 #define	_ASM_LABEL(name)	name
 
 #define	_ENTRY(name) \
 	.text; .even; .globl name; .type name,@function; name:
+#define	END(name)	.size name,.-name
 
-#ifdef __ELF__
 #define	MCOUNT_ENTRY	__mcount
-#else
-#define	MCOUNT_ENTRY	mcount
-#endif
 
 #ifdef GPROF
 #define _PROF_PROLOG	link %a6,#0; jbsr MCOUNT_ENTRY; unlk %a6
@@ -142,9 +139,9 @@
 #define ALTENTRY(name, rname)	_ENTRY(_C_LABEL(name))
 #endif
 
-#define RCSID(x)	.text			;	\
+#define RCSID(x)	.pushsection ".ident"	;	\
 			.asciz x		;	\
-			.even
+			.popsection
 
 /*
  * Global variables of whatever sort.
@@ -175,6 +172,18 @@
 #define	ASBSS(name, size)				\
 	.comm	_ASM_LABEL(name),size
 
+/*
+ * Need a better place for these but these are common across
+ * all m68k ports so let's define just once.
+ */
+#ifdef __mcoldfire__
+#define INTERRUPT_SAVEREG	lea -16(%sp),%sp; moveml #0xC0C0,(%sp)
+#define INTERRUPT_RESTOREREG	moveml (%sp),#0x0303; lea 16(%sp),%sp
+#else
+#define INTERRUPT_SAVEREG	moveml	#0xC0C0,-(%sp)
+#define INTERRUPT_RESTOREREG	moveml	(%sp)+,#0x0303
+#endif
+
 #ifdef _KERNEL
 /*
  * Shorthand for calling panic().
@@ -185,6 +194,24 @@
 		jbsr	_C_LABEL(panic)		;	\
 	9:	.asciz	x			;	\
 		.even
+
+/* 64-bit counter increments */
+#define CPUINFO_INCREMENT(n)					\
+	lea	_C_LABEL(cpu_info_store)+(n)+4,%a1;		\
+	addq.l	#1,(%a1);					\
+	clr.l	%d0;		/* doesn't change CCR[X] */	\
+	move.l	-(%a1),%d1;	/* doesn't change CCR[X] */	\
+	addx.l	%d0,%d1;					\
+	move.l	%d1,(%a1)
+
+/* 64-bit counter increments */
+#define CPUINFO_ADD(n, addend)					\
+	lea	_C_LABEL(cpu_info_store)+(n)+4,%a1;		\
+	add.l	addend,(%a1);					\
+	clr.l	%d0;		/* doesn't change CCR[X] */	\
+	move.l	-(%a1),%d1;	/* doesn't change CCR[X] */	\
+	addx.l	%d0,%d1;					\
+	move.l	%d1,(%a1)
 
 #endif /* _KERNEL */
 
@@ -200,11 +227,10 @@
 #define	VECTOR_UNUSED					\
 	.long	0
 
-#ifdef __ELF__
 #define	WEAK_ALIAS(alias,sym)						\
 	.weak alias;							\
 	alias = sym
-#endif
+
 /*
  * STRONG_ALIAS: create a strong alias.
  */
@@ -213,27 +239,27 @@
 	alias = sym
 
 #ifdef __STDC__
-#define	__STRING(x)			#x
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_ ## sym) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
-#define	__STRING(x)			"x"
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_/**/sym),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
 
 /*
  * Macros to hide shortcomings in the 68010.
  */
-#ifndef __mc68010__
-#define	EXTBL(reg)					\
-	extbl	reg
-#else	/* __mc68010__ */
+#ifdef __mc68010__
 #define	EXTBL(reg)					\
 	extw	reg		;			\
 	extl	reg
+#else	/* __mc68010__ */
+#define	EXTBL(reg)					\
+	extbl	reg
 #endif	/* __mc68010__ */
 
 #endif /* _M68K_ASM_H_ */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: dge.4,v 1.7 2004/10/04 19:06:46 rumble Exp $
+.\"	$NetBSD: dge.4,v 1.11 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright (c) 2004, SUNET, Swedish University Computer Network.
 .\" All rights reserved.
@@ -102,7 +102,7 @@ in the driver.
 .It dge%d: symbol error
 .It dge%d: parity error
 An error in the XGMII communication was detected.
-This is a hardware error in the MAC\*[Lt]-\*[Gt]PHY communication bus.
+This is a hardware error in the MAC<->PHY communication bus.
 .Pp
 .It dge%d: CRC error
 A CRC error in the received datagram was detected.
@@ -112,7 +112,7 @@ The error is probably caused in the fiber communication.
 This is a fatal error and means that the hardware is broken and
 will most likely not function correctly.
 .Pp
-.It "dge%d: unable to allocate or map rx buffer %d error = %d
+.It "dge%d: unable to allocate or map rx buffer %d error = %d"
 The driver was not able to map a mbuf cluster page to a receive
 descriptor entry in the receive ring.
 Most likely the system has run out of mbuf clusters or have a too
@@ -134,6 +134,6 @@ driver first appeared in
 The
 .Nm
 driver was written by
-.An Anders Magnusson Aq ragge@ludd.luth.se .
+.An Anders Magnusson Aq Mt ragge@ludd.luth.se .
 .Sh BUGS
 There should be an XGMII framework for the driver to use.

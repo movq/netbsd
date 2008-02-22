@@ -1,4 +1,4 @@
-/*	$NetBSD: cread.c,v 1.20 2007/12/02 04:59:25 tsutsui Exp $	*/
+/*	$NetBSD: cread.c,v 1.28 2016/01/17 04:35:42 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -77,15 +77,48 @@ static struct sd {
 	int		compressed;	/* 1 if input file is a .gz file */
 } *ss[SOPEN_MAX];
 
-static int		get_byte __P((struct sd *));
-static unsigned long	getLong __P((struct sd *));
-static void		check_header __P((struct sd *));
+static int		get_byte(struct sd *);
+static unsigned long	getLong(struct sd *);
+static void		check_header(struct sd *);
 
 /* XXX - find suitable header file for these: */
-void	*zcalloc __P((void *, unsigned int, unsigned int));
-void	zcfree __P((void *, void *));
-void	zmemcpy __P((unsigned char *, unsigned char *, unsigned int));
+void	*zcalloc(void *, unsigned int, unsigned int);
+void	zcfree(void *, void *);
+void	zmemcpy(unsigned char *, unsigned char *, unsigned int);
 
+/*
+ * This is the double-loop version of LE CRC32 from if_ethersubr,
+ * lightly modified -- it is ~1KB smaller than libkern version with
+ * DYNAMIC_CRC_TABLE but too much slower especially on ancient poor CPUs.
+ */
+#ifndef ETHER_CRC_POLY_LE
+#define ETHER_CRC_POLY_LE	0xedb88320
+#endif
+uint32_t
+crc32(uint32_t crc, const uint8_t *const buf, size_t len)
+{
+#if defined(LIBSA_CREAD_NOCRC)
+	/* XXX provide a stub to avoid pulling a larger libkern version */
+	return crc;
+#else
+	uint32_t c, carry;
+	size_t i, j;
+
+	crc = 0xffffffffU ^ crc;
+	for (i = 0; i < len; i++) {
+		c = buf[i];
+		for (j = 0; j < 8; j++) {
+			carry = ((crc & 0x01) ? 1 : 0) ^ (c & 0x01);
+			crc >>= 1;
+			c >>= 1;
+			if (carry) {
+				crc = (crc ^ ETHER_CRC_POLY_LE);
+			}
+		}
+	}
+	return (crc ^ 0xffffffffU);
+#endif /* defined(LIBSA_CREAD_NOCRC) */
+}
 
 /*
  * compression utilities
@@ -109,7 +142,7 @@ void
 zmemcpy(unsigned char *dest, unsigned char *source, unsigned int len)
 {
 
-	bcopy(source, dest, len);
+	memcpy(dest, source, len);
 }
 
 static int
@@ -237,7 +270,7 @@ open(const char *fname, int mode)
 	ss[fd] = s = alloc(sizeof(struct sd));
 	if (s == 0)
 		goto errout;
-	bzero(s, sizeof(struct sd));
+	(void)memset(s, 0, sizeof(struct sd));
 
 	if (inflateInit2(&(s->stream), -15) != Z_OK)
 		goto errout;
@@ -255,6 +288,7 @@ open(const char *fname, int mode)
 errout:
 	if (s != 0)
 		dealloc(s, sizeof(struct sd));
+	ss[fd] = NULL;
 	oclose(fd);
 	return -1;
 }
@@ -262,7 +296,6 @@ errout:
 int
 close(int fd)
 {
-	struct open_file *f;
 	struct sd *s;
 
 #if !defined(LIBSA_NO_FD_CHECKING)
@@ -271,17 +304,15 @@ close(int fd)
 		return -1;
 	}
 #endif
-	f = &files[fd];
-
-	if ((f->f_flags & F_READ) == 0)
-		return oclose(fd);
 
 	s = ss[fd];
 
-	inflateEnd(&(s->stream));
+	if (s != NULL) {
+		inflateEnd(&(s->stream));
 
-	dealloc(s->inbuf, Z_BUFSIZE);
-	dealloc(s, sizeof(struct sd));
+		dealloc(s->inbuf, Z_BUFSIZE);
+		dealloc(s, sizeof(struct sd));
+	}
 
 	return oclose(fd);
 }
@@ -290,7 +321,9 @@ ssize_t
 read(int fd, void *buf, size_t len)
 {
 	struct sd *s;
+#if !defined(LIBSA_CREAD_NOCRC)
 	unsigned char *start = buf; /* starting point for crc computation */
+#endif
 
 	s = ss[fd];
 
@@ -346,13 +379,24 @@ read(int fd, void *buf, size_t len)
 		s->z_err = inflate(&(s->stream), Z_NO_FLUSH);
 
 		if (s->z_err == Z_STREAM_END) {
+			uint32_t total_out;
+#if !defined(LIBSA_CREAD_NOCRC)
+			uint32_t crc;
 			/* Check CRC and original size */
 			s->crc = crc32(s->crc, start, (unsigned int)
 					(s->stream.next_out - start));
 			start = s->stream.next_out;
+			crc = getLong(s);
+#else
+			(void)getLong(s);
+#endif
+			total_out = getLong(s);
 
-			if (getLong(s) != s->crc ||
-			    getLong(s) != s->stream.total_out) {
+			if (
+#if !defined(LIBSA_CREAD_NOCRC)
+			    crc != s->crc ||
+#endif
+			    total_out != s->stream.total_out) {
 
 				s->z_err = Z_DATA_ERROR;
 			} else {
@@ -360,7 +404,9 @@ read(int fd, void *buf, size_t len)
 				check_header(s);
 				if (s->z_err == Z_OK) {
 					inflateReset(&(s->stream));
+#if !defined(LIBSA_CREAD_NOCRC)
 					s->crc = crc32(0L, Z_NULL, 0);
+#endif
 				}
 			}
 		}
@@ -368,8 +414,10 @@ read(int fd, void *buf, size_t len)
 			break;
 	}
 
+#if !defined(LIBSA_CREAD_NOCRC)
 	s->crc = crc32(s->crc, start,
 	               (unsigned int)(s->stream.next_out - start));
+#endif
 
 	return (int)(len - s->stream.avail_out);
 }
@@ -419,7 +467,8 @@ lseek(int fd, off_t offset, int where)
 			inflateEnd(&(s->stream));
 
 			sav_inbuf = s->inbuf; /* don't allocate again */
-			bzero(s, sizeof(struct sd)); /* this resets total_out to 0! */
+			(void)memset(s, 0, sizeof(struct sd));
+			/* this resets total_out to 0! */
 
 			inflateInit2(&(s->stream), -15);
 			s->stream.next_in = s->inbuf = sav_inbuf;

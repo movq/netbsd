@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_put.c,v 1.15 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_put.c,v 1.22 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_put.c	8.8 (Berkeley) 7/26/94";
-#else
-__RCSID("$NetBSD: bt_put.c,v 1.15 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_put.c,v 1.22 2016/09/24 21:31:25 christos Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -77,7 +75,7 @@ __bt_put(const DB *dbp, DBT *key, const DBT *data, u_int flags)
 	PAGE *h;
 	indx_t idx, nxtindex;
 	pgno_t pg;
-	u_int32_t nbytes, temp;
+	uint32_t nbytes, temp;
 	int dflags, exact, status;
 	char *dest, db[NOVFLSIZE], kb[NOVFLSIZE];
 
@@ -129,9 +127,9 @@ storekey:		if (__ovfl_put(t, key, &pg) == RET_ERROR)
 				return (RET_ERROR);
 			tkey.data = kb;
 			tkey.size = NOVFLSIZE;
-			memmove(kb, &pg, sizeof(pgno_t));
+			memmove(kb, &pg, sizeof(pg));
 			memmove(kb + sizeof(pgno_t),
-			    &key->size, sizeof(u_int32_t));
+			    &key->size, sizeof(uint32_t));
 			dflags |= P_BIGKEY;
 			key = &tkey;
 		}
@@ -140,11 +138,11 @@ storekey:		if (__ovfl_put(t, key, &pg) == RET_ERROR)
 				return (RET_ERROR);
 			tdata.data = db;
 			tdata.size = NOVFLSIZE;
-			memmove(db, &pg, sizeof(pgno_t));
-			_DBFIT(data->size, u_int32_t);
-			temp = (u_int32_t)data->size;
+			memmove(db, &pg, sizeof(pg));
+			_DBFIT(data->size, uint32_t);
+			temp = (uint32_t)data->size;
 			(void)memmove(db + sizeof(pgno_t),
-			    &temp, sizeof(u_int32_t));
+			    &temp, sizeof(uint32_t));
 			dflags |= P_BIGDATA;
 			data = &tdata;
 		}
@@ -204,7 +202,7 @@ delete:		if (__bt_dleaf(t, key, h, (u_int)idx) == RET_ERROR) {
 	 * into the offset array, shift the pointers up.
 	 */
 	nbytes = NBLEAFDBT(key->size, data->size);
-	if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
+	if ((uint32_t)h->upper - (uint32_t)h->lower < nbytes + sizeof(indx_t)) {
 		if ((status = __bt_split(t, h, key,
 		    data, dflags, nbytes, (u_int)idx)) != RET_SUCCESS)
 			return (status);
@@ -253,7 +251,7 @@ success:
 }
 
 #ifdef STATISTICS
-u_long bt_cache_hit, bt_cache_miss;
+unsigned long bt_cache_hit, bt_cache_miss;
 #endif
 
 /*
@@ -270,7 +268,7 @@ static EPG *
 bt_fast(BTREE *t, const DBT *key, const DBT *data, int *exactp)
 {
 	PAGE *h;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	int cmp;
 
 	if ((h = mpool_get(t->bt_mp, t->bt_last.pgno, 0)) == NULL) {
@@ -285,7 +283,7 @@ bt_fast(BTREE *t, const DBT *key, const DBT *data, int *exactp)
 	 * have to search to get split stack.
 	 */
 	nbytes = NBLEAFDBT(key->size, data->size);
-	if (h->upper - h->lower < nbytes + sizeof(indx_t))
+	if ((uint32_t)h->upper - (uint32_t)h->lower < nbytes + sizeof(indx_t))
 		goto miss;
 
 	if (t->bt_order == FORWARD) {

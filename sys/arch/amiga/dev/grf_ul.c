@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_ul.c,v 1.41 2007/03/05 19:48:20 he Exp $ */
+/*	$NetBSD: grf_ul.c,v 1.51 2016/11/03 22:08:31 kamil Exp $ */
 #define UL_DEBUG
 
 /*-
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,9 +33,10 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_ul.c,v 1.41 2007/03/05 19:48:20 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_ul.c,v 1.51 2016/11/03 22:08:31 kamil Exp $");
 
 #include "grful.h"
+#include "ite.h"
 #if NGRFUL > 0
 
 /* Graphics routines for the University of Lowell A2410 board,
@@ -169,8 +163,7 @@ static struct grfvideo_mode *current_mon;
  */
 
 static int
-ulisr(arg)
-	void *arg;
+ulisr(void *arg)
 {
 	struct grf_softc *gp = arg;
 	volatile struct gspregs *ba;
@@ -199,8 +192,7 @@ ulisr(arg)
  * for the moment, a NOP.
  */
 int
-ulowell_alive(mdp)
-	struct grfvideo_mode *mdp;
+ulowell_alive(struct grfvideo_mode *mdp)
 {
 	return 1;
 }
@@ -209,8 +201,7 @@ ulowell_alive(mdp)
  * Load the (mostly) ite support code and the default colormaps.
  */
 static void
-ul_load_code(gp)
-	struct grf_softc *gp;
+ul_load_code(struct grf_softc *gp)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -308,7 +299,7 @@ ul_load_code(gp)
 	 * into the real one some time after the TMS code is started below.
 	 * This might be considered a rude hack.
 	 */
-	bcopy(ul_ovl_palette, gup->gus_ovcmap, 3*4);
+	memcpy(gup->gus_ovcmap, ul_ovl_palette, 3*4);
 
 	/*
 	 * Unflush cache, unhalt CPU -> nmi starts to run. This MUST NOT BE
@@ -367,16 +358,12 @@ ul_load_code(gp)
 }
 
 static int
-ul_load_mon(gp, md)
-	struct grf_softc *gp;
-	struct grfvideo_mode *md;
+ul_load_mon(struct grf_softc *gp, struct grfvideo_mode *md)
 {
-	struct grf_ul_softc *gup;
 	struct grfinfo *gi;
 	volatile struct gspregs *ba;
 	u_int16_t buf[8];
 
-	gup = (struct grf_ul_softc *)gp;
 	gi = &gp->g_display;
 	ba = (volatile struct gspregs *)gp->g_regkva;
 
@@ -441,11 +428,11 @@ ul_load_mon(gp, md)
 
 int ul_mode(struct grf_softc *, u_long, void *, u_long, int);
 
-void grfulattach(struct device *, struct device *, void *);
+void grfulattach(device_t, device_t, void *);
 int grfulprint(void *, const char *);
-int grfulmatch(struct device *, struct cfdata *, void *);
+int grfulmatch(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(grful, sizeof(struct grf_ul_softc),
+CFATTACH_DECL_NEW(grful, sizeof(struct grf_ul_softc),
     grfulmatch, grfulattach, NULL, NULL);
 
 /*
@@ -458,17 +445,14 @@ static struct cfdata *cfdata;
  * tricky regarding the console.
  */
 int
-grfulmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+grfulmatch(device_t parent, cfdata_t cf, void *aux)
 {
 #ifdef ULOWELLCONSOLE
 	static int ulconunit = -1;
 #endif
 	struct zbus_args *zap;
 
-	zap = auxp;
+	zap = aux;
 
 	/*
 	 * allow only one ulowell console
@@ -483,7 +467,7 @@ grfulmatch(pdp, cfp, auxp)
 		return(0);
 
 #ifdef ULOWELLCONSOLE
-	if (amiga_realconfig == 0 || ulconunit != cfp->cf_unit) {
+	if (amiga_realconfig == 0 || ulconunit != cf->cf_unit) {
 #endif
 		if ((unsigned)ulowell_default_mon > ulowell_mon_max)
 			ulowell_default_mon = 1;
@@ -493,8 +477,8 @@ grfulmatch(pdp, cfp, auxp)
 			return(0);
 #ifdef ULOWELLCONSOLE
 		if (amiga_realconfig == 0) {
-			ulconunit = cfp->cf_unit;
-			cfdata = cfp;
+			ulconunit = cf->cf_unit;
+			cfdata = cf;
 		}
 	}
 #endif
@@ -505,29 +489,32 @@ grfulmatch(pdp, cfp, auxp)
  * attach to the grfbus (zbus)
  */
 void
-grfulattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+grfulattach(device_t parent, device_t self, void *aux)
 {
 	static struct grf_ul_softc congrf;
+	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
 	struct grf_ul_softc *gup;
 
-	zap = auxp;
+	zap = aux;
 
-	if (dp == NULL)
+	if (self == NULL) {
 		gup = &congrf;
-	else
-		gup = (struct grf_ul_softc *)dp;
+		gp = &gup->gus_sc;
+		gp->g_device = &temp;
+		temp.dv_private = gp;
+	} else {
+		gup = device_private(self);
+		gp = &gup->gus_sc;
+		gp->g_device = self;
+	}
 
-	gp = &gup->gus_sc;
-
-	if (dp != NULL && congrf.gus_sc.g_regkva != 0) {
+	if (self != NULL && congrf.gus_sc.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		bcopy(&congrf.gus_sc.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.gus_sc.g_display,
 		    (char *)&gup->gus_isr - (char *)&gp->g_display);
 
 		/* ...and transfer the isr */
@@ -535,7 +522,7 @@ grfulattach(pdp, dp, auxp)
 		gup->gus_isr.isr_intr = ulisr;
 		gup->gus_isr.isr_arg = (void *)gp;
 		/*
-		 * To make sure ints are always catched, first add new isr
+		 * To make sure ints are always caught, first add new isr
 		 * then remove old:
 		 */
 		add_isr(&gup->gus_isr);
@@ -546,7 +533,9 @@ grfulattach(pdp, dp, auxp)
 		gp->g_unit = GRF_ULOWELL_UNIT;
 		gp->g_flags = GF_ALIVE;
 		gp->g_mode = ul_mode;
+#if NITE > 0
 		gp->g_conpri = grful_cnprobe();
+#endif
 		gp->g_data = NULL;
 
 		gup->gus_isr.isr_ipl = 2;
@@ -556,31 +545,29 @@ grfulattach(pdp, dp, auxp)
 
 		(void)ul_load_code(gp);
 		(void)ul_load_mon(gp, current_mon);
+#if NITE > 0
 		grful_iteinit(gp);
+#endif
 	}
-	if (dp != NULL)
+	if (self != NULL)
 		printf("\n");
 	/*
 	 * attach grf
 	 */
-	amiga_config_found(cfdata, &gp->g_device, gp, grfulprint);
+	amiga_config_found(cfdata, gp->g_device, gp, grfulprint);
 }
 
 int
-grfulprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+grfulprint(void *aux, const char *pnp)
 {
 	if (pnp)
-		aprint_normal("grf%d at %s", ((struct grf_softc *)auxp)->g_unit,
+		aprint_normal("grf%d at %s", ((struct grf_softc *)aux)->g_unit,
 			pnp);
 	return(UNCONF);
 }
 
 static int
-ul_getvmode (gp, vm)
-	struct grf_softc *gp;
-	struct grfvideo_mode *vm;
+ul_getvmode (struct grf_softc *gp, struct grfvideo_mode *vm)
 {
 	struct grfvideo_mode *md;
 
@@ -616,19 +603,13 @@ ul_getvmode (gp, vm)
 
 
 static int
-ul_setvmode (gp, mode)
-	struct grf_softc *gp;
-	unsigned mode;
+ul_setvmode (struct grf_softc *gp, unsigned mode)
 {
-	struct grf_ul_softc *gup;
-	volatile struct gspregs *ba;
 	int error;
 
 	if (!mode || mode > ulowell_mon_max)
 		return EINVAL;
 
-	ba = (volatile struct gspregs *)gp->g_regkva;
-	gup = (struct grf_ul_softc *)gp;
 	current_mon = ul_monitor_defs + mode - 1;
 
 	error = ul_load_mon (gp, current_mon) ? 0 : EINVAL;
@@ -642,9 +623,7 @@ ul_setvmode (gp, mode)
  */
 
 static inline void
-ul_setfb(gp, cmd)
-	struct grf_softc *gp;
-	u_long cmd;
+ul_setfb(struct grf_softc *gp, u_long cmd)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -680,12 +659,7 @@ ul_setfb(gp, cmd)
  * Return a UNIX error number or 0 for success.
  */
 int
-ul_mode(gp, cmd, arg, a2, a3)
-	struct grf_softc *gp;
-	u_long cmd;
-	void *arg;
-	u_long a2;
-	int a3;
+ul_mode(struct grf_softc *gp, u_long cmd, void *arg, u_long a2, int a3)
 {
 	int i;
 	struct grfdyninfo *gd;
@@ -728,11 +702,7 @@ ul_mode(gp, cmd, arg, a2, a3)
 }
 
 int
-ul_ioctl (gp, cmd, data, dev)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *data;
-	dev_t dev;
+ul_ioctl (register struct grf_softc *gp, u_long cmd, void *data, dev_t dev)
 {
 	switch (cmd) {
 #if 0
@@ -775,10 +745,7 @@ ul_ioctl (gp, cmd, data, dev)
 }
 
 int
-ul_getcmap (gp, cmap, dev)
-	struct grf_softc *gp;
-	struct grf_colormap *cmap;
-	dev_t dev;
+ul_getcmap (struct grf_softc *gp, struct grf_colormap *cmap, dev_t dev)
 {
 	struct grf_ul_softc *gup;
 	u_int8_t *mymap;
@@ -816,10 +783,7 @@ ul_getcmap (gp, cmap, dev)
 }
 
 int
-ul_putcmap (gp, cmap, dev)
-	struct grf_softc *gp;
-	struct grf_colormap *cmap;
-	dev_t dev;
+ul_putcmap (struct grf_softc *gp, struct grf_colormap *cmap, dev_t dev)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -897,10 +861,7 @@ ul_putcmap (gp, cmap, dev)
 }
 
 int
-ul_blank(gp, onoff, dev)
-	struct grf_softc *gp;
-	int *onoff;
-	dev_t dev;
+ul_blank(struct grf_softc *gp, int *onoff, dev_t dev)
 {
 	volatile struct gspregs *gsp;
 
@@ -924,20 +885,14 @@ int ul_BltOpMap[16] = {
 };
 
 int
-ul_bitblt (gp, bb, dev)
-	struct grf_softc *gp;
-	struct grf_bitblt *bb;
-	dev_t dev;
+ul_bitblt (struct grf_softc *gp, struct grf_bitblt *bb, dev_t dev)
 {
 	/* XXX not yet implemented, but pretty trivial */
 	return EPASSTHROUGH;
 }
 
 void
-gsp_write(gsp, ptr, size)
-	volatile struct gspregs *gsp;
-	u_short *ptr;
-	size_t size;
+gsp_write(volatile struct gspregs *gsp, u_short *ptr, size_t size)
 {
 	u_short put, new_put, next, oc;
 	u_long put_hi, oa;

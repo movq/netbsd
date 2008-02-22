@@ -1,4 +1,4 @@
-/*	$NetBSD: walk.c,v 1.23 2006/10/10 01:55:45 dbj Exp $	*/
+/*	$NetBSD: walk.c,v 1.29 2015/11/25 00:48:49 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -41,10 +41,11 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: walk.c,v 1.23 2006/10/10 01:55:45 dbj Exp $");
+__RCSID("$NetBSD: walk.c,v 1.29 2015/11/25 00:48:49 christos Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
+#include <sys/stat.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -54,47 +55,77 @@ __RCSID("$NetBSD: walk.c,v 1.23 2006/10/10 01:55:45 dbj Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/stat.h>
+#include <util.h>
 
 #include "makefs.h"
 #include "mtree.h"
 
 static	void	 apply_specdir(const char *, NODE *, fsnode *, int);
 static	void	 apply_specentry(const char *, NODE *, fsnode *);
-static	fsnode	*create_fsnode(const char *, struct stat *);
+static	fsnode	*create_fsnode(const char *, const char *, const char *,
+			       struct stat *);
 static	fsinode	*link_check(fsinode *);
 
 
 /*
  * walk_dir --
- *	build a tree of fsnodes from `dir', with a parent fsnode of `parent'
- *	(which may be NULL for the root of the tree).
+ *	build a tree of fsnodes from `root' and `dir', with a parent
+ *	fsnode of `parent' (which may be NULL for the root of the tree).
+ *	append the tree to a fsnode of `join' if it is not NULL.
  *	each "level" is a directory, with the "." entry guaranteed to be
  *	at the start of the list, and without ".." entries.
  */
 fsnode *
-walk_dir(const char *dir, fsnode *parent)
+walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join,
+    int replace)
 {
-	fsnode		*first, *cur, *prev;
+	fsnode		*first, *cur, *prev, *last;
 	DIR		*dirp;
 	struct dirent	*dent;
 	char		path[MAXPATHLEN + 1];
 	struct stat	stbuf;
+	char		*name, *rp;
+	int		dot, len;
 
+	assert(root != NULL);
 	assert(dir != NULL);
 
+	len = snprintf(path, sizeof(path), "%s/%s", root, dir);
+	if (len >= (int)sizeof(path))
+		errx(1, "Pathname too long.");
 	if (debug & DEBUG_WALK_DIR)
-		printf("walk_dir: %s %p\n", dir, parent);
-	if ((dirp = opendir(dir)) == NULL)
-		err(1, "Can't opendir `%s'", dir);
-	first = prev = NULL;
+		printf("walk_dir: %s %p\n", path, parent);
+	if ((dirp = opendir(path)) == NULL)
+		err(1, "Can't opendir `%s'", path);
+	rp = path + strlen(root) + 1;
+	if (join != NULL) {
+		first = cur = join;
+		while (cur->next != NULL)
+			cur = cur->next;
+		prev = last = cur;
+	} else
+		last = first = prev = NULL;
 	while ((dent = readdir(dirp)) != NULL) {
-		if (strcmp(dent->d_name, "..") == 0)
-			continue;
+		name = dent->d_name;
+		dot = 0;
+		if (name[0] == '.')
+			switch (name[1]) {
+			case '\0':	/* "." */
+				if (join != NULL)
+					continue;
+				dot = 1;
+				break;
+			case '.':	/* ".." */
+				if (name[2] == '\0')
+					continue;
+				/* FALLTHROUGH */
+			default:
+				dot = 0;
+			}
 		if (debug & DEBUG_WALK_DIR_NODE)
-			printf("scanning %s/%s\n", dir, dent->d_name);
-		if (snprintf(path, sizeof(path), "%s/%s", dir, dent->d_name)
-		    >= sizeof(path))
+			printf("scanning %s/%s/%s\n", root, dir, name);
+		if (snprintf(path + len, sizeof(path) - len, "/%s", name) >=
+		    (int)sizeof(path) - len)
 			errx(1, "Pathname too long.");
 		if (lstat(path, &stbuf) == -1)
 			err(1, "Can't lstat `%s'", path);
@@ -106,22 +137,70 @@ walk_dir(const char *dir, fsnode *parent)
 		}
 #endif
 
-		cur = create_fsnode(dent->d_name, &stbuf);
+		if (join != NULL) {
+			cur = join->next;
+			for (;;) {
+				if (cur == NULL || strcmp(cur->name, name) == 0)
+					break;
+				if (cur == last) {
+					cur = NULL;
+					break;
+				}
+				cur = cur->next;
+			}
+			if (cur != NULL) {
+				if (S_ISDIR(cur->type) &&
+				    S_ISDIR(stbuf.st_mode)) {
+					if (debug & DEBUG_WALK_DIR_NODE)
+						printf("merging %s with %p\n",
+						    path, cur->child);
+					cur->child = walk_dir(root, rp, cur,
+					    cur->child, replace);
+					continue;
+				}
+				if (!replace)
+					errx(1, "Can't merge %s `%s' with "
+					    "existing %s",
+					    inode_type(stbuf.st_mode), path,
+					    inode_type(cur->type));
+				else {
+					if (debug & DEBUG_WALK_DIR_NODE)
+						printf("replacing %s %s\n",
+						    inode_type(stbuf.st_mode),
+						    path);
+					if (cur == join->next)
+						join->next = cur->next;
+					else {
+						fsnode *p;
+						for (p = join->next;
+						    p->next != cur; p = p->next)
+							continue;
+						p->next = cur->next;
+					}
+					free(cur);
+				}
+			}
+		}
+
+		cur = create_fsnode(root, dir, name, &stbuf);
 		cur->parent = parent;
-		if (strcmp(dent->d_name, ".") == 0) {
+		if (dot) {
 				/* ensure "." is at the start of the list */
 			cur->next = first;
 			first = cur;
 			if (! prev)
 				prev = cur;
+			cur->first = first;
 		} else {			/* not "." */
 			if (prev)
 				prev->next = cur;
 			prev = cur;
 			if (!first)
 				first = cur;
+			cur->first = first;
 			if (S_ISDIR(cur->type)) {
-				cur->child = walk_dir(path, cur);
+				cur->child = walk_dir(root, rp, cur, NULL,
+				    replace);
 				continue;
 			}
 		}
@@ -134,8 +213,8 @@ walk_dir(const char *dir, fsnode *parent)
 				cur->inode = curino;
 				cur->inode->nlink++;
 				if (debug & DEBUG_WALK_DIR_LINKCHECK)
-					printf("link_check: found [%u, %llu]\n",
-					    curino->st.st_dev,
+					printf("link_check: found [%llu, %llu]\n",
+					    (unsigned long long)curino->st.st_dev,
 					    (unsigned long long)curino->st.st_ino);
 			}
 		}
@@ -147,29 +226,46 @@ walk_dir(const char *dir, fsnode *parent)
 			if (llen == -1)
 				err(1, "Readlink `%s'", path);
 			slink[llen] = '\0';
-			if ((cur->symlink = strdup(slink)) == NULL)
-				err(1, "Memory allocation error");
+			cur->symlink = estrdup(slink);
 		}
 	}
-	for (cur = first; cur != NULL; cur = cur->next)
-		cur->first = first;
+	assert(first != NULL);
+	if (join == NULL)
+		for (cur = first->next; cur != NULL; cur = cur->next)
+			cur->first = first;
 	if (closedir(dirp) == -1)
-		err(1, "Can't closedir `%s'", dir);
+		err(1, "Can't closedir `%s/%s'", root, dir);
 	return (first);
 }
 
 static fsnode *
-create_fsnode(const char *name, struct stat *stbuf)
+create_fsnode(const char *root, const char *path, const char *name,
+    struct stat *stbuf)
 {
 	fsnode *cur;
 
-	if ((cur = calloc(1, sizeof(fsnode))) == NULL ||
-	    (cur->name = strdup(name)) == NULL ||
-	    (cur->inode = calloc(1, sizeof(fsinode))) == NULL)
-		err(1, "Memory allocation error");
+	cur = ecalloc(1, sizeof(*cur));
+	cur->path = estrdup(path);
+	cur->name = estrdup(name);
+	cur->inode = ecalloc(1, sizeof(*cur->inode));
+	cur->root = root;
 	cur->type = stbuf->st_mode & S_IFMT;
 	cur->inode->nlink = 1;
 	cur->inode->st = *stbuf;
+	if (stampst.st_ino) {
+		cur->inode->st.st_atime = stampst.st_atime;
+		cur->inode->st.st_mtime = stampst.st_mtime;
+		cur->inode->st.st_ctime = stampst.st_ctime;
+#if HAVE_STRUCT_STAT_ST_MTIMENSEC
+		cur->inode->st.st_atimensec = stampst.st_atimensec;
+		cur->inode->st.st_mtimensec = stampst.st_mtimensec;
+		cur->inode->st.st_ctimensec = stampst.st_ctimensec;
+#endif
+#if HAVE_STRUCT_STAT_BIRTHTIME 
+		cur->inode->st.st_birthtime = stampst.st_birthtime;
+		cur->inode->st.st_birthtimensec = stampst.st_birthtimensec;
+#endif
+	}
 	return (cur);
 }
 
@@ -215,6 +311,7 @@ free_fsnodes(fsnode *node)
 			free(cur->inode);
 		if (cur->symlink)
 			free(cur->symlink);
+		free(cur->path);
 		free(cur->name);
 		free(cur);
 	}
@@ -323,7 +420,7 @@ apply_specdir(const char *dir, NODE *specnode, fsnode *dirnode, int speconly)
 			if (strcmp(curnode->name, curfsnode->name) == 0)
 				break;
 		}
-		if (snprintf(path, sizeof(path), "%s/%s",
+		if ((size_t)snprintf(path, sizeof(path), "%s/%s",
 		    dir, curnode->name) >= sizeof(path))
 			errx(1, "Pathname too long.");
 		if (curfsnode == NULL) {	/* need new entry */
@@ -366,23 +463,23 @@ apply_specdir(const char *dir, NODE *specnode, fsnode *dirnode, int speconly)
 			stbuf.st_mtimensec = stbuf.st_atimensec =
 			    stbuf.st_ctimensec = start_time.tv_nsec;
 #endif
-			curfsnode = create_fsnode(curnode->name, &stbuf);
+			curfsnode = create_fsnode(".", ".", curnode->name,
+			    &stbuf);
 			curfsnode->parent = dirnode->parent;
 			curfsnode->first = dirnode;
 			curfsnode->next = dirnode->next;
 			dirnode->next = curfsnode;
 			if (curfsnode->type == S_IFDIR) {
 					/* for dirs, make "." entry as well */
-				curfsnode->child = create_fsnode(".", &stbuf);
+				curfsnode->child = create_fsnode(".", ".", ".",
+				    &stbuf);
 				curfsnode->child->parent = curfsnode;
 				curfsnode->child->first = curfsnode->child;
 			}
 			if (curfsnode->type == S_IFLNK) {
 				assert(curnode->slink != NULL);
 					/* for symlinks, copy the target */
-				if ((curfsnode->symlink =
-				    strdup(curnode->slink)) == NULL)
-					err(1, "Memory allocation error");
+				curfsnode->symlink = estrdup(curnode->slink);
 			}
 		}
 		apply_specentry(dir, curnode, curfsnode);
@@ -438,8 +535,7 @@ apply_specentry(const char *dir, NODE *specnode, fsnode *dirnode)
 		assert(specnode->slink != NULL);
 		ASEPRINT("symlink", "%s", dirnode->symlink, specnode->slink);
 		free(dirnode->symlink);
-		if ((dirnode->symlink = strdup(specnode->slink)) == NULL)
-			err(1, "Memory allocation error");
+		dirnode->symlink = estrdup(specnode->slink);
 	}
 	if (specnode->flags & F_TIME) {
 		ASEPRINT("time", "%ld",
@@ -468,8 +564,9 @@ apply_specentry(const char *dir, NODE *specnode, fsnode *dirnode)
 	}
 #endif
 	if (specnode->flags & F_DEV) {
-		ASEPRINT("rdev", "%#x",
-		    dirnode->inode->st.st_rdev, specnode->st_rdev);
+		ASEPRINT("rdev", "%#llx",
+		    (unsigned long long)dirnode->inode->st.st_rdev,
+		    (unsigned long long)specnode->st_rdev);
 		dirnode->inode->st.st_rdev = specnode->st_rdev;
 	}
 #undef ASEPRINT
@@ -480,19 +577,18 @@ apply_specentry(const char *dir, NODE *specnode, fsnode *dirnode)
 
 /*
  * dump_fsnodes --
- *	dump the fsnodes from `cur', based in the directory `dir'
+ *	dump the fsnodes from `cur'
  */
 void
-dump_fsnodes(const char *dir, fsnode *root)
+dump_fsnodes(fsnode *root)
 {
 	fsnode	*cur;
 	char	path[MAXPATHLEN + 1];
 
-	assert (dir != NULL);
-	printf("dump_fsnodes: %s %p\n", dir, root);
+	printf("dump_fsnodes: %s %p\n", root->path, root);
 	for (cur = root; cur != NULL; cur = cur->next) {
-		if (snprintf(path, sizeof(path), "%s/%s", dir, cur->name)
-		    >= sizeof(path))
+		if (snprintf(path, sizeof(path), "%s/%s", cur->path,
+		    cur->name) >= (int)sizeof(path))
 			errx(1, "Pathname too long.");
 
 		if (debug & DEBUG_DUMP_FSNODES_VERBOSE)
@@ -511,10 +607,10 @@ dump_fsnodes(const char *dir, fsnode *root)
 
 		if (cur->child) {
 			assert (cur->type == S_IFDIR);
-			dump_fsnodes(path, cur->child);
+			dump_fsnodes(cur->child);
 		}
 	}
-	printf("dump_fsnodes: finished %s\n", dir);
+	printf("dump_fsnodes: finished %s/%s\n", root->path, root->name);
 }
 
 
@@ -574,10 +670,7 @@ link_check(fsinode *entry)
 		htused = 0;
 
 		ohtable = htable;
-		htable = calloc(htmask+1, sizeof(*htable));
-		if (!htable)
-			err(1, "Memory allocation error");
-
+		htable = ecalloc(htmask+1, sizeof(*htable));
 		/* populate newly allocated hashtable */
 		if (ohtable) {
 			int i;

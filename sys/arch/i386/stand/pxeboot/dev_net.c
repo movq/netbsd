@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.5 2003/03/12 17:35:57 drochner Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.11 2011/07/17 20:54:42 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,7 +42,6 @@
  * BOOTP for IP address - bootp()
  */
 
-#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -66,7 +58,7 @@
 static int netdev_sock = -1;
 static int netdev_opens;
 
-static int net_getparams __P((int sock));
+static int net_getparams(int sock);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -112,8 +104,7 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(f)
-	struct open_file *f;
+net_close(struct open_file *f)
 {
 
 #ifdef	NETIF_DEBUG
@@ -135,29 +126,19 @@ net_close(f)
 		if (debug)
 			printf("net_close: calling netif_close()\n");
 		pxe_netif_close(netdev_sock);
-		pxe_netif_shutdown(); /* XXX shouldn't be done here */
 		netdev_sock = -1;
 	}
 	return (0);
 }
 
 int
-net_ioctl(f, cmd, data)
-	struct open_file *f;
-	u_long cmd;
-	void *data;
+net_ioctl(struct open_file *f, u_long cmd, void *data)
 {
 	return EIO;
 }
 
 int
-net_strategy(devdata, rw, blk, size, buf, rsize)
-	void *devdata;
-	int rw;
-	daddr_t blk;
-	size_t size;
-	void *buf;
-	size_t *rsize;
+net_strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t *rsize)
 {
 	return EIO;
 }
@@ -168,12 +149,11 @@ net_strategy(devdata, rw, blk, size, buf, rsize)
  * server IP address, and our root path on the server.
  */
 #ifdef	SUPPORT_BOOTP
-int bootp __P((int sock));
+int bootp(int sock);
 #endif
 
 static int
-net_getparams(sock)
-	int sock;
+net_getparams(int sock)
 {
 
 #ifdef	SUPPORT_BOOTP

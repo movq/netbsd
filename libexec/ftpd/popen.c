@@ -1,7 +1,7 @@
-/*	$NetBSD: popen.c,v 1.31 2006/02/01 14:20:14 christos Exp $	*/
+/*	$NetBSD: popen.c,v 1.38 2016/03/17 00:17:58 christos Exp $	*/
 
 /*-
- * Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)popen.c	8.3 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: popen.c,v 1.31 2006/02/01 14:20:14 christos Exp $");
+__RCSID("$NetBSD: popen.c,v 1.38 2016/03/17 00:17:58 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -112,10 +105,11 @@ static int fds;
 extern int ls_main(int, char *[]);
 
 FILE *
-ftpd_popen(char *argv[], const char *ptype, int stderrfd)
+ftpd_popen(const char *argv[], const char *ptype, int stderrfd)
 {
-	FILE *iop;
-	int argc, pdes[2], pid, isls;
+	FILE * volatile iop;
+	int argc, pdes[2], pid;
+	volatile int isls;
 	char **pop;
 	StringList *sl;
 
@@ -127,7 +121,7 @@ ftpd_popen(char *argv[], const char *ptype, int stderrfd)
 	if (!pids) {
 		if ((fds = getdtablesize()) <= 0)
 			return (NULL);
-		if ((pids = (int *)malloc((u_int)(fds * sizeof(int)))) == NULL)
+		if ((pids = (int *)malloc((unsigned int)(fds * sizeof(int)))) == NULL)
 			return (NULL);
 		memset(pids, 0, fds * sizeof(int));
 	}
@@ -145,7 +139,8 @@ ftpd_popen(char *argv[], const char *ptype, int stderrfd)
 		int flags = GLOB_BRACE|GLOB_NOCHECK|GLOB_TILDE|GLOB_LIMIT;
 
 		memset(&gl, 0, sizeof(gl));
-		if (glob(argv[argc], flags, NULL, &gl)) {
+		if (glob(argv[argc], flags, NULL, &gl)
+		    || gl.gl_pathv == NULL)  {
 			if (sl_add(sl, ftpd_strdup(argv[argc])) == -1) {
 				globfree(&gl);
 				goto pfree;

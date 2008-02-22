@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.81 2008/02/02 20:56:46 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.119 2017/10/07 21:16:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -48,7 +48,7 @@ typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -65,7 +65,7 @@ typedef struct {
 
 #if !defined(_ANSI_SOURCE) && \
     (defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L || \
-     defined(_NETBSD_SOURCE))
+     (__cplusplus - 0) >= 201103L || defined(_NETBSD_SOURCE))
 typedef struct {
 	/* LONGLONG */
 	long long int quot;	/* quotient */
@@ -123,6 +123,10 @@ double	 strtod(const char * __restrict, char ** __restrict);
 long	 strtol(const char * __restrict, char ** __restrict, int);
 unsigned long
 	 strtoul(const char * __restrict, char ** __restrict, int);
+#ifdef _OPENBSD_SOURCE
+long long strtonum(const char *, long long, long long, const char **);
+void	*reallocarray(void *, size_t, size_t);
+#endif
 int	 system(const char *);
 
 /* These are currently just stubs. */
@@ -148,7 +152,7 @@ int	 rand_r(unsigned int *);
 /*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 double	 drand48(void);
 double	 erand48(unsigned short[3]);
 long	 jrand48(unsigned short[3]);
@@ -160,7 +164,9 @@ unsigned short *
 	 seed48(unsigned short[3]);
 void	 srand48(long);
 
-int	 putenv(const char *);
+#ifndef __LIBC12_SOURCE__
+int	 putenv(char *) __RENAME(__putenv50);
+#endif
 #endif
 
 
@@ -172,10 +178,17 @@ int	 putenv(const char *);
 long	 a64l(const char *);
 char	*l64a(long);
 
-char	*initstate(unsigned long, char *, size_t);
 long	 random(void);
 char	*setstate(char *);
-void	 srandom(unsigned long);
+#ifndef __LIBC12_SOURCE__
+char	*initstate(unsigned int, char *, size_t) __RENAME(__initstate60);
+void	 srandom(unsigned int) __RENAME(__srandom60);
+#endif
+#ifdef _NETBSD_SOURCE
+#define	RANDOM_MAX	0x7fffffff	/* (((long)1 << 31) - 1) */
+int	 mkostemp(char *, int);
+int	 mkostemps(char *, int, int);
+#endif
 
 char	*mkdtemp(char *);
 int	 mkstemp(char *);
@@ -187,7 +200,7 @@ char	*mktemp(char *)
 
 int	 setkey(const char *);
 
-char	*realpath(const char *, char *);
+char	*realpath(const char * __restrict, char * __restrict);
 
 int	 ttyslot(void);
 
@@ -202,7 +215,8 @@ char	*ptsname(int);
  * ISO C99
  */
 #if defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L || \
-    defined(_NETBSD_SOURCE)
+    defined(_NETBSD_SOURCE) || (__cplusplus - 0) >= 201103L
+
 /* LONGLONG */
 long long int	atoll(const char *);
 /* LONGLONG */
@@ -216,6 +230,13 @@ unsigned long long int
 		strtoull(const char * __restrict, char ** __restrict, int);
 float		strtof(const char * __restrict, char ** __restrict);
 long double	strtold(const char * __restrict, char ** __restrict);
+#endif
+
+#if defined(_ISOC11_SOURCE) || (__STDC_VERSION__ - 0) >= 201101L || \
+    defined(_NETBSD_SOURCE) || (__cplusplus - 0) >= 201103L
+void	*aligned_alloc(size_t, size_t);
+int	at_quick_exit(void (*)(void));
+__dead void quick_exit(int);
 #endif
 
 /*
@@ -238,13 +259,17 @@ int	 posix_memalign(void **, size_t, size_t);
 #if defined(_NETBSD_SOURCE)
 #if defined(alloca) && (alloca == __builtin_alloca) && \
 	defined(__GNUC__) && (__GNUC__ < 2)
-void	*alloca(int);     /* built-in for gcc */ 
-#else 
-void	*alloca(size_t); 
-#endif /* __GNUC__ */ 
+void	*alloca(int);     /* built-in for gcc */
+#elif defined(__PCC__) && !defined(__GNUC__)
+#define alloca(size) __builtin_alloca(size)
+#else
+void	*alloca(size_t);
+#endif /* __GNUC__ */
 
 uint32_t arc4random(void);
 void	 arc4random_stir(void);
+void	 arc4random_buf(void *, size_t);
+uint32_t arc4random_uniform(uint32_t);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
 char	*cgetcap(char *, const char *, int);
@@ -260,7 +285,10 @@ int	 cgetustr(char *, const char *, char **);
 void	 csetexpandtc(int);
 
 int	 daemon(int, int);
-__aconst char *devname(dev_t, mode_t);
+int	 devname_r(dev_t, mode_t, char *, size_t);
+#ifndef __LIBC12_SOURCE__
+__aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
+#endif
 
 #define	HN_DECIMAL		0x01
 #define	HN_NOSPACE		0x02
@@ -272,8 +300,10 @@ __aconst char *devname(dev_t, mode_t);
 
 int	 humanize_number(char *, size_t, int64_t, const char *, int, int);
 int	 dehumanize_number(const char *, int64_t *);
+ssize_t	 hmac(const char *, const void *, size_t, const void *, size_t, void *,
+   size_t);
 
-dev_t	 getdevmajor(const char *, mode_t);
+devmajor_t getdevmajor(const char *, mode_t);
 int	 getloadavg(double [], int);
 
 int	 getenv_r(const char *, char *, size_t);
@@ -283,14 +313,18 @@ void	 cfree(void *);
 int	 heapsort(void *, size_t, size_t, int (*)(const void *, const void *));
 int	 mergesort(void *, size_t, size_t,
 	    int (*)(const void *, const void *));
+int	 ptsname_r(int, char *, size_t);
 int	 radixsort(const unsigned char **, int, const unsigned char *,
 	    unsigned);
 int	 sradixsort(const unsigned char **, int, const unsigned char *,
 	    unsigned);
 
+void	 mi_vector_hash(const void * __restrict, size_t, uint32_t,
+	    uint32_t[3]);
+
 void	 setproctitle(const char *, ...)
-	    __attribute__((__format__(__printf__, 1, 2)));
-const char *getprogname(void) __attribute__((const));
+	    __printflike(1, 2);
+const char *getprogname(void) __constfunc;
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);
@@ -307,12 +341,52 @@ int	 l64a_r(long, char *, int);
 
 size_t	shquote(const char *, char *, size_t);
 size_t	shquotev(int, char * const *, char *, size_t);
+
+int	reallocarr(void *, size_t, size_t);
 #endif /* _NETBSD_SOURCE */
 #endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
 #if defined(_NETBSD_SOURCE)
 qdiv_t	 qdiv(quad_t, quad_t);
 #endif
+
+#if (_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
+double		strtod_l(const char * __restrict, char ** __restrict, locale_t);
+float		strtof_l(const char * __restrict, char ** __restrict, locale_t);
+long double	strtold_l(const char * __restrict, char ** __restrict,
+			  locale_t);
+long	 strtol_l(const char * __restrict, char ** __restrict, int, locale_t);
+unsigned long
+	 strtoul_l(const char * __restrict, char ** __restrict, int, locale_t);
+/* LONGLONG */
+long long int
+	strtoll_l(const char * __restrict, char ** __restrict, int, locale_t);
+/* LONGLONG */
+unsigned long long int
+	strtoull_l(const char * __restrict, char ** __restrict, int, locale_t);
+
+#  if defined(_NETBSD_SOURCE)
+quad_t	 strtoq_l(const char * __restrict, char ** __restrict, int, locale_t);
+u_quad_t strtouq_l(const char * __restrict, char ** __restrict, int, locale_t);
+
+size_t	_mb_cur_max_l(locale_t);
+#define	MB_CUR_MAX_L(loc)	_mb_cur_max_l(loc)
+int	 mblen_l(const char *, size_t, locale_t);
+size_t	 mbstowcs_l(wchar_t * __restrict, const char * __restrict, size_t,
+		    locale_t);
+int	 wctomb_l(char *, wchar_t, locale_t);
+int	 mbtowc_l(wchar_t * __restrict, const char * __restrict, size_t,
+	          locale_t);
+size_t	 wcstombs_l(char * __restrict, const wchar_t * __restrict, size_t,
+		    locale_t);
+
+#  endif /* _NETBSD_SOURCE */
+#endif /* _POSIX_C_SOURCE >= 200809 || _NETBSD_SOURCE */
+
 __END_DECLS
 
 #endif /* !_STDLIB_H_ */

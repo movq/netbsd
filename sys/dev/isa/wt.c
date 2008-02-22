@@ -1,4 +1,4 @@
-/*	$NetBSD: wt.c,v 1.78 2007/10/19 12:00:24 ad Exp $	*/
+/*	$NetBSD: wt.c,v 1.88 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Streamer tape driver.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wt.c,v 1.78 2007/10/19 12:00:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wt.c,v 1.88 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,7 +120,7 @@ static struct wtregs {
 };
 
 struct wt_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 
 	bus_space_tag_t		sc_iot;
@@ -158,12 +158,29 @@ static dev_type_dump(wtdump);
 static dev_type_size(wtsize);
 
 const struct bdevsw wt_bdevsw = {
-	wtopen, wtclose, wtstrategy, wtioctl, wtdump, wtsize, D_TAPE
+	.d_open = wtopen,
+	.d_close = wtclose,
+	.d_strategy = wtstrategy,
+	.d_ioctl = wtioctl,
+	.d_dump = wtdump,
+	.d_psize = wtsize,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
 const struct cdevsw wt_cdevsw = {
-	wtopen, wtclose, wtread, wtwrite, wtioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
+	.d_open = wtopen,
+	.d_close = wtclose,
+	.d_read = wtread,
+	.d_write = wtwrite,
+	.d_ioctl = wtioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
 static int	wtwait(struct wt_softc *sc, int catch, const char *msg);
@@ -181,10 +198,10 @@ static int	wtwritefm(struct wt_softc *sc);
 static u_char	wtsoft(struct wt_softc *sc, int mask, int bits);
 static int	wtintr(void *sc);
 
-int	wtprobe(struct device *, struct cfdata *, void *);
-void	wtattach(struct device *, struct device *, void *);
+int	wtprobe(device_t, cfdata_t, void *);
+void	wtattach(device_t, device_t, void *);
 
-CFATTACH_DECL(wt, sizeof(struct wt_softc),
+CFATTACH_DECL_NEW(wt, sizeof(struct wt_softc),
     wtprobe, wtattach, NULL, NULL);
 
 extern struct cfdriver wt_cd;
@@ -193,8 +210,7 @@ extern struct cfdriver wt_cd;
  * Probe for the presence of the device.
  */
 int
-wtprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+wtprobe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -258,17 +274,19 @@ done:
  * Device is found, configure it.
  */
 void
-wtattach(struct device *parent, struct device *self, void *aux)
+wtattach(device_t parent, device_t self, void *aux)
 {
-	struct wt_softc *sc = (void *)self;
+	struct wt_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	bus_size_t maxsize;
 
+	sc->sc_dev = self;
+
 	/* Map i/o space */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, AV_NPORT, 0, &ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
@@ -282,7 +300,7 @@ wtattach(struct device *parent, struct device *self, void *aux)
 	if (wtreset(iot, ioh, &wtregs)) {
 		sc->type = WANGTEK;
 		memcpy(&sc->regs, &wtregs, sizeof(sc->regs));
-		printf(": type <Wangtek>\n");
+		aprint_normal(": type <Wangtek>\n");
 		goto ok;
 	}
 
@@ -290,14 +308,14 @@ wtattach(struct device *parent, struct device *self, void *aux)
 	if (wtreset(iot, ioh, &avregs)) {
 		sc->type = ARCHIVE;
 		memcpy(&sc->regs, &avregs, sizeof(sc->regs));
-		printf(": type <Archive>\n");
+		aprint_normal(": type <Archive>\n");
 		/* Reset DMA. */
 		bus_space_write_1(iot, ioh, sc->regs.RDMAPORT, 0);
 		goto ok;
 	}
 
 	/* what happened? */
-	printf("%s: lost controller\n", self->dv_xname);
+	aprint_error_dev(self, "lost controller\n");
 	return;
 
 ok:
@@ -307,21 +325,21 @@ ok:
 	sc->chan = ia->ia_drq[0].ir_drq;
 
 	if ((maxsize = isa_dmamaxsize(sc->sc_ic, sc->chan)) < MAXPHYS) {
-		printf("%s: max DMA size %lu is less than required %d\n",
-		    sc->sc_dev.dv_xname, (u_long)maxsize, MAXPHYS);
+		aprint_error_dev(sc->sc_dev,
+		    "max DMA size %lu is less than required %d\n",
+		    (u_long)maxsize, MAXPHYS);
 		return;
 	}
 
 	if (isa_drq_alloc(sc->sc_ic, sc->chan) != 0) {
-		printf("%s: can't reserve drq %d\n",
-		    sc->sc_dev.dv_xname, sc->chan);
+		aprint_error_dev(sc->sc_dev, "can't reserve drq %d\n",
+		    sc->chan);
 		return;
 	}
 
 	if (isa_dmamap_create(sc->sc_ic, sc->chan, MAXPHYS,
 	    BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		printf("%s: can't set up ISA DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "can't set up ISA DMA map\n");
 		return;
 	}
 
@@ -330,8 +348,7 @@ ok:
 }
 
 static int
-wtdump(dev_t dev, daddr_t blkno, void *va,
-    size_t size)
+wtdump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 
 	/* Not implemented. */
@@ -356,7 +373,7 @@ wtopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct wt_softc *sc;
 	int error;
 
-	sc = device_lookup(&wt_cd, unit);
+	sc = device_lookup_private(&wt_cd, unit);
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -409,8 +426,8 @@ wtopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 				/* Check the status of the controller. */
 				if (sc->error & TP_ILL) {
-					printf("%s: invalid tape density\n",
-					    sc->sc_dev.dv_xname);
+					aprint_error_dev(sc->sc_dev,
+					    "invalid tape density\n");
 					return ENODEV;
 				}
 			}
@@ -435,10 +452,11 @@ wtopen(dev_t dev, int flag, int mode, struct lwp *l)
  * Close routine, called on last device close.
  */
 static int
-wtclose(dev_t dev, int flags, int mode,
-    struct lwp *l)
+wtclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(dev) & T_UNIT);
+	struct wt_softc *sc;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	/* If rewind is pending, do nothing */
 	if (sc->flags & TPREW)
@@ -485,11 +503,12 @@ done:
  * ioctl(int fd, WTQICMD, int qicop)		-- do QIC op
  */
 static int
-wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag,
-    struct lwp *l)
+wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(dev) & T_UNIT);
+	struct wt_softc *sc;
 	int error, count, op;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	switch (cmd) {
 	default:
@@ -586,8 +605,10 @@ wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag,
 static void
 wtstrategy(struct buf *bp)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(bp->b_dev) & T_UNIT);
+	struct wt_softc *sc;
 	int s;
+
+	sc = device_lookup_private(&wt_cd, minor(bp->b_dev) & T_UNIT);
 
 	bp->b_resid = bp->b_bcount;
 
@@ -1082,7 +1103,7 @@ wtsense(struct wt_softc *sc, int verbose, int ignore)
 	else if (error & TP_ILL)
 		msg = "Illegal command";
 	if (msg)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, msg);
+		printf("%s: %s\n", device_xname(sc->sc_dev), msg);
 	return 0;
 }
 

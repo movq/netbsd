@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_kill.3,v 1.6 2003/10/30 12:57:11 wiz Exp $
+.\" $NetBSD: pthread_kill.3,v 1.9 2010/07/09 08:51:28 jruoho Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -10,9 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -53,7 +50,7 @@
 .\" EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_kill.3,v 1.9 2002/09/16 19:29:28 mini Exp $
-.Dd October 30, 2003
+.Dd July 9, 2010
 .Dt PTHREAD_KILL 3
 .Os
 .Sh NAME
@@ -88,12 +85,12 @@ Otherwise, an error number is returned.
 .Fn pthread_kill
 shall fail if:
 .Bl -tag -width Er
-.It Bq Er ESRCH
-.Fa thread
-is an invalid thread ID.
 .It Bq Er EINVAL
 .Fa sig
 is an invalid or unsupported signal number.
+.It Bq Er ESRCH
+.Fa thread
+is an invalid thread ID.
 .El
 .Sh SEE ALSO
 .Xr kill 2 ,
@@ -101,6 +98,5 @@ is an invalid or unsupported signal number.
 .Xr pthread_self 3 ,
 .Xr raise 3
 .Sh STANDARDS
-.Fn pthread_kill
-conforms to
-.St -p1003.1-96 .
+The function conforms to
+.St -p1003.1-2001 .

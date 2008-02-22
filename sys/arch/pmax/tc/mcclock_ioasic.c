@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_ioasic.c,v 1.19 2008/01/03 23:02:25 joerg Exp $ */
+/*	$NetBSD: mcclock_ioasic.c,v 1.24 2015/06/09 20:23:53 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,9 +28,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock_ioasic.c,v 1.19 2008/01/03 23:02:25 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_ioasic.c,v 1.24 2015/06/09 20:23:53 matt Exp $");
 
 #include <sys/param.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <dev/clock_subr.h>
@@ -41,19 +42,14 @@ __KERNEL_RCSID(0, "$NetBSD: mcclock_ioasic.c,v 1.19 2008/01/03 23:02:25 joerg Ex
 #include <dev/tc/tcvar.h> 
 #include <dev/tc/ioasicvar.h>
 
-static int	mcclock_ioasic_match __P((struct device *, struct cfdata *,
-		    void *));
-static void	mcclock_ioasic_attach __P((struct device *, struct device *,
-		    void *));
+static int	mcclock_ioasic_match(device_t, cfdata_t, void *);
+static void	mcclock_ioasic_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mcclock_ioasic, sizeof (struct mcclock_pad32_softc),
+CFATTACH_DECL_NEW(mcclock_ioasic, sizeof (struct mcclock_pad32_softc),
     mcclock_ioasic_match, mcclock_ioasic_attach, NULL, NULL);
 
 static int
-mcclock_ioasic_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mcclock_ioasic_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ioasicdev_attach_args *d = aux;
 
@@ -67,13 +63,12 @@ mcclock_ioasic_match(parent, match, aux)
 }
 
 static void
-mcclock_ioasic_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mcclock_ioasic_attach(device_t parent, device_t self, void *aux)
 {
 	struct ioasicdev_attach_args *ioasicdev = aux;
-	struct mcclock_pad32_softc *sc = (struct mcclock_pad32_softc *)self;
+	struct mcclock_pad32_softc *sc = device_private(self);
 
+	sc->sc_mcclock.sc_dev = self;
 	sc->sc_dp = (struct mcclock_pad32_clockdatum *)ioasicdev->iada_addr;
 
 	/* Attach MI driver, using busfns with TC-style register padding */

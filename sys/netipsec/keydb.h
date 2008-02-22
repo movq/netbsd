@@ -1,5 +1,5 @@
-/*	$NetBSD: keydb.h,v 1.6 2007/07/07 18:38:23 degroote Exp $	*/
-/*	$FreeBSD: src/sys/netipsec/keydb.h,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
+/*	$NetBSD: keydb.h,v 1.23 2018/04/19 08:27:38 maxv Exp $	*/
+/*	$FreeBSD: keydb.h,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keydb.h,v 1.14 2000/08/02 17:58:26 sakane Exp $	*/
 
 /*
@@ -36,12 +36,15 @@
 
 #ifdef _KERNEL
 
-#include "opt_ipsec.h"
+#include <sys/localcount.h>
+#include <sys/percpu.h>
 
 #include <netipsec/key_var.h>
 #include <net/route.h>
 #include <netinet/in.h>
 
+#ifndef _SOCKADDR_UNION_DEFINED
+#define _SOCKADDR_UNION_DEFINED
 /*
  * The union of all possible address formats we handle.
  */
@@ -50,11 +53,12 @@ union sockaddr_union {
 	struct sockaddr_in	sin;
 	struct sockaddr_in6	sin6;
 };
+#endif /* _SOCKADDR_UNION_DEFINED */
 
 /* Security Assocciation Index */
 /* NOTE: Ensure to be same address family */
 struct secasindex {
-	union sockaddr_union src;	/* srouce address for SA */
+	union sockaddr_union src;	/* source address for SA */
 	union sockaddr_union dst;	/* destination address for SA */
 	u_int16_t proto;		/* IPPROTO_ESP or IPPROTO_AH */
 	u_int8_t mode;			/* mode of protocol, see ipsec.h */
@@ -64,16 +68,19 @@ struct secasindex {
 
 /* Security Association Data Base */
 struct secashead {
-	LIST_ENTRY(secashead) chain;
+	struct pslist_entry pslist_entry;
+	struct localcount localcount;	/* reference count */
 
 	struct secasindex saidx;
 
 	struct sadb_ident *idents;	/* source identity */
 	struct sadb_ident *identd;	/* destination identity */
 					/* XXX I don't know how to use them. */
+	size_t idents_len;		/* length of idents */
+	size_t identd_len;		/* length of identd */
 
 	u_int8_t state;			/* MATURE or DEAD. */
-	LIST_HEAD(_satree, secasvar) savtree[SADB_SASTATE_MAX+1];
+	struct pslist_head savlist[SADB_SASTATE_MAX+1];
 					/* SA chain */
 					/* The first of this list is newer SA */
 
@@ -87,9 +94,11 @@ struct comp_algo;
 
 /* Security Association */
 struct secasvar {
-	LIST_ENTRY(secasvar) chain;
+	struct pslist_entry pslist_entry;
+	struct pslist_entry pslist_entry_savlut;
+	struct localcount localcount;	/* reference count */
+	bool savlut_added;		/* Status of registration of the LUT */
 
-	u_int refcnt;			/* reference count */
 	u_int8_t state;			/* Status of this Association */
 
 	u_int8_t alg_auth;		/* Authentication Algorithm Identifier*/
@@ -99,18 +108,21 @@ struct secasvar {
 	u_int32_t flags;		/* holder for SADB_KEY_FLAGS */
 
 	struct sadb_key *key_auth;	/* Key for Authentication */
+	size_t key_auth_len;		/* length of key_auth */
 	struct sadb_key *key_enc;	/* Key for Encryption */
-	void *iv;			/* Initilization Vector */
+	size_t key_enc_len;		/* length of key_enc */
 	u_int ivlen;			/* length of IV */
-	void *sched;			/* intermediate encryption key */
-	size_t schedlen;
 
 	struct secreplay *replay;	/* replay prevention */
-	long created;			/* for lifetime */
+	size_t replay_len;		/* length of replay */
+	time_t created;			/* for lifetime */
 
 	struct sadb_lifetime *lft_c;	/* CURRENT lifetime, it's constant. */
 	struct sadb_lifetime *lft_h;	/* HARD lifetime */
 	struct sadb_lifetime *lft_s;	/* SOFT lifetime */
+
+	/* percpu counters for lft_c->sadb_lifetime_{allocations,bytes} */
+	percpu_t *lft_c_counters_percpu;
 
 	u_int32_t seq;			/* sequence number */
 	pid_t pid;			/* message's pid */
@@ -122,16 +134,14 @@ struct secasvar {
 	 *     to interface to the OpenBSD crypto support.  This was done
 	 *     to distinguish this code from the mainline KAME code.
 	 */
-	struct xformsw *tdb_xform;	/* transform */
-	struct enc_xform *tdb_encalgxform;	/* encoding algorithm */
-	struct auth_hash *tdb_authalgxform;	/* authentication algorithm */
-	struct comp_algo *tdb_compalgxform;	/* compression algorithm */
+	const struct xformsw *tdb_xform;	/* transform */
+	const struct enc_xform *tdb_encalgxform; /* encoding algorithm */
+	const struct auth_hash *tdb_authalgxform; /* authentication algorithm */
+	const struct comp_algo *tdb_compalgxform; /* compression algorithm */
 	u_int64_t tdb_cryptoid;		/* crypto session id */
 
-#ifdef IPSEC_NAT_T
 	u_int16_t natt_type;
 	u_int16_t esp_frag;
-#endif
 };
 
 /* replay prevention */
@@ -159,7 +169,7 @@ struct secacq {
 	struct secasindex saidx;
 
 	u_int32_t seq;		/* sequence number */
-	long created;		/* for lifetime */
+	time_t created;		/* for lifetime */
 	int count;		/* for lifetime */
 };
 #endif

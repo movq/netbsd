@@ -1,4 +1,4 @@
-/*	$NetBSD: psh3pwr.c,v 1.2 2007/09/24 18:08:53 kiyohara Exp $	*/
+/*	$NetBSD: psh3pwr.c,v 1.6 2012/10/29 12:51:38 chs Exp $	*/
 /*
  * Copyright (c) 2005, 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psh3pwr.c,v 1.2 2007/09/24 18:08:53 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psh3pwr.c,v 1.6 2012/10/29 12:51:38 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -88,16 +88,16 @@ psh3pwr_ac_is_off(void)
 
 
 struct psh3pwr_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	void *sc_ih_pin;
 	void *sc_ih_pout;
 };
 
-static int psh3pwr_match(struct device *, struct cfdata *, void *);
-static void psh3pwr_attach(struct device *, struct device *, void *);
+static int psh3pwr_match(device_t, struct cfdata *, void *);
+static void psh3pwr_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(psh3pwr, sizeof(struct psh3pwr_softc),
+CFATTACH_DECL_NEW(psh3pwr, sizeof(struct psh3pwr_softc),
     psh3pwr_match, psh3pwr_attach, NULL, NULL);
 
 static int psh3pwr_intr_plug_out(void *);
@@ -108,7 +108,7 @@ static int psh3pwr_get_battery(void);
 
 
 static int
-psh3pwr_match(struct device *parent, struct cfdata *cfp, void *aux)
+psh3pwr_match(device_t parent, struct cfdata *cfp, void *aux)
 {
 
 	if (!platid_match(&platid, &platid_mask_MACH_HITACHI_PERSONA))
@@ -122,12 +122,14 @@ psh3pwr_match(struct device *parent, struct cfdata *cfp, void *aux)
 
 
 static void
-psh3pwr_attach(struct device *parent, struct device *self, void *aux)
+psh3pwr_attach(device_t parent, device_t self, void *aux)
 {
 	extern void (*__sleep_func)(void *);
 	extern void *__sleep_ctx;
-	struct psh3pwr_softc *sc = (struct psh3pwr_softc *)self;
+	struct psh3pwr_softc *sc = device_private(self);
 	uint8_t phdr;
+
+	sc->sc_dev = self;
 
 	/* arrange for hpcapm to call us when power status is requested */
 	config_hook(CONFIG_HOOK_GET, CONFIG_HOOK_ACADAPTER,
@@ -144,24 +146,26 @@ psh3pwr_attach(struct device *parent, struct device *self, void *aux)
 	phdr = _reg_read_1(SH7709_PHDR);
 	_reg_write_1(SH7709_PHDR, phdr | PSH3_GREEN_LED_ON);
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	sc->sc_ih_pout = intc_intr_establish(SH7709_INTEVT2_IRQ0,
-	    IST_EDGE, IPL_TTY, psh3pwr_intr_plug_out, sc);
+	    IST_EDGE, IPL_TTY, psh3pwr_intr_plug_out, self);
 	sc->sc_ih_pin = intc_intr_establish(SH7709_INTEVT2_IRQ1,
-	    IST_EDGE, IPL_TTY, psh3pwr_intr_plug_in, sc);
+	    IST_EDGE, IPL_TTY, psh3pwr_intr_plug_in, self);
 
 	/* XXXX: WindowsCE sets this bit. */
-	printf("%s: plug status: %s\n",
-	    device_xname(&sc->sc_dev), psh3pwr_ac_is_off() ? "out" : "in");
+	aprint_normal_dev(self, "plug status: %s\n",
+	    psh3pwr_ac_is_off() ? "out" : "in");
+
+ 	if (!pmf_device_register(self, NULL, NULL))
+ 		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 
 static int
-psh3pwr_intr_plug_out(void *self)
+psh3pwr_intr_plug_out(void *dev)
 {
-	struct psh3pwr_softc *sc __attribute__((__unused__)) =
-	    (struct psh3pwr_softc *)self;
 	uint8_t irr0, scpdr;
 
 	irr0 = _reg_read_1(SH7709_IRR0);
@@ -174,16 +178,14 @@ psh3pwr_intr_plug_out(void *self)
 	scpdr = _reg_read_1(SH7709_SCPDR);
 	_reg_write_1(SH7709_SCPDR, scpdr | PSH3PWR_PLUG_OUT);
 
-	DPRINTF(("%s: plug out\n", device_xname(&sc->sc_dev)));
+	DPRINTF(("%s: plug out\n", device_xname(dev)));
 
 	return 1;
 }
 
 static int
-psh3pwr_intr_plug_in(void *self)
+psh3pwr_intr_plug_in(void *dev)
 {
-	struct psh3pwr_softc *sc __attribute__((__unused__)) =
-	    (struct psh3pwr_softc *)self;
 	uint8_t irr0, scpdr;
 
 	irr0 = _reg_read_1(SH7709_IRR0);
@@ -195,13 +197,13 @@ psh3pwr_intr_plug_in(void *self)
 	scpdr = _reg_read_1(SH7709_SCPDR);
 	_reg_write_1(SH7709_SCPDR, scpdr & ~PSH3PWR_PLUG_OUT);
 
-	DPRINTF(("%s: plug in\n", device_xname(&sc->sc_dev)));
+	DPRINTF(("%s: plug in\n", device_xname(dev)));
 
 	return 1;
 }
 
 void
-psh3pwr_sleep(void *self)
+psh3pwr_sleep(void *v)
 {
 	/* splhigh on entry */
 	extern void pfckbd_poll_hitachi_power(void);

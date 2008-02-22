@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fpa.c,v 1.48 2007/03/04 06:02:20 christos Exp $	*/
+/*	$NetBSD: if_fpa.c,v 1.61 2018/06/22 04:17:42 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.48 2007/03/04 06:02:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.61 2018/06/22 04:17:42 msaitoh Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -58,12 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.48 2007/03/04 06:02:20 christos Exp $")
 #include <net/if_types.h>
 #include <net/if_dl.h>
 #include <net/route.h>
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
 
 #if defined(__FreeBSD__)
 #include <netinet/if_fddi.h>
@@ -125,11 +120,11 @@ static void pdq_pci_shutdown(int howto, void *sc);
 
 #elif defined(__bsdi__)
 extern struct cfdriver fpacd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpacd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 
 #elif defined(__NetBSD__)
 extern struct cfdriver fpa_cd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpa_cd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 #define	pdq_pci_ifwatchdog		NULL
 #endif
 
@@ -223,7 +218,7 @@ pdq_pci_attach(
 	free((void *) sc, M_DEVBUF);
 	return;
     }
-    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    memcpy(sc->sc_ac.ac_enaddr, (void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, 6);
     pdqs_pci[unit] = sc;
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
     pci_map_int(config_id, pdq_pci_ifintr, (void*) sc, &net_imask);
@@ -289,10 +284,7 @@ pdq_pci_match(
 }
 
 int
-pdq_pci_probe(
-    struct device *parent,
-    struct cfdata *cf,
-    void *aux)
+pdq_pci_probe(device_t parent, cfdata_t cf, void *aux)
 {
     struct isa_attach_args *ia = (struct isa_attach_args *) aux;
     pdq_uint32_t irq, data;
@@ -342,16 +334,14 @@ pdq_pci_probe(
 }
 
 void
-pdq_pci_attach(
-    struct device *parent,
-    struct device *self,
-    void *aux)
+pdq_pci_attach(device_t parent, device_t self, void *aux)
 {
-    pdq_softc_t *sc = (pdq_softc_t *) self;
+    pdq_softc_t *sc = device_private(self);
     struct isa_attach_args *ia = (struct isa_attach_args *) aux;
     struct ifnet *ifp = &sc->sc_if;
     int i;
 
+    sc->sc_dev = self;
     sc->sc_if.if_unit = sc->sc_dev.dv_unit;
     sc->sc_if.if_name = "fpa";
     sc->sc_if.if_flags = 0;
@@ -365,7 +355,7 @@ pdq_pci_attach(
 	return;
     }
 
-    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    memcpy(sc->sc_ac.ac_enaddr, (void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, 6);
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
@@ -391,10 +381,7 @@ struct cfdriver fpacd = {
 #elif defined(__NetBSD__)
 
 static int
-pdq_pci_match(
-    struct device *parent,
-    struct cfdata *match,
-    void *aux)
+pdq_pci_match(device_t parent, cfdata_t match, void *aux)
 {
     struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -407,12 +394,9 @@ pdq_pci_match(
 }
 
 static void
-pdq_pci_attach(
-    struct device * const parent,
-    struct device * const self,
-    void *const aux)
+pdq_pci_attach(device_t const parent, device_t const self, void *const aux)
 {
-    pdq_softc_t * const sc = (pdq_softc_t *)self;
+    pdq_softc_t * const sc = device_private(self);
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
     pdq_uint32_t data;
     pci_intr_handle_t intrhandle;
@@ -420,8 +404,11 @@ pdq_pci_attach(
     bus_space_tag_t iot, memt;
     bus_space_handle_t ioh, memh;
     int ioh_valid, memh_valid;
+    char intrbuf[PCI_INTRSTR_LEN];
 
     aprint_naive(": FDDI controller\n");
+
+    sc->sc_dev = self;
 
     data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CFLT);
     if ((data & 0xFF00) < (DEFPA_LATENCY << 8)) {
@@ -430,7 +417,7 @@ pdq_pci_attach(
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_CFLT, data);
     }
 
-    strcpy(sc->sc_if.if_xname, sc->sc_dev.dv_xname);
+    strlcpy(sc->sc_if.if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
@@ -474,34 +461,34 @@ pdq_pci_attach(
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFPA);
     if (sc->sc_pdq == NULL) {
-	aprint_error("%s: initialization failed\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "initialization failed\n");
 	return;
     }
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
     if (pci_intr_map(pa, &intrhandle)) {
-	aprint_error("%s: couldn't map interrupt\n", self->dv_xname);
+	aprint_error_dev(self, "couldn't map interrupt\n");
 	return;
     }
-    intrstr = pci_intr_string(pa->pa_pc, intrhandle);
+    intrstr = pci_intr_string(pa->pa_pc, intrhandle, intrbuf, sizeof(intrbuf));
     sc->sc_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_NET, pdq_pci_ifintr, sc);
     if (sc->sc_ih == NULL) {
-	aprint_error("%s: couldn't establish interrupt", self->dv_xname);
+	aprint_error_dev(self, "couldn't establish interrupt");
 	if (intrstr != NULL)
-	    aprint_normal(" at %s", intrstr);
-	aprint_normal("\n");
+	    aprint_error(" at %s", intrstr);
+	aprint_error("\n");
 	return;
     }
 
     sc->sc_ats = shutdownhook_establish((void (*)(void *)) pdq_hwreset, sc->sc_pdq);
     if (sc->sc_ats == NULL)
-	aprint_error("%s: warning: couldn't establish shutdown hook\n", self->dv_xname);
+	aprint_error_dev(self, "warning: couldn't establish shutdown hook\n");
     if (intrstr != NULL)
-	aprint_normal("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 }
 
-CFATTACH_DECL(fpa, sizeof(pdq_softc_t),
+CFATTACH_DECL_NEW(fpa, sizeof(pdq_softc_t),
     pdq_pci_match, pdq_pci_attach, NULL, NULL);
 
 #endif /* __NetBSD__ */

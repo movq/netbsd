@@ -1,6 +1,6 @@
-# $NetBSD: t_dots.sh,v 1.1 2007/11/12 15:18:22 jmmv Exp $
+# $NetBSD: t_dots.sh,v 1.5 2010/11/07 17:51:18 jmmv Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,9 @@ topdir_head() {
 topdir_body() {
 	test_mount
 
-	atf_check 'mkdir a' 0 null null
-	atf_check 'test -d ./a' 0 null null
-	atf_check 'test -d a/../a' 0 null null
+	atf_check -s eq:0 -o empty -e empty mkdir a
+	atf_check -s eq:0 -o empty -e empty test -d ./a
+	atf_check -s eq:0 -o empty -e empty test -d a/../a
 
 	test_unmount
 }
@@ -57,10 +50,10 @@ nesteddir_head() {
 nesteddir_body() {
 	test_mount
 
-	atf_check 'mkdir a' 0 null null
-	atf_check 'mkdir a/b' 0 null null
-	atf_check 'test -d a/b/../b' 0 null null
-	atf_check 'test -d a/b/../../a' 0 null null
+	atf_check -s eq:0 -o empty -e empty mkdir a
+	atf_check -s eq:0 -o empty -e empty mkdir a/b
+	atf_check -s eq:0 -o empty -e empty test -d a/b/../b
+	atf_check -s eq:0 -o empty -e empty test -d a/b/../../a
 
 	test_unmount
 }

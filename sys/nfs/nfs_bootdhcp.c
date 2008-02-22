@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bootdhcp.c,v 1.37 2007/12/20 16:19:38 dyoung Exp $	*/
+/*	$NetBSD: nfs_bootdhcp.c,v 1.56 2016/06/10 13:27:16 ozaki-r Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,10 +44,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.37 2007/12/20 16:19:38 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.56 2016/06/10 13:27:16 ozaki-r Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_nfs_boot.h"
 #include "opt_tftproot.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -181,6 +176,8 @@ static const u_int8_t vm_rfc1048[4] = { 99, 130, 83, 99 };
 #define TAG_DOMAIN_NAME		((unsigned char)  15)
 #define TAG_SWAP_SERVER		((unsigned char)  16)
 #define TAG_ROOT_PATH		((unsigned char)  17)
+/* RFC 2132 */
+#define TAG_INTERFACE_MTU	((unsigned char)  26)
 /* End of stuff from bootp.h */
 
 #ifdef NFS_BOOT_DHCP
@@ -208,6 +205,8 @@ static const u_int8_t vm_rfc1048[4] = { 99, 130, 83, 99 };
 #define DHCPRELEASE 7
 #endif
 
+#define IP_MIN_MTU 576
+
 #ifdef NFS_BOOT_DHCP
 #define BOOTP_SIZE_MAX	(sizeof(struct bootp)+312-64)
 #else
@@ -224,8 +223,8 @@ static const u_int8_t vm_rfc1048[4] = { 99, 130, 83, 99 };
 /* Convenience macro */
 #define INTOHL(ina) ((u_int32_t)ntohl((ina).s_addr))
 
-static int bootpc_call __P((struct nfs_diskless *, struct lwp *));
-static void bootp_extract __P((struct bootp *, int, struct nfs_diskless *));
+static int bootpc_call (struct nfs_diskless *, struct lwp *, int *);
+static void bootp_extract (struct bootp *, int, struct nfs_diskless *, int *);
 
 #ifdef	DEBUG_NFS_BOOT_DHCP
 #define DPRINTF(s)  printf s
@@ -238,9 +237,7 @@ static void bootp_extract __P((struct bootp *, int, struct nfs_diskless *));
  * Get our boot parameters using BOOTP.
  */
 int
-nfs_bootdhcp(nd, lwp)
-	struct nfs_diskless *nd;
-	struct lwp *lwp;
+nfs_bootdhcp(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 {
 	struct ifnet *ifp = nd->nd_ifp;
 	int error;
@@ -249,15 +246,17 @@ nfs_bootdhcp(nd, lwp)
 	 * Do enough of ifconfig(8) so that the chosen interface
 	 * can talk to the servers.  Use address zero for now.
 	 */
-	error = nfs_boot_setaddress(ifp, lwp, INADDR_ANY, INADDR_ANY,
-				    INADDR_BROADCAST);
+	error = nfs_boot_setaddress(ifp, lwp,
+		*flags & NFS_BOOT_HAS_MYIP ? nd->nd_myip.s_addr : INADDR_ANY,
+		*flags & NFS_BOOT_HAS_MASK ? nd->nd_mask.s_addr : INADDR_ANY,
+		    INADDR_BROADCAST);
 	if (error) {
 		printf("nfs_boot: set ifaddr zero, error=%d\n", error);
 		return (error);
 	}
 
 	/* This function call does the real send/recv work. */
-	error = bootpc_call(nd, lwp);
+	error = bootpc_call(nd, lwp, flags);
 
 	/* Get rid of the temporary (zero) IP address. */
 	(void) nfs_boot_deladdress(ifp, lwp, INADDR_ANY);
@@ -274,6 +273,12 @@ nfs_bootdhcp(nd, lwp)
 	if (error) {
 		printf("nfs_boot: set ifaddr real, error=%d\n", error);
 		goto out;
+	}
+
+	if ((*flags & NFS_BOOT_ALLINFO) != NFS_BOOT_ALLINFO) {
+		printf("nfs_boot: missing options (need IP, netmask, "
+		       "gateway, next-server, root-path)\n");
+		return EADDRNOTAVAIL;
 	}
 
 out:
@@ -296,8 +301,8 @@ struct bootpcontext {
 #endif
 };
 
-static int bootpset __P((struct mbuf*, void*, int));
-static int bootpcheck __P((struct mbuf*, void*));
+static int bootpset (struct mbuf*, void*, int);
+static int bootpcheck (struct mbuf**, void*);
 
 static int
 bootpset(struct mbuf *m, void *context, int waited)
@@ -313,12 +318,11 @@ bootpset(struct mbuf *m, void *context, int waited)
 }
 
 static int
-bootpcheck(m, context)
-	struct mbuf *m;
-	void *context;
+bootpcheck(struct mbuf **mp, void *context)
 {
 	struct bootp *bootp;
 	struct bootpcontext *bpc = context;
+	struct mbuf *m = *mp;
 	u_int tag, len;
 	u_char *p, *limit;
 
@@ -326,13 +330,13 @@ bootpcheck(m, context)
 	 * Is this a valid reply?
 	 */
 	if (m->m_pkthdr.len < BOOTP_SIZE_MIN) {
-		DPRINTF(("bootpcheck: short packet %d < %d\n", m->m_pkthdr.len,
-		    BOOTP_SIZE_MIN));
+		DPRINTF(("bootpcheck: short packet %d < %zu\n", 
+		    m->m_pkthdr.len, BOOTP_SIZE_MIN));
 		return (-1);
 	}
 	if (m->m_pkthdr.len > BOOTP_SIZE_MAX) {
-		DPRINTF(("bootpcheck: long packet %d > %d\n", m->m_pkthdr.len,
-		    BOOTP_SIZE_MAX));
+		DPRINTF(("Bootpcheck: long packet %d > %zu\n", 
+		   m->m_pkthdr.len, BOOTP_SIZE_MAX));
 		return (-1);
 	}
 
@@ -340,7 +344,7 @@ bootpcheck(m, context)
 	 * don't make first checks more expensive than necessary
 	 */
 	if (m->m_len < offsetof(struct bootp, bp_sname)) {
-		m = m_pullup(m, offsetof(struct bootp, bp_sname));
+		m = *mp = m_pullup(m, offsetof(struct bootp, bp_sname));
 		if (m == NULL) {
 			DPRINTF(("bootpcheck: m_pullup failed\n"));
 			return (-1);
@@ -359,12 +363,19 @@ bootpcheck(m, context)
 	}
 	if (memcmp(bootp->bp_chaddr, bpc->haddr, bpc->halen)) {
 #ifdef DEBUG_NFS_BOOT_DHCP
-		char bp_chaddr[3 * bpc->halen], haddr[3 * bpc->halen];
-#endif
+		char *bp_chaddr, *haddr;
+
+		bp_chaddr = malloc(3 * bpc->halen, M_TEMP, M_WAITOK);
+		haddr     = malloc(3 * bpc->halen, M_TEMP, M_WAITOK);
+
 		DPRINTF(("bootpcheck: incorrect hwaddr %s != %s\n",
-		    ether_snprintf(bp_chaddr, sizeof(bp_chaddr),
+		    ether_snprintf(bp_chaddr, 3 * bpc->halen,
 		    bootp->bp_chaddr),
-		    ether_snprintf(haddr, sizeof(haddr), bpc->haddr)));
+		    ether_snprintf(haddr, 3 * bpc->halen, bpc->haddr)));
+
+		free(bp_chaddr, M_TEMP);
+		free(haddr, M_TEMP);
+#endif
 		return (-1);
 	}
 	if (bootp->bp_xid != bpc->xid) {
@@ -403,7 +414,7 @@ bootpcheck(m, context)
 		goto warn;
 	}
 	p = &bootp->bp_vend[4];
-	limit = ((char*)bootp) + bpc->replylen;
+	limit = ((u_char*)bootp) + bpc->replylen;
 	while (p < limit) {
 		tag = *p++;
 		if (tag == TAG_END)
@@ -439,27 +450,51 @@ warn:
 	return (-1);
 }
 
+static void
+bootp_addvend(u_char *area)
+{
+#ifdef NFS_BOOT_DHCP
+	char vci[64];
+	int vcilen;
+	
+	*area++ = TAG_PARAM_REQ;
+	*area++ = 7;
+	*area++ = TAG_SUBNET_MASK;
+	*area++ = TAG_GATEWAY;
+	*area++ = TAG_HOST_NAME;
+	*area++ = TAG_DOMAIN_NAME;
+	*area++ = TAG_ROOT_PATH;
+	*area++ = TAG_SWAP_SERVER;
+	*area++ = TAG_INTERFACE_MTU;
+
+	/* Insert a NetBSD Vendor Class Identifier option. */
+	snprintf(vci, sizeof(vci), "%s:%s:kernel:%s", ostype, MACHINE,
+	    osrelease);
+	vcilen = strlen(vci);
+	*area++ = TAG_CLASSID;
+	*area++ = vcilen;
+	(void)memcpy(area, vci, vcilen);
+	area += vcilen;
+#endif
+	*area = TAG_END;	
+}
+
 static int
-bootpc_call(nd, lwp)
-	struct nfs_diskless *nd;
-	struct lwp *lwp;
+bootpc_call(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 {
 	struct socket *so;
 	struct ifnet *ifp = nd->nd_ifp;
 	static u_int32_t xid = ~0xFF;
 	struct bootp *bootp;	/* request */
-	struct mbuf *m, *nam;
-	struct sockaddr_in *sin;
+	struct mbuf *m;
+	struct sockaddr_in sin;
 	int error;
 	const u_char *haddr;
 	u_char hafmt, halen;
 	struct bootpcontext bpc;
-#ifdef NFS_BOOT_DHCP
-	char vci[64];
-	int vcilen;
-#endif
+	unsigned int index;
 
-	error = socreate(AF_INET, &so, SOCK_DGRAM, 0, lwp);
+	error = socreate(AF_INET, &so, SOCK_DGRAM, 0, lwp, NULL);
 	if (error) {
 		printf("bootp: socreate, error=%d\n", error);
 		return (error);
@@ -470,7 +505,7 @@ bootpc_call(nd, lwp)
 	 * and free each at the end if not null.
 	 */
 	bpc.replybuf = NULL;
-	m = nam = NULL;
+	m = NULL;
 
 	/* Record our H/W (Ethernet) address. */
 	{	const struct sockaddr_dl *sdl = ifp->if_sadl;
@@ -498,13 +533,11 @@ bootpc_call(nd, lwp)
 	 * interface (why?) and then fails because broadcast
 	 * is not supported on that interface...
 	 */
-	{	int32_t *opt;
-		m = m_get(M_WAIT, MT_SOOPTS);
-		opt = mtod(m, int32_t *);
-		m->m_len = sizeof(*opt);
-		*opt = 1;
-		error = sosetopt(so, SOL_SOCKET, SO_DONTROUTE, m);
-		m = NULL;	/* was consumed */
+	{	int32_t opt;
+
+		opt = 1;
+		error = so_setsockopt(NULL, so, SOL_SOCKET, SO_DONTROUTE, &opt,
+		    sizeof(opt));
 	}
 	if (error) {
 		DPRINTF(("bootpc_call: SO_DONTROUTE failed %d\n", error));
@@ -524,13 +557,11 @@ bootpc_call(nd, lwp)
 	 * The "helper-address" feature of some popular router vendor seems
 	 * to do simple IP forwarding and drops packets with (ip_ttl == 1).
 	 */
-	{	u_char *opt;
-		m = m_get(M_WAIT, MT_SOOPTS);
-		opt = mtod(m, u_char *);
-		m->m_len = sizeof(*opt);
-		*opt = 7;
-		error = sosetopt(so, IPPROTO_IP, IP_MULTICAST_TTL, m);
-		m = NULL;	/* was consumed */
+	{	u_char opt;
+
+		opt = 7;
+		error = so_setsockopt(NULL, so, IPPROTO_IP, IP_MULTICAST_TTL,
+		    &opt, sizeof(opt));
 	}
 	if (error) {
 		DPRINTF(("bootpc_call: IP_MULTICAST_TTL failed %d\n", error));
@@ -554,12 +585,10 @@ bootpc_call(nd, lwp)
 	/*
 	 * Setup socket address for the server.
 	 */
-	nam = m_get(M_WAIT, MT_SONAME);
-	sin = mtod(nam, struct sockaddr_in *);
-	sin->sin_len = nam->m_len = sizeof(*sin);
-	sin->sin_family = AF_INET;
-	sin->sin_addr.s_addr = INADDR_BROADCAST;
-	sin->sin_port = htons(IPPORT_BOOTPS);
+	sin.sin_len = sizeof(sin);
+	sin.sin_family = AF_INET;
+	sin.sin_addr.s_addr = INADDR_BROADCAST;
+	sin.sin_port = htons(IPPORT_BOOTPS);
 
 	/*
 	 * Allocate buffer used for request
@@ -568,7 +597,7 @@ bootpc_call(nd, lwp)
 	m_clget(m, M_WAIT);
 	bootp = mtod(m, struct bootp*);
 	m->m_pkthdr.len = m->m_len = BOOTP_SIZE_MAX;
-	m->m_pkthdr.rcvif = NULL;
+	m_reset_rcvif(m);
 
 	/*
 	 * Build the BOOTP reqest message.
@@ -585,23 +614,13 @@ bootpc_call(nd, lwp)
 #endif
 	/* Fill-in the vendor data. */
 	memcpy(bootp->bp_vend, vm_rfc1048, 4);
+	index = 4;
 #ifdef NFS_BOOT_DHCP
-	bootp->bp_vend[4] = TAG_DHCP_MSGTYPE;
-	bootp->bp_vend[5] = 1;
-	bootp->bp_vend[6] = DHCPDISCOVER;
-	/*
-	 * Insert a NetBSD Vendor Class Identifier option.
-	 */
-	snprintf(vci, sizeof(vci), "%s:%s:kernel:%s", ostype, MACHINE,
-	    osrelease);
-	vcilen = strlen(vci);
-	bootp->bp_vend[7] = TAG_CLASSID;
-	bootp->bp_vend[8] = vcilen;
-	memcpy(&bootp->bp_vend[9], vci, vcilen);
-	bootp->bp_vend[9 + vcilen] = TAG_END;
-#else
-	bootp->bp_vend[4] = TAG_END;
+	bootp->bp_vend[index++] = TAG_DHCP_MSGTYPE;
+	bootp->bp_vend[index++] = 1;
+	bootp->bp_vend[index++] = DHCPDISCOVER;
 #endif
+	bootp_addvend(&bootp->bp_vend[index]);
 
 	bpc.xid = xid;
 	bpc.haddr = haddr;
@@ -614,34 +633,35 @@ bootpc_call(nd, lwp)
 	bpc.dhcp_ok = 0;
 #endif
 
-	error = nfs_boot_sendrecv(so, nam, bootpset, m,
-				  bootpcheck, 0, 0, &bpc, lwp);
+	error = nfs_boot_sendrecv(so, &sin, bootpset, m,
+				  bootpcheck, NULL, NULL, &bpc, lwp);
 	if (error)
 		goto out;
 
 #ifdef NFS_BOOT_DHCP
 	if (bpc.dhcp_ok) {
 		u_int32_t leasetime;
-		bootp->bp_vend[6] = DHCPREQUEST;
-		bootp->bp_vend[7] = TAG_REQ_ADDR;
-		bootp->bp_vend[8] = 4;
-		memcpy(&bootp->bp_vend[9], &bpc.replybuf->bp_yiaddr, 4);
-		bootp->bp_vend[13] = TAG_SERVERID;
-		bootp->bp_vend[14] = 4;
-		memcpy(&bootp->bp_vend[15], &bpc.dhcp_serverip.s_addr, 4);
-		bootp->bp_vend[19] = TAG_LEASETIME;
-		bootp->bp_vend[20] = 4;
+		index = 6;
+		bootp->bp_vend[index++] = DHCPREQUEST;
+		bootp->bp_vend[index++] = TAG_REQ_ADDR;
+		bootp->bp_vend[index++] = 4;
+		memcpy(&bootp->bp_vend[index], &bpc.replybuf->bp_yiaddr, 4);
+		index += 4;
+		bootp->bp_vend[index++] = TAG_SERVERID;
+		bootp->bp_vend[index++] = 4;
+		memcpy(&bootp->bp_vend[index], &bpc.dhcp_serverip.s_addr, 4);
+		index += 4;
+		bootp->bp_vend[index++] = TAG_LEASETIME;
+		bootp->bp_vend[index++] = 4;
 		leasetime = htonl(300);
-		memcpy(&bootp->bp_vend[21], &leasetime, 4);
-		bootp->bp_vend[25] = TAG_CLASSID;
-		bootp->bp_vend[26] = vcilen;
-		memcpy(&bootp->bp_vend[27], vci, vcilen);
-		bootp->bp_vend[27 + vcilen] = TAG_END;
+		memcpy(&bootp->bp_vend[index], &leasetime, 4);
+		index += 4;
+		bootp_addvend(&bootp->bp_vend[index]);
 
 		bpc.expected_dhcpmsgtype = DHCPACK;
 
-		error = nfs_boot_sendrecv(so, nam, bootpset, m,
-					  bootpcheck, 0, 0, &bpc, lwp);
+		error = nfs_boot_sendrecv(so, &sin, bootpset, m,
+					  bootpcheck, NULL, NULL, &bpc, lwp);
 		if (error)
 			goto out;
 	}
@@ -659,24 +679,20 @@ bootpc_call(nd, lwp)
 #endif
 	       inet_ntoa(bpc.replybuf->bp_siaddr));
 
-	bootp_extract(bpc.replybuf, bpc.replylen, nd);
+	bootp_extract(bpc.replybuf, bpc.replylen, nd, flags);
 
 out:
 	if (bpc.replybuf)
 		free(bpc.replybuf, M_DEVBUF);
 	if (m)
 		m_freem(m);
-	if (nam)
-		m_freem(nam);
 	soclose(so);
 	return (error);
 }
 
 static void
-bootp_extract(bootp, replylen, nd)
-	struct bootp *bootp;
-	int replylen;
-	struct nfs_diskless *nd;
+bootp_extract(struct bootp *bootp, int replylen,
+		struct nfs_diskless *nd, int *flags)
 {
 	struct sockaddr_in *sin;
 	struct in_addr netmask;
@@ -685,6 +701,7 @@ bootp_extract(bootp, replylen, nd)
 	char *myname;	/* my hostname */
 	char *mydomain;	/* my domainname */
 	char *rootpath;
+	uint16_t myinterfacemtu;
 	int mynamelen;
 	int mydomainlen;
 	int rootpathlen;
@@ -702,9 +719,11 @@ bootp_extract(bootp, replylen, nd)
 	rootserver = bootp->bp_siaddr;
 	/* assume that server name field is not overloaded by default */
 	overloaded = 0;
+	/* MTU can't be less than IP_MIN_MTU, set to 0 to indicate unset */
+	myinterfacemtu = 0;
 
 	p = &bootp->bp_vend[4];
-	limit = ((char*)bootp) + replylen;
+	limit = ((u_char*)bootp) + replylen;
 	while (p < limit) {
 		tag = *p++;
 		if (tag == TAG_END)
@@ -720,15 +739,23 @@ bootp_extract(bootp, replylen, nd)
 #endif
 		switch (tag) {
 		    case TAG_SUBNET_MASK:
+			if (len < 4) {
+				printf("nfs_boot: subnet mask < 4 bytes\n");
+				break;
+			}
 			memcpy(&netmask, p, 4);
 			break;
 		    case TAG_GATEWAY:
 			/* Routers */
+			if (len < 4) {
+				printf("nfs_boot: routers < 4 bytes\n");
+				break;
+			}
 			memcpy(&gateway, p, 4);
 			break;
 		    case TAG_HOST_NAME:
 			if (len >= sizeof(hostname)) {
-				printf("nfs_boot: host name >= %lu bytes",
+				printf("nfs_boot: host name >= %lu bytes\n",
 				       (u_long)sizeof(hostname));
 				break;
 			}
@@ -737,7 +764,7 @@ bootp_extract(bootp, replylen, nd)
 			break;
 		    case TAG_DOMAIN_NAME:
 			if (len >= sizeof(domainname)) {
-				printf("nfs_boot: domain name >= %lu bytes",
+				printf("nfs_boot: domain name >= %lu bytes\n",
 				       (u_long)sizeof(domainname));
 				break;
 			}
@@ -747,15 +774,28 @@ bootp_extract(bootp, replylen, nd)
 		    case TAG_ROOT_PATH:
 			/* Leave some room for the server name. */
 			if (len >= (MNAMELEN-10)) {
-				printf("nfs_boot: rootpath >=%d bytes",
+				printf("nfs_boot: rootpath >= %d bytes\n",
 				       (MNAMELEN-10));
 				break;
 			}
 			rootpath = p;
 			rootpathlen = len;
 			break;
+		    case TAG_INTERFACE_MTU:
+			if (len != 2) {
+				printf("nfs_boot: interface-mtu len != 2 (%d)",
+					len);
+				break;
+			}
+			memcpy(&myinterfacemtu, p, 2);
+			myinterfacemtu = ntohs(myinterfacemtu);
+			break;
 		    case TAG_SWAP_SERVER:
 			/* override NFS server address */
+			if (len < 4) {
+				printf("nfs_boot: swap server < 4 bytes\n");
+				break;
+			}
 			memcpy(&rootserver, p, 4);
 			break;
 #ifdef NFS_BOOT_DHCP
@@ -790,49 +830,75 @@ bootp_extract(bootp, replylen, nd)
 		domainnamelen = mydomainlen;
 		printf("nfs_boot: my_domain=%s\n", domainname);
 	}
-	nd->nd_myip = bootp->bp_yiaddr;
-	if (nd->nd_myip.s_addr)
+	if (!(*flags & NFS_BOOT_HAS_MYIP)) {
+		nd->nd_myip = bootp->bp_yiaddr;
 		printf("nfs_boot: my_addr=%s\n", inet_ntoa(nd->nd_myip));
-	nd->nd_mask = netmask;
-	if (nd->nd_mask.s_addr)
+		*flags |= NFS_BOOT_HAS_MYIP;
+	}
+	if (!(*flags & NFS_BOOT_HAS_MASK)) {
+		nd->nd_mask = netmask;
 		printf("nfs_boot: my_mask=%s\n", inet_ntoa(nd->nd_mask));
-	nd->nd_gwip = gateway;
-	if (nd->nd_gwip.s_addr)
+		*flags |= NFS_BOOT_HAS_MASK;
+	}
+	if (!(*flags & NFS_BOOT_HAS_GWIP)) {
+		nd->nd_gwip = gateway;
 		printf("nfs_boot: gateway=%s\n", inet_ntoa(nd->nd_gwip));
+		*flags |= NFS_BOOT_HAS_GWIP;
+	}
+	if (myinterfacemtu >= IP_MIN_MTU) {
+		nd->nd_mtu = myinterfacemtu;
+		printf("nfs_boot: mtu=%d\n", nd->nd_mtu);
+	}
 
 	/*
 	 * Store the information about our NFS root mount.
 	 * The caller will print it, so be silent here.
 	 */
-	{
+	do {
 		struct nfs_dlmount *ndm = &nd->nd_root;
 
-		/* Server IP address. */
-		sin = (struct sockaddr_in *) &ndm->ndm_saddr;
-		memset((void *)sin, 0, sizeof(*sin));
-		sin->sin_len = sizeof(*sin);
-		sin->sin_family = AF_INET;
-		sin->sin_addr = rootserver;
-		/* Server name. */
-		if (!overloaded && bootp->bp_sname[0] != 0 &&
-		    !memcmp(&rootserver, &bootp->bp_siaddr,
-			  sizeof(struct in_addr))) {
-			/* standard root server, we have the name */
-			strncpy(ndm->ndm_host, bootp->bp_sname, BP_SNAME_LEN-1);
-		} else {
-			/* Show the server IP address numerically. */
-			strncpy(ndm->ndm_host, inet_ntoa(rootserver),
-				BP_SNAME_LEN-1);
+
+		if (!(*flags & NFS_BOOT_HAS_SERVADDR)) {
+			/* Server IP address. */
+			sin = (struct sockaddr_in *) &ndm->ndm_saddr;
+			memset((void *)sin, 0, sizeof(*sin));
+			sin->sin_len = sizeof(*sin);
+			sin->sin_family = AF_INET;
+			sin->sin_addr = rootserver;
+			*flags |= NFS_BOOT_HAS_SERVADDR;
 		}
-		len = strlen(ndm->ndm_host);
-		if (rootpath &&
-		    len + 1 + rootpathlen + 1 <= sizeof(ndm->ndm_host)) {
-			ndm->ndm_host[len++] = ':';
-			strncpy(ndm->ndm_host + len,
-				rootpath, rootpathlen);
-			ndm->ndm_host[len + rootpathlen] = '\0';
-		} /* else: upper layer will handle error */
-	}
+
+		if (!(*flags & NFS_BOOT_HAS_SERVER)) {
+			/* Server name. */
+			if (!overloaded && bootp->bp_sname[0] != 0 &&
+			    !memcmp(&rootserver, &bootp->bp_siaddr,
+				  sizeof(struct in_addr)))
+			{
+				/* standard root server, we have the name */
+				strncpy(ndm->ndm_host, bootp->bp_sname,
+					BP_SNAME_LEN-1);
+				*flags |= NFS_BOOT_HAS_SERVER;
+			} else {
+				/* Show the server IP address numerically. */
+				strncpy(ndm->ndm_host, inet_ntoa(rootserver),
+					BP_SNAME_LEN-1);
+				*flags |= NFS_BOOT_HAS_SERVER;
+			}
+		}
+
+		if (!(*flags & NFS_BOOT_HAS_ROOTPATH)) {
+			len = strlen(ndm->ndm_host);
+			if (rootpath &&
+			    len + 1 + rootpathlen + 1 <= sizeof(ndm->ndm_host))
+			{
+				ndm->ndm_host[len++] = ':';
+				strncpy(ndm->ndm_host + len,
+					rootpath, rootpathlen);
+				ndm->ndm_host[len + rootpathlen] = '\0';
+				*flags |= NFS_BOOT_HAS_ROOTPATH;
+			} /* else: upper layer will handle error */
+		}
+	} while(0);
 
 #ifdef TFTPROOT
 #if BP_FILE_LEN > MNAMELEN

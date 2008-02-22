@@ -1,4 +1,4 @@
-/*	$NetBSD: radeonfbreg.h,v 1.3 2007/01/03 19:47:17 macallan Exp $	*/
+/*	$NetBSD: radeonfbreg.h,v 1.6 2017/08/23 19:21:14 macallan Exp $	*/
 
 /* $XFree86: xc/programs/Xserver/hw/xfree86/drivers/ati/radeon_reg.h,v 1.31 2003/11/10 18:41:23 tsi Exp $ */
 /*
@@ -684,6 +684,7 @@
 #       define R200_FP_SOURCE_SEL_TRANS        (3 <<  10)
 #       define RADEON_FP_SEL_CRTC1             (0 << 13)
 #       define RADEON_FP_SEL_CRTC2             (1 << 13)
+#       define RADEON_FP_SEL_MASK              (1 << 13)
 #       define RADEON_FP_CRTC_DONT_SHADOW_HPAR (1 << 15)
 #       define RADEON_FP_CRTC_DONT_SHADOW_VPAR (1 << 16)
 #       define RADEON_FP_CRTC_DONT_SHADOW_HEND (1 << 17)
@@ -703,6 +704,7 @@
 #       define R200_FP2_SOURCE_SEL_CRTC2       (1 << 10)
 #       define R200_FP2_SOURCE_SEL_RMX         (2 << 10)
 #       define RADEON_FP2_SRC_SEL_MASK         (3 << 13)
+#       define RADEON_FP2_SRC_SEL_CRTC1        (0 << 13)
 #       define RADEON_FP2_SRC_SEL_CRTC2        (1 << 13)
 #       define RADEON_FP2_FP_POL               (1 << 16)
 #       define RADEON_FP2_LP_POL               (1 << 17)
@@ -1123,6 +1125,17 @@
 #       define RADEON_RB2D_DC_FREE          (3 << 2)
 #       define RADEON_RB2D_DC_FLUSH_ALL     0xf
 #       define RADEON_RB2D_DC_BUSY          (1 << 31)
+#define RADEON_RB3D_DSTCACHE_CTLSTAT	    0x325C
+#	define RADEON_RB3D_DC_FLUSH	    (3 << 0)
+#	define RADEON_RB3D_DC_FREE	    (3 << 2)
+#	define RADEON_RB3D_DC_FLUSH_ALL	    0xf
+#	define RADEON_RB3D_DC_BUSY	    (1 << 31)
+#define R300_DSTCACHE_CTLSTAT		    0x1714
+#	define R300_DC_FLUSH_2D		    (1 << 0)
+#	define R300_DC_FREE_2D		    (1 << 2)
+#	define R300_RB2D_DC_FLUSH_ALL	    (R300_DC_FLUSH_2D | R300_DC_FREE_2D)
+#	define R300_RB2D_DC_BUSY	    (1 << 31)
+
 #define RADEON_RB2D_DSTCACHE_MODE           0x3428
 #define RADEON_REG_BASE                     0x0f18 /* PCI */
 #define RADEON_REGPROG_INF                  0x0f09 /* PCI */

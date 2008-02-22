@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.17 2008/02/13 11:38:03 ad Exp $	*/
+/*	$NetBSD: spl.S,v 1.34 2018/04/04 22:52:58 christos Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 /*
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -50,13 +50,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@
 
 #ifndef XEN
 /*
- * softintr()
+ * Xsoftintr()
  *
  * Switch to the LWP assigned to handle interrupts from the given
  * source.  We borrow the VM context from the interrupted LWP.
@@ -97,32 +90,44 @@
  *	%r13		address to return to
  */
 IDTVEC(softintr)
-	pushq	$_C_LABEL(softintr_ret)	/* set up struct switchframe */
+	/* set up struct switchframe */
+	pushq	$_C_LABEL(softintr_ret)
 	pushq	%rbx
 	pushq	%r12
 	pushq	%r13
 	pushq	%r14
 	pushq	%r15
+
 	movl	$IPL_HIGH,CPUVAR(ILEVEL)
 	movq	CPUVAR(CURLWP),%r15
 	movq	IS_LWP(%rax),%rdi	/* switch to handler LWP */
-	movq	L_ADDR(%rdi),%rdx
-	movq	L_ADDR(%r15),%rcx
+	movq	L_PCB(%rdi),%rdx
+	movq	L_PCB(%r15),%rcx
 	movq	%rdi,CPUVAR(CURLWP)
+
+	/* save old context */
 	movq	%rsp,PCB_RSP(%rcx)
 	movq	%rbp,PCB_RBP(%rcx)
-	movq	PCB_RSP0(%rdx),%rsp	/* onto new stack */
+
+	/* switch to the new stack */
+	movq	PCB_RSP0(%rdx),%rsp
+
+	/* dispatch */
 	sti
 	movq	%r15,%rdi		/* interrupted LWP */
 	movl	IS_MAXLEVEL(%rax),%esi	/* ipl to run at */
 	call	_C_LABEL(softint_dispatch)/* run handlers */
-	movq	L_ADDR(%r15),%rcx
+	cli
+
+	/* restore old context */
+	movq	L_PCB(%r15),%rcx
 	movq	PCB_RSP(%rcx),%rsp
+
 	xchgq	%r15,CPUVAR(CURLWP)	/* must be globally visible */
 	popq	%r15			/* unwind switchframe */
 	addq	$(5 * 8),%rsp
-	cli
-	jmp	*%r13			/* back to splx/doreti */
+	jmp	*%r13			/* back to Xspllower/Xdoreti */
+IDTVEC_END(softintr)
 
 /*
  * softintr_ret()
@@ -134,9 +139,10 @@ IDTVEC(softintr)
  */
 NENTRY(softintr_ret)
 	incl	CPUVAR(MTX_COUNT)	/* re-adjust after mi_switch */
-	movl	$0, L_CTXSWTCH(%rax)	/* %rax from cpu_switchto */
+	movl	$0,L_CTXSWTCH(%rax)	/* %rax from cpu_switchto */
 	cli
-	jmp	*%r13			/* back to splx/doreti */
+	jmp	*%r13			/* back to Xspllower/Xdoreti */
+END(softintr_ret)
 
 /*
  * void softint_trigger(uintptr_t machdep);
@@ -146,6 +152,42 @@ NENTRY(softintr_ret)
 NENTRY(softint_trigger)
 	orl	%edi,CPUVAR(IPENDING)	/* atomic on local cpu */
 	ret
+END(softint_trigger)
+
+
+/*
+ * Xrecurse_preempt()
+ *
+ * Handles preemption interrupts via Xspllower().
+ */
+IDTVEC(recurse_preempt)
+	movl	$IPL_PREEMPT,CPUVAR(ILEVEL)
+	sti
+	xorq	%rdi,%rdi
+	call	_C_LABEL(kpreempt)
+	cli
+	jmp	*%r13			/* back to Xspllower */
+IDTVEC_END(recurse_preempt)
+
+/*
+ * Xresume_preempt()
+ *
+ * Handles preemption interrupts via Xdoreti().
+ */
+IDTVEC(resume_preempt)
+	movl	$IPL_PREEMPT,CPUVAR(ILEVEL)
+	sti
+	testq	$SEL_RPL,TF_CS(%rsp)
+	jnz	1f
+	movq	TF_RIP(%rsp),%rdi
+	call	_C_LABEL(kpreempt)	/* from kernel */
+	cli
+	jmp	*%r13			/* back to Xdoreti */
+1:
+	call	_C_LABEL(preempt)	/* from user */
+	cli
+	jmp	*%r13			/* back to Xdoreti */
+IDTVEC_END(resume_preempt)
 
 /*
  * int splraise(int s);
@@ -156,23 +198,24 @@ ENTRY(splraise)
 	cmoval	%eax,%edi
 	movl	%edi,CPUVAR(ILEVEL)
 	ret
+END(splraise)
 
 /*
  * void spllower(int s);
  *
- * Must be the same size as i686_spllower().  This must use
+ * Must be the same size as cx8_spllower().  This must use
  * pushf/cli/popf as it is used early in boot where interrupts
  * are disabled via eflags/IE.
  */
 ENTRY(spllower)
-	cmpl	CPUVAR(ILEVEL), %edi
+	cmpl	CPUVAR(ILEVEL),%edi
 	jae	1f
-	movl	CPUVAR(IUNMASK)(,%rdi,4), %edx
+	movl	CPUVAR(IUNMASK)(,%rdi,4),%edx
 	pushf
 	cli
-	testl	CPUVAR(IPENDING), %edx
+	testl	CPUVAR(IPENDING),%edx
 	jnz	2f
-	movl	%edi, CPUVAR(ILEVEL)
+	movl	%edi,CPUVAR(ILEVEL)
 	popf
 1:
 	ret
@@ -180,11 +223,11 @@ ENTRY(spllower)
 2:
 	popf
 	jmp	_C_LABEL(Xspllower)
-	nop
-	nop
+3:
+	.space 16
 	.align	16
+END(spllower)
 LABEL(spllower_end)
-
 #endif /* !XEN */
 
 /*
@@ -192,14 +235,14 @@ LABEL(spllower_end)
  *
  * For cmpxchg8b, edx/ecx are the high words and eax/ebx the low.
  *
- * edx : eax = old level / old ipending 
+ * edx : eax = old level / old ipending
  * ecx : ebx = new level / old ipending
  */
 ENTRY(cx8_spllower)
 	movl	CPUVAR(ILEVEL),%edx
 	movq	%rbx,%r8
 	cmpl	%edx,%edi			/* new level is lower? */
-	jae,pn	1f
+	jae	1f
 0:
 	movl	CPUVAR(IPENDING),%eax
 	movl	%edi,%ecx
@@ -209,23 +252,26 @@ ENTRY(cx8_spllower)
 	 * On the P4 this jump is cheaper than patching in junk
 	 * using cmov.  Is cmpxchg expensive if it fails?
 	 */
-	jnz,pn	2f
+	jnz	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz,pn	0b
+	jnz	0b
 1:
 	movq	%r8,%rbx
 	ret
 2:
 	movq	%r8,%rbx
+	.type	_C_LABEL(cx8_spllower_patch), @function
 LABEL(cx8_spllower_patch)
 	jmp	_C_LABEL(Xspllower)
 
 	.align	16
+END(cx8_spllower_patch)
+END(cx8_spllower)
 LABEL(cx8_spllower_end)
 
 /*
  * void Xspllower(int s);
- * 
+ *
  * Process pending interrupts.
  *
  * Important registers:
@@ -235,7 +281,7 @@ LABEL(cx8_spllower_end)
  * It is important that the bit scan instruction is bsr, it will get
  * the highest 2 bits (currently the IPI and clock handlers) first,
  * to avoid deadlocks where one CPU sends an IPI, another one is at
- * splipi() and defers it, lands in here via splx(), and handles
+ * splhigh() and defers it, lands in here via splx(), and handles
  * a lower-prio one first, which needs to take the kernel lock -->
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
@@ -248,11 +294,11 @@ IDTVEC(spllower)
 	pushq	%r13
 	pushq	%r12
 	movl	%edi,%ebx
-	leaq	1f(%rip),%r13		# address to resume loop at
-1:	movl	%ebx,%eax		# get cpl
+	leaq	1f(%rip),%r13		/* address to resume loop at */
+1:	movl	%ebx,%eax		/* get cpl */
 	movl	CPUVAR(IUNMASK)(,%rax,4),%eax
 	CLI(si)
-	andl	CPUVAR(IPENDING),%eax		# any non-masked bits left?
+	andl	CPUVAR(IPENDING),%eax	/* any non-masked bits left? */
 	jz	2f
 	bsrl	%eax,%eax
 	btrl	%eax,CPUVAR(IPENDING)
@@ -265,8 +311,11 @@ IDTVEC(spllower)
 	popq	%r13
 	popq	%rbx
 	ret
+IDTVEC_END(spllower)
 
 /*
+ * void Xdoreti(void);
+ *
  * Handle return from interrupt after device handler finishes.
  *
  * Important registers:
@@ -274,7 +323,7 @@ IDTVEC(spllower)
  *   r13 - address to resume loop at
  */
 IDTVEC(doreti)
-	popq	%rbx			# get previous priority
+	popq	%rbx			/* get previous priority */
 	decl	CPUVAR(IDEPTH)
 	leaq	1f(%rip),%r13
 1:	movl	%ebx,%eax
@@ -282,17 +331,18 @@ IDTVEC(doreti)
 	CLI(si)
 	andl	CPUVAR(IPENDING),%eax
 	jz	2f
-	bsrl    %eax,%eax               # slow, but not worth optimizing
-	btrl    %eax,CPUVAR(IPENDING)
-	movq	CPUVAR(ISOURCES)(,%rax, 8),%rax
+	bsrl	%eax,%eax		/* slow, but not worth optimizing */
+	btrl	%eax,CPUVAR(IPENDING)
+	movq	CPUVAR(ISOURCES)(,%rax,8),%rax
 	jmp	*IS_RESUME(%rax)
 2:	/* Check for ASTs on exit to user mode. */
 	movl	%ebx,CPUVAR(ILEVEL)
 5:
-	testb   $SEL_RPL,TF_CS(%rsp)
+	testb	$SEL_RPL,TF_CS(%rsp)
 	jz	6f
-	.globl doreti_checkast
-doreti_checkast:
+
+	.type	_C_LABEL(doreti_checkast), @function
+LABEL(doreti_checkast)
 	movq	CPUVAR(CURLWP),%r14
 	CHECK_ASTPENDING(%r14)
 	je	3f
@@ -314,11 +364,5 @@ doreti_checkast:
 	call	_C_LABEL(do_pmap_load)
 	CLI(si)
 	jmp	doreti_checkast		/* recheck ASTs */
-
-#ifdef XEN
-NENTRY(call_evtchn_do_event)
-	incl	CPUVAR(IDEPTH)
-	call    _C_LABEL(evtchn_do_event)
-	decl	CPUVAR(IDEPTH)
-	ret
-#endif
+END(doreti_checkast)
+IDTVEC_END(doreti)

@@ -1,4 +1,4 @@
-/*	$NetBSD: sun.c,v 1.5 2006/10/22 16:11:34 christos Exp $	*/
+/*	$NetBSD: sun.c,v 1.9 2015/08/05 06:54:39 mrg Exp $	*/
 
 /*
  * Copyright (c) 2002 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: sun.c,v 1.5 2006/10/22 16:11:34 christos Exp $");
+__RCSID("$NetBSD: sun.c,v 1.9 2015/08/05 06:54:39 mrg Exp $");
 #endif
 
 
@@ -48,13 +46,15 @@ __RCSID("$NetBSD: sun.c,v 1.5 2006/10/22 16:11:34 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "libaudio.h"
+#include "auconv.h"
 
 /*
  * SunOS/NeXT .au format helpers
  */
-struct {
+static const struct {
 	int	file_encoding;
 	int	encoding;
 	int	precision;
@@ -82,10 +82,7 @@ struct {
 };
 
 int
-audio_sun_to_encoding(sun_encoding, encp, precp)
-	int	sun_encoding;
-	u_int	*encp;
-	u_int	*precp;
+audio_sun_to_encoding(int sun_encoding, u_int *encp, u_int *precp)
 {
 	int i;
 
@@ -99,10 +96,7 @@ audio_sun_to_encoding(sun_encoding, encp, precp)
 }
 
 int
-audio_encoding_to_sun(encoding, precision, sunep)
-	int	encoding;
-	int	precision;
-	int	*sunep;
+audio_encoding_to_sun(int encoding, int precision, int *sunep)
 {
 	int i;
 
@@ -113,4 +107,128 @@ audio_encoding_to_sun(encoding, precision, sunep)
 			return (0);
 		}
 	return (1);
+}
+
+int
+sun_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
+{
+	static int warned = 0;
+	static sun_audioheader auh;
+	int sunenc, oencoding = ti->encoding;
+
+	/* only perform conversions if we don't specify the encoding */
+	switch (ti->encoding) {
+
+	case AUDIO_ENCODING_ULINEAR_LE:
+#if BYTE_ORDER == LITTLE_ENDIAN
+	case AUDIO_ENCODING_ULINEAR:
+#endif
+		if (ti->precision == 16 || ti->precision == 32)
+			ti->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		break;
+
+	case AUDIO_ENCODING_ULINEAR_BE:
+#if BYTE_ORDER == BIG_ENDIAN
+	case AUDIO_ENCODING_ULINEAR:
+#endif
+		if (ti->precision == 16 || ti->precision == 32)
+			ti->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		break;
+
+	case AUDIO_ENCODING_SLINEAR_LE:
+#if BYTE_ORDER == LITTLE_ENDIAN
+	case AUDIO_ENCODING_SLINEAR:
+#endif
+		if (ti->precision == 16 || ti->precision == 32)
+			ti->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		break;
+
+#if BYTE_ORDER == BIG_ENDIAN
+	case AUDIO_ENCODING_SLINEAR:
+		ti->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		break;
+#endif
+	}
+	
+	/* if we can't express this as a Sun header, don't write any */
+	if (audio_encoding_to_sun(ti->encoding, ti->precision, &sunenc) != 0) {
+		if (!ti->qflag && !warned) {
+			const char *s = audio_enc_from_val(oencoding);
+
+			if (s == NULL)
+				s = "(unknown)";
+			warnx("failed to convert to sun encoding from %s "
+			      "(precision %d);\nSun audio header not written",
+			      s, ti->precision);
+		}
+		ti->format = AUDIO_FORMAT_NONE;
+		warned = 1;
+		return -1;
+	}
+
+	auh.magic = htonl(AUDIO_FILE_MAGIC);
+	if (ti->outfd == STDOUT_FILENO)
+		auh.data_size = htonl(AUDIO_UNKNOWN_SIZE);
+	else if (ti->total_size != -1)
+		auh.data_size = htonl(ti->total_size);
+	else
+		auh.data_size = 0;
+	auh.encoding = htonl(sunenc);
+	auh.sample_rate = htonl(ti->sample_rate);
+	auh.channels = htonl(ti->channels);
+	if (ti->header_info) {
+		int 	len, infolen;
+
+		infolen = ((len = strlen(ti->header_info)) + 7) & 0xfffffff8;
+		*leftp = infolen - len;
+		auh.hdr_size = htonl(sizeof(auh) + infolen);
+	} else {
+		*leftp = sizeof(audio_default_info);
+		auh.hdr_size = htonl(sizeof(auh) + *leftp);
+	}
+	*(sun_audioheader **)hdrp = &auh;
+	*lenp = sizeof auh;
+	return 0;
+}
+
+write_conv_func
+sun_write_get_conv_func(struct track_info *ti)
+{
+	write_conv_func conv_func = NULL;
+
+	/* only perform conversions if we don't specify the encoding */
+	switch (ti->encoding) {
+
+	case AUDIO_ENCODING_ULINEAR_LE:
+#if BYTE_ORDER == LITTLE_ENDIAN
+	case AUDIO_ENCODING_ULINEAR:
+#endif
+		if (ti->precision == 16)
+			conv_func = change_sign16_swap_bytes_le;
+		else if (ti->precision == 32)
+			conv_func = change_sign32_swap_bytes_le;
+		break;
+
+	case AUDIO_ENCODING_ULINEAR_BE:
+#if BYTE_ORDER == BIG_ENDIAN
+	case AUDIO_ENCODING_ULINEAR:
+#endif
+		if (ti->precision == 16)
+			conv_func = change_sign16_be;
+		else if (ti->precision == 32)
+			conv_func = change_sign32_be;
+		break;
+
+	case AUDIO_ENCODING_SLINEAR_LE:
+#if BYTE_ORDER == LITTLE_ENDIAN
+	case AUDIO_ENCODING_SLINEAR:
+#endif
+		if (ti->precision == 16)
+			conv_func = swap_bytes;
+		else if (ti->precision == 32)
+			conv_func = swap_bytes32;
+		break;
+	}
+
+	return conv_func;
 }

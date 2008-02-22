@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.37 2008/01/30 11:47:05 ad Exp $	*/
+/*	$NetBSD: ufs_vfsops.c,v 1.55 2017/04/17 08:32:02 hannken Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.37 2008/01/30 11:47:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.55 2017/04/17 08:32:02 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -50,11 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.37 2008/01/30 11:47:05 ad Exp $");
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
 
+#include <sys/quotactl.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -89,54 +90,109 @@ ufs_root(struct mount *mp, struct vnode **vpp)
 	struct vnode *nvp;
 	int error;
 
-	if ((error = VFS_VGET(mp, (ino_t)ROOTINO, &nvp)) != 0)
+	if ((error = VFS_VGET(mp, (ino_t)UFS_ROOTINO, &nvp)) != 0)
 		return (error);
 	*vpp = nvp;
 	return (0);
 }
 
 /*
+ * Look up and return a vnode/inode pair by inode number.
+ */
+int
+ufs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
+{
+	int error;
+
+	error = vcache_get(mp, &ino, sizeof(ino), vpp);
+	if (error)
+		return error;
+	error = vn_lock(*vpp, LK_EXCLUSIVE);
+	if (error) {
+		vrele(*vpp);
+		*vpp = NULL;
+		return error;
+	}
+	return 0;
+}
+
+/*
  * Do operations associated with quotas
  */
 int
-ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
+ufs_quotactl(struct mount *mp, struct quotactl_args *args)
 {
-	struct lwp *l = curlwp;
 
-#ifndef QUOTA
+#if !defined(QUOTA) && !defined(QUOTA2)
 	(void) mp;
-	(void) cmds;
-	(void) uid;
-	(void) arg;
-	(void) l;
+	(void) args;
 	return (EOPNOTSUPP);
 #else
-	int cmd, type, error;
+	struct lwp *l = curlwp;
+	int error;
 
-	if (uid == -1)
-		uid = kauth_cred_getuid(l->l_cred);
-	cmd = cmds >> SUBCMDSHIFT;
+	/* Mark the mount busy, as we're passing it to kauth(9). */
+	error = vfs_busy(mp);
+	if (error) {
+		return (error);
+	}
+	mutex_enter(&mp->mnt_updating);
 
+	error = quota_handle_cmd(mp, l, args);
+
+	mutex_exit(&mp->mnt_updating);
+	vfs_unbusy(mp);
+	return (error);
+#endif
+}
+	
+#if 0
 	switch (cmd) {
 	case Q_SYNC:
 		break;
+
 	case Q_GETQUOTA:
+		/* The user can always query about his own quota. */
 		if (uid == kauth_cred_getuid(l->l_cred))
 			break;
-		/* fall through */
+
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_GET, mp, KAUTH_ARG(uid), NULL);
+
+		break;
+
+	case Q_QUOTAON:
+	case Q_QUOTAOFF:
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_ONOFF, mp, NULL, NULL);
+
+		break;
+
+	case Q_SETQUOTA:
+	case Q_SETUSE:
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_MANAGE, mp, KAUTH_ARG(uid), NULL);
+
+		break;
+
 	default:
-		if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) != 0)
-			return (error);
+		error = EINVAL;
+		break;
 	}
 
 	type = cmds & SUBCMDMASK;
-	if ((u_int)type >= MAXQUOTAS)
-		return (EINVAL);
-	error = vfs_trybusy(mp, RW_READER, NULL);
-	if (error != 0)
-		return (error);
+	if (!error) {
+		/* Only check if there was no error above. */
+		if ((u_int)type >= MAXQUOTAS)
+			error = EINVAL;
+	}
 
+	if (error) {
+		vfs_unbusy(mp);
+		return (error);
+	}
+
+	mutex_enter(&mp->mnt_updating);
 	switch (cmd) {
 
 	case Q_QUOTAON:
@@ -166,10 +222,10 @@ ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
 	default:
 		error = EINVAL;
 	}
-	vfs_unbusy(mp, false);
+	mutex_exit(&mp->mnt_updating);
+	vfs_unbusy(mp);
 	return (error);
 #endif
-}
 
 /*
  * This is the generic part of fhtovp called after the underlying
@@ -183,10 +239,13 @@ ufs_fhtovp(struct mount *mp, struct ufid *ufhp, struct vnode **vpp)
 	int error;
 
 	if ((error = VFS_VGET(mp, ufhp->ufid_ino, &nvp)) != 0) {
+		if (error == ENOENT)
+			error = ESTALE;
 		*vpp = NULLVP;
 		return (error);
 	}
 	ip = VTOI(nvp);
+	KASSERT(ip != NULL);
 	if (ip->i_mode == 0 || ip->i_gen != ufhp->ufid_gen) {
 		vput(nvp);
 		*vpp = NULLVP;
@@ -208,8 +267,7 @@ ufs_init(void)
 	ufs_direct_cache = pool_cache_init(sizeof(struct direct), 0, 0, 0,
 	    "ufsdir", NULL, IPL_NONE, NULL, NULL, NULL);
 
-	ufs_ihashinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqinit();
 #endif
 #ifdef UFS_DIRHASH
@@ -223,8 +281,7 @@ ufs_init(void)
 void
 ufs_reinit(void)
 {
-	ufs_ihashreinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqreinit();
 #endif
 }
@@ -238,8 +295,7 @@ ufs_done(void)
 	if (--ufs_initcount > 0)
 		return;
 
-	ufs_ihashdone();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqdone();
 #endif
 	pool_cache_destroy(ufs_direct_cache);

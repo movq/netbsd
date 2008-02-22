@@ -1,4 +1,4 @@
-/*	$NetBSD: strcpy.c,v 1.2 2007/06/04 18:19:27 christos Exp $	*/
+/*	$NetBSD: strcpy.c,v 1.4 2018/02/04 20:22:17 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)strcpy.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: strcpy.c,v 1.2 2007/06/04 18:19:27 christos Exp $");
+__RCSID("$NetBSD: strcpy.c,v 1.4 2018/02/04 20:22:17 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -45,17 +45,12 @@ __RCSID("$NetBSD: strcpy.c,v 1.2 2007/06/04 18:19:27 christos Exp $");
 #include <lib/libkern/libkern.h>
 #endif
 
-#ifdef _FORTIFY_SOURCE
 #undef strcpy
-#endif
 
 char *
 strcpy(char *to, const char *from)
 {
 	char *save = to;
-
-	_DIAGASSERT(to != NULL);
-	_DIAGASSERT(from != NULL);
 
 	for (; (*to = *from) != '\0'; ++from, ++to);
 	return(save);

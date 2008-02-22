@@ -1,4 +1,4 @@
-/*	$NetBSD: spec.c,v 1.64 2006/12/14 20:09:36 he Exp $	*/
+/*	$NetBSD: spec.c,v 1.90 2017/12/14 18:34:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -44,13 +44,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,18 +67,21 @@
 #if 0
 static char sccsid[] = "@(#)spec.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: spec.c,v 1.64 2006/12/14 20:09:36 he Exp $");
+__RCSID("$NetBSD: spec.c,v 1.90 2017/12/14 18:34:41 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <stdarg.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -98,11 +94,15 @@ __RCSID("$NetBSD: spec.c,v 1.64 2006/12/14 20:09:36 he Exp $");
 size_t	mtree_lineno;			/* Current spec line number */
 int	mtree_Mflag;			/* Merge duplicate entries */
 int	mtree_Wflag;			/* Don't "whack" permissions */
+int	mtree_Sflag;			/* Sort entries */
 
 static	dev_t	parsedev(char *);
 static	void	replacenode(NODE *, NODE *);
 static	void	set(char *, NODE *);
 static	void	unset(char *, NODE *);
+static	void	addchild(NODE *, NODE *);
+static	int	nodecmp(const NODE *, const NODE *);
+static	int	appendfield(FILE *, int, const char *, ...) __printflike(3, 4);
 
 #define REPLACEPTR(x,v)	do { if ((x)) free((x)); (x) = (v); } while (0)
 
@@ -194,7 +194,7 @@ noparent:		mtree_err("no parent node");
 				}
 				if (cur == NULL || cur->type != F_DIR) {
 					mtree_err("%s: %s", tname,
-					    strerror(ENOENT));
+					"missing directory in specification");
 				}
 				*e = '/';
 				pathparent = cur;
@@ -218,6 +218,12 @@ noparent:		mtree_err("no parent node");
 				/*
 				 * empty tree
 				 */
+			/*
+			 * Allow a bare "." root node by forcing it to
+			 * type=dir for compatibility with FreeBSD.
+			 */
+			if (strcmp(centry->name, ".") == 0 && centry->type == 0)
+				centry->type = F_DIR;
 			if (strcmp(centry->name, ".") != 0 ||
 			    centry->type != F_DIR)
 				mtree_err(
@@ -226,32 +232,11 @@ noparent:		mtree_err("no parent node");
 			root->parent = root;
 		} else if (pathparent != NULL) {
 				/*
-				 * full path entry
+				 * full path entry; add or replace
 				 */
 			centry->parent = pathparent;
-			cur = pathparent->child;
-			if (cur == NULL) {
-				pathparent->child = centry;
-				last = centry;
-			} else {
-				for (; cur != NULL; cur = cur->next) {
-					if (strcmp(cur->name, centry->name)
-					    == 0) {
-						/* existing entry; replace */
-						replacenode(cur, centry);
-						break;
-					}
-					if (cur->next == NULL) {
-						/* last entry; add new */
-						cur->next = centry;
-						centry->prev = cur;
-						break;
-					}
-				}
-				last = cur;
-				while (last->next != NULL)
-					last = last->next;
-			}
+			addchild(pathparent, centry);
+			last = centry;
 		} else if (strcmp(centry->name, ".") == 0) {
 				/*
 				 * duplicate "." entry; always replace
@@ -259,19 +244,21 @@ noparent:		mtree_err("no parent node");
 			replacenode(root, centry);
 		} else if (last->type == F_DIR && !(last->flags & F_DONE)) {
 				/*
-				 * new relative child
-				 * (no duplicate check)
+				 * new relative child in current dir;
+				 * add or replace
 				 */
 			centry->parent = last;
-			last = last->child = centry;
+			addchild(last, centry);
+			last = centry;
 		} else {
 				/*
-				 * relative entry, up one directory
-				 * (no duplicate check)
+				 * new relative child in parent dir
+				 * (after encountering ".." entry);
+				 * add or replace
 				 */
 			centry->parent = last->parent;
-			centry->prev = last;
-			last = last->next = centry;
+			addchild(last->parent, centry);
+			last = centry;
 		}
 	}
 	return (root);
@@ -302,18 +289,40 @@ free_nodes(NODE *root)
 }
 
 /*
+ * appendfield --
+ *	Like fprintf(), but output a space either before or after
+ *	the regular output, according to the pathlast flag.
+ */
+static int
+appendfield(FILE *fp, int pathlast, const char *fmt, ...)
+{
+	va_list ap;
+	int result;
+
+	va_start(ap, fmt);
+	if (!pathlast)
+		fprintf(fp, " ");
+	result = vprintf(fmt, ap);
+	if (pathlast)
+		fprintf(fp, " ");
+	va_end(ap);
+	return result;
+}
+
+/*
  * dump_nodes --
  *	dump the NODEs from `cur', based in the directory `dir'.
  *	if pathlast is none zero, print the path last, otherwise print
  *	it first.
  */
 void
-dump_nodes(const char *dir, NODE *root, int pathlast)
+dump_nodes(FILE *fp, const char *dir, NODE *root, int pathlast)
 {
 	NODE	*cur;
 	char	path[MAXPATHLEN];
 	const char *name;
 	char	*str;
+	char	*p, *q;
 
 	for (cur = root; cur != NULL; cur = cur->next) {
 		if (cur->type != F_DIR && !matchtags(cur))
@@ -321,72 +330,94 @@ dump_nodes(const char *dir, NODE *root, int pathlast)
 
 		if (snprintf(path, sizeof(path), "%s%s%s",
 		    dir, *dir ? "/" : "", cur->name)
-		    >= sizeof(path))
+		    >= (int)sizeof(path))
 			mtree_err("Pathname too long.");
 
 		if (!pathlast)
-			printf("%s ", vispath(path));
+			fprintf(fp, "%s", vispath(path));
 
 #define MATCHFLAG(f)	((keys & (f)) && (cur->flags & (f)))
 		if (MATCHFLAG(F_TYPE))
-			printf("type=%s ", nodetype(cur->type));
+			appendfield(fp, pathlast, "type=%s",
+			    nodetype(cur->type));
 		if (MATCHFLAG(F_UID | F_UNAME)) {
 			if (keys & F_UNAME &&
 			    (name = user_from_uid(cur->st_uid, 1)) != NULL)
-				printf("uname=%s ", name);
+				appendfield(fp, pathlast, "uname=%s", name);
 			else
-				printf("uid=%u ", cur->st_uid);
+				appendfield(fp, pathlast, "uid=%u",
+				    cur->st_uid);
 		}
 		if (MATCHFLAG(F_GID | F_GNAME)) {
 			if (keys & F_GNAME &&
 			    (name = group_from_gid(cur->st_gid, 1)) != NULL)
-				printf("gname=%s ", name);
+				appendfield(fp, pathlast, "gname=%s", name);
 			else
-				printf("gid=%u ", cur->st_gid);
+				appendfield(fp, pathlast, "gid=%u",
+				    cur->st_gid);
 		}
 		if (MATCHFLAG(F_MODE))
-			printf("mode=%#o ", cur->st_mode);
+			appendfield(fp, pathlast, "mode=%#o", cur->st_mode);
 		if (MATCHFLAG(F_DEV) &&
 		    (cur->type == F_BLOCK || cur->type == F_CHAR))
-			printf("device=%#x ", cur->st_rdev);
+			appendfield(fp, pathlast, "device=%#jx",
+			    (uintmax_t)cur->st_rdev);
 		if (MATCHFLAG(F_NLINK))
-			printf("nlink=%d ", cur->st_nlink);
+			appendfield(fp, pathlast, "nlink=%ju",
+			    (uintmax_t)cur->st_nlink);
 		if (MATCHFLAG(F_SLINK))
-			printf("link=%s ", vispath(cur->slink));
+			appendfield(fp, pathlast, "link=%s",
+			    vispath(cur->slink));
 		if (MATCHFLAG(F_SIZE))
-			printf("size=%lld ", (long long)cur->st_size);
+			appendfield(fp, pathlast, "size=%ju",
+			    (uintmax_t)cur->st_size);
 		if (MATCHFLAG(F_TIME))
-			printf("time=%ld.%ld ", (long)cur->st_mtimespec.tv_sec,
+			appendfield(fp, pathlast, "time=%jd.%09ld",
+			    (intmax_t)cur->st_mtimespec.tv_sec,
 			    cur->st_mtimespec.tv_nsec);
 		if (MATCHFLAG(F_CKSUM))
-			printf("cksum=%lu ", cur->cksum);
+			appendfield(fp, pathlast, "cksum=%lu", cur->cksum);
 		if (MATCHFLAG(F_MD5))
-			printf("md5=%s ", cur->md5digest);
+			appendfield(fp, pathlast, "%s=%s", MD5KEY,
+			    cur->md5digest);
 		if (MATCHFLAG(F_RMD160))
-			printf("rmd160=%s ", cur->rmd160digest);
+			appendfield(fp, pathlast, "%s=%s", RMD160KEY,
+			    cur->rmd160digest);
 		if (MATCHFLAG(F_SHA1))
-			printf("sha1=%s ", cur->sha1digest);
+			appendfield(fp, pathlast, "%s=%s", SHA1KEY,
+			    cur->sha1digest);
 		if (MATCHFLAG(F_SHA256))
-			printf("sha256=%s ", cur->sha256digest);
+			appendfield(fp, pathlast, "%s=%s", SHA256KEY,
+			    cur->sha256digest);
 		if (MATCHFLAG(F_SHA384))
-			printf("sha384=%s ", cur->sha384digest);
+			appendfield(fp, pathlast, "%s=%s", SHA384KEY,
+			    cur->sha384digest);
 		if (MATCHFLAG(F_SHA512))
-			printf("sha512=%s ", cur->sha512digest);
+			appendfield(fp, pathlast, "%s=%s", SHA512KEY,
+			    cur->sha512digest);
 		if (MATCHFLAG(F_FLAGS)) {
 			str = flags_to_string(cur->st_flags, "none");
-			printf("flags=%s ", str);
+			appendfield(fp, pathlast, "flags=%s", str);
 			free(str);
 		}
 		if (MATCHFLAG(F_IGN))
-			printf("ignore ");
+			appendfield(fp, pathlast, "ignore");
 		if (MATCHFLAG(F_OPT))
-			printf("optional ");
-		if (MATCHFLAG(F_TAGS))
-			printf("tags=%s ", cur->tags);
+			appendfield(fp, pathlast, "optional");
+		if (MATCHFLAG(F_TAGS)) {
+			/* don't output leading or trailing commas */
+			p = cur->tags;
+			while (*p == ',')
+				p++;
+			q = p + strlen(p);
+			while(q > p && q[-1] == ',')
+				q--;
+			appendfield(fp, pathlast, "tags=%.*s", (int)(q - p), p);
+		}
 		puts(pathlast ? vispath(path) : "");
 
 		if (cur->child)
-			dump_nodes(path, cur->child, pathlast);
+			dump_nodes(fp, path, cur->child, pathlast);
 	}
 }
 
@@ -399,11 +430,16 @@ dump_nodes(const char *dir, NODE *root, int pathlast)
 char *
 vispath(const char *path)
 {
-	const char extra[] = { ' ', '\t', '\n', '\\', '#', '\0' };
+	static const char extra[] = { ' ', '\t', '\n', '\\', '#', '\0' };
+	static const char extra_glob[] = { ' ', '\t', '\n', '\\', '#', '*',
+	    '?', '[', '\0' };
 	static char pathbuf[4*MAXPATHLEN + 1];
 
-	strsvis(pathbuf, path, VIS_CSTYLE, extra);
-	return(pathbuf);
+	if (flavor == F_NETBSD6)
+		strsvis(pathbuf, path, VIS_CSTYLE, extra);
+	else
+		strsvis(pathbuf, path, VIS_OCTAL, extra_glob);
+	return pathbuf;
 }
 
 
@@ -437,7 +473,7 @@ parsedev(char *arg)
 			mtree_err("not enough arguments");
 		result = (*pack)(argc, numbers, &error);
 		if (error != NULL)
-			mtree_err(error);
+			mtree_err("%s", error);
 	} else {
 		result = (dev_t)strtoul(arg, &ep, 0);
 		if (*ep != '\0')
@@ -605,11 +641,11 @@ set(char *t, NODE *ip)
 			break;
 		case F_TIME:
 			ip->st_mtimespec.tv_sec =
-			    (time_t)strtoul(val, &ep, 10);
+			    (time_t)strtoll(val, &ep, 10);
 			if (*ep != '.')
 				mtree_err("invalid time `%s'", val);
 			val = ep + 1;
-			ip->st_mtimespec.tv_nsec = strtoul(val, &ep, 10);
+			ip->st_mtimespec.tv_nsec = strtol(val, &ep, 10);
 			if (*ep)
 				mtree_err("invalid time `%s'", val);
 			break;
@@ -671,4 +707,147 @@ unset(char *t, NODE *ip)
 			continue;
 		ip->flags &= ~parsekey(p, NULL);
 	}
+}
+
+/*
+ * addchild --
+ *	Add the centry node as a child of the pathparent node.	If
+ *	centry is a duplicate, call replacenode().  If centry is not
+ *	a duplicate, insert it into the linked list referenced by
+ *	pathparent->child.  Keep the list sorted if Sflag is set.
+ */
+static void
+addchild(NODE *pathparent, NODE *centry)
+{
+	NODE *samename;      /* node with the same name as centry */
+	NODE *replacepos;    /* if non-NULL, centry should replace this node */
+	NODE *insertpos;     /* if non-NULL, centry should be inserted
+			      * after this node */
+	NODE *cur;           /* for stepping through the list */
+	NODE *last;          /* the last node in the list */
+	int cmp;
+
+	samename = NULL;
+	replacepos = NULL;
+	insertpos = NULL;
+	last = NULL;
+	cur = pathparent->child;
+	if (cur == NULL) {
+		/* centry is pathparent's first and only child node so far */
+		pathparent->child = centry;
+		return;
+	}
+
+	/*
+	 * pathparent already has at least one other child, so add the
+	 * centry node to the list.
+	 *
+	 * We first scan through the list looking for an existing node
+	 * with the same name (setting samename), and also looking
+	 * for the correct position to replace or insert the new node
+	 * (setting replacepos and/or insertpos).
+	 */
+	for (; cur != NULL; last = cur, cur = cur->next) {
+		if (strcmp(centry->name, cur->name) == 0) {
+			samename = cur;
+		}
+		if (mtree_Sflag) {
+			cmp = nodecmp(centry, cur);
+			if (cmp == 0) {
+				replacepos = cur;
+			} else if (cmp > 0) {
+				insertpos = cur;
+			}
+		}
+	}
+	if (! mtree_Sflag) {
+		if (samename != NULL) {
+			/* replace node with same name */
+			replacepos = samename;
+		} else {
+			/* add new node at end of list */
+			insertpos = last;
+		}
+	}
+
+	if (samename != NULL) {
+		/*
+		 * We found a node with the same name above.  Call
+		 * replacenode(), which will either exit with an error,
+		 * or replace the information in the samename node and
+		 * free the information in the centry node.
+		 */
+		replacenode(samename, centry);
+		if (samename == replacepos) {
+			/* The just-replaced node was in the correct position */
+			return;
+		}
+		if (samename == insertpos || samename->prev == insertpos) {
+			/*
+			 * We thought the new node should be just before
+			 * or just after the replaced node, but that would
+			 * be equivalent to just retaining the replaced node.
+			 */
+			return;
+		}
+
+		/*
+		 * The just-replaced node is in the wrong position in
+		 * the list.  This can happen if sort order depends on
+		 * criteria other than the node name.
+		 *
+		 * Make centry point to the just-replaced node.	 Unlink
+		 * the just-replaced node from the list, and allow it to
+		 * be insterted in the correct position later.
+		 */
+		centry = samename;
+		if (centry->prev)
+			centry->prev->next = centry->next;
+		else {
+			/* centry->next is the new head of the list */
+			pathparent->child = centry->next;
+			assert(centry->next != NULL);
+		}
+		if (centry->next)
+			centry->next->prev = centry->prev;
+		centry->prev = NULL;
+		centry->next = NULL;
+	}
+
+	if (insertpos == NULL) {
+		/* insert centry at the beginning of the list */
+		pathparent->child->prev = centry;
+		centry->next = pathparent->child;
+		centry->prev = NULL;
+		pathparent->child = centry;
+	} else {
+		/* insert centry into the list just after insertpos */
+		centry->next = insertpos->next;
+		insertpos->next = centry;
+		centry->prev = insertpos;
+		if (centry->next)
+			centry->next->prev = centry;
+	}
+	return;
+}
+
+/*
+ * nodecmp --
+ *	used as a comparison function by addchild() to control the order
+ *	in which entries appear within a list of sibling nodes.	 We make
+ *	directories sort after non-directories, but otherwise sort in
+ *	strcmp() order.
+ *
+ * Keep this in sync with dcmp() in create.c.
+ */
+static int
+nodecmp(const NODE *a, const NODE *b)
+{
+
+	if ((a->type & F_DIR) != 0) {
+		if ((b->type & F_DIR) == 0)
+			return 1;
+	} else if ((b->type & F_DIR) != 0)
+		return -1;
+	return strcmp(a->name, b->name);
 }

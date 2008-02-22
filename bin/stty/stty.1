@@ -1,4 +1,4 @@
-.\"	$NetBSD: stty.1,v 1.34 2007/06/24 18:03:00 christos Exp $
+.\"	$NetBSD: stty.1,v 1.45 2017/10/30 15:38:52 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,17 +32,17 @@
 .\"
 .\"     @(#)stty.1	8.5 (Berkeley) 6/1/94
 .\"
-.Dd June 24, 2007
+.Dd August 15, 2016
 .Dt STTY 1
 .Os
 .Sh NAME
 .Nm stty
-.Nd set the options for a terminal device interface
+.Nd set options for a terminal device interface
 .Sh SYNOPSIS
 .Nm
 .Op Fl a | Fl e | Fl g
 .Op Fl f Ar file
-.Op operands
+.Op operand ...
 .Sh DESCRIPTION
 The
 .Nm
@@ -57,7 +57,7 @@ Some combinations of arguments are mutually
 exclusive on some terminal types.
 .Pp
 The following options are available:
-.Bl -tag -width Ds
+.Bl -tag -width XfXfileXX
 .It Fl a
 Display all the current settings for the terminal to standard output
 as per
@@ -66,8 +66,11 @@ as per
 Display all the current settings for the terminal to standard output
 in the traditional
 .Bx
-``all'' and ``everything'' formats.
-.It Fl f
+.Dq all
+and
+.Dq everything
+formats.
+.It Fl f Ar file
 Open and use the terminal named by
 .Ar file
 rather than using standard input.
@@ -91,7 +94,11 @@ characteristics:
 .Ss Control Modes
 Control mode flags affect hardware characteristics associated with the
 terminal.
-This corresponds to the c_cflag in the termios structure.
+This corresponds to the
+.Fa c_cflag
+of the
+.Xr termios 4
+structure.
 .Bl -tag -width Fl
 .It Cm parenb Pq Fl parenb
 Enable (disable) parity generation
@@ -101,15 +108,17 @@ Select odd (even) parity.
 .It Cm cs5 cs6 cs7 cs8
 Select character size, if possible.
 .It Ar number
-Set terminal baud rate to the
-number given, if possible.
+Set terminal baud rate to
+.Ar number ,
+if possible.
 If the
 baud rate is set to zero, modem
 control is no longer
 asserted.
 .It Cm ispeed Ar number
-Set terminal input baud rate to the
-number given, if possible.
+Set terminal input baud rate to
+.Ar number ,
+if possible.
 If the
 input baud rate is set to zero, the
 input baud rate is set to the
@@ -117,7 +126,8 @@ value of the output baud
 rate.
 .It Cm ospeed Ar number
 Set terminal output baud rate to
-the number given, if possible.
+.Ar number ,
+if possible.
 If
 the output baud rate is set to
 zero, modem control is
@@ -148,7 +158,11 @@ Enable RTS/CTS flow control.
 Enable DTR/CTS flow control (if supported).
 .El
 .Ss Input Modes
-This corresponds to the c_iflag in the termios structure.
+This corresponds to the
+.Fa c_iflag
+of the
+.Xr termios 4
+structure.
 .Bl -tag -width Fl
 .It Cm ignbrk Pq Fl ignbrk
 Ignore (do not ignore) break on
@@ -226,7 +240,11 @@ is unset and the input queue is full, the next input character causes
 the entire input and output queues to be discarded.
 .El
 .Ss Output Modes
-This corresponds to the c_oflag of the termios structure.
+This corresponds to the
+.Fa c_oflag
+of the
+.Xr termios 4
+structure.
 .Bl -tag -width Fl
 .It Cm opost Pq Fl opost
 Post-process output (do not
@@ -255,20 +273,19 @@ On the terminal NL performs (does not perform) the CR function.
 Local mode flags (lflags) affect various and sundry characteristics of terminal
 processing.
 Historically the term "local" pertained to new job control features
-implemented by Jim Kulp on a
-.Tn PDP Ns -11/70
-at
-.Tn IIASA .
-Later the driver ran on the first
-.Tn VAX
-at Evans Hall, UC Berkeley, where the job control details
-were greatly modified but the structure definitions and names
-remained essentially unchanged.
-The second interpretation of the 'l' in lflag
-is ``line discipline flag'' which corresponds to the
-.Ar c_lflag
+implemented by Jim Kulp on a PDP-11/70 at IIASA.
+Later the driver ran on the first VAX at Evans Hall, UC Berkeley,
+where the job control details were greatly modified but the structure
+definitions and names remained essentially unchanged.
+The second interpretation of the
+.Sq l
+in lflag
+is
+.Dq line discipline flag ,
+which corresponds to the
+.Fa c_lflag
 of the
-.Ar termios
+.Xr termios 4
 structure.
 .Bl -tag -width Fl
 .It Cm isig Pq Fl isig
@@ -280,7 +297,7 @@ and
 .Dv SUSP .
 .It Cm icanon Pq Fl icanon
 Enable (disable) canonical input
-.Pf ( Dv ERASE
+.Dv ( ERASE
 and
 .Dv KILL
 processing).
@@ -324,8 +341,10 @@ is set, echo control characters as ^X.
 Otherwise control characters echo as themselves.
 .It Cm echoprt Pq Fl echoprt
 For printing terminals.
-If set, echo erased characters backwards within ``\\''
-and ``/''.
+If set, echo erased characters backwards within
+.Dq \e
+and
+.Dq / .
 Otherwise, disable this feature.
 .It Cm noflsh Pq Fl noflsh
 Disable (enable) flush after
@@ -345,13 +364,13 @@ It also skips the first preceding character in its classification
 (as a convenience since the one preceding character could have been
 erased with simply an
 .Dv ERASE
-character.)
+character).
 .It Cm mdmbuf Pq Fl mdmbuf
 If set, flow control output based on condition of Carrier Detect.
 Otherwise writes return an error if Carrier Detect is low (and Carrier
 is not being ignored with the
 .Dv CLOCAL
-flag.)
+flag).
 .It Cm flusho Pq Fl flusho
 Indicates output is (is not) being discarded.
 .It Cm pendin Pq Fl pendin
@@ -364,45 +383,45 @@ or more input arrives.
 .It Ar control-character Ar string
 Set
 .Ar control-character
-to
+to string
 .Ar string .
-If string is a single character,
-the control character is set to
+If the string is a single character,
+then the control character is set to
 that character.
-If string is the
+If the string is the
 two character sequence "^-" or the
-string "undef" the control character
-is disabled (i.e. set to
-.Pf { Dv _POSIX_VDISABLE Ns } . )
+string "undef", then the control character
+is disabled (i.e., set to
+.Bro Dv _POSIX_VDISABLE Brc ) .
 .Pp
-Recognized control-characters:
+Recognized control characters:
 .Bd -ragged -offset indent
-.Bl -column character Subscript
-.It control-
+.Bl -column character Subscript Description
+.It control- Ta "" Ta ""
 .It character	Subscript	Description
 .It _________	_________	_______________
-.It eof Ta Tn VEOF	EOF No character
-.It eol Ta Tn VEOL	EOL No character
-.It eol2 Ta Tn VEOL2	EOL2 No character
-.It erase Ta Tn VERASE	ERASE No character
-.It werase Ta Tn VWERASE	WERASE No character
-.It kill Ta Tn VKILL	KILL No character
-.It reprint Ta Tn VREPRINT	REPRINT No character
-.It intr Ta Tn VINTR	INTR No character
-.It quit Ta Tn VQUIT	QUIT No character
-.It susp Ta Tn VSUSP	SUSP No character
-.It dsusp Ta Tn VDSUSP	DSUSP No character
-.It start Ta Tn VSTART	START No character
-.It stop Ta Tn VSTOP	STOP No character
-.It lnext Ta Tn VLNEXT	LNEXT No character
-.It status Ta Tn VSTATUS	STATUS No character
-.It discard Ta Tn VDISCARD	DISCARD No character
+.It eof Ta VEOF Ta EOF No character
+.It eol Ta VEOL Ta EOL No character
+.It eol2 Ta VEOL2 Ta EOL2 No character
+.It erase Ta VERASE Ta ERASE No character
+.It werase Ta VWERASE Ta WERASE No character
+.It kill Ta VKILL Ta KILL No character
+.It reprint Ta VREPRINT Ta REPRINT No character
+.It intr Ta VINTR Ta INTR No character
+.It quit Ta VQUIT Ta QUIT No character
+.It susp Ta VSUSP Ta SUSP No character
+.It dsusp Ta VDSUSP Ta DSUSP No character
+.It start Ta VSTART Ta START No character
+.It stop Ta VSTOP Ta STOP No character
+.It lnext Ta VLNEXT Ta LNEXT No character
+.It status Ta VSTATUS Ta STATUS No character
+.It discard Ta VDISCARD Ta DISCARD No character
 .El
 .Ed
 .It Cm min Ar number
 .It Cm time Ar number
 Set the value of min or time to
-number.
+.Ar number .
 .Dv MIN
 and
 .Dv TIME
@@ -436,7 +455,9 @@ characters back to system defaults.
 .It Cm sane
 Resets all modes to reasonable values for interactive terminal use.
 .It Cm insane
-Resets all modes to unreasonable values for interactive terminal use.
+Sets all modes to random values, which are very likely
+.Pq but not guaranteed
+to be unreasonable for interactive terminal use.
 .It Cm tty
 Set the line discipline to the standard terminal line discipline
 .Dv TTYDISC .
@@ -451,20 +472,20 @@ The status line consists of the
 system load average, the current command name, its process ID, the
 event the process is waiting on (or the status of the process), the user
 and system times, percent CPU, and current memory usage.
-.It Cm columns Ar number
+.It Cm cols Ar number
 The terminal size is recorded as having
 .Ar number
 columns.
-.It Cm cols Ar number
-is an alias for
-.Cm columns .
+.It Cm columns Ar number
+An alias for
+.Cm cols .
 .It Cm rows Ar number
 The terminal size is recorded as having
 .Ar number
 rows.
 .It Cm dec
-Set modes suitable for users of Digital Equipment Corporation systems (
-.Dv ERASE ,
+Set modes suitable for users of Digital Equipment Corporation systems
+.Dv ( ERASE ,
 .Dv KILL ,
 and
 .Dv INTR
@@ -472,7 +493,7 @@ characters are set to ^?, ^U, and ^C;
 .Dv ixany
 is disabled, and
 .Dv crt
-is enabled.)
+is enabled).
 .It Cm extproc Pq Fl extproc
 If set, this flag indicates that some amount of terminal processing is being
 performed by either the terminal hardware or by the remote side connected
@@ -503,7 +524,9 @@ first rows, then columns.
 .El
 .Ss Compatibility Modes
 These modes remain for compatibility with the previous version of
-the stty command.
+the
+.Nm
+utility.
 .Bl -tag -width Fl
 .It Cm all
 Reports all the terminal modes as with
@@ -588,9 +611,7 @@ incoming STOP character when
 is set.
 .El
 .Sh EXIT STATUS
-The
-.Nm
-utility exits with a value of 0 if successful, and \*[Gt]0 if an error occurs.
+.Ex -std
 .Sh SEE ALSO
 .Xr termios 4 ,
 .Xr tty 4
@@ -600,10 +621,15 @@ The
 utility is expected to be
 .St -p1003.2
 compatible.
-The flags
+The
 .Fl e
 and
 .Fl f
-are
+flags are
 extensions to the standard, as are the operands mentioned in the control
 operations section.
+.Sh HISTORY
+An
+.Nm
+utility appeared in
+.At v2 .

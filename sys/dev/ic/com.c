@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $	*/
+/* $NetBSD: com.c,v 1.348 2018/05/27 17:05:06 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2004, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.348 2018/05/27 17:05:06 jmcneill Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -81,11 +74,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_ntp.h"
-
-#include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
-#include <sys/rnd.h>
-#endif
 
 /* The COM16650 option was renamed to COM_16650. */
 #ifdef COM16650
@@ -102,6 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
 	do {					\
 		console_debugger();		\
 		cn_trapped = 1;			\
+		(void)cn_trapped;		\
 	} while (/* CONSTCOND */ 0)
 
 #include <sys/param.h>
@@ -111,7 +100,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
 #include <sys/poll.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -123,6 +111,10 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 #include <sys/intr.h>
+#ifdef RND_COM
+#include <sys/rndsource.h>
+#endif
+
 
 #include <sys/bus.h>
 
@@ -130,11 +122,11 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.272 2008/01/28 18:12:29 dyoung Exp $");
 #include <dev/ic/comvar.h>
 #include <dev/ic/ns16550reg.h>
 #include <dev/ic/st16650reg.h>
-#ifdef COM_HAYESP
 #include <dev/ic/hayespreg.h>
-#endif
 #define	com_lcr	com_cfcr
 #include <dev/cons.h>
+
+#include "ioconf.h"
 
 #ifdef	COM_REGMAP
 #define	CSR_WRITE_1(r, o, v)	\
@@ -180,23 +172,23 @@ int	com_to_tiocm(struct com_softc *);
 void	com_iflush(struct com_softc *);
 
 int	com_common_getc(dev_t, struct com_regs *);
-void	com_common_putc(dev_t, struct com_regs *, int);
+static void	com_common_putc(dev_t, struct com_regs *, int);
 
 int	cominit(struct com_regs *, int, int, int, tcflag_t);
+
+static int comcnreattach(void);
 
 int	comcngetc(dev_t);
 void	comcnputc(dev_t, int);
 void	comcnpollc(dev_t, int);
 
 #define	integrate	static inline
-void 	comsoft(void *);
+void	comsoft(void *);
 integrate void com_rxsoft(struct com_softc *, struct tty *);
 integrate void com_txsoft(struct com_softc *, struct tty *);
 integrate void com_stsoft(struct com_softc *, struct tty *);
 integrate void com_schedrx(struct com_softc *);
 void	comdiag(void *);
-
-extern struct cfdriver com_cd;
 
 dev_type_open(comopen);
 dev_type_close(comclose);
@@ -207,9 +199,30 @@ dev_type_stop(comstop);
 dev_type_tty(comtty);
 dev_type_poll(compoll);
 
+static struct comcons_info comcons_info;
+
+/*
+ * Following are all routines needed for COM to act as console
+ */
+static struct consdev comcons = {
+	NULL, NULL, comcngetc, comcnputc, comcnpollc, NULL, NULL, NULL,
+	NODEV, CN_NORMAL
+};
+
+
 const struct cdevsw com_cdevsw = {
-	comopen, comclose, comread, comwrite, comioctl,
-	comstop, comtty, compoll, nommap, ttykqfilter, D_TTY
+	.d_open = comopen,
+	.d_close = comclose,
+	.d_read = comread,
+	.d_write = comwrite,
+	.d_ioctl = comioctl,
+	.d_stop = comstop,
+	.d_tty = comtty,
+	.d_poll = compoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 /*
@@ -222,10 +235,7 @@ u_int com_rbuf_size = COM_RING_SIZE;
 u_int com_rbuf_hiwat = (COM_RING_SIZE * 1) / 4;
 u_int com_rbuf_lowat = (COM_RING_SIZE * 3) / 4;
 
-static struct com_regs comconsregs;
 static int comconsattached;
-static int comconsrate;
-static tcflag_t comconscflag;
 static struct cnm_state com_cnm_state;
 
 #ifdef KGDB
@@ -240,21 +250,22 @@ void	com_kgdb_putc(void *, int);
 
 #ifdef COM_REGMAP
 /* initializer for typical 16550-ish hardware */
-#define	COM_REG_16550	{ \
+#define	COM_REG_STD { \
 	com_data, com_data, com_dlbl, com_dlbh, com_ier, com_iir, com_fifo, \
-	com_efr, com_lcr, com_mcr, com_lsr, com_msr }
+	com_efr, com_lcr, com_mcr, com_lsr, com_msr, 0, 0, 0, 0, 0, 0, 0, 0, \
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, com_usr, com_tfl, com_rfl, \
+	0, 0, 0, 0, 0, 0, 0, com_halt }
 
-const bus_size_t com_std_map[16] = COM_REG_16550;
+const bus_size_t com_std_map[42] = COM_REG_STD;
 #endif /* COM_REGMAP */
 
-#define	COMUNIT_MASK	0x7ffff
-#define	COMDIALOUT_MASK	0x80000
+#define	COMDIALOUT_MASK	TTDIALOUT_MASK
 
-#define	COMUNIT(x)	(minor(x) & COMUNIT_MASK)
-#define	COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
+#define	COMUNIT(x)	TTUNIT(x)
+#define	COMDIALOUT(x)	TTDIALOUT(x)
 
 #define	COM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			 device_is_active(&(sc)->sc_dev))
+			 device_is_active((sc)->sc_dev))
 
 #define	BR	BUS_SPACE_BARRIER_READ
 #define	BW	BUS_SPACE_BARRIER_WRITE
@@ -268,17 +279,20 @@ comspeed(long speed, long frequency, int type)
 #define	divrnd(n, q)	(((n)*2/(q)+1)/2)	/* divide and round off */
 
 	int x, err;
+	int divisor = 16;
 
-#if 0
+	if ((type == COM_TYPE_OMAP) && (speed > 230400)) {
+	    divisor = 13;
+	}
+
 	if (speed == 0)
 		return (0);
-#endif
-	if (speed <= 0)
+	if (speed < 0)
 		return (-1);
-	x = divrnd(frequency / 16, speed);
+	x = divrnd(frequency / divisor, speed);
 	if (x <= 0)
 		return (-1);
-	err = divrnd(((quad_t)frequency) * 1000 / 16, speed * x) - 1000;
+	err = divrnd(((quad_t)frequency) * 1000 / divisor, speed * x) - 1000;
 	if (err < 0)
 		err = -err;
 	if (err > COM_TOLERANCE)
@@ -297,16 +311,18 @@ comstatus(struct com_softc *sc, const char *str)
 {
 	struct tty *tp = sc->sc_tty;
 
-	printf("%s: %s %cclocal  %cdcd %cts_carr_on %cdtr %ctx_stopped\n",
-	    sc->sc_dev.dv_xname, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "%s %cclocal  %cdcd %cts_carr_on %cdtr %ctx_stopped\n",
+	    str,
 	    ISSET(tp->t_cflag, CLOCAL) ? '+' : '-',
 	    ISSET(sc->sc_msr, MSR_DCD) ? '+' : '-',
 	    ISSET(tp->t_state, TS_CARR_ON) ? '+' : '-',
 	    ISSET(sc->sc_mcr, MCR_DTR) ? '+' : '-',
 	    sc->sc_tx_stopped ? '+' : '-');
 
-	printf("%s: %s %ccrtscts %ccts %cts_ttstop  %crts rx_flags=0x%x\n",
-	    sc->sc_dev.dv_xname, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "%s %ccrtscts %ccts %cts_ttstop  %crts rx_flags=0x%x\n",
+	    str,
 	    ISSET(tp->t_cflag, CRTSCTS) ? '+' : '-',
 	    ISSET(sc->sc_msr, MSR_CTS) ? '+' : '-',
 	    ISSET(tp->t_state, TS_TTSTOP) ? '+' : '-',
@@ -337,7 +353,7 @@ comprobe1(bus_space_tag_t iot, bus_space_handle_t ioh)
 	regs.cr_iot = iot;
 	regs.cr_ioh = ioh;
 #ifdef	COM_REGMAP
-	memcpy(regs.cr_map, com_std_map, sizeof (regs.cr_map));;
+	memcpy(regs.cr_map, com_std_map, sizeof (regs.cr_map));
 #endif
 
 	return com_probe_subr(&regs);
@@ -352,9 +368,12 @@ com_enable_debugport(struct com_softc *sc)
 {
 
 	/* Turn on line break interrupt, set carrier. */
-	sc->sc_ier = IER_ERXRDY;
+	sc->sc_ier = IER_ERLS;
 	if (sc->sc_type == COM_TYPE_PXA2x0)
 		sc->sc_ier |= IER_EUART | IER_ERXTOUT;
+	if (sc->sc_type == COM_TYPE_INGENIC ||
+	    sc->sc_type == COM_TYPE_TEGRA)
+		sc->sc_ier |= IER_ERXTOUT;
 	CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, sc->sc_ier);
 	SET(sc->sc_mcr, MCR_DTR | MCR_RTS);
 	CSR_WRITE_1(&sc->sc_regs, COM_REG_MCR, sc->sc_mcr);
@@ -365,15 +384,27 @@ com_attach_subr(struct com_softc *sc)
 {
 	struct com_regs *regsp = &sc->sc_regs;
 	struct tty *tp;
-#ifdef COM_16650
 	u_int8_t lcr;
-#endif
 	const char *fifo_msg = NULL;
+	prop_dictionary_t	dict;
+	bool is_console = true;
 
 	aprint_naive("\n");
 
+	dict = device_properties(sc->sc_dev);
+	prop_dictionary_get_bool(dict, "is_console", &is_console);
 	callout_init(&sc->sc_diag_callout, 0);
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_HIGH);
+
+#if defined(COM_16650)
+	sc->sc_type = COM_TYPE_16650;
+#elif defined(COM_16750)
+	sc->sc_type = COM_TYPE_16750;
+#elif defined(COM_HAYESP)
+	sc->sc_type = COM_TYPE_HAYESP;
+#elif defined(COM_PXA2X0)
+	sc->sc_type = COM_TYPE_PXA2x0;
+#endif
 
 	/* Disable interrupts before configuring the device. */
 	if (sc->sc_type == COM_TYPE_PXA2x0)
@@ -383,13 +414,29 @@ com_attach_subr(struct com_softc *sc)
 
 	CSR_WRITE_1(regsp, COM_REG_IER, sc->sc_ier);
 
-	if (regsp->cr_iot == comconsregs.cr_iot &&
-	    regsp->cr_iobase == comconsregs.cr_iobase) {
+	if (bus_space_is_equal(regsp->cr_iot, comcons_info.regs.cr_iot) &&
+	    regsp->cr_iobase == comcons_info.regs.cr_iobase) {
 		comconsattached = 1;
+
+		if (cn_tab == NULL && comcnreattach() != 0) {
+			printf("can't re-init serial console @%lx\n",
+			    (u_long)comcons_info.regs.cr_iobase);
+		}
+
+		switch (sc->sc_type) {
+		case COM_TYPE_16750:
+		case COM_TYPE_DW_APB:
+			/* Use in comintr(). */
+ 			sc->sc_lcr = cflag2lcr(comcons_info.cflag);
+			break;
+		}
 
 		/* Make sure the console is always "hardwired". */
 		delay(10000);			/* wait for output to finish */
-		SET(sc->sc_hwflags, COM_HW_CONSOLE);
+		if (is_console) {
+			SET(sc->sc_hwflags, COM_HW_CONSOLE);
+		}
+
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
@@ -403,12 +450,52 @@ com_attach_subr(struct com_softc *sc)
 		fifo_msg = "Au1X00 UART, working fifo";
 		SET(sc->sc_hwflags, COM_HW_FIFO);
 		goto fifodelay;
+
+	case COM_TYPE_16550_NOERS:
+		sc->sc_fifolen = 16;
+		fifo_msg = "ns16650, no ERS, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		goto fifodelay;
+
+	case COM_TYPE_OMAP:
+		sc->sc_fifolen = 64;
+		fifo_msg = "OMAP UART, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		goto fifodelay;
+
+	case COM_TYPE_INGENIC:
+		sc->sc_fifolen = 16;
+		fifo_msg = "Ingenic UART, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		SET(sc->sc_hwflags, COM_HW_NOIEN);
+		goto fifodelay;
+
+	case COM_TYPE_TEGRA:
+		sc->sc_fifolen = 8;
+		fifo_msg = "Tegra UART, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_1);
+		goto fifodelay;
+
+	case COM_TYPE_BCMAUXUART:
+		sc->sc_fifolen = 1;
+		fifo_msg = "BCM AUX UART, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_1);
+		goto fifodelay;
 	}
 
 	sc->sc_fifolen = 1;
 	/* look for a NS 16550AF UART with FIFOs */
-	CSR_WRITE_1(regsp, COM_REG_FIFO,
-	    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_14);
+	if (sc->sc_type == COM_TYPE_INGENIC) {
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | 
+		    FIFO_TRIGGER_14 | FIFO_UART_ON);
+	} else
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_14);
 	delay(100);
 	if (ISSET(CSR_READ_1(regsp, COM_REG_IIR), IIR_FIFO_MASK)
 	    == IIR_FIFO_MASK)
@@ -416,7 +503,8 @@ com_attach_subr(struct com_softc *sc)
 		    == FIFO_TRIGGER_14) {
 			SET(sc->sc_hwflags, COM_HW_FIFO);
 
-#ifdef COM_16650
+			fifo_msg = "ns16550a, working fifo";
+
 			/*
 			 * IIR changes into the EFR if LCR is set to LCR_EERS
 			 * on 16650s. We also know IIR != 0 at this point.
@@ -428,37 +516,78 @@ com_attach_subr(struct com_softc *sc)
 			 * setting DLAB enable gives access to the EFR on
 			 * these chips.
 			 */
-			lcr = CSR_READ_1(regsp, COM_REG_LCR);
-			CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
-			CSR_WRITE_1(regsp, COM_REG_EFR, 0);
-			if (CSR_READ_1(regsp, COM_REG_EFR) == 0) {
-				CSR_WRITE_1(regsp, COM_REG_LCR,
-				    lcr | LCR_DLAB);
+			if (sc->sc_type == COM_TYPE_16650) {
+				lcr = CSR_READ_1(regsp, COM_REG_LCR);
+				CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
+				CSR_WRITE_1(regsp, COM_REG_EFR, 0);
 				if (CSR_READ_1(regsp, COM_REG_EFR) == 0) {
-					CLR(sc->sc_hwflags, COM_HW_FIFO);
-					sc->sc_fifolen = 0;
-				} else {
-					SET(sc->sc_hwflags, COM_HW_FLOW);
-					sc->sc_fifolen = 32;
-				}
-			} else
-#endif
-				sc->sc_fifolen = 16;
+					CSR_WRITE_1(regsp, COM_REG_LCR,
+					    lcr | LCR_DLAB);
+					if (CSR_READ_1(regsp, COM_REG_EFR) == 0) {
+						CLR(sc->sc_hwflags, COM_HW_FIFO);
+						sc->sc_fifolen = 0;
+					} else {
+						SET(sc->sc_hwflags, COM_HW_FLOW);
+						sc->sc_fifolen = 32;
+					}
+				} else
+					sc->sc_fifolen = 16;
 
-#ifdef COM_16650
-			CSR_WRITE_1(regsp, COM_REG_LCR, lcr);
-			if (sc->sc_fifolen == 0)
-				fifo_msg = "st16650, broken fifo";
-			else if (sc->sc_fifolen == 32)
-				fifo_msg = "st16650a, working fifo";
-			else
-#endif
-				fifo_msg = "ns16550a, working fifo";
+				CSR_WRITE_1(regsp, COM_REG_LCR, lcr);
+				if (sc->sc_fifolen == 0)
+					fifo_msg = "st16650, broken fifo";
+				else if (sc->sc_fifolen == 32)
+					fifo_msg = "st16650a, working fifo";
+				else
+					fifo_msg = "ns16550a, working fifo";
+			}
+
+			/*
+			 * TL16C750 can enable 64byte FIFO, only when DLAB
+			 * is 1.  However, some 16750 may always enable.  For
+			 * example, restrictions according to DLAB in a data
+			 * sheet for SC16C750 were not described.
+			 * Please enable 'options COM_16650', supposing you
+			 * use SC16C750.  Probably 32 bytes of FIFO and HW FLOW
+			 * should become effective.
+			 */
+			if (sc->sc_type == COM_TYPE_16750) {
+				uint8_t iir1, iir2;
+				uint8_t fcr = FIFO_ENABLE | FIFO_TRIGGER_14;
+
+				lcr = CSR_READ_1(regsp, COM_REG_LCR);
+				CSR_WRITE_1(regsp, COM_REG_LCR,
+				    lcr & ~LCR_DLAB);
+				CSR_WRITE_1(regsp, COM_REG_FIFO,
+				    fcr | FIFO_64B_ENABLE);
+				iir1 = CSR_READ_1(regsp, COM_REG_IIR);
+				CSR_WRITE_1(regsp, COM_REG_FIFO, fcr);
+				CSR_WRITE_1(regsp, COM_REG_LCR, lcr | LCR_DLAB);
+				CSR_WRITE_1(regsp, COM_REG_FIFO,
+				    fcr | FIFO_64B_ENABLE);
+				iir2 = CSR_READ_1(regsp, COM_REG_IIR);
+
+				CSR_WRITE_1(regsp, COM_REG_LCR, lcr);
+
+				if (!ISSET(iir1, IIR_64B_FIFO) &&
+				    ISSET(iir2, IIR_64B_FIFO)) {
+					/* It is TL16C750. */
+					sc->sc_fifolen = 64;
+					SET(sc->sc_hwflags, COM_HW_AFE);
+				} else
+					CSR_WRITE_1(regsp, COM_REG_FIFO, fcr);
+
+				if (sc->sc_fifolen == 64)
+					fifo_msg = "tl16c750, working fifo";
+				else
+					fifo_msg = "ns16750, working fifo";
+			}
 		} else
 			fifo_msg = "ns16550, broken fifo";
 	else
 		fifo_msg = "ns8250 or ns16450, no fifo";
 	CSR_WRITE_1(regsp, COM_REG_FIFO, 0);
+
 fifodelay:
 	/*
 	 * Some chips will clear down both Tx and Rx FIFOs when zero is
@@ -470,23 +599,24 @@ fifodelay:
 	aprint_normal(": %s\n", fifo_msg);
 	if (ISSET(sc->sc_hwflags, COM_HW_TXFIFO_DISABLE)) {
 		sc->sc_fifolen = 1;
-		aprint_normal("%s: txfifo disabled\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "txfifo disabled\n");
 	}
 
 fifodone:
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = comstart;
 	tp->t_param = comparam;
 	tp->t_hwiflow = comhwiflow;
+	tp->t_softc = sc;
 
 	sc->sc_tty = tp;
 	sc->sc_rbuf = malloc(com_rbuf_size << 1, M_DEVBUF, M_NOWAIT);
 	sc->sc_rbput = sc->sc_rbget = sc->sc_rbuf;
 	sc->sc_rbavail = com_rbuf_size;
 	if (sc->sc_rbuf == NULL) {
-		aprint_error("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to allocate ring buffer\n");
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (com_rbuf_size << 1);
@@ -503,9 +633,9 @@ fifodone:
 		maj = cdevsw_lookup_major(&com_cdevsw);
 
 		tp->t_dev = cn_tab->cn_dev = makedev(maj,
-						     device_unit(&sc->sc_dev));
+						     device_unit(sc->sc_dev));
 
-		aprint_normal("%s: console\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "console\n");
 	}
 
 #ifdef KGDB
@@ -515,22 +645,22 @@ fifodone:
 	 * exclusive use.  If it's the console _and_ the
 	 * kgdb device, it doesn't.
 	 */
-	if (regsp->cr_iot == comkgdbregs.cr_iot &&
+	if (bus_space_is_equal(regsp->cr_iot, comkgdbregs.cr_iot) &&
 	    regsp->cr_iobase == comkgdbregs.cr_iobase) {
 		if (!ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
 			com_kgdb_attached = 1;
 
 			SET(sc->sc_hwflags, COM_HW_KGDB);
 		}
-		aprint_normal("%s: kgdb\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "kgdb\n");
 	}
 #endif
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, comsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-			  RND_TYPE_TTY, 0);
+#ifdef RND_COM
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_TTY, RND_FLAG_DEFAULT);
 #endif
 
 	/* if there are no enable/disable functions, assume the device
@@ -556,7 +686,6 @@ com_config(struct com_softc *sc)
 	CSR_WRITE_1(regsp, COM_REG_IER, sc->sc_ier);
 	(void) CSR_READ_1(regsp, COM_REG_IIR);
 
-#ifdef COM_HAYESP
 	/* Look for a Hayes ESP board. */
 	if (sc->sc_type == COM_TYPE_HAYESP) {
 
@@ -587,20 +716,46 @@ com_config(struct com_softc *sc)
 		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_LOBYTE(HAYESP_RXLOWMARK));
 	}
-#endif
 
 	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE|COM_HW_KGDB))
 		com_enable_debugport(sc);
 }
 
-int
-com_detach(struct device *self, int flags)
+#if 0
+static int
+comcngetc_detached(dev_t dev)
 {
-	struct com_softc *sc = (struct com_softc *)self;
+	return 0;
+}
+
+static void
+comcnputc_detached(dev_t dev, int c)
+{
+}
+#endif
+
+int
+com_detach(device_t self, int flags)
+{
+	struct com_softc *sc = device_private(self);
 	int maj, mn;
 
-        if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE))
+	if (ISSET(sc->sc_hwflags, COM_HW_KGDB))
 		return EBUSY;
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE) &&
+	    (flags & DETACH_SHUTDOWN) != 0)
+		return EBUSY;
+
+	if (sc->disable != NULL && sc->enabled != 0) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
+		comconsattached = 0;
+		cn_tab = NULL;
+	}
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&com_cdevsw);
@@ -617,7 +772,7 @@ com_detach(struct device *self, int flags)
 		 * Ring buffer allocation failed in the com_attach_subr,
 		 * only the tty is allocated, and nothing else.
 		 */
-		ttyfree(sc->sc_tty);
+		tty_free(sc->sc_tty);
 		return 0;
 	}
 
@@ -626,47 +781,21 @@ com_detach(struct device *self, int flags)
 
 	/* Detach and free the tty. */
 	tty_detach(sc->sc_tty);
-	ttyfree(sc->sc_tty);
+	tty_free(sc->sc_tty);
 
 	/* Unhook the soft interrupt handler. */
 	softint_disestablish(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
+	callout_destroy(&sc->sc_diag_callout);
 
 	/* Destroy the lock. */
 	mutex_destroy(&sc->sc_lock);
 
 	return (0);
-}
-
-int
-com_activate(struct device *self, enum devact act)
-{
-	struct com_softc *sc = (struct com_softc *)self;
-	int rv = 0;
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		if (sc->disable != NULL && sc->enabled != 0) {
-			(*sc->disable)(sc);
-			sc->enabled = 0;
-		}
-		break;
-	}
-
-	return (rv);
 }
 
 void
@@ -698,8 +827,10 @@ com_shutdown(struct com_softc *sc)
 
 	/* Turn off interrupts. */
 	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
-		sc->sc_ier = IER_ERXRDY; /* interrupt on break */
-		if (sc->sc_type == COM_TYPE_PXA2x0)
+		sc->sc_ier = IER_ERLS; /* interrupt on line break */
+		if ((sc->sc_type == COM_TYPE_PXA2x0) ||
+		    (sc->sc_type == COM_TYPE_INGENIC) ||
+		    (sc->sc_type == COM_TYPE_TEGRA))
 			sc->sc_ier |= IER_ERXTOUT;
 	} else
 		sc->sc_ier = 0;
@@ -729,12 +860,12 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s;
 	int error;
 
-	sc = device_lookup(&com_cd, COMUNIT(dev));
+	sc = device_lookup_private(&com_cd, COMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, COM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -746,6 +877,13 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 #endif
 
 	tp = sc->sc_tty;
+
+	/*
+	 * If the device is exclusively for kernel use, deny userland
+	 * open.
+	 */
+	if (ISSET(tp->t_state, TS_KERN_ONLY))
+		return (EBUSY);
 
 	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
@@ -760,12 +898,11 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 		tp->t_dev = dev;
 
-
 		if (sc->enable) {
 			if ((*sc->enable)(sc)) {
 				splx(s);
-				printf("%s: device enable failed\n",
-				       sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				    "device enable failed\n");
 				return (EIO);
 			}
 			mutex_spin_enter(&sc->sc_lock);
@@ -776,18 +913,26 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 		}
 
 		/* Turn on interrupts. */
-		sc->sc_ier = IER_ERXRDY | IER_ERLS | IER_EMSC;
+		sc->sc_ier = IER_ERXRDY | IER_ERLS;
+		if (!ISSET(tp->t_cflag, CLOCAL))
+			sc->sc_ier |= IER_EMSC;
+
 		if (sc->sc_type == COM_TYPE_PXA2x0)
 			sc->sc_ier |= IER_EUART | IER_ERXTOUT;
+		else if (sc->sc_type == COM_TYPE_INGENIC ||
+			 sc->sc_type == COM_TYPE_TEGRA)
+			sc->sc_ier |= IER_ERXTOUT;
 		CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, sc->sc_ier);
 
 		/* Fetch the current modem control status, needed later. */
 		sc->sc_msr = CSR_READ_1(&sc->sc_regs, COM_REG_MSR);
 
 		/* Clear PPS capture state on first open. */
+		mutex_spin_enter(&timecounter_lock);
 		memset(&sc->sc_pps_state, 0, sizeof(sc->sc_pps_state));
 		sc->sc_pps_state.ppscap = PPS_CAPTUREASSERT | PPS_CAPTURECLEAR;
 		pps_init(&sc->sc_pps_state);
+		mutex_spin_exit(&timecounter_lock);
 
 		mutex_spin_exit(&sc->sc_lock);
 
@@ -796,8 +941,8 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 		 * sticky bits from TIOCSFLAGS.
 		 */
 		if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
-			t.c_ospeed = comconsrate;
-			t.c_cflag = comconscflag;
+			t.c_ospeed = comcons_info.rate;
+			t.c_cflag = comcons_info.cflag;
 		} else {
 			t.c_ospeed = TTYDEF_SPEED;
 			t.c_cflag = TTYDEF_CFLAG;
@@ -871,11 +1016,18 @@ bad:
 int
 comclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
 	if (!ISSET(tp->t_state, TS_ISOPEN))
+		return (0);
+	/*
+	 * If the device is exclusively for kernel use, deny userland
+	 * close.
+	 */
+	if (ISSET(tp->t_state, TS_KERN_ONLY))
 		return (0);
 
 	(*tp->t_linesw->l_close)(tp, flag);
@@ -899,7 +1051,8 @@ comclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 comread(dev_t dev, struct uio *uio, int flag)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -911,7 +1064,8 @@ comread(dev_t dev, struct uio *uio, int flag)
 int
 comwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -923,7 +1077,8 @@ comwrite(dev_t dev, struct uio *uio, int flag)
 int
 compoll(dev_t dev, int events, struct lwp *l)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (COM_ISALIVE(sc) == 0)
@@ -935,7 +1090,8 @@ compoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 comtty(dev_t dev)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
@@ -944,12 +1100,17 @@ comtty(dev_t dev)
 int
 comioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
-	struct tty *tp = sc->sc_tty;
+	struct com_softc *sc;
+	struct tty *tp;
 	int error;
 
+	sc = device_lookup_private(&com_cd, COMUNIT(dev));
+	if (sc == NULL)
+		return ENXIO;
 	if (COM_ISALIVE(sc) == 0)
 		return (EIO);
+
+	tp = sc->sc_tty;
 
 	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
 	if (error != EPASSTHROUGH)
@@ -1019,10 +1180,13 @@ comioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 #ifdef PPS_SYNC
 	case PPS_IOC_KCBIND:
 #endif
+		mutex_spin_enter(&timecounter_lock);
 		error = pps_ioctl(cmd, data, &sc->sc_pps_state);
+		mutex_spin_exit(&timecounter_lock);
 		break;
 
 	case TIOCDCDTIMESTAMP:	/* XXX old, overloaded  API used by xntpd v3 */
+		mutex_spin_enter(&timecounter_lock);
 #ifndef PPS_TRAILING_EDGE
 		TIMESPEC_TO_TIMEVAL((struct timeval *)data,
 		    &sc->sc_pps_state.ppsinfo.assert_timestamp);
@@ -1030,6 +1194,7 @@ comioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		TIMESPEC_TO_TIMEVAL((struct timeval *)data,
 		    &sc->sc_pps_state.ppsinfo.clear_timestamp);
 #endif
+		mutex_spin_exit(&timecounter_lock);
 		break;
 
 	default:
@@ -1147,8 +1312,12 @@ com_to_tiocm(struct com_softc *sc)
 		SET(ttybits, TIOCM_RTS);
 
 	combits = sc->sc_msr;
-	if (ISSET(combits, MSR_DCD))
+	if (sc->sc_type == COM_TYPE_INGENIC) {
 		SET(ttybits, TIOCM_CD);
+	} else {
+		if (ISSET(combits, MSR_DCD))
+			SET(ttybits, TIOCM_CD);
+	}
 	if (ISSET(combits, MSR_CTS))
 		SET(ttybits, TIOCM_CTS);
 	if (ISSET(combits, MSR_DSR))
@@ -1195,14 +1364,14 @@ cflag2lcr(tcflag_t cflag)
 int
 comparam(struct tty *tp, struct termios *t)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(tp->t_dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(tp->t_dev));
 	int ospeed;
 	u_char lcr;
 
 	if (COM_ISALIVE(sc) == 0)
 		return (EIO);
 
-#ifdef COM_HAYESP
 	if (sc->sc_type == COM_TYPE_HAYESP) {
 		int prescaler, speed;
 
@@ -1220,8 +1389,7 @@ comparam(struct tty *tp, struct termios *t)
 			return (EINVAL);
 		sc->sc_prescaler = prescaler;
 	} else
-#endif
-	ospeed = comspeed(t->c_ospeed, sc->sc_frequency, sc->sc_type);
+		ospeed = comspeed(t->c_ospeed, sc->sc_frequency, sc->sc_type);
 
 	/* Check requested parameters. */
 	if (ospeed < 0)
@@ -1270,7 +1438,11 @@ comparam(struct tty *tp, struct termios *t)
 		sc->sc_mcr_dtr = MCR_DTR;
 		sc->sc_mcr_rts = MCR_RTS;
 		sc->sc_msr_cts = MSR_CTS;
-		sc->sc_efr = EFR_AUTORTS | EFR_AUTOCTS;
+		if (ISSET(sc->sc_hwflags, COM_HW_AFE)) {
+			SET(sc->sc_mcr, MCR_AFE);
+		} else {
+			sc->sc_efr = EFR_AUTORTS | EFR_AUTOCTS;
+		}
 	} else if (ISSET(t->c_cflag, MDMBUF)) {
 		/*
 		 * For DTR/DCD flow control, make sure we don't toggle DTR for
@@ -1279,7 +1451,11 @@ comparam(struct tty *tp, struct termios *t)
 		sc->sc_mcr_dtr = 0;
 		sc->sc_mcr_rts = MCR_DTR;
 		sc->sc_msr_cts = MSR_DCD;
-		sc->sc_efr = 0;
+		if (ISSET(sc->sc_hwflags, COM_HW_AFE)) {
+			CLR(sc->sc_mcr, MCR_AFE);
+		} else {
+			sc->sc_efr = 0;
+		}
 	} else {
 		/*
 		 * If no flow control, then always set RTS.  This will make
@@ -1289,7 +1465,11 @@ comparam(struct tty *tp, struct termios *t)
 		sc->sc_mcr_dtr = MCR_DTR | MCR_RTS;
 		sc->sc_mcr_rts = 0;
 		sc->sc_msr_cts = 0;
-		sc->sc_efr = 0;
+		if (ISSET(sc->sc_hwflags, COM_HW_AFE)) {
+			CLR(sc->sc_mcr, MCR_AFE);
+		} else {
+			sc->sc_efr = 0;
+		}
 		if (ISSET(sc->sc_mcr, MCR_DTR))
 			SET(sc->sc_mcr, MCR_RTS);
 		else
@@ -1297,12 +1477,10 @@ comparam(struct tty *tp, struct termios *t)
 	}
 	sc->sc_msr_mask = sc->sc_msr_cts | sc->sc_msr_dcd;
 
-#if 0
-	if (ospeed == 0)
+	if (t->c_ospeed == 0 && tp->t_ospeed != 0)
 		CLR(sc->sc_mcr, sc->sc_mcr_dtr);
-	else
+	else if (t->c_ospeed != 0 && tp->t_ospeed == 0)
 		SET(sc->sc_mcr, sc->sc_mcr_dtr);
-#endif
 
 	sc->sc_dlbl = ospeed;
 	sc->sc_dlbh = ospeed >> 8;
@@ -1316,13 +1494,23 @@ comparam(struct tty *tp, struct termios *t)
 	 *    overflows.
 	 *  * Otherwise set it a bit higher.
 	 */
-	if (sc->sc_type == COM_TYPE_HAYESP)
+	if (sc->sc_type == COM_TYPE_HAYESP) {
 		sc->sc_fifo = FIFO_DMA_MODE | FIFO_ENABLE | FIFO_TRIGGER_8;
-	else if (ISSET(sc->sc_hwflags, COM_HW_FIFO))
-		sc->sc_fifo = FIFO_ENABLE |
-		    (t->c_ospeed <= 1200 ? FIFO_TRIGGER_1 : FIFO_TRIGGER_8);
-	else
+	} else if (sc->sc_type == COM_TYPE_TEGRA) {
+		sc->sc_fifo = FIFO_ENABLE | FIFO_TRIGGER_1;
+	} else if (ISSET(sc->sc_hwflags, COM_HW_FIFO)) {
+		if (t->c_ospeed <= 1200)
+			sc->sc_fifo = FIFO_ENABLE | FIFO_TRIGGER_1;
+		else if (t->c_ospeed <= 38400)
+			sc->sc_fifo = FIFO_ENABLE | FIFO_TRIGGER_8;
+		else
+			sc->sc_fifo = FIFO_ENABLE | FIFO_TRIGGER_4;
+	} else {
 		sc->sc_fifo = 0;
+	}
+
+	if (sc->sc_type == COM_TYPE_INGENIC)
+		sc->sc_fifo |= FIFO_UART_ON;
 
 	/* And copy to tty. */
 	tp->t_ispeed = t->c_ospeed;
@@ -1362,7 +1550,11 @@ comparam(struct tty *tp, struct termios *t)
 	 * CLOCAL or MDMBUF.  We don't hang up here; we only do that by
 	 * explicit request.
 	 */
-	(void) (*tp->t_linesw->l_modem)(tp, ISSET(sc->sc_msr, MSR_DCD));
+	if (sc->sc_type == COM_TYPE_INGENIC) {
+		/* no DCD here */
+		(void) (*tp->t_linesw->l_modem)(tp, 1);
+	} else
+		(void) (*tp->t_linesw->l_modem)(tp, ISSET(sc->sc_msr, MSR_DCD));
 
 #ifdef COM_DEBUG
 	if (com_debug)
@@ -1383,6 +1575,7 @@ void
 com_iflush(struct com_softc *sc)
 {
 	struct com_regs	*regsp = &sc->sc_regs;
+	uint8_t fifo;
 #ifdef DIAGNOSTIC
 	int reg;
 #endif
@@ -1403,9 +1596,24 @@ com_iflush(struct com_softc *sc)
 		    CSR_READ_1(regsp, COM_REG_RXDATA);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: com_iflush timeout %02x\n", sc->sc_dev.dv_xname,
-		       reg);
+		aprint_error_dev(sc->sc_dev, "com_iflush timeout %02x\n", reg);
 #endif
+
+	switch (sc->sc_type) {
+	case COM_TYPE_16750:
+	case COM_TYPE_DW_APB:
+		/*
+		 * Reset all Rx/Tx FIFO, preserve current FIFO length.
+		 * This should prevent triggering busy interrupt while
+		 * manipulating divisors.
+		 */
+		fifo = CSR_READ_1(regsp, COM_REG_FIFO) & (FIFO_TRIGGER_1 |
+		    FIFO_TRIGGER_4 | FIFO_TRIGGER_8 | FIFO_TRIGGER_14);
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    fifo | FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST);
+		delay(100);
+		break;
+	}
 }
 
 void
@@ -1421,11 +1629,17 @@ com_loadchannelregs(struct com_softc *sc)
 	else
 		CSR_WRITE_1(regsp, COM_REG_IER, 0);
 
+	if (sc->sc_type == COM_TYPE_OMAP) {
+		/* disable before changing settings */
+		CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_DISABLE);
+	}
+
 	if (ISSET(sc->sc_hwflags, COM_HW_FLOW)) {
-		if (sc->sc_type != COM_TYPE_AU1x00) {	/* no EFR on alchemy */
-			CSR_WRITE_1(regsp, COM_REG_EFR, sc->sc_efr);
-			CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
-		}
+		KASSERT(sc->sc_type != COM_TYPE_AU1x00);
+		KASSERT(sc->sc_type != COM_TYPE_16550_NOERS);
+		/* no EFR on alchemy */
+		CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
+		CSR_WRITE_1(regsp, COM_REG_EFR, sc->sc_efr);
 	}
 	if (sc->sc_type == COM_TYPE_AU1x00) {
 		/* alchemy has single separate 16-bit clock divisor register */
@@ -1439,14 +1653,40 @@ com_loadchannelregs(struct com_softc *sc)
 	CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr);
 	CSR_WRITE_1(regsp, COM_REG_MCR, sc->sc_mcr_active = sc->sc_mcr);
 	CSR_WRITE_1(regsp, COM_REG_FIFO, sc->sc_fifo);
-#ifdef COM_HAYESP
 	if (sc->sc_type == COM_TYPE_HAYESP) {
 		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD1,
 		    HAYESP_SETPRESCALER);
 		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
 		    sc->sc_prescaler);
 	}
-#endif
+	if (sc->sc_type == COM_TYPE_OMAP) {
+		/* setup the fifos.  the FCR value is not used as long
+		   as SCR[6] and SCR[7] are 0, which they are at reset
+		   and we never touch the SCR register */
+		uint8_t rx_fifo_trig = 40;
+		uint8_t tx_fifo_trig = 60;
+		uint8_t rx_start = 8;
+		uint8_t rx_halt = 60;
+		uint8_t tlr_value = ((rx_fifo_trig>>2) << 4) | (tx_fifo_trig>>2);
+		uint8_t tcr_value = ((rx_start>>2) << 4) | (rx_halt>>2);
+
+		/* enable access to TCR & TLR */
+		CSR_WRITE_1(regsp, COM_REG_MCR, sc->sc_mcr | MCR_TCR_TLR);
+
+		/* write tcr and tlr values */
+		CSR_WRITE_1(regsp, COM_REG_TLR, tlr_value);
+		CSR_WRITE_1(regsp, COM_REG_TCR, tcr_value);
+
+		/* disable access to TCR & TLR */
+		CSR_WRITE_1(regsp, COM_REG_MCR, sc->sc_mcr);
+
+		/* enable again, but mode is based on speed */
+		if (sc->sc_tty->t_termios.c_ospeed > 230400) {
+			CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_UART_13X);
+		} else {
+			CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_UART_16X);
+		}
+	}
 
 	CSR_WRITE_1(regsp, COM_REG_IER, sc->sc_ier);
 }
@@ -1454,7 +1694,8 @@ com_loadchannelregs(struct com_softc *sc)
 int
 comhwiflow(struct tty *tp, int block)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(tp->t_dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(tp->t_dev));
 
 	if (COM_ISALIVE(sc) == 0)
 		return (0);
@@ -1509,7 +1750,8 @@ com_hwiflow(struct com_softc *sc)
 void
 comstart(struct tty *tp)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(tp->t_dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(tp->t_dev));
 	struct com_regs *regsp = &sc->sc_regs;
 	int s;
 
@@ -1571,7 +1813,8 @@ out:
 void
 comstop(struct tty *tp, int flag)
 {
-	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(tp->t_dev));
+	struct com_softc *sc =
+	    device_lookup_private(&com_cd, COMUNIT(tp->t_dev));
 
 	mutex_spin_enter(&sc->sc_lock);
 	if (ISSET(tp->t_state, TS_BUSY)) {
@@ -1599,7 +1842,7 @@ comdiag(void *arg)
 	mutex_spin_exit(&sc->sc_lock);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -1690,11 +1933,14 @@ com_rxsoft(struct com_softc *sc, struct tty *tp)
 			if (ISSET(sc->sc_rx_flags, RX_IBUF_OVERFLOWED)) {
 				CLR(sc->sc_rx_flags, RX_IBUF_OVERFLOWED);
 				SET(sc->sc_ier, IER_ERXRDY);
-#ifdef COM_PXA2X0
 				if (sc->sc_type == COM_TYPE_PXA2x0)
 					SET(sc->sc_ier, IER_ERXTOUT);
-#endif
-				CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, sc->sc_ier);
+				if (sc->sc_type == COM_TYPE_INGENIC ||
+				    sc->sc_type == COM_TYPE_TEGRA)
+					SET(sc->sc_ier, IER_ERXTOUT);
+
+				CSR_WRITE_1(&sc->sc_regs, COM_REG_IER,
+				    sc->sc_ier);
 			}
 			if (ISSET(sc->sc_rx_flags, RX_IBUF_BLOCKED)) {
 				CLR(sc->sc_rx_flags, RX_IBUF_BLOCKED);
@@ -1791,8 +2037,61 @@ comintr(void *arg)
 	if (COM_ISALIVE(sc) == 0)
 		return (0);
 
+	KASSERT(regsp != NULL);
+
 	mutex_spin_enter(&sc->sc_lock);
 	iir = CSR_READ_1(regsp, COM_REG_IIR);
+
+	/* Handle ns16750-specific busy interrupt. */
+	if (sc->sc_type == COM_TYPE_16750 &&
+	    (iir & IIR_BUSY) == IIR_BUSY) {
+		for (int timeout = 10000;
+		    (CSR_READ_1(regsp, COM_REG_USR) & 0x1) != 0; timeout--)
+			if (timeout <= 0) {
+				aprint_error_dev(sc->sc_dev,
+				    "timeout while waiting for BUSY interrupt "
+				    "acknowledge\n");
+				mutex_spin_exit(&sc->sc_lock);
+				return (0);
+			}
+
+		CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr);
+		iir = CSR_READ_1(regsp, COM_REG_IIR);
+	}
+
+	/* DesignWare APB UART BUSY interrupt */
+	if (sc->sc_type == COM_TYPE_DW_APB &&
+	    (iir & IIR_BUSY) == IIR_BUSY) {
+		if ((CSR_READ_1(regsp, COM_REG_USR) & 0x1) != 0) {
+			CSR_WRITE_1(regsp, COM_REG_HALT, HALT_CHCFG_EN);
+			CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr | LCR_DLAB);
+			CSR_WRITE_1(regsp, COM_REG_DLBL, sc->sc_dlbl);
+			CSR_WRITE_1(regsp, COM_REG_DLBH, sc->sc_dlbh);
+			CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr);
+			CSR_WRITE_1(regsp, COM_REG_HALT,
+			    HALT_CHCFG_EN | HALT_CHCFG_UD);
+			for (int timeout = 10000000;
+			    (CSR_READ_1(regsp, COM_REG_HALT) & HALT_CHCFG_UD) != 0;
+			    timeout--) {
+				if (timeout <= 0) {
+					aprint_error_dev(sc->sc_dev,
+					    "timeout while waiting for HALT "
+					    "update acknowledge 0x%x 0x%x\n",
+					    CSR_READ_1(regsp, COM_REG_HALT),
+					    CSR_READ_1(regsp, COM_REG_USR));
+					break;
+				}
+			}
+			CSR_WRITE_1(regsp, COM_REG_HALT, 0);
+			(void)CSR_READ_1(regsp, COM_REG_USR);
+		} else {
+			CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr | LCR_DLAB);
+			CSR_WRITE_1(regsp, COM_REG_DLBL, sc->sc_dlbl);
+			CSR_WRITE_1(regsp, COM_REG_DLBH, sc->sc_dlbh);
+			CSR_WRITE_1(regsp, COM_REG_LCR, sc->sc_lcr);
+		}
+	}
+
 	if (ISSET(iir, IIR_NOPEND)) {
 		mutex_spin_exit(&sc->sc_lock);
 		return (0);
@@ -1807,7 +2106,7 @@ again:	do {
 
 		lsr = CSR_READ_1(regsp, COM_REG_LSR);
 		if (ISSET(lsr, LSR_BI)) {
-			int cn_trapped = 0;
+			int cn_trapped = 0; /* see above: cn_trap() */
 
 			cn_check_magic(sc->sc_tty->t_dev,
 				       CNC_BREAK, com_cnm_state);
@@ -1820,6 +2119,9 @@ again:	do {
 			}
 #endif
 		}
+
+		if (sc->sc_type == COM_TYPE_BCMAUXUART && ISSET(iir, IIR_RXRDY))
+			lsr |= LSR_RXRDY;
 
 		if (ISSET(lsr, LSR_RCV_MASK) &&
 		    !ISSET(sc->sc_rx_flags, RX_IBUF_OVERFLOWED)) {
@@ -1868,12 +2170,19 @@ again:	do {
 			 */
 			if (!cc) {
 				SET(sc->sc_rx_flags, RX_IBUF_OVERFLOWED);
-#ifdef COM_PXA2X0
-				if (sc->sc_type == COM_TYPE_PXA2x0)
+				switch (sc->sc_type) {
+				case COM_TYPE_PXA2x0:
 					CLR(sc->sc_ier, IER_ERXRDY|IER_ERXTOUT);
-				else
-#endif
+					break;
+				case COM_TYPE_INGENIC:
+				case COM_TYPE_TEGRA:
+					CLR(sc->sc_ier,
+					    IER_ERXRDY | IER_ERXTOUT);
+					break;
+				default:
 					CLR(sc->sc_ier, IER_ERXRDY);
+					break;
+				}
 				CSR_WRITE_1(regsp, COM_REG_IER, sc->sc_ier);
 			}
 		} else {
@@ -1888,11 +2197,13 @@ again:	do {
 		sc->sc_msr = msr;
 		if ((sc->sc_pps_state.ppsparam.mode & PPS_CAPTUREBOTH) &&
 		    (delta & MSR_DCD)) {
+			mutex_spin_enter(&timecounter_lock);
 			pps_capture(&sc->sc_pps_state);
 			pps_event(&sc->sc_pps_state,
 			    (msr & MSR_DCD) ?
 			    PPS_CAPTUREASSERT :
 			    PPS_CAPTURECLEAR);
+			mutex_spin_exit(&timecounter_lock);
 		}
 
 		/*
@@ -1921,7 +2232,7 @@ again:	do {
 	    /*
 	     * Since some device (e.g., ST16C1550) doesn't clear IIR_TXRDY
 	     * by IIR read, so we can't do this way: `process all interrupts,
-	     * then do TX if possble'.
+	     * then do TX if possible'.
 	     */
 	    (iir & IIR_IMASK) != IIR_TXRDY);
 
@@ -1979,7 +2290,7 @@ again:	do {
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 
@@ -2018,14 +2329,16 @@ com_common_getc(dev_t dev, struct com_regs *regsp)
 		return (c);
 	}
 
-	/* block until a character becomes available */
-	while (!ISSET(stat = CSR_READ_1(regsp, COM_REG_LSR), LSR_RXRDY))
-		;
+	/* don't block until a character becomes available */
+	if (!ISSET(stat = CSR_READ_1(regsp, COM_REG_LSR), LSR_RXRDY)) {
+		splx(s);
+		return -1;
+	}
 
 	c = CSR_READ_1(regsp, COM_REG_RXDATA);
 	stat = CSR_READ_1(regsp, COM_REG_IIR);
 	{
-		int cn_trapped = 0; /* unused */
+		int cn_trapped = 0;	/* required by cn_trap, see above */
 #ifdef DDB
 		extern int db_active;
 		if (!db_active)
@@ -2036,7 +2349,7 @@ com_common_getc(dev_t dev, struct com_regs *regsp)
 	return (c);
 }
 
-void
+static void
 com_common_putc(dev_t dev, struct com_regs *regsp, int c)
 {
 	int s = splserial();
@@ -2074,39 +2387,76 @@ cominit(struct com_regs *regsp, int rate, int frequency, int type,
 		&regsp->cr_ioh))
 		return (ENOMEM); /* ??? */
 
+	if (type == COM_TYPE_OMAP) {
+		/* disable before changing settings */
+		CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_DISABLE);
+	}
+
 	rate = comspeed(rate, frequency, type);
-	if (type != COM_TYPE_AU1x00) {
-		/* no EFR on alchemy */
-		CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
-		CSR_WRITE_1(regsp, COM_REG_EFR, 0);
-		CSR_WRITE_1(regsp, COM_REG_LCR, LCR_DLAB);
-		CSR_WRITE_1(regsp, COM_REG_DLBL, rate & 0xff);
-		CSR_WRITE_1(regsp, COM_REG_DLBH, rate >> 8);
-	} else {
-		CSR_WRITE_1(regsp, COM_REG_DLBL, rate);
+	if (__predict_true(rate != -1)) {
+		if (type == COM_TYPE_AU1x00) {
+			CSR_WRITE_2(regsp, COM_REG_DLBL, rate);
+		} else {
+			/* no EFR on alchemy */
+			if ((type != COM_TYPE_16550_NOERS) && 
+			    (type != COM_TYPE_INGENIC)) {
+				CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
+				CSR_WRITE_1(regsp, COM_REG_EFR, 0);
+			}
+			CSR_WRITE_1(regsp, COM_REG_LCR, LCR_DLAB);
+			CSR_WRITE_1(regsp, COM_REG_DLBL, rate & 0xff);
+			CSR_WRITE_1(regsp, COM_REG_DLBH, rate >> 8);
+		}
 	}
 	CSR_WRITE_1(regsp, COM_REG_LCR, cflag2lcr(cflag));
 	CSR_WRITE_1(regsp, COM_REG_MCR, MCR_DTR | MCR_RTS);
-	CSR_WRITE_1(regsp, COM_REG_FIFO,
-	    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST | FIFO_TRIGGER_1);
-#ifdef COM_PXA2X0
+
+	if (type == COM_TYPE_INGENIC) {
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST |
+		    FIFO_TRIGGER_1 | FIFO_UART_ON);
+	} else {
+		CSR_WRITE_1(regsp, COM_REG_FIFO,
+		    FIFO_ENABLE | FIFO_RCV_RST | FIFO_XMT_RST |
+		    FIFO_TRIGGER_1);
+	}
+
+	if (type == COM_TYPE_OMAP) {
+		/* setup the fifos.  the FCR value is not used as long
+		   as SCR[6] and SCR[7] are 0, which they are at reset
+		   and we never touch the SCR register */
+		uint8_t rx_fifo_trig = 40;
+		uint8_t tx_fifo_trig = 60;
+		uint8_t rx_start = 8;
+		uint8_t rx_halt = 60;
+		uint8_t tlr_value = ((rx_fifo_trig>>2) << 4) | (tx_fifo_trig>>2);
+		uint8_t tcr_value = ((rx_start>>2) << 4) | (rx_halt>>2);
+
+		/* enable access to TCR & TLR */
+		CSR_WRITE_1(regsp, COM_REG_MCR, MCR_DTR | MCR_RTS | MCR_TCR_TLR);
+
+		/* write tcr and tlr values */
+		CSR_WRITE_1(regsp, COM_REG_TLR, tlr_value);
+		CSR_WRITE_1(regsp, COM_REG_TCR, tcr_value);
+
+		/* disable access to TCR & TLR */
+		CSR_WRITE_1(regsp, COM_REG_MCR, MCR_DTR | MCR_RTS);
+
+		/* enable again, but mode is based on speed */
+		if (rate > 230400) {
+			CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_UART_13X);
+		} else {
+			CSR_WRITE_1(regsp, COM_REG_MDR1, MDR1_MODE_UART_16X);
+		}
+	}
+
 	if (type == COM_TYPE_PXA2x0)
 		CSR_WRITE_1(regsp, COM_REG_IER, IER_EUART);
 	else
-#endif
 		CSR_WRITE_1(regsp, COM_REG_IER, 0);
 
 	return (0);
 }
-
-/*
- * Following are all routines needed for COM to act as console
- */
-struct consdev comcons = {
-	NULL, NULL, comcngetc, comcnputc, comcnpollc, NULL, NULL, NULL,
-	NODEV, CN_NORMAL
-};
-
 
 int
 comcnattach1(struct com_regs *regsp, int rate, int frequency, int type,
@@ -2114,9 +2464,9 @@ comcnattach1(struct com_regs *regsp, int rate, int frequency, int type,
 {
 	int res;
 
-	comconsregs = *regsp;
+	comcons_info.regs = *regsp;
 
-	res = cominit(&comconsregs, rate, frequency, type, cflag);
+	res = cominit(&comcons_info.regs, rate, frequency, type, cflag);
 	if (res)
 		return (res);
 
@@ -2124,8 +2474,10 @@ comcnattach1(struct com_regs *regsp, int rate, int frequency, int type,
 	cn_init_magic(&com_cnm_state);
 	cn_set_magic("\047\001"); /* default magic is BREAK */
 
-	comconsrate = rate;
-	comconscflag = cflag;
+	comcons_info.frequency = frequency;
+	comcons_info.type = type;
+	comcons_info.rate = rate;
+	comcons_info.cflag = cflag;
 
 	return (0);
 }
@@ -2147,11 +2499,18 @@ comcnattach(bus_space_tag_t iot, bus_addr_t iobase, int rate, int frequency,
 	return comcnattach1(&regs, rate, frequency, type, cflag);
 }
 
+static int
+comcnreattach(void)
+{
+	return comcnattach1(&comcons_info.regs, comcons_info.rate,
+	    comcons_info.frequency, comcons_info.type, comcons_info.cflag);
+}
+
 int
 comcngetc(dev_t dev)
 {
 
-	return (com_common_getc(dev, &comconsregs));
+	return (com_common_getc(dev, &comcons_info.regs));
 }
 
 /*
@@ -2161,13 +2520,14 @@ void
 comcnputc(dev_t dev, int c)
 {
 
-	com_common_putc(dev, &comconsregs, c);
+	com_common_putc(dev, &comcons_info.regs, c);
 }
 
 void
 comcnpollc(dev_t dev, int on)
 {
 
+	com_readaheadcount = 0;
 }
 
 #ifdef KGDB
@@ -2177,13 +2537,13 @@ com_kgdb_attach1(struct com_regs *regsp, int rate, int frequency, int type,
 {
 	int res;
 
-	if (regsp->cr_iot == comconsregs.cr_iot &&
-	    regsp->cr_iobase == comconsregs.cr_iobase) {
+	if (bus_space_is_equal(regsp->cr_iot, comcons_info.regs.cr_iot) &&
+	    regsp->cr_iobase == comcons_info.regs.cr_iobase) {
 #if !defined(DDB)
 		return (EBUSY); /* cannot share with console */
 #else
 		comkgdbregs = *regsp;
-		comkgdbregs.cr_ioh = comconsregs.cr_ioh;
+		comkgdbregs.cr_ioh = comcons_info.regs.cr_ioh;
 #endif
 	} else {
 		comkgdbregs = *regsp;
@@ -2246,11 +2606,13 @@ com_is_console(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t *ioh)
 	bus_space_handle_t help;
 
 	if (!comconsattached &&
-	    iot == comconsregs.cr_iot && iobase == comconsregs.cr_iobase)
-		help = comconsregs.cr_ioh;
+	    bus_space_is_equal(iot, comcons_info.regs.cr_iot) &&
+	    iobase == comcons_info.regs.cr_iobase)
+		help = comcons_info.regs.cr_ioh;
 #ifdef KGDB
 	else if (!com_kgdb_attached &&
-	    iot == comkgdbregs.cr_iot && iobase == comkgdbregs.cr_iobase)
+	    bus_space_is_equal(iot, comkgdbregs.cr_iot) &&
+	    iobase == comkgdbregs.cr_iobase)
 		help = comkgdbregs.cr_ioh;
 #endif
 	else
@@ -2266,19 +2628,37 @@ com_is_console(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t *ioh)
  * have firmware which doesn't interact properly with a com device in
  * FIFO mode.
  */
-void
-com_cleanup(void *arg)
+bool
+com_cleanup(device_t self, int how)
 {
-	struct com_softc *sc = arg;
+	struct com_softc *sc = device_private(self);
 
 	if (ISSET(sc->sc_hwflags, COM_HW_FIFO))
 		CSR_WRITE_1(&sc->sc_regs, COM_REG_FIFO, 0);
+
+	return true;
 }
 
 bool
-com_resume(device_t dev)
+com_suspend(device_t self, const pmf_qual_t *qual)
 {
-	struct com_softc *sc = device_private(dev);
+	struct com_softc *sc = device_private(self);
+
+#if 0
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE) && cn_tab == &comcons)
+		cn_tab = &comcons_suspend;
+#endif
+
+	CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, 0);
+	(void)CSR_READ_1(&sc->sc_regs, COM_REG_IIR);
+
+	return true;
+}
+
+bool
+com_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct com_softc *sc = device_private(self);
 
 	mutex_spin_enter(&sc->sc_lock);
 	com_loadchannelregs(sc);

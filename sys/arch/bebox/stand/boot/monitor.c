@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.7 2005/12/24 22:50:07 perry Exp $	*/
+/*	$NetBSD: monitor.c,v 1.11 2016/06/11 06:28:49 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,9 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
+
+#include "boot.h"
 
 extern int errno;
 extern char *name;
@@ -48,7 +44,7 @@ void db_cmd_mt(int, char **);
 void db_cmd_put(int, char **);
 void db_cmd_help(int, char **);
 
-extern void exec_kernel(char *, void *);
+uint32_t db_atob(char *);
 
 struct {
 	char *name;
@@ -73,7 +69,7 @@ db_monitor(void)
 
 	while (1) {
 		printf("db> ");
-		gets(line);
+		kgets(line, sizeof(line));
 
 		flag = 0;
 		for (p = line, argc = 0; *p != '\0'; p++) {
@@ -109,10 +105,11 @@ db_monitor(void)
 	return 0;
 }
 
-int
+uint32_t
 db_atob(char *p)
 {
-	int b = 0, width, tmp, exp, x = 0;
+	uint32_t b = 0;
+	int width, tmp, exp, x = 0;
 
 	if (p[1] == 'x') {
 		p += 2;
@@ -138,7 +135,8 @@ void
 db_cmd_dump(int argc, char **argv)
 {
 	char *p, *r, *pp;
-	int mode, add, size, i;
+	int mode, size, i;
+	uint32_t add;
 
 	switch (argc) {
 	case 4:
@@ -176,21 +174,21 @@ db_cmd_dump(int argc, char **argv)
 			printf("\n0x%x:", add);
 		switch (mode) {
 		case 1:
-			printf(" %x", *(unsigned char *)add);
+			printf(" %x", *(uint8_t *)add);
 			add += 1;
 			size -= 1;
 			if (++i == 16)
 				i = 0;
 			break;
 		case 2:
-			printf(" %x", *(unsigned short *)add);
+			printf(" %x", *(uint16_t *)add);
 			add += 2;
 			size -= 2;
 			if (++i == 8)
 				i = 0;
 			break;
 		case 4:
-			printf(" %x", *(unsigned int *)add);
+			printf(" %x", *(uint32_t *)add);
 			add += 4;
 			size -= 4;
 			if (++i == 4)
@@ -210,7 +208,8 @@ void
 db_cmd_get(int argc, char **argv)
 {
 	char *p, *r;
-	int mode, add;
+	uint32_t add;
+	int mode;
 
 	switch (argc) {
 	case 3:
@@ -242,13 +241,13 @@ db_cmd_get(int argc, char **argv)
 	printf("0x%x: ", add);
 	switch (mode) {
 	case 1:
-		printf("0x%x", *(char *)add);
+		printf("0x%x", *(uint8_t *)add);
 		break;
 	case 2:
-		printf("0x%x", *(short *)add);
+		printf("0x%x", *(uint16_t *)add);
 		break;
 	case 4:
-		printf("0x%x", *(int *)add);
+		printf("0x%x", *(uint32_t *)add);
 		break;
 	}
 	printf("\n");
@@ -263,7 +262,8 @@ void
 db_cmd_put(int argc, char **argv)
 {
 	char *p, *r, *pp;
-	int mode, add, data;
+	uint32_t add, data;
+	int mode;
 
 	switch (argc) {
 	case 4:
@@ -298,13 +298,13 @@ db_cmd_put(int argc, char **argv)
 	printf("0x%x: 0x%x", add, data);
 	switch (mode) {
 	case 1:
-		*(char *)add = data;
+		*(uint8_t *)add = data;
 		break;
 	case 2:
-		*(short *)add = data;
+		*(uint16_t *)add = data;
 		break;
 	case 4:
-		*(int *)add = data;
+		*(uint32_t *)add = data;
 		break;
 	}
 	printf("\n");
@@ -318,13 +318,14 @@ out:
 #define STR(x) #x
 
 #define	FUNC(x) \
-unsigned int mf ## x() { \
-	unsigned int tmp; \
+uint32_t mf ## x(void); \
+void mt ## x(uint32_t); \
+uint32_t mf ## x() { \
+	uint32_t tmp; \
 	__asm volatile (STR(mf ## x %0) : STR(=r)(tmp)); \
 	return (tmp); \
 } \
-void mt ## x(data) \
-unsigned int data; \
+void mt ## x(uint32_t data) \
 { \
 	__asm volatile (STR(mt ## x %0) :: STR(r)(data)); \
 } \
@@ -332,12 +333,12 @@ unsigned int data; \
 #define DEF(x) \
 	{ #x, mf ## x, mt ## x }
 
-FUNC(msr);
+FUNC(msr)
 
 struct {
 	char *op;
-	unsigned int (*mf)(void);
-	void (*mt)(unsigned int);
+	uint32_t (*mf)(void);
+	void (*mt)(uint32_t);
 } mreg [] = {
 	DEF(msr),
 	{ NULL, NULL, NULL },
@@ -380,7 +381,7 @@ db_cmd_mt(int argc, char **argv)
 
 	while (mreg[i].op != NULL) {
 		if (!strcmp(mreg[i].op, argv[1])) {
-			(mreg[i].mt)((unsigned int)db_atob(argv[2]));
+			(mreg[i].mt)(db_atob(argv[2]));
 			printf(" 0x%x\n", db_atob(argv[2]));
 			break;
 		}

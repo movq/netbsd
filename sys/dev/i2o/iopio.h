@@ -1,4 +1,4 @@
-/*	$NetBSD: iopio.h,v 1.5 2008/02/11 03:36:25 dyoung Exp $	*/
+/*	$NetBSD: iopio.h,v 1.8 2017/10/28 06:27:32 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,9 @@
 
 #ifndef _I2O_IOPIO_H_
 #define	_I2O_IOPIO_H_
+
+#include <sys/types.h>
+#include <sys/ioccom.h>
 
 #define	IOP_MAX_MSG_XFERS	3	/* Maximum transfer count per msg */
 #define	IOP_MAX_OUTBOUND	256	/* Maximum outbound queue depth */

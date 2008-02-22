@@ -1,4 +1,4 @@
-/*	$NetBSD: csc.c,v 1.13 2005/12/11 12:16:05 christos Exp $	*/
+/*	$NetBSD: csc.c,v 1.19 2014/01/21 19:50:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: csc.c,v 1.13 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: csc.c,v 1.19 2014/01/21 19:50:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: csc.c,v 1.13 2005/12/11 12:16:05 christos Exp $");
 #include <dev/podulebus/podules.h>
 #include <dev/podulebus/powerromreg.h>
 
-int  cscmatch(struct device *, struct cfdata *, void *);
-void cscattach(struct device *, struct device *, void *);
+int  cscmatch(device_t, cfdata_t, void *);
+void cscattach(device_t, device_t, void *);
 
-CFATTACH_DECL(csc, sizeof(struct csc_softc),
+CFATTACH_DECL_NEW(csc, sizeof(struct csc_softc),
     cscmatch, cscattach, NULL, NULL);
 
 int csc_intr(void *);
@@ -84,12 +77,9 @@ void csc_set_dma_mode(struct sfas_softc *, int);
  * if we are a Cumana SCSI-2 card
  */
 int
-cscmatch(pdp, cf, auxp)
-	struct device	*pdp;
-	struct cfdata	*cf;
-	void		*auxp;
+cscmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	struct podule_attach_args *pa = (struct podule_attach_args *)auxp;
+	struct podule_attach_args *pa = aux;
 
 	/* Look for the card */
 	if (pa->pa_product == PODULE_CUMANA_SCSI2)
@@ -105,18 +95,15 @@ cscmatch(pdp, cf, auxp)
 }
 
 void
-cscattach(pdp, dp, auxp)
-	struct device	*pdp;
-	struct device	*dp;
-	void		*auxp;
+cscattach(device_t parent, device_t self, void *aux)
 {
-	struct csc_softc *sc = (struct csc_softc *)dp;
+	struct csc_softc *sc = device_private(self);
 	struct podule_attach_args  *pa;
 	csc_regmap_p	   rp = &sc->sc_regmap;
 	vu_char		  *fas;
 	int loop;
 
-	pa = (struct podule_attach_args *)auxp;
+	pa = aux;
 
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
@@ -147,6 +134,7 @@ cscattach(pdp, dp, auxp)
 	rp->FAS216.sfas_tc_high	= &fas[CSC_FAS_OFFSET_TCH];
 	rp->FAS216.sfas_fifo_bot = &fas[CSC_FAS_OFFSET_FIFOBOT];
 
+	sc->sc_softc.sc_dev	= self;
 	sc->sc_softc.sc_fas	= (sfas_regmap_p)rp;
 	sc->sc_softc.sc_spec	= &sc->sc_specific;
 
@@ -166,7 +154,7 @@ cscattach(pdp, dp, auxp)
 
 	sfasinitialize((struct sfas_softc *)sc);
 
-	sc->sc_softc.sc_adapter.adapt_dev = &sc->sc_softc.sc_dev;
+	sc->sc_softc.sc_adapter.adapt_dev = self;
 	sc->sc_softc.sc_adapter.adapt_nchannels = 1;
 	sc->sc_softc.sc_adapter.adapt_openings = 7;
 	sc->sc_softc.sc_adapter.adapt_max_periph = 1;
@@ -197,11 +185,11 @@ cscattach(pdp, dp, auxp)
 
 #if CSC_POLL == 0
 	evcnt_attach_dynamic(&sc->sc_softc.sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    dp->dv_xname, "intr");
+	    device_xname(self), "intr");
 	sc->sc_softc.sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 	    csc_intr, &sc->sc_softc, &sc->sc_softc.sc_intrcnt);
 	if (sc->sc_softc.sc_ih == NULL)
-	    panic("%s: Cannot install IRQ handler", dp->dv_xname);
+	    panic("%s: Cannot install IRQ handler", device_xname(self));
 #else
 	printf(" polling");
 	sc->sc_softc.sc_adapter.adapt_flags |= SCSIPI_ADAPT_POLL_ONLY;
@@ -209,13 +197,12 @@ cscattach(pdp, dp, auxp)
 	printf("\n");
 
 	/* attach all scsi units on us */
-	config_found(dp, &sc->sc_softc.sc_channel, scsiprint);
+	config_found(self, &sc->sc_softc.sc_channel, scsiprint);
 }
 
 
 int
-csc_intr(arg)
-	void *arg;
+csc_intr(void *arg)
 {
 	struct sfas_softc *dev = arg;
 	csc_regmap_p	      rp;
@@ -244,18 +231,14 @@ csc_intr(arg)
 
 /* Load transfer address into DMA register */
 void
-csc_set_dma_adr(sc, ptr)
-	struct sfas_softc *sc;
-	void		 *ptr;
+csc_set_dma_adr(struct sfas_softc *sc, void *ptr)
 {
 	return;
 }
 
 /* Set DMA transfer counter */
 void
-csc_set_dma_tc(sc, len)
-	struct sfas_softc *sc;
-	unsigned int	  len;
+csc_set_dma_tc(struct sfas_softc *sc, unsigned int len)
 {
 	*sc->sc_fas->sfas_tc_low  = len; len >>= 8;
 	*sc->sc_fas->sfas_tc_mid  = len; len >>= 8;
@@ -264,19 +247,13 @@ csc_set_dma_tc(sc, len)
 
 /* Set DMA mode */
 void
-csc_set_dma_mode(sc, mode)
-	struct sfas_softc *sc;
-	int		  mode;
+csc_set_dma_mode(struct sfas_softc *sc, int mode)
 {
 }
 
 /* Initialize DMA for transfer */
 int
-csc_setup_dma(sc, ptr, len, mode)
-	void	 *sc;
-	void	 *ptr;
-	int	  len;
-	int	  mode;
+csc_setup_dma(void *sc, void *ptr, int len, int mode)
 {
 
 	return (0);
@@ -284,10 +261,7 @@ csc_setup_dma(sc, ptr, len, mode)
 
 /* Check if address and len is ok for DMA transfer */
 int
-csc_need_bump(sc, ptr, len)
-	void	 *sc;
-	void	 *ptr;
-	int	  len;
+csc_need_bump(void *sc, void *ptr, int len)
 {
 	int	p;
 
@@ -305,25 +279,16 @@ csc_need_bump(sc, ptr, len)
 
 /* Interrupt driven routines */
 int
-csc_build_dma_chain(sc, chain, p, l)
-	void	*sc;
-	void	*chain;
-	void	*p;
-	int	 l;
+csc_build_dma_chain(void *sc, void *chain, void *p, int l)
 {
 	return(0);
 }
 
 /* Turn on/off led */
 void
-csc_led(v, mode)
-	void	 *v;
-	int	  mode;
+csc_led(void *v, int mode)
 {
 	struct sfas_softc *sc = v;
-	csc_regmap_p		rp;
-
-	rp = (csc_regmap_p)sc->sc_fas;
 
 	if (mode) {
 		sc->sc_led_status++;

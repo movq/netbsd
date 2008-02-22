@@ -1,4 +1,4 @@
-/*	$NetBSD: thread.c,v 1.4 2007/10/23 14:58:45 christos Exp $	*/
+/*	$NetBSD: thread.c,v 1.10 2012/10/21 22:18:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: thread.c,v 1.4 2007/10/23 14:58:45 christos Exp $");
+__RCSID("$NetBSD: thread.c,v 1.10 2012/10/21 22:18:16 christos Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -143,6 +136,9 @@ thread_showcmd(void *v)
 static int
 is_tagged_core(struct message *mp)
 {
+	if (S_IS_EXPOSE(state))
+		return 1;
+
 	for (/*EMPTY*/; mp; mp = mp->m_flink)
 		if ((mp->m_flag & MTAGGED) == 0 ||
 		    is_tagged_core(mp->m_clink) == 0)
@@ -153,7 +149,7 @@ is_tagged_core(struct message *mp)
 static int
 is_tagged(struct message *mp)
 {
-	return (mp->m_flag & MTAGGED) && is_tagged_core(mp->m_clink);
+	return mp->m_flag & MTAGGED && is_tagged_core(mp->m_clink);
 }
 
 /************************************************************************
@@ -274,7 +270,7 @@ next_abs_message(struct message *mp)
 {
 	int i;
 
-	i = mp - message_array.t_head;
+	i = (int)(mp - message_array.t_head);
 
 	if (i < 0 || i + 1 >= message_array.t_msgCount)
 		return NULL;
@@ -454,7 +450,11 @@ thread_fix_old_links(struct message *nmessage, struct message *message, int omsg
 	message_array.t_head = nmessage; /* for assert check in thread_fix_new_links */
 #endif
 
-# define FIX_LINK(p)	do { if (p) p = nmessage + (p - message); } while(/*CONSTCOND*/0)
+# define FIX_LINK(p)	do {\
+	if (p)\
+		p = nmessage + (p - message);\
+  } while (/*CONSTCOND*/0)
+
 	FIX_LINK(current_thread.t_head);
 	for (i = 0; i < omsgCount; i++) {
 		FIX_LINK(nmessage[i].m_blink);
@@ -462,7 +462,7 @@ thread_fix_old_links(struct message *nmessage, struct message *message, int omsg
 		FIX_LINK(nmessage[i].m_clink);
 		FIX_LINK(nmessage[i].m_plink);
 	}
-	for (i = 0; i < current_thread.t_msgCount; i++ )
+	for (i = 0; i < current_thread.t_msgCount; i++)
 		FIX_LINK(current_thread.t_msgtbl[i]);
 
 # undef FIX_LINK
@@ -565,6 +565,16 @@ thread_fix_new_links(struct message *message, int omsgCount, int msgCount)
 /*
  * All state changes should go through here!!!
  */
+
+/*
+ * NOTE: It is the caller's responsibility to ensure that the "dot"
+ * will be valid after a state change.  For example, when changing
+ * from exposed to hidden threads, it is necessary to move the dot to
+ * the head of the thread or it will not be seen.  Use thread_top()
+ * for this.  Likewise, use first_visible_message() to locate the
+ * first visible message after a state change.
+ */
+
 static state_t
 set_state(int and_bits, int xor_bits)
 {
@@ -577,12 +587,47 @@ set_state(int and_bits, int xor_bits)
 	return old_state;
 }
 
+static struct message *
+first_visible_message(struct message *mp)
+{
+	struct message *oldmp;
+
+	if (mp == NULL)
+		mp = current_thread.t_head;
+
+	oldmp = mp;
+	if ((S_IS_RESTRICT(state) && is_tagged(mp)) || mp->m_flag & MDELETED)
+		mp = next_message(mp);
+
+	if (mp == NULL) {
+		mp = oldmp;
+		if ((S_IS_RESTRICT(state) && is_tagged(mp)) || mp->m_flag & MDELETED)
+			mp = prev_message(mp);
+	}
+	if (mp == NULL)
+		mp = current_thread.t_head;
+
+	return mp;
+}
+
 static void
 restore_state(state_t new_state)
 {
 	state = new_state;
 	reindex(&current_thread);
 	redepth(&current_thread);
+	dot = first_visible_message(dot);
+}
+
+static struct message *
+thread_top(struct message *mp)
+{
+	while (mp && mp->m_plink) {
+		if (mp->m_plink->m_clink == current_thread.t_head)
+			break;
+		mp = mp->m_plink;
+	}
+	return mp;
 }
 
 /************************************************************************/
@@ -621,7 +666,7 @@ flattencmd_core(struct message *mp)
 	size_t mcount;
 	struct message *tp;
 	struct message *nextmp;
-	int i;
+	size_t i;
 
 	if (mp == NULL)
 		return;
@@ -735,11 +780,11 @@ qsort_cmpfn(const void *left, const void *right)
 static void
 link_array(struct key_sort_s *marray, size_t mcount)
 {
-	int i;
+	size_t i;
 	struct message *lastmp;
 	lastmp = NULL;
 	for (i = 0; i < mcount; i++) {
-		marray[i].mp->m_index = i + 1;
+		marray[i].mp->m_index = (int)i + 1;
 		marray[i].mp->m_blink = lastmp;
 		marray[i].mp->m_flink = NULL;
 		if (lastmp)
@@ -753,9 +798,9 @@ link_array(struct key_sort_s *marray, size_t mcount)
 }
 
 static void
-cut_array(struct key_sort_s *marray, int beg, int end)
+cut_array(struct key_sort_s *marray, size_t beg, size_t end)
 {
-	int i;
+	size_t i;
 
 	if (beg + 1 < end) {
 		assert(marray[beg].mp->m_clink == NULL);
@@ -784,7 +829,7 @@ thread_array(struct key_sort_s *marray, size_t mcount, int cutit)
 	link_array(marray, mcount);
 
 	if (cutit) {
-		int i, j;
+		size_t i, j;
 		/*
 		 * Flatten out the array.
 		 */
@@ -875,24 +920,6 @@ get_parent_id(struct message *mp)
 	return skin(hfield("in-reply-to", mp));
 }
 
-struct marray_s {
-	struct message *mp;
-	char *message_id;
-	char *parent_id;
-};
-
-static struct message *
-thread_top(struct message *mp)
-{
-	while (mp && mp->m_plink) {
-		if (mp->m_plink->m_clink == current_thread.t_head)
-			break;
-		mp = mp->m_plink;
-	}
-	return mp;
-}
-
-
 /*
  * Thread on the "In-Reply-To" and "Reference" fields.  This is the
  * normal way to thread.
@@ -900,15 +927,18 @@ thread_top(struct message *mp)
 static void
 thread_on_reference(struct message *mp)
 {
+	struct {
+		struct message *mp;
+		char *message_id;
+		char *parent_id;
+	} *marray;
 	struct message *parent;
 	state_t oldstate;
-	size_t mcount;
-	struct marray_s *marray;
-	int i;
+	size_t mcount, i;
 
 	assert(mp == current_thread.t_head);
 
-	oldstate = set_state(~(S_RESTRICT|S_EXPOSE), S_EXPOSE); /* restrict off, expose on */
+	oldstate = set_state(~(S_RESTRICT | S_EXPOSE), S_EXPOSE); /* restrict off, expose on */
 
 	mcount = get_msgCount();
 
@@ -954,7 +984,7 @@ thread_on_reference(struct message *mp)
 	for (i = 0; i < mcount; i++) {
 		struct message *child;
 		char *parent_id;
-		int j;
+		size_t j;
 
 		if ((parent_id = marray[i].parent_id) == NULL)
 			continue;
@@ -972,7 +1002,7 @@ thread_on_reference(struct message *mp)
 		 */
 		for (j = 0; j < mcount; j++) {
 			/* message_id will be NULL on mbox files */
-			if (marray[i].message_id == NULL)
+			if (marray[j].message_id == NULL)
 				continue;
 
 			if (equal(marray[j].message_id, parent_id)) {
@@ -1064,16 +1094,17 @@ tagbelowcmd(void *v)
 
 	msgvec = v;
 
-	oldstate = set_state(~(S_RESTRICT|S_EXPOSE), S_EXPOSE); /* restrict off, expose on */
+	oldstate = set_state(~(S_RESTRICT | S_EXPOSE), S_EXPOSE); /* restrict off, expose on */
 	mp = get_message(*msgvec);
 	if (mp) {
 		depth = mp->m_depth;
 		for (mp = first_message(current_thread.t_head); mp; mp = next_message(mp))
-			if (mp->m_depth > depth ) {
+			if (mp->m_depth > depth) {
 				mp->m_flag |= MTAGGED;
 				touch(mp);
 			}
 	}
+	/* dot is OK */
 	restore_state(oldstate);
 /*	thread_announce(v); */
 	return 0;
@@ -1085,7 +1116,8 @@ tagbelowcmd(void *v)
 PUBLIC int
 hidetagscmd(void *v)
 {
-	(void)set_state(~S_RESTRICT, S_RESTRICT);
+	(void)set_state(~S_RESTRICT, S_RESTRICT);	/* restrict on */
+	dot = first_visible_message(dot);
 	thread_announce(v);
 	return 0;
 }
@@ -1096,7 +1128,8 @@ hidetagscmd(void *v)
 PUBLIC int
 showtagscmd(void *v)
 {
-	(void)set_state(~S_RESTRICT, 0);
+	(void)set_state(~S_RESTRICT, 0);		/* restrict off */
+	dot = first_visible_message(dot);
 	thread_announce(v);
 	return 0;
 }
@@ -1112,6 +1145,7 @@ PUBLIC int
 exposecmd(void *v)
 {
 	(void)set_state(~S_EXPOSE, S_EXPOSE);	/* expose on */
+	dot = first_visible_message(dot);
 	thread_announce(v);
 	return 0;
 }
@@ -1123,7 +1157,8 @@ PUBLIC int
 hidecmd(void *v)
 {
 	dot = thread_top(dot);
-	(void)set_state(~S_EXPOSE, 0);	/* expose off */
+	(void)set_state(~S_EXPOSE, 0);		/* expose off */
+	dot = first_visible_message(dot);
 	thread_announce(v);
 	return 0;
 }
@@ -1397,7 +1432,7 @@ static void
 field_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key, int skin_it)
 {
-	int i;
+	size_t i;
 	for (i = 0; i < mcount; i++) {
 		marray[i].mp = mp;
 		marray[i].key.str =
@@ -1411,14 +1446,14 @@ static void
 subj_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	int i;
+	size_t i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
 #endif
 	for (i = 0; i < mcount; i++) {
 		char *subj = hfield(key, mp);
-		while( strncasecmp(subj, "Re:", 3) == 0 )
+		while (strncasecmp(subj, "Re:", 3) == 0)
 			subj = skip_WSP(subj + 3);
 		marray[i].mp = mp;
 		marray[i].key.str = subj;
@@ -1432,7 +1467,7 @@ static void
 lines_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags)
 {
-	int i;
+	size_t i;
 	int use_blines;
 	int use_hlines;
 #ifdef __lint__
@@ -1457,7 +1492,7 @@ static void
 size_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	int i;
+	size_t i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
@@ -1474,7 +1509,7 @@ static void __unused
 date_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags)
 {
-	int i;
+	size_t i;
 	int use_hl_date;
 	int zero_hour_min_sec;
 #ifdef __lint__
@@ -1506,7 +1541,7 @@ static void
 from_load(struct key_sort_s *marray, size_t mcount, struct message *mp,
     const char *key __unused, int flags __unused)
 {
-	int i;
+	size_t i;
 #ifdef __lint__
 	flags = flags;
 	key = key;
@@ -1593,7 +1628,7 @@ thread_current_on(char *str, int modflags, int cutit)
 	size_t mcount;
 	state_t oldstate;
 
-	oldstate = set_state(~(S_RESTRICT|S_EXPOSE), cutit ? S_EXPOSE : 0);
+	oldstate = set_state(~(S_RESTRICT | S_EXPOSE), cutit ? S_EXPOSE : 0);
 
 	kp = get_key(str);
 	mcount = get_msgCount();
@@ -1606,7 +1641,6 @@ thread_current_on(char *str, int modflags, int cutit)
 
 	if (!S_IS_EXPOSE(oldstate))
 		dot = thread_top(dot);
-
 	restore_state(oldstate);
 }
 
@@ -1670,8 +1704,6 @@ sortcmd(void *v)
 
 /*
  * Delete duplicate messages (based on their "Message-Id" field).
- *
- * XXX - This doesn't completely belong here, but what the hell.
  */
 /*ARGSUSED*/
 PUBLIC int
@@ -1681,19 +1713,22 @@ deldupscmd(void *v __unused)
 	int depth;
 	state_t oldstate;
 
-	oldstate = set_state(~(S_RESTRICT|S_EXPOSE), S_EXPOSE);
+	oldstate = set_state(~(S_RESTRICT | S_EXPOSE), S_EXPOSE); /* restrict off, expose on */
 
 	thread_current_on(__UNCONST("Message-Id"), 0, 1);
 	reindex(&current_thread);
 	redepth(&current_thread);
 	depth = current_thread.t_head->m_depth;
-	for (mp = first_message(current_thread.t_head); mp; mp = next_message(mp))
-		if (mp->m_depth > depth ) {
-			mp->m_flag &= ~(MPRESERVE|MSAVED|MBOX);
-			mp->m_flag |= MDELETED|MTOUCH;
+	for (mp = first_message(current_thread.t_head); mp; mp = next_message(mp)) {
+		if (mp->m_depth > depth) {
+			mp->m_flag &= ~(MPRESERVE | MSAVED | MBOX);
+			mp->m_flag |= MDELETED | MTOUCH;
 			touch(mp);
 		}
+	}
+	dot = thread_top(dot);	/* do this irrespective of the oldstate */
 	restore_state(oldstate);
+/*	thread_announce(v); */
 	return 0;
 }
 

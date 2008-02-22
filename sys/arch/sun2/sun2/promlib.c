@@ -1,4 +1,4 @@
-/*	$NetBSD: promlib.c,v 1.15 2005/12/24 22:45:40 perry Exp $	*/
+/*	$NetBSD: promlib.c,v 1.18 2014/03/24 18:50:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.15 2005/12/24 22:45:40 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.18 2014/03/24 18:50:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.15 2005/12/24 22:45:40 perry Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/stdarg.h>
 #define _SUN2_PROMLIB_PRIVATE
 #include <machine/promlib.h>
 
@@ -160,6 +152,7 @@ type new proto								\
 	int rc;								\
 	_mode_monitor(&state, 0);					\
 	rc = (*(romVectorPtr->old)) args;				\
+	__USE(rc);							\
 	_mode_kernel(&state, 0);					\
 	ret ;								\
 }
@@ -229,6 +222,7 @@ prom_printf(const char *fmt, ...)
 	    /* the PROM printf vector: */
 		(romVectorPtr->printf))
 		)(fmt, varargs);
+	__USE(rc);
 	_mode_kernel(&state, 0);
 }
 

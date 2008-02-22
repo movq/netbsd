@@ -1,4 +1,4 @@
-/*	$NetBSD: mkswap.c,v 1.4 2007/12/12 00:03:34 lukem Exp $	*/
+/*	$NetBSD: mkswap.c,v 1.10 2015/09/03 13:53:36 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -43,6 +43,9 @@
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
 #endif
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mkswap.c,v 1.10 2015/09/03 13:53:36 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <errno.h>
@@ -114,7 +117,7 @@ mkoneswap(struct config *cf)
 		    cf->cf_root->nv_str);
 	fprintf(fp, "const char *rootspec = %s;\n", specinfo);
 	fprintf(fp, "dev_t\trootdev = %s;\t/* %s */\n\n",
-		mkdevstr(nv->nv_int),
+		mkdevstr((dev_t)nv->nv_num),
 		nv->nv_str == s_qmark ? "wildcarded" : nv->nv_str);
 
 	/*
@@ -127,20 +130,14 @@ mkoneswap(struct config *cf)
 		snprintf(specinfo, sizeof(specinfo), "\"%s\"", cf->cf_dump->nv_str);
 	fprintf(fp, "const char *dumpspec = %s;\n", specinfo);
 	fprintf(fp, "dev_t\tdumpdev = %s;\t/* %s */\n\n",
-		nv ? mkdevstr(nv->nv_int) : "NODEV",
+		nv ? mkdevstr((dev_t)nv->nv_num) : "NODEV",
 		nv ? nv->nv_str : "unspecified");
 
 	/*
 	 * Emit the root file system.
 	 */
-	if (cf->cf_fstype == NULL)
-		strlcpy(specinfo, "NULL", sizeof(specinfo));
-	else {
-		snprintf(specinfo, sizeof(specinfo), "%s_mountroot",
-		    cf->cf_fstype);
-		fprintf(fp, "int %s(void);\n", specinfo);
-	}
-	fprintf(fp, "int (*mountroot)(void) = %s;\n", specinfo);
+	fprintf(fp, "const char *rootfstype = \"%s\";\n",
+		cf->cf_fstype ? cf->cf_fstype : "?");
 
 	fflush(fp);
 	if (ferror(fp))

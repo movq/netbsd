@@ -1,4 +1,4 @@
-/*	$NetBSD: stdethers.c,v 1.16 2007/03/10 01:21:08 hubertf Exp $	*/
+/*	$NetBSD: stdethers.c,v 1.19 2011/08/30 21:10:29 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: stdethers.c,v 1.16 2007/03/10 01:21:08 hubertf Exp $");
+__RCSID("$NetBSD: stdethers.c,v 1.19 2011/08/30 21:10:29 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -50,8 +45,7 @@ __RCSID("$NetBSD: stdethers.c,v 1.16 2007/03/10 01:21:08 hubertf Exp $");
 
 #include "protos.h"
 
-int	main(int, char *[]);
-void	usage(void);
+__dead static void	usage(void);
 
 
 int
@@ -61,7 +55,8 @@ main(int argc, char *argv[])
 	FILE	*data_file;
 	size_t	 line_no;
 	size_t	 len;
-	char	*fname, *p;
+	const char *fname;
+	char	*p;
 	char	 hostname[MAXHOSTNAMELEN + 1];
 
 	if (argc > 2)
@@ -94,7 +89,7 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-void
+static void
 usage(void)
 {
 

@@ -1,21 +1,21 @@
-/* $NetBSD: ciavar.h,v 1.17 2000/03/19 01:43:25 thorpej Exp $ */
+/* $NetBSD: ciavar.h,v 1.20 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -48,11 +48,11 @@ struct cia_config {
 
 	struct alpha_sgmap cc_sgmap;
 
-	u_int32_t cc_hae_mem;
-	u_int32_t cc_hae_io;
+	uint32_t cc_hae_mem;
+	uint32_t cc_hae_io;
 
-	u_int32_t cc_rev;
-	u_int32_t cc_cnfg;
+	uint32_t cc_rev;
+	uint32_t cc_cnfg;
 
 	int	cc_flags;
 
@@ -66,19 +66,19 @@ struct cia_config {
 };
 
 struct cia_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 
 	struct	cia_config *sc_ccp;
 };
 
-void	cia_init __P((struct cia_config *, int));
-void	cia_pci_init __P((pci_chipset_tag_t, void *));
-void	cia_dma_init __P((struct cia_config *));
+void	cia_init(struct cia_config *, int);
+void	cia_pci_init(pci_chipset_tag_t, void *);
+void	cia_dma_init(struct cia_config *);
 
-void	cia_bwx_bus_io_init __P((bus_space_tag_t, void *));
-void	cia_bwx_bus_mem_init __P((bus_space_tag_t, void *));
+void	cia_bwx_bus_io_init(bus_space_tag_t, void *);
+void	cia_bwx_bus_mem_init(bus_space_tag_t, void *);
 
-void	cia_swiz_bus_io_init __P((bus_space_tag_t, void *));
-void	cia_swiz_bus_mem_init __P((bus_space_tag_t, void *));
+void	cia_swiz_bus_io_init(bus_space_tag_t, void *);
+void	cia_swiz_bus_mem_init(bus_space_tag_t, void *);
 
-void	cia_pyxis_intr_enable __P((int, int));
+void	cia_pyxis_intr_enable(int, int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: localconf.c,v 1.4 2006/09/09 16:22:09 manu Exp $	*/
+/*	$NetBSD: localconf.c,v 1.10 2018/05/19 20:14:56 maxv Exp $	*/
 
 /*	$KAME: localconf.c,v 1.33 2001/08/09 07:32:19 sakane Exp $	*/
 
@@ -63,20 +63,48 @@
 #include "admin.h"
 #include "gcmalloc.h"
 
-struct localconf *lcconf;
+struct localconf *lcconf = NULL;
 
 static void setdefault __P((void));
 
 void
 initlcconf()
 {
-	lcconf = racoon_calloc(1, sizeof(*lcconf));
-	if (lcconf == NULL)
-		errx(1, "failed to allocate local conf.");
+	if (lcconf == NULL) {
+		lcconf = racoon_calloc(1, sizeof(*lcconf));
+		if (lcconf == NULL)
+			errx(1, "failed to allocate local conf.");
+
+		// Important: assure all pointers within lcconf to be NULL.
+		memset(lcconf, 0, sizeof(*lcconf));
+	}
 
 	setdefault();
-
 	lcconf->racoon_conf = LC_DEFAULT_CF;
+}
+
+void
+lcconf_setchroot(char* chroot)
+{
+	if (lcconf->chroot) {
+		racoon_free(lcconf->chroot);
+		lcconf->chroot = NULL;
+	}
+	lcconf->chroot = chroot;
+}
+
+int
+lcconf_setpath(char* path, unsigned int path_type)
+{
+	if (path_type >= LC_PATHTYPE_MAX)
+		return -1;
+
+	if (lcconf->pathinfo[path_type])
+		racoon_free(lcconf->pathinfo[path_type]);
+
+	lcconf->pathinfo[path_type] = path;
+
+	return 0;
 }
 
 void
@@ -85,17 +113,13 @@ flushlcconf()
 	int i;
 
 	setdefault();
-	clear_myaddr(&lcconf->myaddrs);
+	myaddr_flush();
+
 	for (i = 0; i < LC_PATHTYPE_MAX; i++) {
 		if (lcconf->pathinfo[i]) {
 			racoon_free(lcconf->pathinfo[i]);
 			lcconf->pathinfo[i] = NULL;
 		}
-	}
-	for (i = 0; i < LC_IDENTTYPE_MAX; i++) {
-		if (lcconf->ident[i])
-			vfree(lcconf->ident[i]);
-		lcconf->ident[i] = NULL;
 	}
 }
 
@@ -104,8 +128,19 @@ setdefault()
 {
 	lcconf->uid = 0;
 	lcconf->gid = 0;
-	lcconf->chroot = NULL;
-	lcconf->autograbaddr = 1;
+
+	{
+		int i = 0;
+		for (; i < LC_PATHTYPE_MAX; i++) {
+			if (lcconf->pathinfo[i]) {
+				racoon_free(lcconf->pathinfo[i]);
+				lcconf->pathinfo[i] = NULL;
+			}
+		}
+	}
+
+	lcconf_setchroot(NULL); 
+
 	lcconf->port_isakmp = PORT_ISAKMP;
 	lcconf->port_isakmp_natt = PORT_ISAKMP_NATT;
 	lcconf->default_af = AF_INET;
@@ -124,6 +159,7 @@ setdefault()
 	lcconf->complex_bundle = TRUE; /*XXX FALSE;*/
 	lcconf->gss_id_enc = LC_GSSENC_UTF16LE; /* Windows compatibility */
 	lcconf->natt_ka_interval = LC_DEFAULT_NATT_KA_INTERVAL;
+	lcconf->pfkey_buffer_size = LC_DEFAULT_PFKEY_BUFFER_SIZE;
 }
 
 /*
@@ -211,7 +247,11 @@ getpsk(str, len)
 		if (*p == '\0')
 			continue;	/* no 2nd parameter */
 		p--;
-		if (strncmp(buf, str, len) == 0 && buf[len] == '\0') {
+		if (
+#ifdef ENABLE_WILDCARD_MATCH
+		    strncmp(buf, "*", 2) == 0 ||
+#endif
+		    (strncmp(buf, str, len) == 0 && buf[len] == '\0')) {
 			p++;
 			keylen = 0;
 			for (q = p; *q != '\0' && *q != '\n'; q++)
@@ -336,25 +376,15 @@ doitype2doi(doitype)
 
 
 static void
-saverestore_params(f)
-	int f;
+saverestore_params(int f)
 {
 	static u_int16_t s_port_isakmp;
-#ifdef ENABLE_ADMINPORT
-	static u_int16_t s_port_admin;
-#endif
 
 	/* 0: save, 1: restore */
 	if (f) {
 		lcconf->port_isakmp = s_port_isakmp;
-#ifdef ENABLE_ADMINPORT
-		lcconf->port_admin = s_port_admin;
-#endif
 	} else {
 		s_port_isakmp = lcconf->port_isakmp;
-#ifdef ENABLE_ADMINPORT
-		s_port_admin = lcconf->port_admin;
-#endif
 	}
 }
 

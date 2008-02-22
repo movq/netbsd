@@ -1,4 +1,4 @@
-/*	$NetBSD: vfontedpr.c,v 1.12 2004/04/23 22:14:57 christos Exp $	*/
+/*	$NetBSD: vfontedpr.c,v 1.17 2016/09/05 00:40:30 sevan Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -29,17 +29,21 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)vfontedpr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vfontedpr.c,v 1.12 2004/04/23 22:14:57 christos Exp $");
+__RCSID("$NetBSD: vfontedpr.c,v 1.17 2016/09/05 00:40:30 sevan Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -47,14 +51,12 @@ __RCSID("$NetBSD: vfontedpr.c,v 1.12 2004/04/23 22:14:57 christos Exp $");
 #include <time.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 #include "pathnames.h"
 #include "extern.h"
 
-#define FALSE 0
-#define TRUE !(FALSE)
-#define NIL 0
 #define STANDARD 0
 #define ALTERNATE 1
 
@@ -69,25 +71,25 @@ __RCSID("$NetBSD: vfontedpr.c,v 1.12 2004/04/23 22:14:57 christos Exp $");
 #define PNAMELEN 40		/* length of a function/procedure name */
 #define PSMAX 20		/* size of procedure name stacking */
 
-static int       iskw __P((char *));
-static boolean   isproc __P((char *));
-static void      putKcp __P((char *, char *, boolean));
-static void      putScp __P((char *));
-static void      putcp __P((int));
-static int       tabs __P((char *, char *));
-static int       width __P((char *, char *));
+static int       iskw(char *);
+static bool      isproc(char *);
+static void      putKcp(char *, char *, bool);
+static void      putScp(char *);
+static void      putcp(int);
+static int       tabs(char *, char *);
+static int       width(char *, char *);
 
 /*
  *	The state variables
  */
 
-static boolean  filter = FALSE;	/* act as a filter (like eqn) */
-static boolean	inchr;		/* in a string constant */
-static boolean	incomm;		/* in a comment of the primary type */
-static boolean	idx = FALSE;	/* form an index */
-static boolean	instr;		/* in a string constant */
-static boolean	nokeyw = FALSE;	/* no keywords being flagged */
-static boolean  pass = FALSE;	/*
+static bool	filter = false;	/* act as a filter (like eqn) */
+static bool	inchr;		/* in a string constant */
+static bool	incomm;		/* in a comment of the primary type */
+static bool	idx = false;	/* form an index */
+static bool	instr;		/* in a string constant */
+static bool	nokeyw = false;	/* no keywords being flagged */
+static bool	pass = false;	/*
 				 * when acting as a filter, pass indicates
 				 * whether we are currently processing
 				 * input.
@@ -100,7 +102,7 @@ static const char *defsfile[2] = { _PATH_VGRINDEFS, 0 };
 static int	margin;
 static int	plstack[PSMAX];	/* the procedure nesting level stack */
 static char	pname[BUFSIZ+1];
-static boolean  prccont;	/* continue last procedure */
+static bool  prccont;	/* continue last procedure */
 static int	psptr;		/* the stack index of the current procedure */
 static char	pstack[PSMAX][PNAMELEN+1];	/* the procedure name stack */
 
@@ -121,19 +123,15 @@ char	*l_keywds[BUFSIZ/2];	/* keyword table address */
 char	*l_prcbeg;		/* regular expr for procedure begin */
 char    *l_strbeg;		/* delimiter for string constant */
 char    *l_strend;		/* delimiter for string constant */
-boolean	 l_toplex;		/* procedures only defined at top lex level */
+bool	 l_toplex;		/* procedures only defined at top lex level */
 const char *language = "c";	/* the language indicator */
-
-int	main __P((int, char **));
 
 #define	ps(x)	printf("%s", x)
 static char minus[] = "-";
 static char minusn[] = "-n";
 
 int
-main(argc, argv)
-    int argc;
-    char *argv[];
+main(int argc, char *argv[])
 {
     const char *fname = "";
     struct stat stbuf;
@@ -163,7 +161,7 @@ main(argc, argv)
 
 	    /* act as a filter like eqn */
 	    if (!strcmp(argv[0], "-f")) {
-		filter++;
+		filter=true;
 		argv[0] = argv[argc-1];
 		argv[argc-1] = minus;
 		continue;
@@ -177,13 +175,13 @@ main(argc, argv)
 
 	    /* build an index */
 	    if (!strcmp(argv[0], "-x")) {
-		idx++;
+		idx=true;
 		argv[0] = minusn;
 	    }
 
 	    /* indicate no keywords */
 	    if (!strcmp(argv[0], "-n")) {
-		nokeyw++;
+		nokeyw=true;
 		argc--, argv++;
 		continue;
 	    }
@@ -242,7 +240,7 @@ main(argc, argv)
 	    exit(0);
 	}
 	if (cgetustr(defs, "kw", &cp) == -1)
-	    nokeyw = TRUE;
+	    nokeyw = true;
 	else  {
 	    char **cpp;
 
@@ -255,7 +253,7 @@ main(argc, argv)
 		while (*cp != ' ' && *cp  != '\t' && *cp)
 		    cp++;
 	    }
-	    *cpp = NIL;
+	    *cpp = NULL;
 	}
 	cgetustr(defs, "pb", &cp);
 	l_prcbeg = convexp(cp);
@@ -285,10 +283,10 @@ main(argc, argv)
 
 	/* initialize the program */
 
-	incomm = FALSE;
-	instr = FALSE;
-	inchr = FALSE;
-	x_escaped = FALSE;
+	incomm = false;
+	instr = false;
+	inchr = false;
+	x_escaped = false;
 	blklevel = 0;
 	for (psptr=0; psptr<PSMAX; psptr++) {
 	    pstack[psptr][0] = '\0';
@@ -324,12 +322,12 @@ main(argc, argv)
 	    if (buf[0] == '.') {
 		printf("%s", buf);
 		if (!strncmp (buf+1, "vS", 2))
-		    pass = TRUE;
+		    pass = true;
 		if (!strncmp (buf+1, "vE", 2))
-		    pass = FALSE;
+		    pass = false;
 		continue;
 	    }
-	    prccont = FALSE;
+	    prccont = false;
 	    if (!filter || pass)
 		putScp(buf);
 	    else
@@ -352,8 +350,7 @@ main(argc, argv)
 #define isidchr(c) (isalnum((unsigned char)(c)) || (c) == '_')
 
 static void
-putScp(os)
-    char *os;
+putScp(char *os)
 {
     char *s = os;			/* pointer to unmatched string */
     char dummy[BUFSIZ];			/* dummy to be used by expmatch */
@@ -365,7 +362,7 @@ putScp(os)
     char *blkeptr;			/* end of a lexical block end */
 
     x_start = os;			/* remember the start for expmatch */
-    x_escaped = FALSE;
+    x_escaped = false;
     if (nokeyw || incomm || instr)
 	goto skip;
     if (isproc(s)) {
@@ -391,15 +388,15 @@ skip:
 	    chrptr = expmatch(s, l_chrbeg, dummy);
 
 	    /* start of a comment? */
-	    if (comptr != NIL)
-		if ((comptr < strptr || strptr == NIL)
-		  && (comptr < acmptr || acmptr == NIL)
-		  && (comptr < chrptr || chrptr == NIL)
-		  && (comptr < blksptr || blksptr == NIL)
-		  && (comptr < blkeptr || blkeptr == NIL)) {
-		    putKcp(s, comptr-1, FALSE);
+	    if (comptr != NULL)
+		if ((comptr < strptr || strptr == NULL)
+		  && (comptr < acmptr || acmptr == NULL)
+		  && (comptr < chrptr || chrptr == NULL)
+		  && (comptr < blksptr || blksptr == NULL)
+		  && (comptr < blkeptr || blkeptr == NULL)) {
+		    putKcp(s, comptr-1, false);
 		    s = comptr;
-		    incomm = TRUE;
+		    incomm = true;
 		    comtype = STANDARD;
 		    if (s != os)
 			ps("\\c");
@@ -408,14 +405,14 @@ skip:
 		}
 
 	    /* start of a comment? */
-	    if (acmptr != NIL)
-		if ((acmptr < strptr || strptr == NIL)
-		  && (acmptr < chrptr || chrptr == NIL)
-		  && (acmptr < blksptr || blksptr == NIL)
-		  && (acmptr < blkeptr || blkeptr == NIL)) {
-		    putKcp(s, acmptr-1, FALSE);
+	    if (acmptr != NULL)
+		if ((acmptr < strptr || strptr == NULL)
+		  && (acmptr < chrptr || chrptr == NULL)
+		  && (acmptr < blksptr || blksptr == NULL)
+		  && (acmptr < blkeptr || blkeptr == NULL)) {
+		    putKcp(s, acmptr-1, false);
 		    s = acmptr;
-		    incomm = TRUE;
+		    incomm = true;
 		    comtype = ALTERNATE;
 		    if (s != os)
 			ps("\\c");
@@ -424,30 +421,30 @@ skip:
 		}
 
 	    /* start of a string? */
-	    if (strptr != NIL)
-		if ((strptr < chrptr || chrptr == NIL)
-		  && (strptr < blksptr || blksptr == NIL)
-		  && (strptr < blkeptr || blkeptr == NIL)) {
-		    putKcp(s, strptr-1, FALSE);
+	    if (strptr != NULL)
+		if ((strptr < chrptr || chrptr == NULL)
+		  && (strptr < blksptr || blksptr == NULL)
+		  && (strptr < blkeptr || blkeptr == NULL)) {
+		    putKcp(s, strptr-1, false);
 		    s = strptr;
-		    instr = TRUE;
+		    instr = true;
 		    continue;
 		}
 
 	    /* start of a character string? */
-	    if (chrptr != NIL)
-		if ((chrptr < blksptr || blksptr == NIL)
-		  && (chrptr < blkeptr || blkeptr == NIL)) {
-		    putKcp(s, chrptr-1, FALSE);
+	    if (chrptr != NULL)
+		if ((chrptr < blksptr || blksptr == NULL)
+		  && (chrptr < blkeptr || blkeptr == NULL)) {
+		    putKcp(s, chrptr-1, false);
 		    s = chrptr;
-		    inchr = TRUE;
+		    inchr = true;
 		    continue;
 		}
 
 	    /* end of a lexical block */
-	    if (blkeptr != NIL) {
-		if (blkeptr < blksptr || blksptr == NIL) {
-		    putKcp(s, blkeptr - 1, FALSE);
+	    if (blkeptr != NULL) {
+		if (blkeptr < blksptr || blksptr == NULL) {
+		    putKcp(s, blkeptr - 1, false);
 		    s = blkeptr;
 		    blklevel--;
 		    if (psptr >= 0 && plstack[psptr] >= blklevel) {
@@ -460,7 +457,7 @@ skip:
 
 			/* see if we should print the last proc name */
 			if (--psptr >= 0)
-			    prccont = TRUE;
+			    prccont = true;
 			else
 			    psptr = -1;
 		    }
@@ -469,8 +466,8 @@ skip:
 	    }
 
 	    /* start of a lexical block */
-	    if (blksptr != NIL) {
-		putKcp(s, blksptr - 1, FALSE);
+	    if (blksptr != NULL) {
+		putKcp(s, blksptr - 1, false);
 		s = blksptr;
 		blklevel++;
 		continue;
@@ -480,62 +477,62 @@ skip:
 	} else if (incomm) {
 	    comptr = expmatch(s, l_comend, dummy);
 	    acmptr = expmatch(s, l_acmend, dummy);
-	    if (((comtype == STANDARD) && (comptr != NIL)) ||
-	        ((comtype == ALTERNATE) && (acmptr != NIL))) {
+	    if (((comtype == STANDARD) && (comptr != NULL)) ||
+	        ((comtype == ALTERNATE) && (acmptr != NULL))) {
 		if (comtype == STANDARD) {
-		    putKcp(s, comptr-1, TRUE);
+		    putKcp(s, comptr-1, true);
 		    s = comptr;
 		} else {
-		    putKcp(s, acmptr-1, TRUE);
+		    putKcp(s, acmptr-1, true);
 		    s = acmptr;
 		}
-		incomm = FALSE;
+		incomm = false;
 		ps("\\c\n'-C\n");
 		continue;
 	    } else {
-		putKcp(s, s + strlen(s) -1, TRUE);
+		putKcp(s, s + strlen(s) -1, true);
 		s = s + strlen(s);
 		continue;
 	    }
 
 	/* check for end of string */
 	} else if (instr) {
-	    if ((strptr = expmatch(s, l_strend, dummy)) != NIL) {
-		putKcp(s, strptr-1, TRUE);
+	    if ((strptr = expmatch(s, l_strend, dummy)) != NULL) {
+		putKcp(s, strptr-1, true);
 		s = strptr;
-		instr = FALSE;
+		instr = false;
 		continue;
 	    } else {
-		putKcp(s, s+strlen(s)-1, TRUE);
+		putKcp(s, s+strlen(s)-1, true);
 		s = s + strlen(s);
 		continue;
 	    }
 
 	/* check for end of character string */
 	} else if (inchr) {
-	    if ((chrptr = expmatch(s, l_chrend, dummy)) != NIL) {
-		putKcp(s, chrptr-1, TRUE);
+	    if ((chrptr = expmatch(s, l_chrend, dummy)) != NULL) {
+		putKcp(s, chrptr-1, true);
 		s = chrptr;
-		inchr = FALSE;
+		inchr = false;
 		continue;
 	    } else {
-		putKcp(s, s+strlen(s)-1, TRUE);
+		putKcp(s, s+strlen(s)-1, true);
 		s = s + strlen(s);
 		continue;
 	    }
 	}
 
 	/* print out the line */
-	putKcp(s, s + strlen(s) -1, FALSE);
+	putKcp(s, s + strlen(s) -1, false);
 	s = s + strlen(s);
     } while (*s);
 }
 
 static void
-putKcp(start, end, force)
-    char	*start;		/* start of string to write */
-    char	*end;		/* end of string to write */
-    boolean	force;		/* true if we should force nokeyw */
+putKcp(
+    char	*start,		/* start of string to write */
+    char	*end,		/* end of string to write */
+    bool	force)		/* true if we should force nokeyw */
 {
     int i;
     int xfld = 0;
@@ -582,16 +579,14 @@ putKcp(start, end, force)
 
 
 static int
-tabs(s, os)
-    char *s, *os;
+tabs(char *s, char *os)
 {
 
-    return (width(s, os) / 8);
+    return width(s, os) / 8;
 }
 
 static int
-width(s, os)
-	char *s, *os;
+width(char *s, char *os)
 {
 	int i = 0;
 
@@ -607,12 +602,11 @@ width(s, os)
 			i++;
 		s++;
 	}
-	return (i);
+	return i;
 }
 
 static void
-putcp(c)
-	int c;
+putcp(int c)
 {
 
 	switch(c) {
@@ -675,16 +669,15 @@ putcp(c)
 /*
  *	look for a process beginning on this line
  */
-static boolean
-isproc(s)
-    char *s;
+static bool
+isproc(char *s)
 {
     pname[0] = '\0';
     if (!l_toplex || blklevel == 0)
-	if (expmatch(s, l_prcbeg, pname) != NIL) {
-	    return (TRUE);
+	if (expmatch(s, l_prcbeg, pname) != NULL) {
+	    return true;
 	}
-    return (FALSE);
+    return false;
 }
 
 
@@ -692,8 +685,7 @@ isproc(s)
  */
 
 static int
-iskw(s)
-	char *s;
+iskw(char *s)
 {
 	char **ss = l_keywds;
 	int i = 1;
@@ -703,7 +695,6 @@ iskw(s)
 		i++;
 	while ((cp = *ss++) != NULL)
 		if (!STRNCMP(s,cp,i) && !isidchr((unsigned char)cp[i]))
-			return (i);
-	return (0);
+			return i;
+	return 0;
 }
-

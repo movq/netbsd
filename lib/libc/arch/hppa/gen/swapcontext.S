@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.3 2007/11/18 14:11:25 skrll Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.6 2014/02/19 13:01:51 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,12 @@
  */
 
 #include "SYS.h"
+#include "assym.h"
+
 #include <machine/mcontext.h>
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.3 2007/11/18 14:11:25 skrll Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.6 2014/02/19 13:01:51 skrll Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 LEAF_ENTRY(swapcontext)
@@ -51,10 +46,15 @@ LEAF_ENTRY(swapcontext)
 
 	ldw	HPPA_FRAME_ARG(0)(%sp), %arg1
 	ldw	HPPA_FRAME_ARG(1)(%sp), %arg0
-	stw	%r0, (_OFFSETOF_UC_GREGS + _REG_RET0 * SZREG)(%arg1)
+
+	ldw	HPPA_FRAME_CRP(%sp), %rp
 	ldo	4(%rp), %r1
 	stw	%r1, (_OFFSETOF_UC_GREGS + _REG_PCOQT * SZREG)(%arg1)
 	stw	%rp, (_OFFSETOF_UC_GREGS + _REG_PCOQH * SZREG)(%arg1)
-	SYSCALL(setcontext)
+	bl	setcontext, %rp
+	stw	%r0, (_OFFSETOF_UC_GREGS + _REG_RET0 * SZREG)(%arg1)
+
+	ldw	HPPA_FRAME_CRP(%sp), %rp
+	bv,n	%r0(%rp)
 EXIT(swapcontext)
 	.end

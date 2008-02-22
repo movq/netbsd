@@ -1,4 +1,4 @@
-/*	$NetBSD: psychovar.h,v 1.14 2006/02/13 21:47:12 cdi Exp $	*/
+/*	$NetBSD: psychovar.h,v 1.21 2013/12/07 11:17:24 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -71,12 +69,6 @@ struct psycho_pbm {
 	bus_space_tag_t			pp_iot;
 	bus_dma_tag_t			pp_dmat;
 	int				pp_bus;
-	int				pp_busmax;
-	struct pp_busnode {
-		int	node;
-		int	(*valid)(void *);
-		void	*arg;
-	}				(*pp_busnode)[256];
 	int				pp_flags;
 
 	/* and pointers into the psycho regs for our bits */
@@ -91,7 +83,7 @@ struct psycho_pbm {
  * per pair of psycho's.
  */
 struct psycho_softc {
-	struct	device			sc_dev;
+	device_t			sc_dev;
 
 	/*
 	 * one sabre has two simba's.  psycho's are separately attached,
@@ -132,6 +124,7 @@ struct psycho_softc {
 
 	struct sysmon_pswitch		*sc_smcontext;	/* power switch definition */
 	int				sc_powerpressed;/* already signaled */
+	uint64_t			sc_last_stick;
 };
 
 /* get a PCI offset address from bus_space_handle_t */
@@ -144,5 +137,10 @@ bus_space_tag_t psycho_alloc_bus_tag(struct psycho_pbm *, int);
 #define psycho_alloc_config_tag(pp) psycho_alloc_bus_tag((pp), PCI_CONFIG_BUS_SPACE)
 #define psycho_alloc_mem_tag(pp) psycho_alloc_bus_tag((pp), PCI_MEMORY_BUS_SPACE)
 #define psycho_alloc_io_tag(pp) psycho_alloc_bus_tag((pp), PCI_IO_BUS_SPACE)
+
+uint64_t psycho_getstick(void);
+uint32_t psycho_getstick32(void);
+void psycho_setstick(long);
+void psycho_nextstick(long);
 
 #endif /* _SPARC64_DEV_PSYCHOVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_isa.c,v 1.18 2007/10/19 12:00:15 ad Exp $	*/
+/*	$NetBSD: dpt_isa.c,v 1.23 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_isa.c,v 1.18 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_isa.c,v 1.23 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,13 +59,13 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_isa.c,v 1.18 2007/10/19 12:00:15 ad Exp $");
 #define	DPT_ISA_IOSIZE		16
 #define DPT_ISA_MAXCCBS		16
 
-static void	dpt_isa_attach(struct device *, struct device *, void *);
-static int	dpt_isa_match(struct device *, struct cfdata *, void *);
+static void	dpt_isa_attach(device_t, device_t, void *);
+static int	dpt_isa_match(device_t, cfdata_t, void *);
 static int	dpt_isa_probe(struct isa_attach_args *, int);
 static int	dpt_isa_wait(bus_space_handle_t, bus_space_tag_t, u_int8_t,
 			     u_int8_t);
 
-CFATTACH_DECL(dpt_isa, sizeof(struct dpt_softc),
+CFATTACH_DECL_NEW(dpt_isa, sizeof(struct dpt_softc),
     dpt_isa_match, dpt_isa_attach, NULL, NULL);
 
 /* Try 'less intrusive' addresses first */
@@ -93,8 +93,7 @@ dpt_isa_wait(bus_space_handle_t ioh, bus_space_tag_t iot, u_int8_t mask,
  * Match a supported board.
  */
 static int
-dpt_isa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+dpt_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	int i;
@@ -172,7 +171,7 @@ dpt_isa_probe(struct isa_attach_args *ia, int iobase)
 	 */
 	bus_space_write_1(iot, ioh, HA_COMMAND, CP_PIO_GETCFG);
 	memset(&ec, 0, sizeof(ec));
-	i = ((int)&((struct eata_cfg *)0)->ec_cfglen +
+	i = ((uintptr_t)&((struct eata_cfg *)0)->ec_cfglen +
 	    sizeof(ec.ec_cfglen)) >> 1;
 	p = (u_int16_t *)&ec;
 
@@ -184,13 +183,13 @@ dpt_isa_probe(struct isa_attach_args *ia, int iobase)
 		*p++ = bus_space_read_stream_2(iot, ioh, HA_DATA);
 
 	if ((i = ec.ec_cfglen) > (sizeof(struct eata_cfg)
-	    - (int)(&(((struct eata_cfg *)0L)->ec_cfglen))
+	    - (uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen))
 	    - sizeof(ec.ec_cfglen)))
 		i = sizeof(struct eata_cfg)
-		  - (int)(&(((struct eata_cfg *)0L)->ec_cfglen))
+		  - (uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen))
 		  - sizeof(ec.ec_cfglen);
 
-	j = i + (int)(&(((struct eata_cfg *)0L)->ec_cfglen)) +
+	j = i + (uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen)) +
 	    sizeof(ec.ec_cfglen);
 	i >>= 1;
 
@@ -253,7 +252,7 @@ dpt_isa_probe(struct isa_attach_args *ia, int iobase)
  * Attach a matched board.
  */
 static void
-dpt_isa_attach(struct device *parent, struct device *self, void *aux)
+dpt_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia;
 	isa_chipset_tag_t ic;
@@ -264,15 +263,17 @@ dpt_isa_attach(struct device *parent, struct device *self, void *aux)
 	int error;
 
 	ia = aux;
-	sc = (struct dpt_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	iot = ia->ia_iot;
 	ic = ia->ia_ic;
 
-	printf(": ");
+	aprint_naive("\n");
+	aprint_normal(": ");
 
 	if ((error = bus_space_map(iot, ia->ia_io[0].ir_addr, DPT_ISA_IOSIZE,
 	     0, &ioh)) != 0) {
-		printf("can't map i/o space, error = %d\n", error);
+		aprint_error("can't map i/o space, error = %d\n", error);
 		return;
 	}
 
@@ -281,7 +282,7 @@ dpt_isa_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = ia->ia_dmat;
 
 	if ((error = isa_dmacascade(ic, ia->ia_drq[0].ir_drq)) != 0) {
-		printf("unable to cascade DRQ, error = %d\n", error);
+		aprint_error("unable to cascade DRQ, error = %d\n", error);
 		return;
 	}
 
@@ -289,12 +290,12 @@ dpt_isa_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = isa_intr_establish(ic, ia->ia_irq[0].ir_irq, IST_EDGE,
 	    IPL_BIO, dpt_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("can't establish interrupt\n");
+		aprint_error("can't establish interrupt\n");
 		return;
 	}
 
 	if (dpt_readcfg(sc)) {
-		printf("readcfg failed - see dpt(4)\n");
+		aprint_error("readcfg failed - see dpt(4)\n");
 		return;
 	}
 

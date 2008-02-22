@@ -1,4 +1,4 @@
-/*	$NetBSD: at24cxx.c,v 1.9 2007/12/11 05:38:12 lukem Exp $	*/
+/*	$NetBSD: at24cxx.c,v 1.30 2018/06/26 06:34:55 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at24cxx.c,v 1.9 2007/12/11 05:38:12 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at24cxx.c,v 1.30 2018/06/26 06:34:55 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: at24cxx.c,v 1.9 2007/12/11 05:38:12 lukem Exp $");
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/at24cxxvar.h>
 
+#include "ioconf.h"
+
 /*
  * AT24Cxx EEPROM I2C address:
  *	101 0xxx
@@ -61,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: at24cxx.c,v 1.9 2007/12/11 05:38:12 lukem Exp $");
  * larger than 512kb).  Be sure to check the datasheet of your EEPROM
  * because there's much variation between models.
  */
-#define	AT24CXX_ADDRMASK	0x78
+#define	AT24CXX_ADDRMASK	0x3f8
 #define	AT24CXX_ADDR		0x50
 
 #define	AT24CXX_WRITE_CYCLE_MS	10
@@ -73,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: at24cxx.c,v 1.9 2007/12/11 05:38:12 lukem Exp $");
 #if NSEEPROM > 0
 
 struct seeprom_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_address;
 	int sc_size;
@@ -81,12 +83,11 @@ struct seeprom_softc {
 	int sc_open;
 };
 
-static int  seeprom_match(struct device *, struct cfdata *, void *);
-static void seeprom_attach(struct device *, struct device *, void *);
+static int  seeprom_match(device_t, cfdata_t, void *);
+static void seeprom_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(seeprom, sizeof(struct seeprom_softc),
+CFATTACH_DECL_NEW(seeprom, sizeof(struct seeprom_softc),
 	seeprom_match, seeprom_attach, NULL, NULL);
-extern struct cfdriver seeprom_cd;
 
 dev_type_open(seeprom_open);
 dev_type_close(seeprom_close);
@@ -94,35 +95,63 @@ dev_type_read(seeprom_read);
 dev_type_write(seeprom_write);
 
 const struct cdevsw seeprom_cdevsw = {
-	seeprom_open, seeprom_close, seeprom_read, seeprom_write, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	.d_open = seeprom_open,
+	.d_close = seeprom_close,
+	.d_read = seeprom_read,
+	.d_write = seeprom_write,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 static int seeprom_wait_idle(struct seeprom_softc *);
 
+static const struct device_compatible_entry compat_data[] = {
+	{ "i2c-at24c64",		8192 },
+	{ "i2c-at34c02",		256 },
+	{ "atmel,24c02",		256 },
+	{ "atmel,24c16",		2048 },
+	{ NULL,				0 }
+};
 
 static int
-seeprom_match(struct device *parent, struct cfdata *cf, void *aux)
+seeprom_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct i2c_attach_args *ia = aux;
+	int match_result;
+
+	if (iic_use_direct_match(ia, cf, compat_data, &match_result))
+		return match_result;
 
 	if ((ia->ia_addr & AT24CXX_ADDRMASK) == AT24CXX_ADDR)
-		return (1);
+		return I2C_MATCH_ADDRESS_ONLY;
 
-	return (0);
+	return 0;
 }
 
 static void
-seeprom_attach(struct device *parent, struct device *self, void *aux)
+seeprom_attach(device_t parent, device_t self, void *aux)
 {
 	struct seeprom_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = aux;
+	const struct device_compatible_entry *dce;
 
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
+	sc->sc_dev = self;
 
-	aprint_naive(": EEPROM\n");
-	aprint_normal(": AT24Cxx EEPROM\n");
+	if (ia->ia_name != NULL) {
+		aprint_naive(": %s", ia->ia_name);
+		aprint_normal(": %s", ia->ia_name);
+	} else {
+		aprint_naive(": EEPROM");
+		aprint_normal(": AT24Cxx or compatible EEPROM");
+	}
 
 	/*
 	 * The AT24C01A/02/04/08/16 EEPROMs use a 1 byte command
@@ -138,7 +167,14 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 	 * switching to select the proper super-page.  This isn't
 	 * supported by this driver.
 	 */
-	sc->sc_size = ia->ia_size;
+	if (device_cfdata(self)->cf_flags)
+		sc->sc_size = (device_cfdata(self)->cf_flags << 7);
+
+	if (sc->sc_size <= 0 && ia->ia_ncompat > 0) {
+		if (iic_compatible_match(ia, compat_data, &dce))
+			sc->sc_size = dce->data;
+	}
+
 	switch (sc->sc_size) {
 	case 128:		/* 1Kbit */
 	case 256:		/* 2Kbit */
@@ -146,6 +182,7 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 	case 1024:		/* 8Kbit */
 	case 2048:		/* 16Kbit */
 		sc->sc_cmdlen = 1;
+		aprint_normal(": size %d\n", sc->sc_size);
 		break;
 
 	case 4096:		/* 32Kbit */
@@ -154,6 +191,7 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 	case 32768:		/* 256Kbit */
 	case 65536:		/* 512Kbit */
 		sc->sc_cmdlen = 2;
+		aprint_normal(": size %d\n", sc->sc_size);
 		break;
 
 	default:
@@ -167,8 +205,9 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 		 * Obviously this will not work for 4KB or 8KB
 		 * EEPROMs, but them's the breaks.
 		 */
-		aprint_error("%s: invalid size specified; "
-		    "assuming 2KB (16Kb)\n", sc->sc_dev.dv_xname);
+		aprint_normal("\n");
+		aprint_error_dev(self, "invalid size specified; "
+		    "assuming 2KB (16Kb)\n");
 		sc->sc_size = 2048;
 		sc->sc_cmdlen = 1;
 	}
@@ -182,7 +221,7 @@ seeprom_open(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct seeprom_softc *sc;
 
-	if ((sc = device_lookup(&seeprom_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&seeprom_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	/* XXX: Locking */
@@ -200,7 +239,7 @@ seeprom_close(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct seeprom_softc *sc;
 
-	if ((sc = device_lookup(&seeprom_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&seeprom_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	sc->sc_open = 0;
@@ -216,14 +255,11 @@ seeprom_read(dev_t dev, struct uio *uio, int flags)
 	u_int8_t ch, cmdbuf[2];
 	int a, error;
 
-	if ((sc = device_lookup(&seeprom_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&seeprom_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= sc->sc_size)
 		return (EINVAL);
-
-	if ((error = iic_acquire_bus(sc->sc_tag, 0)) != 0)
-		return (error);
 
 	/*
 	 * Even though the AT24Cxx EEPROMs support sequential
@@ -242,21 +278,23 @@ seeprom_read(dev_t dev, struct uio *uio, int flags)
 			cmdbuf[0] = AT24CXX_ADDR_HI(a);
 			cmdbuf[1] = AT24CXX_ADDR_LO(a);
 		}
+
+		if ((error = iic_acquire_bus(sc->sc_tag, 0)) != 0)
+			return (error);
 		if ((error = iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
 				      addr, cmdbuf, sc->sc_cmdlen,
 				      &ch, 1, 0)) != 0) {
 			iic_release_bus(sc->sc_tag, 0);
-			printf("%s: seeprom_read: byte read failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "seeprom_read: byte read failed at 0x%x\n", a);
 			return (error);
 		}
+		iic_release_bus(sc->sc_tag, 0);
+
 		if ((error = uiomove(&ch, 1, uio)) != 0) {
-			iic_release_bus(sc->sc_tag, 0);
 			return (error);
 		}
 	}
-
-	iic_release_bus(sc->sc_tag, 0);
 
 	return (0);
 }
@@ -270,14 +308,11 @@ seeprom_write(dev_t dev, struct uio *uio, int flags)
 	u_int8_t ch, cmdbuf[2];
 	int a, error;
 
-	if ((sc = device_lookup(&seeprom_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&seeprom_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= sc->sc_size)
 		return (EINVAL);
-
-	if ((error = iic_acquire_bus(sc->sc_tag, 0)) != 0)
-		return (error);
 
 	/*
 	 * See seeprom_read() for why we don't use sequential
@@ -298,23 +333,24 @@ seeprom_write(dev_t dev, struct uio *uio, int flags)
 			iic_release_bus(sc->sc_tag, 0);
 			return (error);
 		}
+
+		if ((error = iic_acquire_bus(sc->sc_tag, 0)) != 0)
+			return (error);
 		if ((error = iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP,
 				      addr, cmdbuf, sc->sc_cmdlen,
 				      &ch, 1, 0)) != 0) {
 			iic_release_bus(sc->sc_tag, 0);
-			printf("%s: seeprom_write: byte write failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "seeprom_write: byte write failed at 0x%x\n", a);
 			return (error);
 		}
+		iic_release_bus(sc->sc_tag, 0);
 
 		/* Wait until the device commits the byte. */
 		if ((error = seeprom_wait_idle(sc)) != 0) {
-			iic_release_bus(sc->sc_tag, 0);
 			return (error);
 		}
 	}
-
-	iic_release_bus(sc->sc_tag, 0);
 
 	return (0);
 }
@@ -325,6 +361,7 @@ seeprom_wait_idle(struct seeprom_softc *sc)
 	uint8_t cmdbuf[2] = { 0, 0 };
 	int rv, timeout;
 	u_int8_t dummy;
+	int error;
 
 	timeout = (1000 / hz) / AT24CXX_WRITE_CYCLE_MS;
 	if (timeout == 0)
@@ -336,8 +373,15 @@ seeprom_wait_idle(struct seeprom_softc *sc)
 	 * Read the byte at address 0.  This is just a dummy
 	 * read to wait for the EEPROM's write cycle to complete.
 	 */
-	while (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_address,
-			cmdbuf, sc->sc_cmdlen, &dummy, 1, 0)) {
+	for (;;) {
+		if ((error = iic_acquire_bus(sc->sc_tag, 0)) != 0)
+			return error;
+		error = iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
+		    sc->sc_address, cmdbuf, sc->sc_cmdlen, &dummy, 1, 0);
+		iic_release_bus(sc->sc_tag, 0);
+		if (error == 0)
+			break;
+
 		rv = tsleep(sc, PRIBIO | PCATCH, "seepromwr", timeout);
 		if (rv != EWOULDBLOCK)
 			return (rv);

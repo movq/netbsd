@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdevsw.c,v 1.5 2007/12/12 00:03:33 lukem Exp $	*/
+/*	$NetBSD: mkdevsw.c,v 1.15 2016/07/16 07:13:26 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
 #endif
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mkdevsw.c,v 1.15 2016/07/16 07:13:26 pgoyette Exp $");
 
 #include <stdio.h>
 #include <string.h>
@@ -90,9 +86,38 @@ emitheader(FILE *fp)
 	autogen_comment(fp, "devsw.c");
 
 	fputs("#include <sys/param.h>\n"
-		  "#include <sys/conf.h>\n"
-		  "\n#define\tDEVSW_ARRAY_SIZE(x)\t"
-		  "(sizeof((x))/sizeof((x)[0]))\n", fp);
+		  "#include <sys/conf.h>\n", fp);
+}
+
+static void
+dentry(FILE *fp, struct hashtab *t, devmajor_t i, char p)
+{
+	const struct devm *dm;
+	char mstr[16];
+
+	(void)snprintf(mstr, sizeof(mstr), "%d", i);
+	if ((dm = ht_lookup(t, intern(mstr))) == NULL)
+		return;
+
+	fprintf(fp, "extern const struct %cdevsw %s_%cdevsw;\n",
+	    p, dm->dm_name, p);
+}
+
+static void
+pentry(FILE *fp, struct hashtab *t, devmajor_t i, char p)
+{
+	const struct devm *dm;
+	char mstr[16];
+
+	(void)snprintf(mstr, sizeof(mstr), "%d", i);
+	dm = ht_lookup(t, intern(mstr));
+
+	if (dm)
+		fprintf(fp, "\t&%s_%cdevsw", dm->dm_name, p); 
+	else
+		fputs("\tNULL", fp);
+
+	fprintf(fp, ",\t// %3d\n", i);
 }
 
 /*
@@ -101,63 +126,37 @@ emitheader(FILE *fp)
 static void
 emitdevm(FILE *fp)
 {
-	struct devm *dm;
-	char mstr[16];
-	int i;
+	devmajor_t i;
 
 	fputs("\n/* device switch table for block device */\n", fp);
 
-	for (i = 0 ; i <= maxbdevm ; i++) {
-		(void)snprintf(mstr, sizeof(mstr), "%d", i);
-		if ((dm = ht_lookup(bdevmtab, intern(mstr))) == NULL)
-			continue;
-
-		fprintf(fp, "extern const struct bdevsw %s_bdevsw;\n",
-			    dm->dm_name);
-	}
+	for (i = 0; i <= maxbdevm ; i++)
+		dentry(fp, bdevmtab, i, 'b');
 
 	fputs("\nconst struct bdevsw *bdevsw0[] = {\n", fp);
 
-	for (i = 0 ; i <= maxbdevm ; i++) {
-		(void)snprintf(mstr, sizeof(mstr), "%d", i);
-		if ((dm = ht_lookup(bdevmtab, intern(mstr))) == NULL) {
-			fprintf(fp, "\tNULL,\n");
-		} else {
-			fprintf(fp, "\t&%s_bdevsw,\n", dm->dm_name);
-		}
-	}
+	for (i = 0; i <= maxbdevm; i++)
+		pentry(fp, bdevmtab, i, 'b');
 
 	fputs("};\n\nconst struct bdevsw **bdevsw = bdevsw0;\n", fp);
 
-	fputs("const int sys_bdevsws = DEVSW_ARRAY_SIZE(bdevsw0);\n"
-		  "int max_bdevsws = DEVSW_ARRAY_SIZE(bdevsw0);\n", fp);
+	fputs("const int sys_bdevsws = __arraycount(bdevsw0);\n"
+		  "int max_bdevsws = __arraycount(bdevsw0);\n", fp);
 
 	fputs("\n/* device switch table for character device */\n", fp);
 
-	for (i = 0 ; i <= maxcdevm ; i++) {
-		(void)snprintf(mstr, sizeof(mstr), "%d", i);
-		if ((dm = ht_lookup(cdevmtab, intern(mstr))) == NULL)
-			continue;
-
-		fprintf(fp, "extern const struct cdevsw %s_cdevsw;\n",
-			    dm->dm_name);
-	}
+	for (i = 0; i <= maxcdevm; i++)
+		dentry(fp, cdevmtab, i, 'c');
 
 	fputs("\nconst struct cdevsw *cdevsw0[] = {\n", fp);
 
-	for (i = 0 ; i <= maxcdevm ; i++) {
-		(void)snprintf(mstr, sizeof(mstr), "%d", i);
-		if ((dm = ht_lookup(cdevmtab, intern(mstr))) == NULL) {
-			fprintf(fp, "\tNULL,\n");
-		} else {
-			fprintf(fp, "\t&%s_cdevsw,\n", dm->dm_name);
-		}
-	}
+	for (i = 0; i <= maxcdevm; i++)
+		pentry(fp, cdevmtab, i, 'c');
 
 	fputs("};\n\nconst struct cdevsw **cdevsw = cdevsw0;\n", fp);
 
-	fputs("const int sys_cdevsws = DEVSW_ARRAY_SIZE(cdevsw0);\n"
-		  "int max_cdevsws = DEVSW_ARRAY_SIZE(cdevsw0);\n", fp);
+	fputs("const int sys_cdevsws = __arraycount(cdevsw0);\n"
+		  "int max_cdevsws = __arraycount(cdevsw0);\n", fp);
 }
 
 /*
@@ -171,12 +170,46 @@ emitconv(FILE *fp)
 	fputs("\n/* device conversion table */\n"
 		  "struct devsw_conv devsw_conv0[] = {\n", fp);
 	TAILQ_FOREACH(dm, &alldevms, dm_next) {
-		fprintf(fp, "\t{ \"%s\", %d, %d },\n", dm->dm_name,
+		if (version < 20100430) {
+			/* Emit compatible structure */
+			fprintf(fp, "\t{ \"%s\", %d, %d },\n", dm->dm_name,
 			    dm->dm_bmajor, dm->dm_cmajor);
+			continue;
+		}
+		struct nvlist *nv;
+		const char *d_class, *d_flags = "0";
+		int d_vec[2] = { 0, 0 };
+		int i = 0;
+
+		/*
+		 * "parse" info.  currently the rules are simple:
+		 *  1) first entry defines class
+		 *  2) next ones without n_str are d_vectdim
+		 *  3) next one with n_str is d_flags
+		 *  4) EOL
+		 */
+		nv = dm->dm_devnodes;
+		d_class = nv->nv_str;
+		while ((nv = nv->nv_next) != NULL) {
+			if (i > 2)
+				panic("invalid devnode definition");
+			if (nv->nv_str) {
+				d_flags = nv->nv_str;
+				break;
+			}
+			if (nv->nv_num > INT_MAX || nv->nv_num < INT_MIN)
+				panic("out of range devnode definition");
+			d_vec[i++] = (int)nv->nv_num;
+		}
+
+		fprintf(fp, "\t{ \"%s\", %d, %d, %s, %s, { %d, %d }},\n",
+			    dm->dm_name, dm->dm_bmajor, dm->dm_cmajor,
+			    d_class, d_flags, d_vec[0], d_vec[1]);
+
 	}
 	fputs("};\n\n"
 		  "struct devsw_conv *devsw_conv = devsw_conv0;\n"
-		  "int max_devsw_convs = DEVSW_ARRAY_SIZE(devsw_conv0);\n",
+		  "int max_devsw_convs = __arraycount(devsw_conv0);\n",
 		  fp);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: catopen.c,v 1.24 2007/12/28 00:39:32 martin Exp $	*/
+/*	$NetBSD: catopen.c,v 1.33 2014/09/16 01:30:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: catopen.c,v 1.24 2007/12/28 00:39:32 martin Exp $");
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: catopen.c,v 1.33 2014/09/16 01:30:28 christos Exp $");
 
 #define _NLS_PRIVATE
+#define __SETLOCALE_SOURCE__
 
 #include "namespace.h"
 #include <sys/param.h>
@@ -57,34 +49,36 @@ __RCSID("$NetBSD: catopen.c,v 1.24 2007/12/28 00:39:32 martin Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#ifdef CITRUS
-#include <citrus/citrus_namespace.h>
-#include <citrus/citrus_region.h>
-#include <citrus/citrus_lookup.h>
-#else
-#include <locale/aliasname_local.h>
-#define _lookup_alias(p, a, b, s, c)	__unaliasname((p), (a), (b), (s))
-#endif
+#include "citrus_namespace.h"
+#include "citrus_bcs.h"
+#include "citrus_region.h"
+#include "citrus_lookup.h"
+#include "citrus_aliasname_local.h"
+#include "setlocale_local.h"
 
 #define NLS_ALIAS_DB "/usr/share/nls/nls.alias"
 
 #define NLS_DEFAULT_PATH "/usr/share/nls/%L/%N.cat:/usr/share/nls/%N/%L"
 #define NLS_DEFAULT_LANG "C"
 
-#ifdef __weak_alias
 __weak_alias(catopen, _catopen)
-#endif
+__weak_alias(catopen_l, _catopen_l)
 
-static nl_catd load_msgcat __P((const char *));
+static nl_catd load_msgcat(const char *);
 
 nl_catd
-_catopen(name, oflag)
-	const char *name;
-	int oflag;
+catopen(const char *name, int oflag)
+{
+
+	return catopen_l(name, oflag, _current_locale());
+}
+
+nl_catd
+catopen_l(const char *name, int oflag, locale_t loc)
 {
 	char tmppath[PATH_MAX+1];
 	const char *nlspath;
-	const char *lang;
+	const char *lang, *reallang;
 	char *t;
 	const char *s, *u;
 	nl_catd catd;
@@ -99,17 +93,21 @@ _catopen(name, oflag)
 
 	if (issetugid() || (nlspath = getenv("NLSPATH")) == NULL)
 		nlspath = NLS_DEFAULT_PATH;
+	/*
+	 * Historical note:
+	 * http://www.hauN.org/ml/b-l-j/a/800/828.html (in japanese)
+	 */
 	if (oflag == NL_CAT_LOCALE) {
-		lang = setlocale(LC_MESSAGES, NULL);
-	}
-	else {
+		lang = loc->part_name[LC_MESSAGES];
+	} else {
 		lang = getenv("LANG");
 	}
 	if (lang == NULL || strchr(lang, '/'))
 		lang = NLS_DEFAULT_LANG;
 
-	lang = _lookup_alias(NLS_ALIAS_DB, lang, langbuf, sizeof(langbuf),
-			     _LOOKUP_CASE_SENSITIVE);
+	reallang = __unaliasname(NLS_ALIAS_DB, lang, langbuf, sizeof(langbuf));
+	if (reallang == NULL)
+		reallang = lang;
 
 	s = nlspath;
 	t = tmppath;
@@ -118,7 +116,7 @@ _catopen(name, oflag)
 			if (*s == '%') {
 				switch (*(++s)) {
 				case 'L':	/* locale */
-					u = lang;
+					u = reallang;
 					while (*u && t < tmppath + PATH_MAX)
 						*t++ = *u++;
 					break;
@@ -156,8 +154,7 @@ _catopen(name, oflag)
 }
 
 static nl_catd
-load_msgcat(path)
-	const char *path;
+load_msgcat(const char *path)
 {
 	struct stat st;
 	nl_catd catd;
@@ -166,7 +163,7 @@ load_msgcat(path)
 
 	_DIAGASSERT(path != NULL);
 
-	if ((fd = open(path, O_RDONLY)) == -1)
+	if ((fd = open(path, O_RDONLY|O_CLOEXEC)) == -1)
 		return (nl_catd)-1;
 
 	if (fstat(fd, &st) != 0) {
@@ -178,7 +175,7 @@ load_msgcat(path)
 	    (off_t)0);
 	close (fd);
 
-	if (data == (void *)-1) {
+	if (data == MAP_FAILED) {
 		return (nl_catd)-1;
 	}
 
@@ -188,7 +185,7 @@ load_msgcat(path)
 		return (nl_catd)-1;
 	}
 
-	if ((catd = malloc(sizeof (*catd))) == 0) {
+	if ((catd = malloc(sizeof (*catd))) == NULL) {
 		munmap(data, (size_t)st.st_size);
 		return (nl_catd)-1;
 	}

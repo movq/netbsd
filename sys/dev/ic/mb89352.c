@@ -1,8 +1,8 @@
-/*	$NetBSD: mb89352.c,v 1.46 2007/10/19 11:59:56 ad Exp $	*/
+/*	$NetBSD: mb89352.c,v 1.56 2017/10/28 04:53:55 riastradh Exp $	*/
 /*	NecBSD: mb89352.c,v 1.4 1998/03/14 07:31:20 kmatsuda Exp	*/
 
 /*-
- * Copyright (c) 1996,97,98,99,2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-1999,2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,11 +16,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles M. Hannum.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  *
  * Copyright (c) 1994 Jarle Greipsland
  * All rights reserved.
@@ -70,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.46 2007/10/19 11:59:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.56 2017/10/28 04:53:55 riastradh Exp $");
 
 #ifdef DDB
 #define	integrate
@@ -120,6 +127,9 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.46 2007/10/19 11:59:56 ad Exp $");
 /* threshold length for DMA transfer */
 #define SPC_MIN_DMA_LEN	32
 
+#ifdef luna68k	/* XXX old drives like DK312C in LUNAs require this */
+#define NO_MANUAL_XFER
+#endif
 #ifdef x68k	/* XXX it seems x68k SPC SCSI hardware has some quirks */
 #define NEED_DREQ_ON_HARDWARE_XFER
 #define NO_MANUAL_XFER
@@ -141,7 +151,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.46 2007/10/19 11:59:56 ad Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <sys/intr.h>
@@ -154,6 +163,8 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.46 2007/10/19 11:59:56 ad Exp $");
 
 #include <dev/ic/mb89352reg.h>
 #include <dev/ic/mb89352var.h>
+
+#include "ioconf.h"
 
 #ifndef DDB
 #define	Debugger() panic("should call debugger here (mb89352.c)")
@@ -168,7 +179,7 @@ void	spc_dequeue(struct spc_softc *, struct spc_acb *);
 void	spc_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t,
     void *);
 int	spc_poll(struct spc_softc *, struct scsipi_xfer *, int);
-integrate void	spc_sched_msgout(struct spc_softc *, u_char);
+integrate void	spc_sched_msgout(struct spc_softc *, uint8_t);
 integrate void	spc_setsync(struct spc_softc *, struct spc_tinfo *);
 void	spc_select(struct spc_softc *, struct spc_acb *);
 void	spc_timeout(void *);
@@ -180,8 +191,8 @@ int	spc_reselect(struct spc_softc *, int);
 void	spc_msgin(struct spc_softc *);
 void	spc_abort(struct spc_softc *, struct spc_acb *);
 void	spc_msgout(struct spc_softc *);
-int	spc_dataout_pio(struct spc_softc *, u_char *, int);
-int	spc_datain_pio(struct spc_softc *, u_char *, int);
+int	spc_dataout_pio(struct spc_softc *, uint8_t *, int);
+int	spc_datain_pio(struct spc_softc *, uint8_t *, int);
 #if SPC_DEBUG
 void	spc_print_acb(struct spc_acb *);
 void	spc_dump_driver(struct spc_softc *);
@@ -189,8 +200,6 @@ void	spc_dump89352(struct spc_softc *);
 void	spc_show_scsi_cmd(struct spc_acb *);
 void	spc_print_active_acb(void);
 #endif
-
-extern struct cfdriver spc_cd;
 
 /*
  * INITIALIZATION ROUTINES (probe, attach ++)
@@ -257,8 +266,8 @@ spc_attach(struct spc_softc *sc)
 	 * the chip's clock input and the size and offset of the sync period
 	 * register.
 	 *
-	 * For a 20MHz clock, this gives us 25, or 100nS, or 10MB/s, as a
-	 * maximum transfer rate, and 112.5, or 450nS, or 2.22MB/s, as a
+	 * For a 20MHz clock, this gives us 25, or 100ns, or 10MB/s, as a
+	 * maximum transfer rate, and 112.5, or 450ns, or 2.22MB/s, as a
 	 * minimum transfer rate.
 	 */
 	sc->sc_minsync = (2 * 250) / sc->sc_freq;
@@ -268,7 +277,7 @@ spc_attach(struct spc_softc *sc)
 	/*
 	 * Fill in the adapter.
 	 */
-	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_dev = sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -284,11 +293,10 @@ spc_attach(struct spc_softc *sc)
 
 	/*
 	 * Add reference to adapter so that we drop the reference after
-	 * config_found() to make sure the adatper is disabled.
+	 * config_found() to make sure the adapter is disabled.
 	 */
 	if (scsipi_adapter_addref(adapt) != 0) {
-		printf("%s: unable to enable controller\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to enable controller\n");
 		return;
 	}
 
@@ -297,36 +305,23 @@ spc_attach(struct spc_softc *sc)
 	/*
 	 * ask the adapter what subunits are present
 	 */
-	sc->sc_child = config_found(&sc->sc_dev, chan, scsiprint);
+	sc->sc_child = config_found(sc->sc_dev, chan, scsiprint);
 	scsipi_adapter_delref(adapt);
 }
 
-int
-spc_activate(struct device *self, enum devact act)
+void
+spc_childdet(device_t self, device_t child)
 {
-	struct spc_softc *sc = (void *)self;
-	int s, rv = 0;
+	struct spc_softc *sc = device_private(self);
 
-	s = splhigh();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_child != NULL)
-			rv = config_deactivate(sc->sc_child);
-		break;
-	}
-	splx(s);
-
-	return (rv);
+	if (sc->sc_child == child)
+		sc->sc_child = NULL;
 }
 
 int
-spc_detach(struct device *self, int flags)
+spc_detach(device_t self, int flags)
 {
-	struct spc_softc *sc = (void *)self;
+	struct spc_softc *sc = device_private(self);
 	int rv = 0;
 
 	if (sc->sc_child != NULL)
@@ -515,8 +510,8 @@ spc_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
     void *arg)
 {
 	struct scsipi_xfer *xs;
-	struct scsipi_periph *periph;
-	struct spc_softc *sc = (void *)chan->chan_adapter->adapt_dev;
+	struct scsipi_periph *periph __diagused;
+	struct spc_softc *sc = device_private(chan->chan_adapter->adapt_dev);
 	struct spc_acb *acb;
 	int s, flags;
 
@@ -635,7 +630,7 @@ spc_poll(struct spc_softc *sc, struct scsipi_xfer *xs, int count)
  */
 
 integrate void
-spc_sched_msgout(struct spc_softc *sc, u_char m)
+spc_sched_msgout(struct spc_softc *sc, uint8_t m)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -711,7 +706,7 @@ spc_select(struct spc_softc *sc, struct spc_acb *acb)
 int
 spc_reselect(struct spc_softc *sc, int message)
 {
-	u_char selid, target, lun;
+	uint8_t selid, target, lun;
 	struct spc_acb *acb;
 	struct scsipi_periph *periph;
 	struct spc_tinfo *ti;
@@ -725,7 +720,7 @@ spc_reselect(struct spc_softc *sc, int message)
 	selid = sc->sc_selid & ~(1 << sc->sc_initiator);
 	if (selid & (selid - 1)) {
 		printf("%s: reselect with invalid selid %02x; "
-		    "sending DEVICE RESET\n", sc->sc_dev.dv_xname, selid);
+		    "sending DEVICE RESET\n", device_xname(sc->sc_dev), selid);
 		SPC_BREAK();
 		goto reset;
 	}
@@ -746,7 +741,7 @@ spc_reselect(struct spc_softc *sc, int message)
 	}
 	if (acb == NULL) {
 		printf("%s: reselect from target %d lun %d with no nexus; "
-		    "sending ABORT\n", sc->sc_dev.dv_xname, target, lun);
+		    "sending ABORT\n", device_xname(sc->sc_dev), target, lun);
 		SPC_BREAK();
 		goto abort;
 	}
@@ -767,7 +762,7 @@ spc_reselect(struct spc_softc *sc, int message)
 	/* Do an implicit RESTORE POINTERS. */
 	sc->sc_dp = acb->data_addr;
 	sc->sc_dleft = acb->data_length;
-	sc->sc_cp = (u_char *)&acb->scsipi_cmd;
+	sc->sc_cp = (uint8_t *)&acb->scsipi_cmd;
 	sc->sc_cleft = acb->scsipi_cmd_length;
 
 	return (0);
@@ -853,7 +848,7 @@ spc_done(struct spc_softc *sc, struct spc_acb *acb)
 				xs->error = XS_DRIVER_STUFFUP;
 #if SPC_DEBUG
 				printf("%s: spc_done: bad stat 0x%x\n",
-				    sc->sc_dev.dv_xname, acb->target_stat);
+				    device_xname(sc->sc_dev), acb->target_stat);
 #endif
 				break;
 			}
@@ -1050,7 +1045,8 @@ nextbyte:
 			if (sc->sc_dleft < 0) {
 				periph = acb->xs->xs_periph;
 				printf("%s: %ld extra bytes from %d:%d\n",
-				    sc->sc_dev.dv_xname, (long)-sc->sc_dleft,
+				    device_xname(sc->sc_dev),
+				    (long)-sc->sc_dleft,
 				    periph->periph_target, periph->periph_lun);
 				sc->sc_dleft = 0;
 			}
@@ -1110,7 +1106,7 @@ nextbyte:
 		case MSG_RESTOREPOINTERS:
 			sc->sc_dp = acb->data_addr;
 			sc->sc_dleft = acb->data_length;
-			sc->sc_cp = (u_char *)&acb->scsipi_cmd;
+			sc->sc_cp = (uint8_t *)&acb->scsipi_cmd;
 			sc->sc_cleft = acb->scsipi_cmd_length;
 			break;
 
@@ -1159,7 +1155,8 @@ nextbyte:
 
 			default:
 				printf("%s: unrecognized MESSAGE EXTENDED; "
-				    "sending REJECT\n", sc->sc_dev.dv_xname);
+				    "sending REJECT\n",
+				    device_xname(sc->sc_dev));
 				SPC_BREAK();
 				goto reject;
 			}
@@ -1167,7 +1164,7 @@ nextbyte:
 
 		default:
 			printf("%s: unrecognized MESSAGE; sending REJECT\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			SPC_BREAK();
 		reject:
 			spc_sched_msgout(sc, SEND_REJECT);
@@ -1178,7 +1175,7 @@ nextbyte:
 	case SPC_RESELECTED:
 		if (!MSG_ISIDENTIFY(sc->sc_imess[0])) {
 			printf("%s: reselect without IDENTIFY; "
-			    "sending DEVICE RESET\n", sc->sc_dev.dv_xname);
+			    "sending DEVICE RESET\n", device_xname(sc->sc_dev));
 			SPC_BREAK();
 			goto reset;
 		}
@@ -1188,7 +1185,7 @@ nextbyte:
 
 	default:
 		printf("%s: unexpected MESSAGE IN; sending DEVICE RESET\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		SPC_BREAK();
 	reset:
 		spc_sched_msgout(sc, SEND_DEV_RESET);
@@ -1336,7 +1333,7 @@ nextmsg:
 
 	default:
 		printf("%s: unexpected MESSAGE OUT; sending NOOP\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		SPC_BREAK();
 		sc->sc_omess[0] = MSG_NOOP;
 		n = 1;
@@ -1440,11 +1437,11 @@ out:
  * and the rarer cases (as a result) somewhat more comlex
  */
 int
-spc_dataout_pio(struct spc_softc *sc, u_char *p, int n)
+spc_dataout_pio(struct spc_softc *sc, uint8_t *p, int n)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_char intstat = 0;
+	uint8_t intstat = 0;
 	int out = 0;
 #define DOUTAMOUNT 8		/* Full FIFO */
 
@@ -1549,7 +1546,7 @@ phasechange:
  * targets which don't disconnect or for huge transfers.
  */
 int
-spc_datain_pio(struct spc_softc *sc, u_char *p, int n)
+spc_datain_pio(struct spc_softc *sc, uint8_t *p, int n)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -1636,7 +1633,7 @@ spc_intr(void *arg)
 	struct spc_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_char ints;
+	uint8_t ints;
 	struct spc_acb *acb;
 	struct scsipi_periph *periph;
 	struct spc_tinfo *ti;
@@ -1672,7 +1669,7 @@ loop:
 	SPC_MISC(("ints = 0x%x  ", ints));
 
 	if ((ints & INTS_RST) != 0) {
-		printf("%s: SCSI bus reset\n", sc->sc_dev.dv_xname);
+		printf("%s: SCSI bus reset\n", device_xname(sc->sc_dev));
 		goto reset;
 	}
 
@@ -1681,7 +1678,7 @@ loop:
 	 */
 	if ((bus_space_read_1(iot, ioh, SERR) & (SERR_SCSI_PAR|SERR_SPC_PAR))
 	    != 0) {
-		printf("%s: SCSI bus parity error\n", sc->sc_dev.dv_xname);
+		printf("%s: SCSI bus parity error\n", device_xname(sc->sc_dev));
 		if (sc->sc_prevphase == PH_MSGIN) {
 			sc->sc_flags |= SPC_DROP_MSGIN;
 			spc_sched_msgout(sc, SEND_PARITY_ERROR);
@@ -1709,7 +1706,7 @@ loop:
 			 * We don't currently support target mode.
 			 */
 			printf("%s: target mode selected; going to BUS FREE\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 
 			goto sched;
 		} else if ((ints & INTS_RESEL) != 0) {
@@ -1742,7 +1739,7 @@ loop:
 			 */
 			if (sc->sc_state != SPC_SELECTING) {
 				printf("%s: selection out while idle; "
-				    "resetting\n", sc->sc_dev.dv_xname);
+				    "resetting\n", device_xname(sc->sc_dev));
 				SPC_BREAK();
 				goto reset;
 			}
@@ -1773,7 +1770,7 @@ loop:
 			/* Do an implicit RESTORE POINTERS. */
 			sc->sc_dp = acb->data_addr;
 			sc->sc_dleft = acb->data_length;
-			sc->sc_cp = (u_char *)&acb->scsipi_cmd;
+			sc->sc_cp = (uint8_t *)&acb->scsipi_cmd;
 			sc->sc_cleft = acb->scsipi_cmd_length;
 
 			/* On our first connection, schedule a timeout. */
@@ -1787,7 +1784,7 @@ loop:
 
 			if (sc->sc_state != SPC_SELECTING) {
 				printf("%s: selection timeout while idle; "
-				    "resetting\n", sc->sc_dev.dv_xname);
+				    "resetting\n", device_xname(sc->sc_dev));
 				SPC_BREAK();
 				goto reset;
 			}
@@ -1802,7 +1799,7 @@ loop:
 			if (sc->sc_state != SPC_IDLE) {
 				printf("%s: BUS FREE while not idle; "
 				    "state=%d\n",
-				    sc->sc_dev.dv_xname, sc->sc_state);
+				    device_xname(sc->sc_dev), sc->sc_state);
 				SPC_BREAK();
 				goto out;
 			}
@@ -1873,7 +1870,7 @@ loop:
 				 */
 				printf("%s: unexpected disconnect; "
 				    "sending REQUEST SENSE\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				SPC_BREAK();
 				acb->target_stat = SCSI_CHECK;
 				acb->xs->error = XS_NOERROR;
@@ -1960,7 +1957,7 @@ dophase:
 	case PH_DATAOUT:
 		if (sc->sc_state != SPC_CONNECTED)
 			break;
-		SPC_MISC(("dataout dleft=%d  ", sc->sc_dleft));
+		SPC_MISC(("dataout dleft=%zu  ", sc->sc_dleft));
 		if (sc->sc_dma_start != NULL &&
 		    sc->sc_dleft > SPC_MIN_DMA_LEN) {
 			(*sc->sc_dma_start)(sc, sc->sc_dp, sc->sc_dleft, 0);
@@ -2011,7 +2008,8 @@ dophase:
 		goto loop;
 	}
 
-	printf("%s: unexpected bus phase; resetting\n", sc->sc_dev.dv_xname);
+	printf("%s: unexpected bus phase; resetting\n",
+	    device_xname(sc->sc_dev));
 	SPC_BREAK();
 reset:
 	spc_init(sc, 1);
@@ -2069,7 +2067,7 @@ spc_timeout(void *arg)
 	struct spc_softc *sc;
 	int s;
 
-	sc = (void *)periph->periph_channel->chan_adapter->adapt_dev;
+	sc = device_private(periph->periph_channel->chan_adapter->adapt_dev);
 	scsipi_printaddr(periph);
 	printf("timed out");
 
@@ -2098,7 +2096,7 @@ spc_timeout(void *arg)
 void
 spc_show_scsi_cmd(struct spc_acb *acb)
 {
-	u_char  *b = (u_char *)&acb->scsipi_cmd;
+	uint8_t  *b = (uint8_t *)&acb->scsipi_cmd;
 	int i;
 
 	scsipi_printaddr(acb->xs->xs_periph);
@@ -2127,7 +2125,7 @@ void
 spc_print_active_acb(void)
 {
 	struct spc_acb *acb;
-	struct spc_softc *sc = spc_cd.cd_devs[0]; /* XXX */
+	struct spc_softc *sc = device_lookup_private(&spc_cd, 0); /* XXX */
 
 	printf("ready list:\n");
 	TAILQ_FOREACH(acb, &sc->ready_list, chain)

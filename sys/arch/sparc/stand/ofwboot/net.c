@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.3 2006/07/13 20:03:34 uwe Exp $	*/
+/*	$NetBSD: net.c,v 1.8 2012/07/16 11:26:27 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -60,10 +60,14 @@
 #include <lib/libsa/stand.h>
 #include <lib/libsa/net.h>
 #include <lib/libsa/netif.h>
+#include <lib/libsa/bootp.h>
+#include <lib/libsa/bootparam.h>
+#include <lib/libsa/nfs.h>
 
 #include <lib/libkern/libkern.h>
 
 #include "ofdev.h"
+#include "net.h"
 
 
 static int net_mountroot_bootparams(void);
@@ -92,8 +96,6 @@ net_open(struct of_dev *op)
 			error = errno;
 			goto bad;
 		}
-		if ((error = net_mountroot()) != 0)
-			goto bad;
 	}
 	open_count++;
 bad:
@@ -116,26 +118,34 @@ net_close(struct of_dev *op)
 			netif_close(netdev_sock);
 			netdev_sock = -1;
 		}
+	return 0;
+}
+
+static void
+net_clear_params(void)
+{
+	
+	myip.s_addr = 0;
+	netmask = 0;
+	gateip.s_addr = 0;
+	*hostname = '\0';
+	rootip.s_addr = 0;
+	*rootpath = '\0';
 }
 
 int
 net_mountroot_bootparams(void)
 {
 
+	net_clear_params();
+
 	/* Get our IP address.  (rarp.c) */
 	if (rarp_getipaddress(netdev_sock) == -1)
 		return (errno);
-
-	printf("Using BOOTPARAMS protocol: ");
-	printf("ip address: %s", inet_ntoa(myip));
-
-	/* Get our hostname, server IP address. */
+	printf("Using BOOTPARAMS protocol:\n  ip addr=%s\n", inet_ntoa(myip));
 	if (bp_whoami(netdev_sock))
 		return (errno);
-
-	printf(", hostname: %s\n", hostname);
-
-	/* Get the root pathname. */
+	printf("  hostname=%s\n", hostname);
 	if (bp_getfile(netdev_sock, "root", &rootip, rootpath))
 		return (errno);
 
@@ -145,23 +155,53 @@ net_mountroot_bootparams(void)
 int
 net_mountroot_bootp(void)
 {
+	int attempts;
 
-	bootp(netdev_sock);
-
+	/* We need a few attempts here as some DHCP servers
+	 * require >1 packet and my wireless bridge is always
+	 * in learning mode until the 2nd attempt ... */
+	for (attempts = 0; attempts < 3; attempts++) {
+		net_clear_params();
+		bootp(netdev_sock);
+		if (myip.s_addr != 0)
+			break;
+	}
 	if (myip.s_addr == 0)
 		return(ENOENT);
 
-	printf("Using BOOTP protocol: ");
-	printf("ip address: %s", inet_ntoa(myip));
-
+	printf("Using BOOTP protocol:\n ip addr=%s\n", inet_ntoa(myip));
 	if (hostname[0])
-		printf(", hostname: %s", hostname);
+		printf("  hostname=%s\n", hostname);
 	if (netmask)
-		printf(", netmask: %s", intoa(netmask));
+		printf("  netmask=%s\n", intoa(netmask));
 	if (gateip.s_addr)
-		printf(", gateway: %s", inet_ntoa(gateip));
-	printf("\n");
+		printf("  gateway=%s\n", inet_ntoa(gateip));
 
+	return (0);
+}
+
+/*
+ * libsa's tftp_open expects a pointer to netdev_sock, i.e. an (int *),
+ * in f_devdata, a pointer to which gets handed down from devopen().
+ *
+ * Do not expect booting via different methods to have the same
+ * requirements or semantics.
+ *
+ * net_tftp_bootp uses net_mountroot_bootp because that incidentially does
+ * most of what it needs to do. It of course in no manner actually mounts
+ * anything, all that routine actually does is prepare the socket for the
+ * necessary net access, and print info for the user.
+ */
+
+int
+net_tftp_bootp(int **sock)
+{
+
+	net_mountroot_bootp();
+	if (myip.s_addr == 0)
+		return(ENOENT);
+
+	*sock = &netdev_sock;
 	return (0);
 }
 
@@ -189,7 +229,7 @@ net_mountroot(void)
 	if (error != 0)
 		return (error);
 
-	printf("root addr=%s path=%s\n", inet_ntoa(rootip), rootpath);
+	printf("  root addr=%s\n  path=%s\n", inet_ntoa(rootip), rootpath);
 
 	/* Get the NFS file handle (mount). */
 	if (nfs_mount(netdev_sock, rootip, rootpath) != 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.2 2007/12/09 20:27:49 jmcneill Exp $	*/
+/*	$NetBSD: pcib.c,v 1.16 2018/03/04 13:24:17 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.2 2007/12/09 20:27:49 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.16 2018/03/04 13:24:17 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -54,22 +47,18 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.2 2007/12/09 20:27:49 jmcneill Exp $");
 #include <dev/pci/pcidevs.h>
 
 #include "isa.h"
+#include "pcibvar.h"
 
-struct pcib_softc {
-	pci_chipset_tag_t	sc_pc;
-	pcitag_t		sc_tag;
-};
+int	pcibmatch(device_t, cfdata_t, void *);
 
-int	pcibmatch(struct device *, struct cfdata *, void *);
-void	pcibattach(struct device *, struct device *, void *);
+CFATTACH_DECL3_NEW(pcib, sizeof(struct pcib_softc),
+    pcibmatch, pcibattach, pcibdetach, NULL, pcibrescan, pcibchilddet,
+    DVF_DETACH_SHUTDOWN);
 
-CFATTACH_DECL_NEW(pcib, sizeof(struct pcib_softc),
-    pcibmatch, pcibattach, NULL, NULL);
-
-void	pcib_callback(struct device *);
+void	pcib_callback(device_t);
 
 int
-pcibmatch(struct device *parent, struct cfdata *match, void *aux)
+pcibmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -154,10 +143,10 @@ pcibmatch(struct device *parent, struct cfdata *match, void *aux)
 		break;
 	case PCI_VENDOR_VIATECH:
 		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_VIATECH_VT82C686A_SMB:
+		case PCI_PRODUCT_VIATECH_VT82C686A_PWR:
 			/*
-			 * The VIA VT82C686A SMBus Controller itself as 
-			 * ISA bridge, but it's wrong !
+			 * The VIA VT82C686A Power Management Controller
+			 * identifies itself as ISA bridge, but it's wrong !
 			 */
 			return (0);
 		}
@@ -171,11 +160,13 @@ pcibmatch(struct device *parent, struct cfdata *match, void *aux)
 	case PCI_VENDOR_CYRIX:
 		switch (PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_CYRIX_CX5530_PCIB:
+#if !defined(XEN)
 			{
 				extern int clock_broken_latch;
 
 				clock_broken_latch = 0;
 			}
+#endif
 			return(1);
 		}
 		break;
@@ -190,50 +181,70 @@ pcibmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-pcibattach(struct device *parent, struct device *self, void *aux)
+pcibattach(device_t parent, device_t self, void *aux)
 {
 	struct pcib_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
-	char devinfo[256];
-
-	aprint_naive("\n");
-	aprint_normal("\n");
 
 	/*
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
 
-	/* If a more specific pcib implementation has already registered a
-	 * power handler, don't overwrite it.
-	 */
- 	if (!device_pmf_is_registered(self)) {
- 		if (!pmf_device_register(self, NULL, NULL))
- 	    		aprint_error_dev(self, "couldn't establish power handler\n");
-	}
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	config_defer(self, pcib_callback);
 }
 
-void
-pcib_callback(struct device *self)
+int
+pcibdetach(device_t self, int flags)
 {
+	int rc;
+
+	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+	pmf_device_deregister(self);
+	return 0;
+}
+
+void
+pcibchilddet(device_t self, device_t child)
+{
+	struct pcib_softc *sc = device_private(self);
+
+	if (sc->sc_isabus == child)
+		sc->sc_isabus = NULL;
+}
+
+int
+pcibrescan(device_t self, const char *ifattr, const int *loc)
+{
+	struct pcib_softc *sc = device_private(self);
 	struct isabus_attach_args iba;
 
-	/*
-	 * Attach the ISA bus behind this bridge.
-	 */
-	memset(&iba, 0, sizeof(iba));
-	iba.iba_iot = X86_BUS_SPACE_IO;
-	iba.iba_memt = X86_BUS_SPACE_MEM;
+	if (ifattr_match(ifattr, "isabus") && sc->sc_isabus == NULL) {
+		/*
+		 * Attach the ISA bus behind this bridge.
+		 */
+		memset(&iba, 0, sizeof(iba));
+		iba.iba_iot = x86_bus_space_io;
+		iba.iba_memt = x86_bus_space_mem;
 #if NISA > 0
-	iba.iba_dmat = &isa_bus_dma_tag;
+		iba.iba_dmat = &isa_bus_dma_tag;
 #endif
-	config_found_ia(self, "isabus", &iba, isabusprint);
+		sc->sc_isabus =
+		    config_found_ia(self, "isabus", &iba, isabusprint);
+	}
+	return 0;
+}
+
+void
+pcib_callback(device_t self)
+{
+	pcibrescan(self, "isabus", NULL);
 }

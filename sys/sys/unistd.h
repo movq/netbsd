@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.40 2008/01/15 03:37:12 rmind Exp $	*/
+/*	$NetBSD: unistd.h,v 1.61 2016/08/04 06:43:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,8 @@
 #include <sys/featuretest.h>
 
 /* compile-time symbolic constants */
-#define	_POSIX_JOB_CONTROL	/* implementation supports job control */
+#define	_POSIX_JOB_CONTROL	1
+				/* implementation supports job control */
 
 /*
  * According to POSIX 1003.1:
@@ -54,55 +55,118 @@
  * extra privileges.
  */
 #ifdef	_NOT_AVAILABLE
-#define	_POSIX_SAVED_IDS	/* saved set-user-ID and set-group-ID */
+#define	_POSIX_SAVED_IDS	1
+				/* saved set-user-ID and set-group-ID */
 #endif
 
-#define	_POSIX_VERSION		199009L
-#define	_POSIX2_VERSION		199212L
+#define	_POSIX_VERSION			200112L
+#define	_POSIX2_VERSION			200112L
+
+/*
+ * We support the posix_spawn() family of functions (unconditionally).
+ */
+#define	_POSIX_SPAWN			200809L
 
 /* execution-time symbolic constants */
-				/* asynchronous I/O is available */
-#define	_POSIX_ASYNCHRONOUS_IO	200112L
-				/* chown requires appropriate privileges */
-#define	_POSIX_CHOWN_RESTRICTED	1
-				/* clock selection */
-#define	_POSIX_CLOCK_SELECTION	-1
-				/* too-long path components generate errors */
-#define	_POSIX_NO_TRUNC		1
-				/* may disable terminal special characters */
-#define	_POSIX_VDISABLE		((unsigned char)'\377')
-				/* file synchronization is available */
-#define	_POSIX_FSYNC		1
-				/* synchronized I/O is available */
-#define	_POSIX_SYNCHRONIZED_IO	1
-				/* memory mapped files */
-#define	_POSIX_MAPPED_FILES	1
-				/* memory locking of whole address space */
-#define	_POSIX_MEMLOCK		1
-				/* memory locking address ranges */
-#define	_POSIX_MEMLOCK_RANGE	1
-				/* memory access protections */
-#define	_POSIX_MEMORY_PROTECTION 1
-				/* message passing is available */
-#define	_POSIX_MESSAGE_PASSING	200112L
-				/* monotonic clock */
-#define	_POSIX_MONOTONIC_CLOCK	200112L
-				/* priority scheduling */
+
+/*
+ * POSIX options and option groups we unconditionally do or don't
+ * implement.  Those options which are implemented (or not) entirely
+ * in user mode are defined in <unistd.h>.  Please keep this list in
+ * alphabetical order.
+ *
+ * Anything which is defined as zero below **must** have an
+ * implementation for the corresponding sysconf() which is able to
+ * determine conclusively whether or not the feature is supported.
+ * Anything which is defined as other than -1 below **must** have
+ * complete headers, types, and function declarations as specified by
+ * the POSIX standard; however, if the relevant sysconf() function
+ * returns -1, the functions may be stubbed out.
+ */
+					/* Advisory information */
+#undef	_POSIX_ADVISORY_INFO
+					/* asynchronous I/O is available */
+#define	_POSIX_ASYNCHRONOUS_IO		200112L
+					/* barriers */
+#define	_POSIX_BARRIERS			200112L
+					/* chown requires correct privileges */
+#define	_POSIX_CHOWN_RESTRICTED		1
+					/* clock selection */
+#define	_POSIX_CLOCK_SELECTION		-1
+					/* cputime clock */
+#define	_POSIX_CPUTIME			200112L
+					/* CPU type */
+#undef	_POSIX_CPUTYPE
+					/* file synchronization is available */
+#define	_POSIX_FSYNC			1
+					/* support IPv6 */
+#define	_POSIX_IPV6			0
+					/* job control is available */
+#define	_POSIX_JOB_CONTROL		1
+					/* memory mapped files */
+#define	_POSIX_MAPPED_FILES		1
+					/* memory locking whole address space */
+#define	_POSIX_MEMLOCK			1
+					/* memory locking address ranges */
+#define	_POSIX_MEMLOCK_RANGE		1
+					/* memory access protections */
+#define	_POSIX_MEMORY_PROTECTION	1
+					/* message passing is available */
+#define	_POSIX_MESSAGE_PASSING		200112L
+					/* monotonic clock */
+#define	_POSIX_MONOTONIC_CLOCK		200112L
+					/* too-long path comp generate errors */
+#define	_POSIX_NO_TRUNC			1
+					/* prioritized I/O */
+#define	_POSIX_PRIORITIZED_IO		-1
+					/* priority scheduling */
 #define	_POSIX_PRIORITY_SCHEDULING	200112L
-				/* threads */
-#define	_POSIX_THREADS		200112L
-				/* semaphores */
-#define	_POSIX_SEMAPHORES	0
-				/* barriers */
-#define	_POSIX_BARRIERS		200112L
-				/* timers */
-#define	_POSIX_TIMERS		200112L
-				/* spin locks */
-#define	_POSIX_SPIN_LOCKS	200112L
-				/* read/write locks */
+					/* raw sockets */
+#define	_POSIX_RAW_SOCKETS		200112L
+					/* read/write locks */
 #define	_POSIX_READER_WRITER_LOCKS	200112L
-				/* XPG4.2 shared memory */
-#define	_XOPEN_SHM		0
+					/* realtime signals */
+#undef	_POSIX_REALTIME_SIGNALS
+					/* regular expressions */
+#define	_POSIX_REGEXP			1
+					/* semaphores */
+#define	_POSIX_SEMAPHORES		0
+					/* shared memory objects */
+#define	_POSIX_SHARED_MEMORY_OBJECTS	0
+					/* shell */
+#define	_POSIX_SHELL			1
+					/* spin locks */
+#define	_POSIX_SPIN_LOCKS		200112L
+					/* sporadic server */
+#undef	_POSIX_SPORADIC_SERVER
+					/* synchronized I/O is available */
+#define	_POSIX_SYNCHRONIZED_IO		1
+					/* threads */
+#define	_POSIX_THREADS			200112L
+					/* pthread_attr for stack size */
+#define	_POSIX_THREAD_ATTR_STACKSIZE	200112L
+					/* pthread_attr for stack address */
+#define	_POSIX_THREAD_ATTR_STACKADDR	200112L
+					/* thread cputime clock */
+#define	_POSIX_THREAD_CPUTIME		200112L
+					/* _r functions */
+#define	_POSIX_THREAD_PRIO_PROTECT	200112L
+					/* PTHREAD_PRIO_PROTECT */
+#define	_POSIX_THREAD_SAFE_FUNCTIONS	200112L
+					/* timeouts */
+#undef	_POSIX_TIMEOUTS
+					/* timers */
+#define	_POSIX_TIMERS			200112L
+					/* typed memory objects */
+#undef	_POSIX_TYPED_MEMORY_OBJECTS
+					/* may disable terminal spec chars */
+#define	_POSIX_VDISABLE			__CAST(unsigned char, '\377')
+
+					/* C binding */
+#define	_POSIX2_C_BIND			200112L
+
+					/* XPG4.2 shared memory */
+#define	_XOPEN_SHM			0
 
 /* access function */
 #define	F_OK		0	/* test for existence of file */
@@ -146,6 +210,12 @@
 #define	_PC_VDISABLE		 9
 #define	_PC_SYNC_IO		10
 #define	_PC_FILESIZEBITS	11
+#define	_PC_SYMLINK_MAX		12
+#define	_PC_2_SYMLINKS		13
+#define	_PC_ACL_EXTENDED	14
+
+/* From OpenSolaris, used by SEEK_DATA/SEEK_HOLE. */
+#define	_PC_MIN_HOLE_SIZE	15
 
 /* configurable system variables; use as argument to sysconf(3) */
 /*
@@ -209,6 +279,50 @@
 #define	_SC_MQ_OPEN_MAX		54
 #define	_SC_MQ_PRIO_MAX		55
 #define	_SC_PRIORITY_SCHEDULING	56
+#define	_SC_THREAD_DESTRUCTOR_ITERATIONS 57
+#define	_SC_THREAD_KEYS_MAX		58
+#define	_SC_THREAD_STACK_MIN		59
+#define	_SC_THREAD_THREADS_MAX		60
+#define	_SC_THREAD_ATTR_STACKADDR	61
+#define	_SC_THREAD_ATTR_STACKSIZE 	62
+#define	_SC_THREAD_PRIORITY_SCHEDULING	63
+#define	_SC_THREAD_PRIO_INHERIT 	64
+#define	_SC_THREAD_PRIO_PROTECT		65
+#define	_SC_THREAD_PROCESS_SHARED	66
+#define	_SC_THREAD_SAFE_FUNCTIONS	67
+#define	_SC_TTY_NAME_MAX		68
+#define	_SC_HOST_NAME_MAX		69
+#define	_SC_PASS_MAX			70
+#define	_SC_REGEXP			71
+#define	_SC_SHELL			72
+#define	_SC_SYMLOOP_MAX			73
+
+/* Actually, they are not supported or implemented yet */
+#define	_SC_V6_ILP32_OFF32		74
+#define	_SC_V6_ILP32_OFFBIG		75
+#define	_SC_V6_LP64_OFF64		76
+#define	_SC_V6_LPBIG_OFFBIG		77
+#define	_SC_2_PBS			80
+#define	_SC_2_PBS_ACCOUNTING		81
+#define	_SC_2_PBS_CHECKPOINT		82
+#define	_SC_2_PBS_LOCATE		83
+#define	_SC_2_PBS_MESSAGE		84
+#define	_SC_2_PBS_TRACK			85
+
+/* These are implemented */
+#define	_SC_SPAWN			86
+#define	_SC_SHARED_MEMORY_OBJECTS	87
+
+#define	_SC_TIMER_MAX			88
+#define	_SC_SEM_NSEMS_MAX		89
+#define	_SC_CPUTIME			90
+#define	_SC_THREAD_CPUTIME		91
+#define	_SC_DELAYTIMER_MAX		92
+#define	_SC_SIGQUEUE_MAX		93
+#define	_SC_REALTIME_SIGNALS		94
+
+/* Extensions found in Solaris and Linux. */
+#define	_SC_PHYS_PAGES		121
 
 #ifdef _NETBSD_SOURCE
 /* Commonly provided sysconf() extensions */

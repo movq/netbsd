@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6var.h,v 1.8 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: smc90cx6var.h,v 1.12 2017/10/23 09:22:24 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  * As the reset functionality differs between the Amiga boards (using the
  * 90c26 chip) and middle-aged ISA boards (using the 90c56 chip), we have
  * a sc_reset callback function in the softc, which does a stop function
- * (reset and leave dead) or a reset function depending on wether the 2nd
+ * (reset and leave dead) or a reset function depending on whether the 2nd
  * parameter is 0 or 1.
  */
 
@@ -55,7 +48,7 @@
 #include <sys/callout.h>
 
 struct bah_softc {
-	struct	device		sc_dev;
+	device_t		sc_dev;
 	struct	arccom		sc_arccom;	/* Common arcnet structures */
 	bus_space_tag_t		sc_bst_r, sc_bst_m;
 	bus_space_handle_t 	sc_regs, sc_mem;
@@ -77,7 +70,7 @@ struct bah_softc {
 	u_char	sc_retransmits[2];	/* unused at the moment */
 };
 
-void	bah_attach_subr(struct bah_softc *);
+int	bah_attach_subr(struct bah_softc *);
 int	bahintr(void *);
 
 #endif

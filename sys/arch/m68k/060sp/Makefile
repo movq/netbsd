@@ -1,6 +1,6 @@
-# $NetBSD: Makefile,v 1.8 2005/12/11 12:17:52 christos Exp $
+# $NetBSD: Makefile,v 1.11 2014/01/10 16:41:16 christos Exp $
 
-.include <bsd.sys.mk>		# for HOST_SH
+.include <bsd.own.mk>		# for HOST_SH, TOOL_SED
 
 # regenerate isp.S, fpsp.S, pfpsp.S
 
@@ -11,6 +11,11 @@
 .PATH: dist
 
 .sa.S:
+	SED=${TOOL_SED:Q} \
 	${HOST_SH} asm2gas ${.IMPSRC} >${.TARGET}
 
-all: isp.S fpsp.S pfpsp.S
+
+all:	isp.S fpsp.S pfpsp.S
+CLEANFILES+=isp.S fpsp.S pfpsp.S
+
+.include <bsd.files.mk>

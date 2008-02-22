@@ -1,4 +1,4 @@
-/*	$NetBSD: tmp.c,v 1.12 2007/02/21 20:15:17 hubertf Exp $	*/
+/*	$NetBSD: tmp.c,v 1.16 2009/11/06 18:34:22 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,10 +63,7 @@
 
 #include <sys/cdefs.h>
 
-#ifndef lint
-__RCSID("$NetBSD: tmp.c,v 1.12 2007/02/21 20:15:17 hubertf Exp $");
-__SCCSID("@(#)tmp.c	8.1 (Berkeley) 6/6/93");
-#endif /* not lint */
+__RCSID("$NetBSD: tmp.c,v 1.16 2009/11/06 18:34:22 joerg Exp $");
 
 #include <sys/param.h>
 
@@ -92,7 +82,7 @@ __SCCSID("@(#)tmp.c	8.1 (Berkeley) 6/6/93");
 #define _NAME_TMP "sort.XXXXXXXX"
 
 FILE *
-ftmp()
+ftmp(void)
 {
 	sigset_t set, oset;
 	FILE *fp;
@@ -108,7 +98,8 @@ ftmp()
 		err(2, "ftmp: mkstemp(\"%s\")", path);
 	if (!(fp = fdopen(fd, "w+")))
 		err(2, "ftmp: fdopen(\"%s\")", path);
-	(void)unlink(path);
+	if (!DEBUG('t'))
+		(void)unlink(path);
 
 	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 	return (fp);

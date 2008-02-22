@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_types.h,v 1.9 2008/02/14 21:40:51 ad Exp $	*/
+/*	$NetBSD: pthread_types.h,v 1.23 2017/09/09 23:21:45 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,8 +35,19 @@
 /*
  * We use the "pthread_spin_t" name internally; "pthread_spinlock_t" is the
  * POSIX spinlock object. 
+ *
+ * C++ expects to be using PTHREAD_FOO_INITIALIZER as a member initializer.
+ * This does not work for volatile types.  Since C++ does not touch the guts
+ * of those types, we do not include volatile in the C++ definitions.
  */
-typedef __cpu_simple_lock_t	pthread_spin_t;
+typedef __cpu_simple_lock_t pthread_spin_t;
+#ifdef __cplusplus
+typedef __cpu_simple_lock_nv_t __pthread_spin_t;
+#define __pthread_volatile
+#else
+typedef pthread_spin_t __pthread_spin_t;
+#define __pthread_volatile volatile
+#endif
 
 /*
  * Copied from PTQ_HEAD in pthread_queue.h
@@ -91,21 +95,68 @@ struct	__pthread_attr_st {
 };
 
 /*
- * ptm_lock will never be spun on: it's locked with
- * pthread__simple_lock_try() or not at all.
+ * ptm_owner is the actual lock field which is locked via CAS operation.
+ * This structure's layout is designed to compatible with the previous
+ * version used in SA pthreads.
  */
+#ifdef __CPU_SIMPLE_LOCK_PAD
+/*
+ * If __SIMPLE_UNLOCKED != 0 and we have to pad, we have to worry about
+ * endianness.  Currently that isn't an issue but put in a check in case
+ * something changes in the future.
+ */
+#if __SIMPLELOCK_UNLOCKED != 0
+#error __CPU_SIMPLE_LOCK_PAD incompatible with __SIMPLELOCK_UNLOCKED == 0
+#endif
+#endif
 struct	__pthread_mutex_st {
 	unsigned int	ptm_magic;
-	unsigned int	ptm_errorcheck;
+	__pthread_spin_t ptm_errorcheck;
+#ifdef __CPU_SIMPLE_LOCK_PAD
+	uint8_t		ptm_pad1[3];
+#if (__STDC_VERSION__ - 0) >= 199901L
+#define _PTHREAD_MUTEX_PAD(a)	.a = { 0, 0, 0 },
+#else
+#define _PTHREAD_MUTEX_PAD(a)	{ 0, 0, 0 },
+#endif
+#else
+#define _PTHREAD_MUTEX_PAD(a)
+#endif
+	union {
+		unsigned char ptm_ceiling;
+		__pthread_spin_t ptm_unused;
+	};
+#ifdef __CPU_SIMPLE_LOCK_PAD
+	uint8_t		ptm_pad2[3];
+#endif
+	__pthread_volatile pthread_t ptm_owner;
+	pthread_t * __pthread_volatile ptm_waiters;
 	unsigned int	ptm_recursed;
-	pthread_t * volatile ptm_waiters;
-	volatile pthread_t ptm_owner;
+	void		*ptm_spare2;	/* unused - backwards compat */
 };
 
 #define	_PT_MUTEX_MAGIC	0x33330003
 #define	_PT_MUTEX_DEAD	0xDEAD0003
 
-#define _PTHREAD_MUTEX_INITIALIZER { _PT_MUTEX_MAGIC, 0, 0, NULL, NULL }
+#if (__STDC_VERSION__ - 0) >= 199901L
+#define _PTHREAD_MUTEX_INI(a, b) .a = b
+#define _PTHREAD_MUTEX_UNI(a) .a = 0
+#else
+#define _PTHREAD_MUTEX_INI(a, b) b
+#define _PTHREAD_MUTEX_UNI(a) { 0 }
+#endif
+
+#define _PTHREAD_MUTEX_INITIALIZER {					\
+	_PTHREAD_MUTEX_INI(ptm_magic, _PT_MUTEX_MAGIC), 		\
+	_PTHREAD_MUTEX_INI(ptm_errorcheck, __SIMPLELOCK_UNLOCKED),	\
+	_PTHREAD_MUTEX_PAD(ptm_pad1)					\
+	_PTHREAD_MUTEX_UNI(ptm_ceiling),				\
+	_PTHREAD_MUTEX_PAD(ptm_pad2)					\
+	_PTHREAD_MUTEX_INI(ptm_owner, NULL),				\
+	_PTHREAD_MUTEX_INI(ptm_waiters, NULL),				\
+	_PTHREAD_MUTEX_INI(ptm_recursed, 0),				\
+	_PTHREAD_MUTEX_INI(ptm_spare2, NULL),				\
+}
 
 struct	__pthread_mutexattr_st {
 	unsigned int	ptma_magic;
@@ -120,7 +171,7 @@ struct	__pthread_cond_st {
 	unsigned int	ptc_magic;
 
 	/* Protects the queue of waiters */
-	pthread_spin_t	ptc_lock;
+	__pthread_spin_t ptc_lock;
 	pthread_queue_t	ptc_waiters;
 
 	pthread_mutex_t	*ptc_mutex;	/* Current mutex */
@@ -154,7 +205,7 @@ struct	__pthread_once_st {
 
 struct	__pthread_spinlock_st {
 	unsigned int	pts_magic;
-	pthread_spin_t	pts_spin;
+	__pthread_spin_t pts_spin;
 	int		pts_flags;
 };
 	
@@ -172,12 +223,12 @@ struct	__pthread_rwlock_st {
 	unsigned int	ptr_magic;
 
 	/* Protects data below */
-	pthread_spin_t	ptr_interlock;
+	__pthread_spin_t ptr_interlock;
 
 	pthread_queue_t	ptr_rblocked;
 	pthread_queue_t	ptr_wblocked;
 	unsigned int	ptr_nreaders;
-	volatile pthread_t ptr_owner;
+	__pthread_volatile pthread_t ptr_owner;
 	void	*ptr_private;
 };
 

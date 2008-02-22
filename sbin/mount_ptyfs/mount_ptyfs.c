@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_ptyfs.c,v 1.8 2007/07/16 17:06:54 pooka Exp $	*/
+/*	$NetBSD: mount_ptyfs.c,v 1.17 2016/09/05 01:09:57 sevan Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -69,15 +69,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_ptyfs.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mount_ptyfs.c,v 1.8 2007/07/16 17:06:54 pooka Exp $");
+__RCSID("$NetBSD: mount_ptyfs.c,v 1.17 2016/09/05 01:09:57 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,25 +94,29 @@ __RCSID("$NetBSD: mount_ptyfs.c,v 1.8 2007/07/16 17:06:54 pooka Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <grp.h>
+#include <util.h>
 
 #include <mntopts.h>
 
-#define ALTF_GROUP	1
-#define ALTF_MODE	2
+#define ALTF_GROUP	0x1
+#define ALTF_MODE	0x2
+#define ALTF_CHROOT	0x4			/* compat */
 
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
+	MOPT_NOATIME,
+	MOPT_RELATIME,
 	{ "group", 0, ALTF_GROUP, 1 },
 	{ "mode", 0, ALTF_MODE, 1 },
+	{ "chroot", 0, ALTF_CHROOT, 1 },	/* compat */
 	MOPT_NULL,
 };
 
-int	main(int, char *[]);
 int	mount_ptyfs(int argc, char **argv);
 
 static gid_t	getgrp(const char *name);
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
@@ -160,9 +164,14 @@ mount_ptyfs(int argc, char *argv[])
 	args.version = PTYFS_ARGSVERSION;
 	args.gid = getgrp("tty");
 	args.mode = S_IRUSR|S_IWUSR|S_IWGRP;
+	args.flags = 0;
 
-	while ((ch = getopt(argc, argv, "g:m:o:")) != -1)
+	while ((ch = getopt(argc, argv, "cg:m:o:")) != -1)
 		switch (ch) {
+		case 'c':	/* compat */
+		compat:
+			warnx("-c and -o chroot options are obsolete");
+			break;
 		case 'o':
 			altflags = 0;
 			mp = getmntopts(optarg, mopts, &mntflags, &altflags);
@@ -172,6 +181,8 @@ mount_ptyfs(int argc, char *argv[])
 				args.gid = getgrp(getmntoptstr(mp, "group"));
 			if (altflags & ALTF_MODE)
 				args.mode = (mode_t)getmntoptnum(mp, "mode");
+			if (altflags & ALTF_CHROOT)
+				goto compat;
 			freemntopts(mp);
 			break;
 		case 'g':
@@ -200,9 +211,10 @@ mount_ptyfs(int argc, char *argv[])
 
 	if (mount(MOUNT_PTYFS, canon_dir, mntflags, &args, sizeof args) == -1)
 		err(1, "ptyfs on %s", canon_dir);
-	if (mntflags & MNT_GETARGS)
+	if (mntflags & MNT_GETARGS) {
 		printf("version=%d, gid=%lu, mode=0%o\n", args.version,
 		    (unsigned long)args.gid, args.mode);
+	}
 	return 0;
 }
 
@@ -210,6 +222,7 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "Usage: %s [-g <group|gid>] [-m <mode>] [-o options] ptyfs mountpoint\n", getprogname());
+	    "Usage: %s [-g <group|gid>] [-m <mode>] [-o options] "
+	    "ptyfs mountpoint\n", getprogname());
 	exit(1);
 }

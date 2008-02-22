@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:15:08 thorpej Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.5 2013/09/12 15:36:16 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.2 2003/01/18 11:15:08 thorpej Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.5 2013/09/12 15:36:16 joerg Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 ENTRY(swapcontext)
@@ -56,8 +49,13 @@ ENTRY(swapcontext)
 	add	%o7, 8, %o1
 	st	%o1, [%o2 + 40 + 1 * 4]		! gr[_REG_PC] = retaddr
 
-	mov	%o3, %o0
-	mov	%o1, %g2			! optimize `return'
-	mov	SYS_setcontext|SYSCALL_G2RFLAG, %g1
-	t	ST_SYSCALL
-	ERROR()
+#ifdef __PIC__
+	PIC_PROLOGUE(%g1, %g2)			! %g1 = _GLOBAL_OFFSET_TABLE
+	set	_C_LABEL(setcontext), %g2
+	ld	[%g1 + %g2], %g1
+	jmp	%g1
+	 mov	%o3, %o0
+#else
+	jmp	_C_LABEL(setcontext)
+	 mov	%o3, %o0
+#endif

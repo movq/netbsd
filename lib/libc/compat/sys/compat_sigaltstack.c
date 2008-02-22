@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigaltstack.c,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: compat_sigaltstack.c,v 1.5 2012/03/20 17:06:00 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,20 +31,20 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_sigaltstack.c,v 1.1 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: compat_sigaltstack.c,v 1.5 2012/03/20 17:06:00 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
 
 #include <limits.h>
+#include <sys/time.h>
+#include <compat/sys/time.h>
 #include <signal.h>
 #include <compat/include/signal.h>
 #include <stddef.h>
 
 int
-sigaltstack(onss, ooss)
-	const struct sigaltstack13 *onss;
-	struct sigaltstack13 *ooss;
+sigaltstack(const struct sigaltstack13 *onss, struct sigaltstack13 *ooss)
 {
 	stack_t nss, oss;
 	int error;
@@ -67,7 +60,7 @@ sigaltstack(onss, ooss)
 		if (oss.ss_size > INT_MAX)
 			ooss->ss_size = INT_MAX;
 		else
-			ooss->ss_size = oss.ss_size;
+			ooss->ss_size = (int)oss.ss_size;
 		ooss->ss_flags = oss.ss_flags;
 	}
 

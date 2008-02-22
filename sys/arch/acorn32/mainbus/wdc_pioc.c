@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pioc.c,v 1.21 2006/01/16 20:30:18 bouyer Exp $	*/
+/*	$NetBSD: wdc_pioc.c,v 1.30 2017/10/20 07:06:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe.
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.21 2006/01/16 20:30:18 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.30 2017/10/20 07:06:06 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <acorn32/mainbus/piocvar.h>
@@ -60,35 +60,29 @@ struct wdc_pioc_softc {
 	struct	wdc_softc sc_wdcdev;
 	struct	ata_channel *sc_chanlist[1];
 	struct	ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
 	struct	wdc_regs sc_wdc_regs;
 	void	*sc_ih;
 };
 
 /* prototypes for functions */
-static int  wdc_pioc_probe  __P((struct device *, struct cfdata *, void *));
-static void wdc_pioc_attach __P((struct device *, struct device *, void *));
+static int  wdc_pioc_probe  (device_t, cfdata_t, void *);
+static void wdc_pioc_attach (device_t, device_t, void *);
 
 /* device attach structure */
-CFATTACH_DECL(wdc_pioc, sizeof(struct wdc_pioc_softc),
+CFATTACH_DECL_NEW(wdc_pioc, sizeof(struct wdc_pioc_softc),
     wdc_pioc_probe, wdc_pioc_attach, NULL, NULL);
 
 /*
- * int wdc_pioc_probe(struct device *parent, struct cfdata *cf, void *aux)
+ * int wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
  *
  * Make sure we are trying to attach a wdc device and then
  * probe for one.
  */
 
 static int
-wdc_pioc_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pioc_attach_args *pa = aux;
-	struct ata_channel ch;
-	struct wdc_softc wdc;
 	struct wdc_regs wdr;
 	int res, i;
 	u_int iobase;
@@ -99,11 +93,6 @@ wdc_pioc_probe(parent, cf, aux)
 	/* We need an offset */
 	if (pa->pa_offset == PIOCCF_OFFSET_DEFAULT)
 		return(0);
-
-	memset(&wdc, 0, sizeof(wdc));
-	memset(&ch, 0, sizeof(ch));
-	ch.ch_atac = &wdc.sc_atac;
-	wdc.regs = &wdr;
 
 	iobase = pa->pa_iobase + pa->pa_offset;
 	wdr.cmd_iot = pa->pa_iot;
@@ -120,7 +109,7 @@ wdc_pioc_probe(parent, cf, aux)
 			return 0;
 		}
 	}
-	wdc_init_shadow_regs(&ch);
+	wdc_init_shadow_regs(&wdr);
 
 	if (bus_space_map(wdr.ctl_iot, iobase + WDC_PIOC_AUXREG_OFFSET,
 	    WDC_PIOC_AUXREG_NPORTS, 0, &wdr.ctl_ioh)) {
@@ -129,7 +118,7 @@ wdc_pioc_probe(parent, cf, aux)
 		return(0);
 	}
 
-	res = wdcprobe(&ch);
+	res = wdcprobe(&wdr);
 
 	bus_space_unmap(wdr.ctl_iot, wdr.ctl_ioh, WDC_PIOC_AUXREG_NPORTS);
 	bus_space_unmap(wdr.cmd_iot, wdr.cmd_baseioh, WDC_PIOC_REG_NPORTS);
@@ -140,59 +129,58 @@ wdc_pioc_probe(parent, cf, aux)
 }
 
 /*
- * void wdc_pioc_attach(struct device *parent, struct device *self, void *aux)
+ * void wdc_pioc_attach(device_t parent, device_t self, void *aux)
  *
  * attach the wdc device
  */
 
 static void
-wdc_pioc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wdc_pioc_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_pioc_softc *sc = (void *)self;
+	struct wdc_pioc_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	struct pioc_attach_args *pa = aux;
 	u_int iobase;
 	int i;
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 	iobase = pa->pa_iobase + pa->pa_offset;
 	wdr->cmd_iot = pa->pa_iot;
 	wdr->ctl_iot = pa->pa_iot;
 	if (bus_space_map(wdr->cmd_iot, iobase,
 	    WDC_PIOC_REG_NPORTS, 0, &wdr->cmd_baseioh))
-		panic("%s: couldn't map drive registers", self->dv_xname);
+		panic("%s: couldn't map drive registers", device_xname(self));
 	for (i = 0; i < WDC_PIOC_REG_NPORTS; i++) {
 		if (bus_space_subregion(wdr->cmd_iot,
 			wdr->cmd_baseioh, i,	i == 0 ? 4 : 1,
 			&wdr->cmd_iohs[i]) != 0)
 			panic("%s: couldn't submap drive registers",
-			    self->dv_xname);
+			    device_xname(self));
 	}
 
 	if (bus_space_map(wdr->ctl_iot,
 	    iobase + WDC_PIOC_AUXREG_OFFSET, WDC_PIOC_AUXREG_NPORTS, 0,
 	    &wdr->ctl_ioh))
-		panic("%s: couldn't map aux registers", self->dv_xname);
+		panic("%s: couldn't map aux registers", device_xname(self));
 
 	sc->sc_ih = intr_claim(pa->pa_irq, IPL_BIO, "wdc",  wdcintr,
 	     &sc->sc_channel);
 	if (!sc->sc_ih)
-		panic("%s: Cannot claim IRQ %d", self->dv_xname, pa->pa_irq);
+		panic("%s: Cannot claim IRQ %d", device_xname(self),
+		    pa->pa_irq);
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
 	sc->sc_chanlist[0] = &sc->sc_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_channel.ch_channel = 0;
-	sc->sc_channel.ch_queue = &sc->sc_chqueue;
-	sc->sc_channel.ch_ndrive = 2;
 
-	wdc_init_shadow_regs(&sc->sc_channel);
+	wdc_init_shadow_regs(wdr);
 
 	wdcattach(&sc->sc_channel);
 }

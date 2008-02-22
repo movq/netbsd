@@ -1,6 +1,6 @@
 #!/usr/bin/awk -
 #
-#	$NetBSD: MAKEDEV.awk,v 1.19 2007/12/10 17:57:24 garbled Exp $
+#	$NetBSD: MAKEDEV.awk,v 1.25 2014/09/19 09:01:05 matt Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -16,13 +16,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,25 +55,28 @@ BEGIN {
 
 	# file with major definitions
 	majors[0] = "conf/majors"
-	if ((maarch == "arm" || maarch == "armeb") && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
+	if (index(maarch, "arm") != 0 && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
 		majors[1] = "arch/arm/conf/majors.arm32";
 	else if (machine == "sbmips")
 		majors[1] = "arch/evbmips/conf/majors.evbmips";
-	else if ((maarch == "powerpc") && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
+	else if ((maarch == "powerpc" || maarch == "powerpc64") && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
 		majors[1] = "arch/powerpc/conf/majors.powerpc";
 	else
 		majors[1] = "arch/" machine "/conf/majors." machine;
+	nm = 2;
 
 	# process all files with majors and fill the chr[] and blk[]
 	# arrays, used in template processing
-	for (m in majors) {
+	for (m = 0; m < nm; m++) {
 		file = top majors[m]
 		if (system("test -f '" file "'") != 0) {
 			print "ERROR: can't find majors file '" file "'" > "/dev/stderr"
 			exit 1
 		}
 		while (getline < file) {
-			if ($1 == "device-major") {
+			if ($1 == "include") {
+				majors[nm++] = substr($2, 2, length($2)-2);
+			} else if ($1 == "device-major") {
 				if ($3 == "char") {
 					chr[$2] = $4
 					if ($5 == "block")
@@ -218,7 +214,7 @@ BEGIN {
 	print "# Generated from:"
 
 	# MAKEDEV.awk (this script) RCS Id
-	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.19 2007/12/10 17:57:24 garbled Exp $"
+	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.25 2014/09/19 09:01:05 matt Exp $"
 	gsub(/\$/, "", ARCSID)
 	print "#	" ARCSID
 	
@@ -271,7 +267,7 @@ BEGIN {
 	sub(/%CONSOLE_CMAJOR%/, CONSOLE_CMAJOR)
 	parsed = ""
 	line = $0
-	while (match(line, /%[gu]id_[a-z]*%/)) {
+	while (match(line, /%[gu]id_[_a-z]*%/)) {
 		typ = substr(line, RSTART + 1, 3);
 		nam = substr(line, RSTART + 5, RLENGTH - 6);
 		if (typ == "uid") {

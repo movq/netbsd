@@ -1,5 +1,7 @@
-#	$NetBSD: Makefile,v 1.15 2007/12/28 21:44:32 ad Exp $
+#	$NetBSD: Makefile,v 1.20 2013/06/08 21:13:19 dholland Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
+
+WARNS?=	3	# XXX: sign-compare issues
 
 .include <bsd.own.mk>
 
@@ -8,10 +10,10 @@ MAN=	fsck_lfs.8
 SRCS=	bufcache.c dir.c fsutil.c inode.c lfs.c lfs_cksum.c lfs_itimes.c main.c
 SRCS+=	pass0.c pass1.c pass2.c pass3.c pass4.c pass5.c pass6.c
 SRCS+=	segwrite.c setup.c utilities.c vars.c vnode.c
+SRCS+=	kernelops.c
 FSCK=	${NETBSDSRCDIR}/sbin/fsck
 .PATH:	${NETBSDSRCDIR}/sys/ufs/lfs ${FSCK}
-CPPFLAGS+=-I${.CURDIR} -I${FSCK} -DIN_FSCK_LFS "-Dmutex_enter(x)=" "-Dmutex_exit(x)="
-CPPFLAGS+="-DKASSERT(x)="
+CPPFLAGS+=-I${.CURDIR} -I${FSCK} -DIN_FSCK_LFS
 # -DVERBOSE_BLOCKMAP 
 
 LDADD+=-lutil

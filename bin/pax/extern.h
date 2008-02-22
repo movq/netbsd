@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.54 2008/01/10 04:24:51 tls Exp $	*/
+/*	$NetBSD: extern.h,v 1.59 2012/08/09 08:09:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -181,12 +181,10 @@ int next_file(ARCHD *);
 void ls_list(ARCHD *, time_t, FILE *);
 void ls_tty(ARCHD *);
 void safe_print(const char *, FILE *);
-u_long asc_ul(char *, int, int);
-int ul_asc(u_long, char *, int, int);
-#if !defined(NET2_STAT) && !defined(_LP64)
-unsigned long long asc_ull(char *, int, int);
-int ull_asc(unsigned long long, char *, int, int);
-#endif
+uint32_t asc_u32(char *, int, int);
+int u32_asc(uintmax_t, char *, int, int);
+uintmax_t asc_umax(char *, int, int);
+int umax_asc(uintmax_t, char *, int, int);
 int check_Aflag(void);
 
 /*
@@ -204,7 +202,6 @@ extern int sep;
 extern int havechd;
 void options(int, char **);
 OPLIST * opt_next(void);
-int opt_add(const char *);
 int bad_opt(void);
 int mkpath(char *);
 char *chdname;
@@ -216,7 +213,7 @@ int do_chroot;
  * pat_rep.c
  */
 int rep_add(char *);
-int pat_add(char *, char *);
+int pat_add(char *, char *, int);
 void pat_chk(void);
 int pat_sel(ARCHD *);
 int pat_match(ARCHD *);
@@ -233,14 +230,12 @@ extern int cflag;
 extern int cwdfd;
 extern int dflag;
 extern int iflag;
-extern int jflag;
 extern int kflag;
 extern int lflag;
 extern int nflag;
 extern int tflag;
 extern int uflag;
 extern int vflag;
-extern int zflag;
 extern int Dflag;
 extern int Hflag;
 extern int Lflag;
@@ -266,9 +261,6 @@ extern const char *argv0;
 extern FILE *listf;
 extern char *tempfile;
 extern char *tempbase;
-
-int main(int, char **);
-void sig_cleanup(int);
 
 /*
  * sel_subs.c

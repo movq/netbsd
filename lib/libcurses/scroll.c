@@ -1,4 +1,4 @@
-/*	$NetBSD: scroll.c,v 1.19 2007/01/21 13:25:36 jdc Exp $	*/
+/*	$NetBSD: scroll.c,v 1.24 2017/02/10 06:25:28 blymn Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)scroll.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: scroll.c,v 1.19 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: scroll.c,v 1.24 2017/02/10 06:25:28 blymn Exp $");
 #endif
 #endif				/* not lint */
 
@@ -48,7 +48,8 @@ __RCSID("$NetBSD: scroll.c,v 1.19 2007/01/21 13:25:36 jdc Exp $");
 int
 scroll(WINDOW *win)
 {
-	return(wscrl(win, 1));
+
+	return wscrl(win, 1);
 }
 
 #ifndef _CURSES_USE_MACROS
@@ -58,9 +59,10 @@ scroll(WINDOW *win)
  *	Scroll stdscr n lines - up if n is positive, down if n is negative.
  */
 int
-scrl(int lines)
+scrl(int nlines)
 {
-	return wscrl(stdscr, lines);
+
+	return wscrl(stdscr, nlines);
 }
 
 /*
@@ -70,6 +72,7 @@ scrl(int lines)
 int
 setscrreg(int top, int bottom)
 {
+
 	return wsetscrreg(stdscr, top, bottom);
 }
 
@@ -80,30 +83,25 @@ setscrreg(int top, int bottom)
  *	Scroll a window n lines - up if n is positive, down if n is negative.
  */
 int
-wscrl(WINDOW *win, int lines)
+wscrl(WINDOW *win, int nlines)
 {
 	int     oy, ox;
 
 #ifdef DEBUG
-	__CTRACE(__CTRACE_WINDOW, "wscrl: (%p) lines=%d\n", win, lines);
+	__CTRACE(__CTRACE_WINDOW, "wscrl: (%p) lines=%d\n", win, nlines);
 #endif
 
 	if (!(win->flags & __SCROLLOK))
-		return (ERR);
-	if (!lines)
-		return (OK);
+		return ERR;
+	if (!nlines)
+		return OK;
 
 	getyx(win, oy, ox);
 #ifdef DEBUG
 	__CTRACE(__CTRACE_WINDOW, "wscrl: y=%d\n", oy);
 #endif
-	if (oy < win->scr_t || oy > win->scr_b)
-		/* Outside scrolling region */
-		wmove(win, 0, 0);
-	else
-		/* Inside scrolling region */
-		wmove(win, win->scr_t, 0);
-	winsdelln(win, 0 - lines);
+	wmove(win, win->scr_t, 0);
+	winsdelln(win, 0 - nlines);
 	wmove(win, oy, ox);
 
 	if (win == curscr) {
@@ -114,7 +112,7 @@ wscrl(WINDOW *win, int lines)
 		__CTRACE(__CTRACE_WINDOW, "scroll: win == curscr\n");
 #endif
 	}
-	return (OK);
+	return OK;
 }
 
 /*
@@ -125,10 +123,10 @@ int
 wsetscrreg(WINDOW *win, int top, int bottom)
 {
 	if (top < 0 || bottom >= win->maxy || bottom - top < 1)
-		return (ERR);
+		return ERR;
 	win->scr_t = top;
 	win->scr_b = bottom;
-	return (OK);
+	return OK;
 }
 
 /*
@@ -138,10 +136,11 @@ wsetscrreg(WINDOW *win, int top, int bottom)
 bool
 has_ic(void)
 {
-	if (__tc_ic !=NULL && __tc_dc != NULL)
-		return (TRUE);
+
+	if (insert_character != NULL && delete_character != NULL)
+		return true;
 	else
-		return (FALSE);
+		return false;
 }
 
 /*
@@ -151,8 +150,8 @@ has_ic(void)
 bool
 has_il(void)
 {
-	if (__tc_al !=NULL && __tc_dl != NULL)
-		return (TRUE);
+	if (insert_line !=NULL && delete_line != NULL)
+		return true;
 	else
-		return (FALSE);
+		return false;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.47 2007/11/19 18:51:43 ad Exp $	*/
+/*	$NetBSD: kd.c,v 1.53 2014/07/25 08:10:35 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.47 2007/11/19 18:51:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.53 2014/07/25 08:10:35 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -80,8 +73,18 @@ dev_type_tty(kdtty);
 dev_type_poll(kdpoll);
 
 const struct cdevsw kd_cdevsw = {
-	kdopen, kdclose, kdread, kdwrite, kdioctl,
-	nostop, kdtty, kdpoll, nommap, ttykqfilter, D_TTY
+	.d_open = kdopen,
+	.d_close = kdclose,
+	.d_read = kdread,
+	.d_write = kdwrite,
+	.d_ioctl = kdioctl,
+	.d_stop = nostop,
+	.d_tty = kdtty,
+	.d_poll = kdpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 struct	tty *fbconstty = 0;	/* tty structure for frame buffer console */
@@ -89,7 +92,6 @@ struct	tty *fbconstty = 0;	/* tty structure for frame buffer console */
 #define PUT_WSIZE	64
 
 struct kd_softc {
-	struct	device kd_dev;		/* required first: base device */
 	struct  tty *kd_tty;
 	int rows, cols;
 
@@ -126,7 +128,7 @@ kd_init(struct kd_softc *kd)
 	
 	kd = &kd_softc; 	/* XXX */
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	callout_setfunc(&tp->t_rstrt_ch, kd_later, tp);
 	tp->t_oproc = kdstart;
 	tp->t_param = kdparam;
@@ -461,7 +463,7 @@ void
 cons_attach_input(struct cons_channel *cc, struct consdev *cn)
 {
 	struct kd_softc *kd = &kd_softc;
-	struct kbd_softc *kds = cc->cc_dev;
+	struct kbd_softc *kds = cc->cc_private;
 	struct kbd_state *ks;
 
 	/* Share the keyboard state */
@@ -484,7 +486,7 @@ cons_attach_input(struct cons_channel *cc, struct consdev *cn)
 	cn_tab->cn_pri = CN_INTERNAL;
 
 	/* Set up initial PROM input channel for /dev/console */
-	prom_cons_channel.cc_dev = NULL;
+	prom_cons_channel.cc_private = NULL;
 	prom_cons_channel.cc_iopen = kd_rom_iopen;
 	prom_cons_channel.cc_iclose = kd_rom_iclose;
 
@@ -524,7 +526,7 @@ kdcninit(struct consdev *cn)
 	kbd_xlate_init(ks);
 
 	/* Set up initial PROM input channel for /dev/console */
-	prom_cons_channel.cc_dev = NULL;
+	prom_cons_channel.cc_private = NULL;
 	prom_cons_channel.cc_iopen = kd_rom_iopen;
 	prom_cons_channel.cc_iclose = kd_rom_iclose;
 	cons_attach_input(&prom_cons_channel);

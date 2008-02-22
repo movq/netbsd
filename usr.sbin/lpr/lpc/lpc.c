@@ -1,4 +1,4 @@
-/*	$NetBSD: lpc.c,v 1.23 2007/10/03 19:07:43 christos Exp $	*/
+/*	$NetBSD: lpc.c,v 1.27 2017/05/04 16:26:09 sevan Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -32,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpc.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpc.c,v 1.23 2007/10/03 19:07:43 christos Exp $");
+__RCSID("$NetBSD: lpc.c,v 1.27 2017/05/04 16:26:09 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,12 +82,11 @@ History	*hist;
 HistEvent he;
 EditLine *elptr;
 
-static void		 cmdscanner(int);
+__dead static void	 cmdscanner(int);
 static struct cmd	*getcmd(const char *);
-static void		 intr(int);
+__dead static void	 intr(int);
 static void		 makeargv(void);
 static int		 ingroup(const char *);
-int			 main(int, char *p[]);
 const char		*prompt(void);
 static int		 parse(char *, char *p[], int);
 
@@ -240,7 +239,7 @@ makeargv(void)
 
 	s = strlen(cmdline) + 1;
 	margc = 0;
-	for (cp = cmdline; *cp && (cp - cmdline) < s && n < MAX_MARGV; n++) {
+	for (cp = cmdline; *cp && (size_t)(cp - cmdline) < s && n < MAX_MARGV; n++) {
 		while (isspace((unsigned char)*cp))
 			cp++;
 		if (*cp == '\0')

@@ -1,4 +1,4 @@
-/*	$NetBSD: igsfbvar.h,v 1.16 2006/04/05 01:13:50 uwe Exp $ */
+/*	$NetBSD: igsfbvar.h,v 1.20 2011/07/26 08:59:37 mrg Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Valeriy E. Ushakov
@@ -32,6 +32,8 @@
  */
 #ifndef _DEV_IC_IGSFBVAR_H_
 #define _DEV_IC_IGSFBVAR_H_
+
+#include <dev/videomode/videomode.h>
 
 #define	IGS_CMAP_SIZE	256	/* 256 R/G/B entries */
 struct igs_hwcmap {
@@ -76,6 +78,10 @@ struct igsfb_devconfig {
 
 	/* resolution */
 	int dc_width, dc_height, dc_depth, dc_stride;
+	int dc_maxdepth;
+	const struct videomode *dc_mode;
+
+	char dc_modestring[128];
 
 	/* part of video memory mapped for wsscreen */
 	bus_space_handle_t dc_fbh;
@@ -105,6 +111,9 @@ struct igsfb_devconfig {
 	/* saved dc_ri.ri_ops.putchar */
 	void (*dc_ri_putchar)(void *, int, int, u_int, long);
 
+	/* optional MD mmap() method */
+	paddr_t (*dc_mmap)(void *, void *, off_t, int);
+
 	struct igs_hwcmap dc_cmap;	/* software copy of colormap */
 	struct igs_hwcursor dc_cursor;	/* software copy of cursor sprite */
 
@@ -118,7 +127,7 @@ struct igsfb_devconfig {
 
 
 struct igsfb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct igsfb_devconfig *sc_dc;
 };
 
@@ -196,6 +205,7 @@ igs_attr_write(bus_space_tag_t t, bus_space_handle_t h,
 int	igsfb_enable(bus_space_tag_t, bus_addr_t, int);
 void	igsfb_hw_setup(struct igsfb_devconfig *);
 void	igsfb_1024x768_8bpp_60Hz(struct igsfb_devconfig *);
+void	igsfb_set_mode(struct igsfb_devconfig *, const struct videomode *, int);
 
 /* igsfb.c */
 int	igsfb_cnattach_subr(struct igsfb_devconfig *);

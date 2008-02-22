@@ -1,32 +1,34 @@
-/*	$NetBSD: clnt_generic.c,v 1.26 2006/06/22 19:35:34 christos Exp $	*/
+/*	$NetBSD: clnt_generic.c,v 1.33 2014/05/28 14:45:19 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
  * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
@@ -39,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_generic.c 1.32 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_generic.c,v 1.26 2006/06/22 19:35:34 christos Exp $");
+__RCSID("$NetBSD: clnt_generic.c,v 1.33 2014/05/28 14:45:19 christos Exp $");
 #endif
 #endif
 
@@ -56,6 +58,8 @@ __RCSID("$NetBSD: clnt_generic.c,v 1.26 2006/06/22 19:35:34 christos Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -72,13 +76,13 @@ __weak_alias(clnt_tli_create,_clnt_tli_create)
  * if this can not be done.
  */
 CLIENT *
-clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
-	const char *hostname;
-	rpcprog_t prog;
-	rpcvers_t *vers_out;
-	rpcvers_t vers_low;
-	rpcvers_t vers_high;
-	const char *nettype;
+clnt_create_vers(
+	const char *	hostname,
+	rpcprog_t	prog,
+	rpcvers_t *	vers_out,
+	rpcvers_t	vers_low,
+	rpcvers_t	vers_high,
+	const char *	nettype)
 {
 	CLIENT *clnt;
 	struct timeval to;
@@ -96,7 +100,7 @@ clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
 	to.tv_sec = 10;
 	to.tv_usec = 0;
 	rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t) xdr_void,
-			(char *) NULL, (xdrproc_t) xdr_void, (char *) NULL, to);
+	    NULL, (xdrproc_t) xdr_void, NULL, to);
 	if (rpc_stat == RPC_SUCCESS) {
 		*vers_out = vers_high;
 		return (clnt);
@@ -116,8 +120,7 @@ clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
 		}
 		CLNT_CONTROL(clnt, CLSET_VERS, (char *)(void *)&vers_high);
 		rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t) xdr_void,
-				(char *) NULL, (xdrproc_t) xdr_void,
-				(char *) NULL, to);
+		    NULL, (xdrproc_t) xdr_void, NULL, to);
 		if (rpc_stat == RPC_SUCCESS) {
 			*vers_out = vers_high;
 			return (clnt);
@@ -146,11 +149,11 @@ error:
  * It calls clnt_tp_create();
  */
 CLIENT *
-clnt_create(hostname, prog, vers, nettype)
-	const char *hostname;				/* server name */
-	rpcprog_t prog;				/* program number */
-	rpcvers_t vers;				/* version number */
-	const char *nettype;				/* net type */
+clnt_create(
+	const char *	hostname,			/* server name */
+	rpcprog_t	prog,				/* program number */
+	rpcvers_t	vers,				/* version number */
+	const char *	nettype)			/* net type */
 {
 	struct netconfig *nconf;
 	CLIENT *clnt = NULL;
@@ -219,11 +222,11 @@ clnt_create(hostname, prog, vers, nettype)
  * It finds out the server address from rpcbind and calls clnt_tli_create()
  */
 CLIENT *
-clnt_tp_create(hostname, prog, vers, nconf)
-	const char *hostname;			/* server name */
-	rpcprog_t prog;				/* program number */
-	rpcvers_t vers;				/* version number */
-	const struct netconfig *nconf;		/* net config struct */
+clnt_tp_create(
+	const char *		hostname,	/* server name */
+	rpcprog_t		prog,		/* program number */
+	rpcvers_t		vers,		/* version number */
+	const struct netconfig *nconf)		/* net config struct */
 {
 	struct netbuf *svcaddr;			/* servers address */
 	CLIENT *cl = NULL;			/* client handle */
@@ -250,10 +253,16 @@ clnt_tp_create(hostname, prog, vers, nconf)
 	} else {
 		/* Reuse the CLIENT handle and change the appropriate fields */
 		if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == TRUE) {
-			if (cl->cl_netid == NULL)
+			if (cl->cl_netid == NULL) {
 				cl->cl_netid = strdup(nconf->nc_netid);
-			if (cl->cl_tp == NULL)
+				if (cl->cl_netid == NULL)
+					goto out;
+			}
+			if (cl->cl_tp == NULL) {
 				cl->cl_tp = strdup(nconf->nc_device);
+				if (cl->cl_tp == NULL)
+					goto out;
+			}
 			(void) CLNT_CONTROL(cl, CLSET_PROG, (void *)&prog);
 			(void) CLNT_CONTROL(cl, CLSET_VERS, (void *)&vers);
 		} else {
@@ -265,6 +274,9 @@ clnt_tp_create(hostname, prog, vers, nconf)
 	free(svcaddr->buf);
 	free(svcaddr);
 	return (cl);
+out:
+	clnt_destroy(cl);
+	return NULL;
 }
 
 /*
@@ -276,14 +288,14 @@ clnt_tp_create(hostname, prog, vers, nconf)
  * If sizes are 0; appropriate defaults will be chosen.
  */
 CLIENT *
-clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
-	int fd;				/* fd */
-	const struct netconfig *nconf;	/* netconfig structure */
-	const struct netbuf *svcaddr;	/* servers address */
-	rpcprog_t prog;			/* program number */
-	rpcvers_t vers;			/* version number */
-	u_int sendsz;			/* send size */
-	u_int recvsz;			/* recv size */
+clnt_tli_create(
+	int fd,				/* fd */
+	const struct netconfig *nconf,	/* netconfig structure */
+	const struct netbuf *svcaddr,	/* servers address */
+	rpcprog_t prog,			/* program number */
+	rpcvers_t vers,			/* version number */
+	u_int sendsz,			/* send size */
+	u_int recvsz)			/* recv size */
 {
 	CLIENT *cl;			/* client handle */
 	bool_t madefd = FALSE;		/* whether fd opened here */
@@ -309,7 +321,7 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 		if (!__rpc_fd2sockinfo(fd, &si))
 			goto err;
 
-		bindresvport(fd, NULL);
+		(void)bindresvport(fd, NULL);
 	} else {
 		if (!__rpc_fd2sockinfo(fd, &si))
 			goto err;
@@ -331,7 +343,7 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 		cl = clnt_vc_create(fd, svcaddr, prog, vers, sendsz, recvsz);
 		if (!nconf || !cl)
 			break;
-		__rpc_setnodelay(fd, &si);
+		(void)__rpc_setnodelay(fd, &si);
 		break;
 	case NC_TPI_CLTS:
 		cl = clnt_dg_create(fd, svcaddr, prog, vers, sendsz, recvsz);
@@ -344,22 +356,45 @@ clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
 		goto err1; /* borrow errors from clnt_dg/vc creates */
 	if (nconf) {
 		cl->cl_netid = strdup(nconf->nc_netid);
+		if (cl->cl_netid == NULL)
+			goto err0;
 		cl->cl_tp = strdup(nconf->nc_device);
+		if (cl->cl_tp == NULL)
+			goto err0;
 	} else {
 		cl->cl_netid = __UNCONST("");
 		cl->cl_tp = __UNCONST("");
 	}
 	if (madefd) {
 		(void) CLNT_CONTROL(cl, CLSET_FD_CLOSE, NULL);
-/*		(void) CLNT_CONTROL(cl, CLSET_POP_TIMOD, (char *) NULL);  */
+/*		(void) CLNT_CONTROL(cl, CLSET_POP_TIMOD, NULL);  */
 	};
 
 	return (cl);
 
+err0:
+	clnt_destroy(cl);
 err:
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;
 err1:	if (madefd)
 		(void) close(fd);
 	return (NULL);
+}
+
+/*
+ * Don't block thse so interactive programs don't get stuck in lalaland.
+ * (easier to do this than making connect(2) non-blocking..)
+ */
+int
+__clnt_sigfillset(sigset_t *ss) {
+	static const int usersig[] = {
+	    SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGTSTP
+	};
+	if (sigfillset(ss) == -1)
+		return -1;
+	for (size_t i = 0; i < __arraycount(usersig); i++)
+		if (sigdelset(ss, usersig[i]) == -1)
+			return -1;
+	return 0;
 }

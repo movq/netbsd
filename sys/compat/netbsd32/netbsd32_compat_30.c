@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_30.c,v 1.23 2007/12/20 23:03:01 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_30.c,v 1.31 2014/12/05 17:26:21 maxv Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,13 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_30.c,v 1.23 2007/12/20 23:03:01 dsl Exp $");
-
-#include "opt_nfsserver.h"
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_30.c,v 1.31 2014/12/05 17:26:21 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
@@ -68,31 +63,33 @@ compat_30_netbsd32_getdents(struct lwp *l, const struct compat_30_netbsd32_getde
 		syscallarg(netbsd32_charp) buf;
 		syscallarg(netbsd32_size_t) count;
 	} */
-	struct file *fp;
+	file_t *fp;
 	int error, done;
 	char  *buf;
 	netbsd32_size_t count;
-	struct proc *p = l->l_proc;
 
 	/* Limit the size on any kernel buffers used by VOP_READDIR */
 	count = min(MAXBSIZE, SCARG(uap, count));
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
 		goto out;
 	}
-	buf = malloc(count, M_TEMP, M_WAITOK);
+	if (count == 0)
+		goto out;
+
+	buf = kmem_alloc(count, KM_SLEEP);
 	error = vn_readdir(fp, buf, UIO_SYSSPACE, count, &done, l, 0, 0);
 	if (error == 0) {
 		*retval = netbsd32_to_dirent12(buf, done);
 		error = copyout(buf, SCARG_P32(uap, buf), *retval);
 	}
-	free(buf, M_TEMP);
+	kmem_free(buf, count);
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -110,7 +107,7 @@ compat_30_netbsd32___stat13(struct lwp *l, const struct compat_30_netbsd32___sta
 
 	path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, FOLLOW, &sb);
+	error = do_sys_stat(path, FOLLOW, &sb);
 	if (error)
 		return (error);
 	netbsd32_from___stat13(&sb, &sb32);
@@ -125,21 +122,11 @@ compat_30_netbsd32___fstat13(struct lwp *l, const struct compat_30_netbsd32___fs
 		syscallarg(int) fd;
 		syscallarg(netbsd32_stat13p_t) sb;
 	} */
-	int fd = SCARG(uap, fd);
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
 	struct netbsd32_stat13 sb32;
 	struct stat ub;
-	int error = 0;
+	int error;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_stat)(fp, &ub, l);
-	FILE_UNUSE(fp, l);
-
+	error = do_sys_fstat(SCARG(uap, fd), &ub);
 	if (error == 0) {
 		netbsd32_from___stat13(&ub, &sb32);
 		error = copyout(&sb32, SCARG_P32(uap, sb), sizeof(sb32));
@@ -161,7 +148,7 @@ compat_30_netbsd32___lstat13(struct lwp *l, const struct compat_30_netbsd32___ls
 
 	path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, NOFOLLOW, &sb);
+	error = do_sys_stat(path, NOFOLLOW, &sb);
 	if (error)
 		return (error);
 	netbsd32_from___stat13(&sb, &sb32);
@@ -199,7 +186,7 @@ compat_30_netbsd32_fhstat(struct lwp *l, const struct compat_30_netbsd32_fhstat_
 		return EOPNOTSUPP;
 	if ((error = VFS_FHTOVP(mp, (struct fid*)&fh.fh_fid, &vp)))
 		return (error);
-	error = vn_stat(vp, &sb, l);
+	error = vn_stat(vp, &sb);
 	vput(vp);
 	if (error)
 		return (error);
@@ -225,10 +212,10 @@ compat_30_netbsd32_fhstatvfs1(struct lwp *l, const struct compat_30_netbsd32_fhs
 	    SCARG(uap, flags));
 
 	if (error != 0) {
-		s32 = malloc(sizeof *s32, M_TEMP, M_WAITOK);
+		s32 = kmem_alloc(sizeof(*s32), KM_SLEEP);
 		netbsd32_from_statvfs(sbuf, s32);
 		error = copyout(s32, SCARG_P32(uap, buf), sizeof *s32);
-		free(s32, M_TEMP);
+		kmem_free(s32, sizeof(*s32));
 	}
 	STATVFSBUF_PUT(sbuf);
 
@@ -268,21 +255,21 @@ compat_30_netbsd32_getfh(struct lwp *l, const struct compat_30_netbsd32_getfh_ar
 
 
 int
-compat_30_netbsd32_sys___fhstat30(struct lwp *l, const struct compat_30_netbsd32_sys___fhstat30_args *uap, register_t *retval)
+compat_30_netbsd32___fhstat30(struct lwp *l, const struct compat_30_netbsd32___fhstat30_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_fhandlep_t) fhp;
 		syscallarg(netbsd32_statp_t) sb;
 	} */
 	struct stat sb;
-	struct netbsd32_stat sb32;
+	struct netbsd32_stat50 sb32;
 	int error;
 
 	error = do_fhstat(l, SCARG_P32(uap, fhp), FHANDLE_SIZE_COMPAT, &sb);
 	if (error)
 		return error;
 
-	netbsd32_from___stat30(&sb, &sb32);
+	netbsd32_from___stat50(&sb, &sb32);
 	error = copyout(&sb32, SCARG_P32(uap, sb), sizeof(sb32));
 	return error;
 }

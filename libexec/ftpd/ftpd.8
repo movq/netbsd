@@ -1,4 +1,4 @@
-.\"	$NetBSD: ftpd.8,v 1.79 2008/01/30 02:16:35 lukem Exp $
+.\"	$NetBSD: ftpd.8,v 1.87 2018/04/28 13:38:00 riastradh Exp $
 .\"
 .\" Copyright (c) 1997-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,7 +56,7 @@
 .\"
 .\"     @(#)ftpd.8	8.2 (Berkeley) 4/19/94
 .\"
-.Dd January 30, 2008
+.Dd May 1, 2009
 .Dt FTPD 8
 .Os
 .Sh NAME
@@ -72,9 +65,9 @@
 Internet File Transfer Protocol server
 .Sh SYNOPSIS
 .Nm
-.Op Fl 46DdHlnQqrsUuWwX
+.Op Fl 46DdfHlnQqrsUuWwX
 .Op Fl a Ar anondir
-.Op Fl C Ar user
+.Op Fl C Ar user Ns Op @ Ns Ar host
 .Op Fl c Ar confdir
 .Op Fl e Ar emailaddr
 .Op Fl h Ar hostname
@@ -112,12 +105,17 @@ This can also be specified with the
 .Xr ftpd.conf 5
 .Sy chroot
 directive.
-.It Fl C Ar user
+.It Fl C Ar user Ns Op @ Ns Ar host
 Check whether
 .Ar user
+.Po
+as if connecting from
+.Ar host ,
+if provided
+.Pc
 would be granted access under
 the restrictions given in
-.Xr ftpusers 5
+.Xr ftpusers 5 ,
 and exit without attempting a connection.
 .Nm
 exits with an exit code of 0 if access would be granted, or 1 otherwise.
@@ -156,6 +154,10 @@ for the
 .Dq "\&%E"
 escape sequence (see
 .Sx Display file escape sequences )
+.It Fl f
+Stops the
+.Fl D
+flag from detaching from the tty and going into the background.
 .It Fl H
 Equivalent to
 .Do
@@ -280,8 +282,7 @@ style
 .Pa xferlog
 file suitable for input into a third-party log analysis tool with a command
 similar to:
-.Dl "grep 'xferlog: ' /var/log/xferlog | \e"
-.Dl "\ \ \ sed -e 's/^.*xferlog: //' \*[Gt] wuxferlog"
+.Dl "sed -ne 's/^.*xferlog: //p' /var/log/xferlog > wuxferlog"
 .El
 .Pp
 The file
@@ -315,7 +316,7 @@ server currently supports the following
 .Tn FTP
 requests.
 The case of the requests is ignored.
-.Bl -column "Request" -offset indent
+.Bl -column "Request" "Description" -offset indent
 .It Sy Request Ta Sy Description
 .It ABOR Ta "abort previous command"
 .It ACCT Ta "specify account (ignored)"
@@ -369,7 +370,7 @@ The following non-standard or
 .Ux
 specific commands are supported by the SITE request.
 .Pp
-.Bl -column Request -offset indent
+.Bl -column Request Description -offset indent
 .It Sy Request Ta Sy Description
 .It CHMOD Ta "change mode of a file, e.g. ``SITE CHMOD 755 filename''"
 .It HELP Ta "give help information."
@@ -426,7 +427,7 @@ authenticates users according to five rules.
 .Bl -enum -offset indent
 .It
 The login name must be in the password data base,
-.Pa /etc/pwd.db ,
+.Xr passwd 5 ,
 and not have a null password.
 In this case a password must be provided by the client before any
 file operations may be performed.
@@ -870,5 +871,5 @@ requests against files larger than 10240 bytes will be denied if
 the current transfer
 .Sy TYPE
 is
-.Sq Li A 
+.Sq Li A
 (ASCII).

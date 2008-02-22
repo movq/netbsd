@@ -1,7 +1,7 @@
-/*	$NetBSD: intr.c,v 1.2 2007/12/11 16:51:14 ad Exp $	*/
+/*	$NetBSD: intr.c,v 1.7 2014/10/13 22:24:43 uwe Exp $	*/
 
 /*-
- * Copyright (c) 2005 NONAKA Kimihiro
+ * Copyright (C) 2005 NONAKA Kimihiro <nonaka@netbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,21 +13,20 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.2 2007/12/11 16:51:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.7 2014/10/13 22:24:43 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,6 +76,8 @@ intc_intr(int ssr, int spc, int ssp)
 	struct intc_intrhand *ih;
 	struct clockframe cf;
 	int evtcode;
+
+	curcpu()->ci_data.cpu_nintr++;
 
 	evtcode = _reg_read_4(SH4_INTEVT);
 	ih = EVTCODE_IH(evtcode);
@@ -191,15 +192,7 @@ extintr_establish(int irq, int level, int (*ih_fun)(void *), void *ih_arg)
 	ih->ih_enable = 1;
 	ih->ih_level = level;
 	ih->ih_irq = irq - 5;
-	if (irq != 5) {
-		name = extintr_names[irq - 5];
-	} else if (level == IPL_BIO) {
-		name = "ehci";
-	} else if (level == IPL_NET) {
-		name = "rtk";
-	} else {
-		name = "unknown";
-	}
+	name = extintr_names[irq - 5];
 	evcnt_attach_dynamic(&ih->ih_evcnt, EVCNT_TYPE_INTR,
 	    NULL, "ext", name);
 	*p = ih;
@@ -259,7 +252,7 @@ void
 extintr_enable(void *aux)
 {
 	struct intrhand *ih = aux;
-	struct intrhand *p, *q;
+	struct intrhand *p, *q __debugused;
 	struct extintr_handler *eih;
 	int irq;
 	int cnt;
@@ -295,7 +288,7 @@ void
 extintr_disable(void *aux)
 {
 	struct intrhand *ih = aux;
-	struct intrhand *p, *q;
+	struct intrhand *p, *q __debugused;
 	struct extintr_handler *eih;
 	int irq;
 	int cnt;

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.15 2007/07/01 18:45:36 dsl Exp $	*/
+/*	$NetBSD: linux_socket.h,v 1.23 2017/02/03 16:57:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,12 +74,12 @@
  * the rest matches IPPROTO_XXX
  */
 
-/* SOL_SOCKET is machine dependant on Linux */
+/* SOL_SOCKET is machine dependent on Linux */
 #define LINUX_SOL_IP		0
 #define LINUX_SOL_TCP		6
 #define LINUX_SOL_UDP		17
-/* Unused for now: */
 #define LINUX_SOL_IPV6		41
+/* Unused for now: */
 #define LINUX_SOL_ICMPV6	58
 #define LINUX_SOL_RAW		255
 #define LINUX_SOL_IPX		256
@@ -101,7 +94,7 @@
 #define LINUX_SOL_AAL		265
 
 /*
- * Options for [gs]etsockopt(2), socket level are machine dependant.
+ * Options for [gs]etsockopt(2), socket level are machine dependent.
  */
 
 /*
@@ -110,11 +103,18 @@
 
 #define LINUX_IP_TOS		1
 #define LINUX_IP_TTL		2
+#define LINUX_IP_HDRINCL	3
 #define	LINUX_IP_MULTICAST_IF	32
 #define	LINUX_IP_MULTICAST_TTL	33
 #define	LINUX_IP_MULTICAST_LOOP	34
 #define	LINUX_IP_ADD_MEMBERSHIP	35
 #define	LINUX_IP_DROP_MEMBERSHIP 36
+
+/*
+ * Options for [gs]etsockopt(2), IPV6 level.
+ */
+
+#define LINUX_IPV6_V6ONLY		26
 
 /*
  * Options for [gs]etsockopt(2), TCP level.
@@ -129,6 +129,21 @@
 #define LINUX_SCM_CONNECT	3	/* not supported in NetBSD */
 #define LINUX_SCM_TIMESTAMP	LINUX_SO_TIMESTAMP
 				/* not actually implemented in Linux 2.5.15? */
+
+struct linux_msghdr {
+	void		*msg_name;
+	int		msg_namelen;
+	struct iovec	*msg_iov;
+	size_t		msg_iovlen;
+	void		*msg_control;
+	size_t		msg_controllen;
+	unsigned int	msg_flags;
+};
+
+struct linux_mmsghdr {
+	struct linux_msghdr msg_hdr;
+	unsigned int msg_len;
+};
 
 /*
  * Message flags (for sendmsg/recvmsg)
@@ -186,6 +201,10 @@ struct linux_cmsghdr {
 	((mhdr)->msg_controllen >= sizeof(struct linux_cmsghdr) ? \
 	(struct linux_cmsghdr *)(mhdr)->msg_control : NULL)
 
+#define LINUX_CMSG_SPACE(l) \
+	(sizeof(struct linux_cmsghdr) + LINUX_CMSG_ALIGN(l))
+#define LINUX_CMSG_LEN(l) \
+	(sizeof(struct linux_cmsghdr) + (l))
 
 /*
  * Machine specific definitions.
@@ -206,6 +225,17 @@ struct linux_cmsghdr {
 #include <compat/linux/arch/amd64/linux_socket.h>
 #else
 #error Undefined linux_socket.h machine type.
+#endif
+
+/*
+ * Flags for socket().
+ * These are provided in the "type" parameter.
+ */
+
+#define LINUX_SOCK_TYPE_MASK	0xf
+#define LINUX_SOCK_CLOEXEC	LINUX_O_CLOEXEC
+#ifndef LINUX_SOCK_NONBLOCK
+#define LINUX_SOCK_NONBLOCK	LINUX_O_NONBLOCK
 #endif
 
 #endif /* !_LINUX_SOCKET_H */

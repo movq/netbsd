@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_dumb.c,v 1.14 2006/11/16 01:33:31 christos Exp $ */
+/* $NetBSD: wsemul_dumb.c,v 1.17 2017/11/03 18:42:35 maya Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.14 2006/11/16 01:33:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.17 2017/11/03 18:42:35 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: wsemul_dumb.c,v 1.14 2006/11/16 01:33:31 christos Ex
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsemulvar.h>
 #include <dev/wscons/ascii.h>
+#include <dev/wscons/wsksymdef.h>
 
 void	*wsemul_dumb_cnattach(const struct wsscreen_descr *, void *,
 				   int, int, long);
@@ -54,15 +55,16 @@ void	wsemul_dumb_detach(void *cookie, u_int *crowp, u_int *ccolp);
 void	wsemul_dumb_resetop(void *, enum wsemul_resetops);
 
 const struct wsemul_ops wsemul_dumb_ops = {
-	"dumb",
-	wsemul_dumb_cnattach,
-	wsemul_dumb_attach,
-	wsemul_dumb_output,
-	wsemul_dumb_translate,
-	wsemul_dumb_detach,
-	wsemul_dumb_resetop,
-	NULL,	/* getmsgattrs */
-	NULL,	/* setmsgattrs */
+	.name = "dumb",
+	.cnattach = wsemul_dumb_cnattach,
+	.attach = wsemul_dumb_attach,
+	.output = wsemul_dumb_output,
+	.translate = wsemul_dumb_translate,
+	.detach = wsemul_dumb_detach,
+	.reset = wsemul_dumb_resetop,
+	.getmsgattrs = NULL,
+	.setmsgattrs = NULL,
+	.resize = NULL,
 };
 
 struct wsemul_dumb_emuldata {
@@ -203,6 +205,14 @@ int
 wsemul_dumb_translate(void *cookie, keysym_t in,
     const char **out)
 {
+	static char c;
+
+	if (KS_GROUP(in) == KS_GROUP_Plain) {
+		/* allow ISO-1 */
+		c = KS_VALUE(in);
+		*out = &c;
+		return (1);
+	}
 	return (0);
 }
 

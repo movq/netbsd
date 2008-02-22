@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $	*/
+/*	$NetBSD: options.c,v 1.118 2015/12/19 18:45:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $");
+__RCSID("$NetBSD: options.c,v 1.118 2015/12/19 18:45:52 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,7 +62,9 @@ __RCSID("$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <paths.h>
+#include <util.h>
 #include "pax.h"
 #include "options.h"
 #include "cpio.h"
@@ -75,33 +77,39 @@ __RCSID("$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $");
 /*
  * Routines which handle command line options
  */
+struct stat tst;		/* Timestamp to set if non-0 */
 
 static int nopids;		/* tar mode: suppress "pids" for -p option */
 static char flgch[] = FLGCH;	/* list of all possible flags (pax) */
 static OPLIST *ophead = NULL;	/* head for format specific options -x */
 static OPLIST *optail = NULL;	/* option tail */
 
+static int opt_add(const char *);
 static int no_op(void);
 static void printflg(unsigned int);
 static int c_frmt(const void *, const void *);
 static off_t str_offt(char *);
-static char *getline(FILE *fp);
+static char *get_line(FILE *fp);
+#ifndef SMALL
+static int set_tstamp(const char *, struct stat *);
+#endif
 static void pax_options(int, char **);
-static void pax_usage(void);
+__dead static void pax_usage(void);
 static void tar_options(int, char **);
-static void tar_usage(void);
+__dead static void tar_usage(void);
 #ifndef NO_CPIO
 static void cpio_options(int, char **);
-static void cpio_usage(void);
+__dead static void cpio_usage(void);
 #endif
 
-/* errors from getline */
+/* errors from get_line */
 #define GETLINE_FILE_CORRUPT 1
 #define GETLINE_OUT_OF_MEM 2
-static int getline_error;
+static int get_line_error;
 
 #define BZIP2_CMD	"bzip2"		/* command to run as bzip2 */
 #define GZIP_CMD	"gzip"		/* command to run as gzip */
+#define XZ_CMD		"xz"		/* command to run as xz */
 #define COMPRESS_CMD	"compress"	/* command to run as compress */
 
 /*
@@ -124,8 +132,11 @@ static int getline_error;
 #define	OPT_INSECURE			14
 #define	OPT_STRICT			15
 #define	OPT_SPARSE			16
+#define OPT_XZ				17
+#define OPT_GNU				18
+#define	OPT_TIMESTAMP			19
 #if !HAVE_NBTOOL_CONFIG_H
-#define	OPT_CHROOT			17
+#define	OPT_CHROOT			20
 #endif
 
 /*
@@ -240,6 +251,14 @@ struct option pax_longopts[] = {
 						OPT_INSECURE },
 	{ "force-local",	no_argument,		0,
 						OPT_FORCE_LOCAL },
+	{ "use-compress-program", required_argument,	0,
+						OPT_USE_COMPRESS_PROGRAM },
+	{ "xz",			no_argument,		0,
+						OPT_XZ },
+	{ "gnu",		no_argument,		0,
+						OPT_GNU },
+	{ "timestamp",		required_argument,	0,
+						OPT_TIMESTAMP },
 	{ 0,			0,			0,
 						0 },
 };
@@ -254,7 +273,7 @@ static void
 pax_options(int argc, char **argv)
 {
 	int c;
-	int i;
+	size_t i;
 	u_int64_t flg = 0;
 	u_int64_t bflg = 0;
 	char *pt;
@@ -318,7 +337,6 @@ pax_options(int argc, char **argv)
 			/*
 			 * pass through bzip2
 			 */
-			jflag = 1;
 			gzip_program = BZIP2_CMD;
 			break;
 		case 'k':
@@ -640,8 +658,25 @@ pax_options(int argc, char **argv)
 			secure = 0;
 			break;
 		case OPT_FORCE_LOCAL:
-			forcelocal = 0;
+			forcelocal = 1;
 			break;
+		case OPT_USE_COMPRESS_PROGRAM:
+			gzip_program = optarg;
+			break;
+		case OPT_XZ:
+			gzip_program = XZ_CMD;
+			break;
+		case OPT_GNU:
+			is_gnutar = 1;
+			break;
+#ifndef SMALL
+		case OPT_TIMESTAMP:
+			if (set_tstamp(optarg, &tst) == -1) {
+				tty_warn(1, "Invalid timestamp `%s'", optarg);
+				tar_usage();
+			}
+			break;
+#endif
 		case '?':
 		default:
 			pax_usage();
@@ -692,7 +727,7 @@ pax_options(int argc, char **argv)
 	case LIST:
 	case EXTRACT:
 		for (; optind < argc; optind++)
-			if (pat_add(argv[optind], NULL) < 0)
+			if (pat_add(argv[optind], NULL, 0) < 0)
 				pax_usage();
 		break;
 	case COPY:
@@ -754,6 +789,7 @@ struct option tar_longopts[] = {
 	{ "gunzip",		no_argument,		0,	'z' },
 	{ "read-full-blocks",	no_argument,		0,	'B' },
 	{ "directory",		required_argument,	0,	'C' },
+	{ "xz",			no_argument,		0,	'J' },
 	{ "to-stdout",		no_argument,		0,	'O' },
 	{ "absolute-paths",	no_argument,		0,	'P' },
 	{ "sparse",		no_argument,		0,	'S' },
@@ -783,6 +819,8 @@ struct option tar_longopts[] = {
 	{ "chroot",		no_argument,		0,
 						OPT_CHROOT },
 #endif
+	{ "timestamp",		required_argument,	0,
+						OPT_TIMESTAMP },
 #if 0 /* Not implemented */
 	{ "catenate",		no_argument,		0,	'A' },	/* F */
 	{ "concatenate",	no_argument,		0,	'A' },	/* F */
@@ -856,7 +894,7 @@ tar_options(int argc, char **argv)
 	 * process option flags
 	 */
 	while ((c = getoldopt(argc, argv,
-	    "+b:cef:hjklmopqrs:tuvwxzBC:HI:OPST:X:Z014578",
+	    "+b:cef:hjklmopqrs:tuvwxzBC:HI:JOPST:X:Z014578",
 	    tar_longopts, NULL))
 	    != -1)  {
 		switch(c) {
@@ -907,7 +945,6 @@ tar_options(int argc, char **argv)
 			/*
 			 * pass through bzip2. not a standard option
 			 */
-			jflag = 1;
 			gzip_program = BZIP2_CMD;
 			break;
 		case 'k':
@@ -945,9 +982,6 @@ tar_options(int argc, char **argv)
 				pids = 0;
 				nopids = 1;
 			}
-			break;
-		case 'O':
-			Oflag = 1;
 			break;
 		case 'p':
 			/*
@@ -1012,7 +1046,6 @@ tar_options(int argc, char **argv)
 			/*
 			 * use gzip.  Non standard option.
 			 */
-			zflag = 1;
 			gzip_program = GZIP_CMD;
 			break;
 		case 'B':
@@ -1045,6 +1078,12 @@ tar_options(int argc, char **argv)
 			incfiles[nincfiles - 1].file = optarg;
 			incfiles[nincfiles - 1].dir = chdname;
 			break;
+		case 'J':
+			gzip_program = XZ_CMD;
+			break;
+		case 'O':
+			Oflag = 1;
+			break;
 		case 'P':
 			/*
 			 * do not remove leading '/' from pathnames
@@ -1072,7 +1111,6 @@ tar_options(int argc, char **argv)
 			/*
 			 * use compress.
 			 */
-			zflag = 1;
 			gzip_program = COMPRESS_CMD;
 			break;
 		case '0':
@@ -1100,7 +1138,6 @@ tar_options(int argc, char **argv)
 			/* Just ignore -- we always unlink first. */
 			break;
 		case OPT_USE_COMPRESS_PROGRAM:
-			zflag = 1;
 			gzip_program = optarg;
 			break;
 		case OPT_FORCE_LOCAL:
@@ -1123,6 +1160,14 @@ tar_options(int argc, char **argv)
 #if !HAVE_NBTOOL_CONFIG_H
 		case OPT_CHROOT:
 			do_chroot = 1;
+			break;
+#endif
+#ifndef SMALL
+		case OPT_TIMESTAMP:
+			if (set_tstamp(optarg, &tst) == -1) {
+				tty_warn(1, "Invalid timestamp `%s'", optarg);
+				tar_usage();
+			}
 			break;
 #endif
 		default:
@@ -1173,6 +1218,7 @@ tar_options(int argc, char **argv)
 			int sawpat = 0;
 			int dirisnext = 0;
 			char *file, *dir = NULL;
+			int mustfreedir = 0;
 
 			while (nincfiles || *argv != NULL) {
 				/*
@@ -1185,6 +1231,7 @@ tar_options(int argc, char **argv)
 				if (nincfiles) {
 					file = incfiles->file;
 					dir = incfiles->dir;
+					mustfreedir = 0;
 					incfiles++;
 					nincfiles--;
 				} else if (strcmp(*argv, "-I") == 0) {
@@ -1192,9 +1239,11 @@ tar_options(int argc, char **argv)
 						break;
 					file = *argv++;
 					dir = chdname;
+					mustfreedir = 0;
 				} else {
 					file = NULL;
 					dir = NULL;
+					mustfreedir = 0;
 				}
 				if (file != NULL) {
 					FILE *fp;
@@ -1206,11 +1255,12 @@ tar_options(int argc, char **argv)
 						tty_warn(1, "Unable to open file '%s' for read", file);
 						tar_usage();
 					}
-					while ((str = getline(fp)) != NULL) {
+					while ((str = get_line(fp)) != NULL) {
 						if (dirisnext) {
-							if (dir)
+							if (dir && mustfreedir)
 								free(dir);
 							dir = str;
+							mustfreedir = 1;
 							dirisnext = 0;
 							continue;
 						}
@@ -1222,24 +1272,25 @@ tar_options(int argc, char **argv)
 						}
 						if (strncmp(str, "-C ", 3) == 0) {
 							havechd++;
-							if (dir)
+							if (dir && mustfreedir)
 								free(dir);
 							dir = strdup(str + 3);
+							mustfreedir = 1;
 							free(str);
 							continue;
 						}
-						if (pat_add(str, dir) < 0)
+						if (pat_add(str, dir, NOGLOB_MTCH) < 0)
 							tar_usage();
 						sawpat = 1;
 					}
 					/* Bomb if given -C w/out a dir. */
 					if (dirisnext)
 						tar_usage();
-					if (dir)
+					if (dir && mustfreedir)
 						free(dir);
 					if (strcmp(file, "-") != 0)
 						fclose(fp);
-					if (getline_error) {
+					if (get_line_error) {
 						tty_warn(1, "Problem with file '%s'", file);
 						tar_usage();
 					}
@@ -1248,7 +1299,7 @@ tar_options(int argc, char **argv)
  						break;
 					chdname = *argv++;
 					havechd++;
-				} else if (pat_add(*argv++, chdname) < 0)
+				} else if (pat_add(*argv++, chdname, 0) < 0)
 					tar_usage();
 				else
 					sawpat = 1;
@@ -1309,7 +1360,7 @@ tar_options(int argc, char **argv)
 					tty_warn(1, "Unable to open file '%s' for read", file);
 					tar_usage();
 				}
-				while ((str = getline(fp)) != NULL) {
+				while ((str = get_line(fp)) != NULL) {
 					if (dirisnext) {
 						if (ftree_add(str, 1) < 0)
 							tar_usage();
@@ -1333,7 +1384,7 @@ tar_options(int argc, char **argv)
 					tar_usage();
 				if (strcmp(file, "-") != 0)
 					fclose(fp);
-				if (getline_error) {
+				if (get_line_error) {
 					tty_warn(1, "Problem with file '%s'",
 					    file);
 					tar_usage();
@@ -1352,7 +1403,7 @@ tar_options(int argc, char **argv)
 		maxflt = 0;
 		break;
 	}
-	if (!fstdin && ((arcname == (char *)NULL) || (*arcname == '\0'))) {
+	if (!fstdin && ((arcname == NULL) || (*arcname == '\0'))) {
 		arcname = getenv("TAPE");
 		if ((arcname == NULL) || (*arcname == '\0'))
 			arcname = _PATH_DEFTAPE;
@@ -1360,8 +1411,7 @@ tar_options(int argc, char **argv)
 }
 
 int
-mkpath(path)
-	char *path;
+mkpath(char *path)
 {
 	char *slash;
 	int done = 0;
@@ -1418,6 +1468,8 @@ struct option cpio_longopts[] = {
 						OPT_INSECURE },
 	{ "sparse",		no_argument,		0,
 						OPT_SPARSE },
+	{ "xz",			no_argument,		0,
+						OPT_XZ },
 
 #ifdef notyet
 /* Not implemented */
@@ -1449,6 +1501,8 @@ cpio_set_action(int op)
 {
 	if ((act == APPND && op == ARCHIVE) || (act == ARCHIVE && op == APPND))
 		act = APPND;
+	else if (act == EXTRACT && op == LIST)
+		act = op;
 	else if (act != ERROR && act != op)
 		cpio_usage();
 	else
@@ -1467,7 +1521,8 @@ cpio_options(int argc, char **argv)
 	FSUB tmp;
 	u_int64_t flg = 0;
 	u_int64_t bflg = 0;
-	int c, i;
+	int c;
+	size_t i;
 	FILE *fp;
 	char *str;
 
@@ -1634,11 +1689,11 @@ cpio_options(int argc, char **argv)
 				    optarg);
 				cpio_usage();
 			}
-			while ((str = getline(fp)) != NULL) {
-				pat_add(str, NULL);
+			while ((str = get_line(fp)) != NULL) {
+				pat_add(str, NULL, 0);
 			}
 			fclose(fp);
-			if (getline_error) {
+			if (get_line_error) {
 				tty_warn(1, "Problem with file '%s'", optarg);
 				cpio_usage();
 			}
@@ -1661,6 +1716,7 @@ cpio_options(int argc, char **argv)
 			(void)fputs("\n\n", stderr);
 			cpio_usage();
 			break;
+		case 'F':
 		case 'I':
 		case 'O':
 			/*
@@ -1718,15 +1774,18 @@ cpio_options(int argc, char **argv)
 			 * process Version 6 cpio format
 			 */
 			frmt = &(fsub[F_BCPIO]);
+			break;
 		case OPT_FORCE_LOCAL:
 			forcelocal = 1;
 			break;
 		case OPT_INSECURE:
 			secure = 0;
 			break;
-
 		case OPT_SPARSE:
 			/* do nothing; we already generate sparse files */
+			break;
+		case OPT_XZ:
+			gzip_program = XZ_CMD;
 			break;
 		default:
 			cpio_usage();
@@ -1774,7 +1833,7 @@ cpio_options(int argc, char **argv)
 	case LIST:
 	case EXTRACT:
 		for (; optind < argc; optind++)
-			if (pat_add(argv[optind], 0) < 0)
+			if (pat_add(argv[optind], NULL, 0) < 0)
 				cpio_usage();
 		break;
 	case COPY:
@@ -1797,10 +1856,10 @@ cpio_options(int argc, char **argv)
 		 * no read errors allowed on updates/append operation!
 		 */
 		maxflt = 0;
-		while ((str = getline(stdin)) != NULL) {
+		while ((str = get_line(stdin)) != NULL) {
 			ftree_add(str, 0);
 		}
-		if (getline_error) {
+		if (get_line_error) {
 			tty_warn(1, "Problem while reading stdin");
 			cpio_usage();
 		}
@@ -2027,28 +2086,65 @@ str_offt(char *val)
 	return num;
 }
 
-char *
-getline(FILE *f)
+static char *
+get_line(FILE *f)
 {
 	char *name, *temp;
 	size_t len;
 
 	name = fgetln(f, &len);
 	if (!name) {
-		getline_error = ferror(f) ? GETLINE_FILE_CORRUPT : 0;
+		get_line_error = ferror(f) ? GETLINE_FILE_CORRUPT : 0;
 		return 0;
 	}
 	if (name[len-1] != '\n')
 		len++;
 	temp = malloc(len);
 	if (!temp) {
-		getline_error = GETLINE_OUT_OF_MEM;
+		get_line_error = GETLINE_OUT_OF_MEM;
 		return 0;
 	}
 	memcpy(temp, name, len-1);
 	temp[len-1] = 0;
 	return temp;
 }
+
+#ifndef SMALL
+/*
+ * set_tstamp()
+ *	Use a specific timestamp for all individual files created in the
+ *	archive
+ */
+static int
+set_tstamp(const char *b, struct stat *st)
+{
+	time_t when;
+	char *eb;
+	long long l;
+
+	if (stat(b, st) != -1)
+		return 0;
+
+#ifndef HAVE_NBTOOL_CONFIG_H
+	errno = 0;
+	if ((when = parsedate(b, NULL, NULL)) == -1 && errno != 0)
+#endif
+	{
+		errno = 0;
+		l = strtoll(b, &eb, 0);
+		if (b == eb || *eb || errno)
+			return -1;
+		when = (time_t)l;
+	}
+
+	st->st_ino = 1;
+#if HAVE_STRUCT_STAT_BIRTHTIME 
+	st->st_birthtime =
+#endif
+	st->st_mtime = st->st_ctime = st->st_atime = when;
+	return 0;
+}
+#endif
 
 /*
  * no_op()
@@ -2068,7 +2164,7 @@ no_op(void)
  *	print the usage summary to the user
  */
 
-void
+static void
 pax_usage(void)
 {
 	fprintf(stderr,
@@ -2097,11 +2193,11 @@ pax_usage(void)
  *	print the usage summary to the user
  */
 
-void
+static void
 tar_usage(void)
 {
-	(void)fputs("usage: tar [-]{crtux}[-befhjklmopqvwzHOPSXZ014578] [archive] "
-		    "[blocksize]\n"
+	(void)fputs("usage: tar [-]{crtux}[-befhjklmopqvwzHJOPSXZ014578] "
+		    "[archive] [blocksize]\n"
 		    "           [-C directory] [-T file] [-s replstr] "
 		    "[file ...]\n", stderr);
 	exit(1);
@@ -2114,7 +2210,7 @@ tar_usage(void)
  *	print the usage summary to the user
  */
 
-void
+static void
 cpio_usage(void)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: flt_rounds.c,v 1.4 2007/01/17 23:24:22 hubertf Exp $	*/
+/*	$NetBSD: flt_rounds.c,v 1.7 2017/03/11 01:25:04 chs Exp $	*/
 
 /*
  * Copyright (c) 1996 Mark Brinicombe
@@ -33,16 +33,17 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: flt_rounds.c,v 1.4 2007/01/17 23:24:22 hubertf Exp $");
+__RCSID("$NetBSD: flt_rounds.c,v 1.7 2017/03/11 01:25:04 chs Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#include "namespace.h"
 #include <sys/types.h>
 #include <ieeefp.h>
 
 static const int map[] = {
 	1,	/* round to nearest */
-	2,	/* round to positive infinity */
-	3,	/* round to negative infinity */
+	3,	/* round to positive infinity */
+	2,	/* round to negative infinity */
 	0	/* round to zero */
 };
 
@@ -75,7 +76,7 @@ static const int map[] = {
 extern int __flt_rounds __P((void));
 
 int
-__flt_rounds()
+__flt_rounds(void)
 {
 	return(map[fpgetround()]);
 }

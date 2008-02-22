@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.24 2006/06/28 14:46:32 drochner Exp $
+#	$NetBSD: Makefile.inc,v 1.26 2014/01/20 17:14:38 joerg Exp $
 
 SRCS+=	setjmp.S _setjmp.S sigsetjmp.S
 
@@ -6,7 +6,7 @@ SRCS+=	makecontext.c resumecontext.c swapcontext.S
 
 SRCS+=	_lwp.c
 
-SRCS+=	fabs.c flt_rounds.c bswap16.c bswap32.c bswap64.c
+SRCS+=	fabs_ieee754.c flt_rounds.c bswap16.c bswap32.c bswap64.c
 
 # Common ieee754 constants and functions
 SRCS+=	infinityf_ieee754.c infinity_ieee754.c infinityl_dbl_ieee754.c
@@ -18,9 +18,9 @@ SRCS+=	signbitf_ieee754.c signbitd_ieee754.c
 
 SRCS+=	nanf.c
 
-SRCS.sh3.gen=	Lint__setjmp.c Lint___setjmp14.c Lint___sigsetjmp14.c \
+LSRCS.sh3.gen=	Lint__setjmp.c Lint___setjmp14.c Lint___sigsetjmp14.c \
 		Lint_swapcontext.c
 
-LSRCS+=		${SRCS.sh3.gen}
-DPSRCS+=	${SRCS.sh3.gen}
-CLEANFILES+=	${SRCS.sh3.gen}
+LSRCS+=		${LSRCS.sh3.gen}
+DPSRCS+=	${LSRCS.sh3.gen}
+CLEANFILES+=	${LSRCS.sh3.gen}

@@ -1,4 +1,4 @@
-/*	$NetBSD: yppush_svc.c,v 1.7 2003/11/12 13:31:08 grant Exp $	*/
+/*	$NetBSD: yppush_svc.c,v 1.10 2011/08/30 17:06:22 plunky Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: yppush_svc.c,v 1.7 2003/11/12 13:31:08 grant Exp $");
+__RCSID("$NetBSD: yppush_svc.c,v 1.10 2011/08/30 17:06:22 plunky Exp $");
 #endif
 
 /*
@@ -69,10 +64,10 @@ int _rpcpmstart;		/* Started by a port monitor ? */
 int _rpcfdtype;			/* Whether Stream or Datagram ? */
 int _rpcsvcdirty;		/* Still serving ? */
 
-static	void _msgout(char *);
+static	void _msgout(const char *);
 
 static
-void _msgout(char *msg)
+void _msgout(const char *msg)
 {
 #ifdef RPC_SVC_FG
 	if (_rpcpmstart)
@@ -97,14 +92,14 @@ yppush_xfrrespprog_1(struct svc_req *rqstp, SVCXPRT *transp)
 	_rpcsvcdirty = 1;
 	switch (rqstp->rq_proc) {
 	case YPPUSHPROC_NULL:
-		xdr_argument = xdr_void;
-		xdr_result = xdr_void;
+		xdr_argument = (xdrproc_t)xdr_void;
+		xdr_result = (xdrproc_t)xdr_void;
 		local = yppushproc_null_1_svc;
 		break;
 
 	case YPPUSHPROC_XFRRESP:
-		xdr_argument = xdr_yppushresp_xfr;
-		xdr_result = xdr_void;
+		xdr_argument = (xdrproc_t)xdr_yppushresp_xfr;
+		xdr_result = (xdrproc_t)xdr_void;
 		local = yppushproc_xfrresp_1_svc;
 		break;
 

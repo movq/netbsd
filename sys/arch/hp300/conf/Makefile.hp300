@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.hp300,v 1.87 2005/12/11 12:17:13 christos Exp $
+#	$NetBSD: Makefile.hp300,v 1.93 2018/02/25 00:27:16 mrg Exp $
 
 # Makefile for NetBSD
 #
@@ -33,7 +33,7 @@ GENASSYM_CONF=	${HP300}/hp300/genassym.cf
 ##
 CPPFLAGS+=	-Dhp300
 CFLAGS+=	-msoft-float
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
@@ -46,12 +46,15 @@ KERN_AS=	obj
 # for the Motorola 68040 Floating Point Software Product
 .include "$S/arch/m68k/fpsp/Makefile.inc"
 
-MD_OBJS=	locore.o ${FPSP}
+MD_OBJS=	locore.o
+MD_LIBS=	${FPSP}
 MD_CFILES=
 MD_SFILES=	${HP300}/hp300/locore.s
 
 locore.o: ${HP300}/hp300/locore.s assym.h
 	${NORMAL_S}
+
+.include "$S/arch/m68k/conf/Makefile.kern.m68k.inc"
 
 ##
 ## (5) link settings
@@ -79,7 +82,7 @@ dma.o hpux_machdep.o locore.o machdep.o pmap.o pmap_boostrap.o sys_machdep.o tra
 
 %CFILES
 
-#%SFILES
+%SFILES
 
 %LOAD
 

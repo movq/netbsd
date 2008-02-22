@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_fcntl.c,v 1.6 2008/02/04 22:23:43 dsl Exp $ */
+/*	$NetBSD: linux32_fcntl.c,v 1.10 2014/05/17 09:30:07 njoly Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.6 2008/02/04 22:23:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.10 2014/05/17 09:30:07 njoly Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,6 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_fcntl.c,v 1.6 2008/02/04 22:23:43 dsl Exp $"
 #include <compat/linux/common/linux_fcntl.h>
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_misc.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -110,7 +112,7 @@ int
 linux32_sys_fcntl(struct lwp *l, const struct linux32_sys_fcntl_args *uap, register_t *retval)
 {
 	/* {
-		syscallcarg(int) fd;
+		syscallarg(int) fd;
                 syscallarg(int) cmd;
 		syscallarg(netbsd32_voidp) arg;
 	} */
@@ -141,4 +143,40 @@ linux32_sys_fcntl(struct lwp *l, const struct linux32_sys_fcntl_args *uap, regis
 	NETBSD32TOP_UAP(arg, void);
 
 	return linux_sys_fcntl(l, &ua, retval);
+}
+
+int
+linux32_sys_fadvise64(struct lwp *l,
+    const struct linux32_sys_fadvise64_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(uint32_t) offlo;
+		syscallarg(uint32_t) offhi;
+		syscallarg(netbsd32_size_t) len;
+		syscallarg(int) advice;
+	} */
+	off_t off = ((off_t)SCARG(uap, offhi) << 32) + SCARG(uap, offlo);
+
+	return do_posix_fadvise(SCARG(uap, fd), off,
+	    SCARG(uap, len), linux_to_bsd_posix_fadv(SCARG(uap, advice)));
+}
+
+int
+linux32_sys_fadvise64_64(struct lwp *l,
+    const struct linux32_sys_fadvise64_64_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(uint32_t) offlo;
+		syscallarg(uint32_t) offhi;
+		syscallarg(uint32_t) lenlo;
+		syscallarg(uint32_t) lenhi;
+		syscallarg(int) advice;
+	} */
+	off_t off = ((off_t)SCARG(uap, offhi) << 32) + SCARG(uap, offlo);
+	off_t len = ((off_t)SCARG(uap, lenhi) << 32) + SCARG(uap, lenlo);
+
+	return do_posix_fadvise(SCARG(uap, fd), off,
+	    len, linux_to_bsd_posix_fadv(SCARG(uap, advice)));
 }

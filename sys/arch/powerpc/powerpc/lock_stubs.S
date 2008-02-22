@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.3 2008/02/14 19:41:54 garbled Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.10 2014/02/28 05:38:15 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,6 @@
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include "assym.h"
@@ -54,21 +46,21 @@
 
 	.text
 
+#if __HAVE_MUTEX_STUBS
 /*
  * int _lock_cas(uintptr_t *ptr, uintptr_t old, uintptr_t new);
  */
-ENTRY_NOPROFILE(_lock_cas)
+ENTRY(_lock_cas)
 1:
-	lwarx	%r10,0,%r3
-	cmpw	%r10,%r4
+	lptrarx	%r10,0,%r3
+	cmpptr	%r10,%r4
 	bne-	2f
-	stwcx.	%r5,0,%r3
+	stptrcx. %r5,0,%r3
 	bne-	1b
 	SYNC
 	li	%r3,1
 	blr
 2:
-	SYNC
 	li	%r3,0
 	blr
 
@@ -76,14 +68,12 @@ ENTRY_NOPROFILE(_lock_cas)
 /*
  * void mutex_enter(kmutex_t *);
  */
-ENTRY_NOPROFILE(mutex_enter)
-	GET_CPUINFO(%r8)
-	ldptr	%r9,CI_CURLWP(%r8)
+ENTRY(mutex_enter)
 1:
-	lwarx	%r10,0,%r3
-	cmpwi	%r10,0
+	lptrarx	%r10,0,%r3
+	cmpptri	%r10,0
 	bne-	2f
-	stwcx.	%r9,0,%r3
+	stptrcx. %r13,0,%r3
 	bne-	1b
 	ISYNC
 	blr
@@ -93,18 +83,111 @@ ENTRY_NOPROFILE(mutex_enter)
 /*
  * void mutex_exit(kmutex_t *);
  */
-ENTRY_NOPROFILE(mutex_exit)
-	GET_CPUINFO(%r8)
-	ldptr	%r9,CI_CURLWP(%r8)
+ENTRY(mutex_exit)
 	SYNC
 	li	%r7,0
 1:
-	lwarx	%r10,0,%r3
-	cmpw	%r10,%r9
+	lptrarx	%r10,0,%r3
+	cmpptr	%r10,%r13
 	bne-	2f
-	stwcx.	%r7,0,%r3
+	stptrcx. %r7,0,%r3
 	bne-	1b
 	blr
 2:
 	b	_C_LABEL(mutex_vector_exit)
+
 #endif	/* !LOCKDEBUG */
+
+/*
+ * void rw_enter(krwlock_t *krw, krw_t op);
+ */
+#if RW_READ_INCR != 16
+#error RW_READ_INCR != 16, clrrXi need fixing
+#endif
+#if RW_OWNER != 0
+#error RW_OWNER != 0, ldptr should be ldptru
+#endif
+
+#if __HAVE_RW_STUBS
+
+ENTRY(rw_enter)
+	cmpwi	%r3,RW_READER
+	bne-	1f
+
+	ldptr	%r9,RW_OWNER(%r3)
+	clrrptri %r9,%r9,4		/* clear low 4 bits */
+	addi	%r7,%r9,RW_READ_INCR
+	b	2f
+1:
+	li	%r9,0
+	ori	%r7,%r13,RW_WRITE_LOCKED
+
+2:	lptrarx	%r10,0,%r3
+	cmpptr	%r10,%r9
+	bne-	3f
+	stptrcx. %r7,0,%r3
+	bne-	2b
+	ISYNC
+	blr
+
+3:	b	_C_LABEL(rw_vector_enter)
+
+/*
+ * bool rw_tryenter(krwlock_t *krw, krw_t op);
+ */
+ENTRY(rw_tryenter)
+	cmpwi	%r3,RW_READER
+	bne-	1f
+
+	ldptr	%r9,RW_OWNER(%r3)
+	clrrptri %r9,%r9,4		/* clear low 4 bits */
+	addi	%r7,%r9,RW_READ_INCR
+	b	2f
+
+1:	li	%r9,0
+	ori	%r7,%r13,RW_WRITE_LOCKED
+
+2:	lptrarx	%r10,0,%r3
+	cmpptr	%r10,%r9
+	bne-	3f
+	stptrcx. %r7,0,%r3
+	bne-	2b
+
+	ISYNC
+	li	%r3,1
+	blr
+
+3:	li	%r3,0
+	blr
+
+/*
+ * void rw_exit(krwlock_t *krw, krw_t op);
+ */
+ENTRY(rw_exit)
+	ldptr	%r9,RW_OWNER(%r3)
+	SYNC
+	andi.	%r0,%r9,RW_WRITE_LOCKED
+	bne-	1f
+
+	clrrptri. %r9,%r9,4		/* clear low 4 bits */
+	beq-	3f			/* if 0, no reader, go slow */
+
+	addi	%r7,%r9,-RW_READ_INCR
+	b	2f
+1:
+	li	%r7,0
+	ori	%r9,%r13,RW_WRITE_LOCKED
+
+2:	lptrarx	%r10,0,%r3
+	cmpptr	%r10,%r9
+	bne-	3f
+	stptrcx. %r7,0,%r3
+	bne-	2b
+
+	blr
+
+3:	b	_C_LABEL(rw_vector_exit)
+
+#endif	/* __HAVE_RW_STUBS */
+
+#endif	/* __HAVE_MUTEX_STUBS */

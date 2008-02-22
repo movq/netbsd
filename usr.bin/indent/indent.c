@@ -1,4 +1,4 @@
-/*	$NetBSD: indent.c,v 1.16 2004/10/30 17:45:34 dsl Exp $	*/
+/*	$NetBSD: indent.c,v 1.23 2016/09/05 00:40:29 sevan Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -65,17 +65,17 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1985 Sun Microsystems, Inc.\n\
-@(#) Copyright (c) 1976 Board of Trustees of the University of Illinois.\n\
-@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985 Sun Microsystems, Inc.\
+  Copyright (c) 1976 Board of Trustees of the University of Illinois.\
+  Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)indent.c	5.17 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: indent.c,v 1.16 2004/10/30 17:45:34 dsl Exp $");
+__RCSID("$NetBSD: indent.c,v 1.23 2016/09/05 00:40:29 sevan Exp $");
 #endif
 #endif				/* not lint */
 
@@ -94,13 +94,11 @@ __RCSID("$NetBSD: indent.c,v 1.16 2004/10/30 17:45:34 dsl Exp $");
 #undef  EXTERN
 #include "indent_codes.h"
 
-char   *in_name = "Standard Input";	/* will always point to name of input
-					 * file */
-char   *out_name = "Standard Output";	/* will always point to name of output
-					 * file */
+const char *in_name = "Standard Input";		/* will always point to name of
+						 * input file */
+const char *out_name = "Standard Output";	/* will always point to name of
+						 * output file */
 char    bakfile[MAXPATHLEN] = "";
-
-int main(int, char **);
 
 int
 main(int argc, char **argv)
@@ -122,7 +120,8 @@ main(int argc, char **argv)
 	int     squest;		/* when this is positive, we have seen a ?
 				 * without the matching : in a <c>?<s>:<s>
 				 * construct */
-	char   *t_ptr;		/* used for copying tokens */
+	const char *t_ptr;	/* used for copying tokens */
+	int	tabs_to_var = 0; /* true if using tabs to indent to var name */
 	int     type_code;	/* the type of token, returned by lexi */
 
 	int     last_else = 0;	/* true iff last keyword was an else */
@@ -133,7 +132,7 @@ main(int argc, char **argv)
         \*-----------------------------------------------*/
 
 	if (!setlocale(LC_ALL, ""))
-		fprintf(stderr, "indent: can't set locale.\n");
+		warnx("can't set locale.");
 
 	hd_type = 0;
 	ps.p_stack[0] = stmt;	/* this is the parser's stack */
@@ -235,8 +234,7 @@ main(int argc, char **argv)
 								 * output file */
 					if (strcmp(in_name, out_name) == 0) {	/* attempt to overwrite
 										 * the file */
-						fprintf(stderr, "indent: input and output files must be different\n");
-						exit(1);
+						errx(1, "input and output files must be different");
 					}
 					output = fopen(out_name, "w");
 					if (output == 0)	/* check for create
@@ -244,8 +242,7 @@ main(int argc, char **argv)
 						err(1, "%s", out_name);
 					continue;
 				}
-			fprintf(stderr, "indent: unknown parameter: %s\n", argv[i]);
-			exit(1);
+			errx(1, "unknown parameter: %s", argv[i]);
 		} else
 			set_option(argv[i]);
 	}			/* end of for */
@@ -261,7 +258,7 @@ main(int argc, char **argv)
 		}
 	}
 	if (ps.com_ind <= 1)
-		ps.com_ind = 2;	/* dont put normal comments before column 2 */
+		ps.com_ind = 2;	/* don't put normal comments before column 2 */
 	if (troff) {
 		if (bodyf.font[0] == 0)
 			parsefont(&bodyf, "R");
@@ -309,7 +306,7 @@ main(int argc, char **argv)
 			ps.ind_level = ps.i_l_follow = col / ps.ind_size;
 	}
 	if (troff) {
-		char   *p = in_name, *beg = in_name;
+		const char   *p = in_name, *beg = in_name;
 
 		while (*p)
 			if (*p++ == '/')
@@ -356,7 +353,7 @@ main(int argc, char **argv)
 			case lbrace:	/* this is a brace that starts the
 					 * compound stmt */
 				if (sc_end == 0) {	/* ignore buffering if a
-							 * comment wasnt stored
+							 * comment wasn't stored
 							 * up */
 					ps.search_brace = false;
 					goto check_type;
@@ -421,7 +418,7 @@ main(int argc, char **argv)
 					force_nl = false;
 
 				if (sc_end == 0) {	/* ignore buffering if
-							 * comment wasnt saved
+							 * comment wasn't saved
 							 * up */
 					ps.search_brace = false;
 					goto check_type;
@@ -504,7 +501,7 @@ check_type:
 					diag(0, "Line broken");
 				flushed_nl = false;
 				dump_line();
-				ps.want_blank = false;	/* dont insert blank at
+				ps.want_blank = false;	/* don't insert blank at
 							 * line start */
 				force_nl = false;
 			}
@@ -624,7 +621,7 @@ check_type:
 				ps.last_u_d = true;	/* inform lexi that a
 							 * following operator is
 							 * unary */
-				ps.in_stmt = false;	/* dont use stmt
+				ps.in_stmt = false;	/* don't use stmt
 							 * continuation
 							 * indentation */
 
@@ -648,7 +645,7 @@ check_type:
 				ps.dumped_decl_indent = 1;
 				e_code += strlen(e_code);
 			} else {
-				char   *res = token;
+				const char *res = token;
 
 				if (ps.in_decl && !ps.block_init) {	/* if this is a unary op
 									 * in a declaration, we
@@ -674,7 +671,7 @@ check_type:
 			if (ps.want_blank)
 				*e_code++ = ' ';
 			{
-				char   *res = token;
+				const char *res = token;
 
 				if (troff)
 					switch (token[0]) {
@@ -786,8 +783,8 @@ check_type:
 
 			ps.in_decl = (ps.dec_nest > 0);	/* if we were in a first
 							 * level structure
-							 * declaration, we arent
-							 * any more */
+							 * declaration, we
+							 * aren't any more */
 
 			if ((!sp_sw || hd_type != forstmt) && ps.p_l_follow > 0) {
 
@@ -802,8 +799,8 @@ check_type:
 						 * while, etc. with unbalanced
 						 * parens */
 					sp_sw = false;
-					parse(hd_type);	/* dont lose the if, or
-							 * whatever */
+					parse(hd_type);	/* don't lose the if,
+							 * or whatever */
 				}
 			}
 			*e_code++ = ';';
@@ -820,7 +817,7 @@ check_type:
 			break;
 
 		case lbrace:	/* got a '{' */
-			ps.in_stmt = false;	/* dont indent the {} */
+			ps.in_stmt = false;	/* don't indent the {} */
 			if (!ps.block_init)
 				force_nl = true;	/* force other stuff on
 							 * same line as '{' onto
@@ -857,7 +854,7 @@ check_type:
 				}
 			}
 			if (s_code == e_code)
-				ps.ind_stmt = false;	/* dont put extra
+				ps.ind_stmt = false;	/* don't put extra
 							 * indentation on line
 							 * with '{' */
 			if (ps.in_decl && ps.in_or_st) {	/* this is either a
@@ -866,9 +863,9 @@ check_type:
 				di_stack[ps.dec_nest++] = dec_ind;
 				/* ?		dec_ind = 0; */
 			} else {
-				ps.decl_on_line = false;	/* we cant be in the
+				ps.decl_on_line = false;	/* we can't be in the
 								 * middle of a
-								 * declaration, so dont
+								 * declaration, so don't
 								 * do special
 								 * indentation of
 								 * comments */
@@ -998,6 +995,7 @@ check_type:
 		         * : i);
 		         */
 			dec_ind = ps.decl_indent > 0 ? ps.decl_indent : i;
+			tabs_to_var = (use_tabs ? ps.decl_indent > 0 : 0);
 			goto copy_id;
 
 		case ident:	/* got an identifier or constant */
@@ -1012,11 +1010,44 @@ check_type:
 							sprintf(e_code, "\n.De %dp+\200p\n", dec_ind * 7);
 							ps.dumped_decl_indent = 1;
 							e_code += strlen(e_code);
-						} else
-							while ((e_code - s_code) < dec_ind) {
+							CHECK_SIZE_CODE;
+						} else {
+							int cur_dec_ind;
+							int pos, startpos;
+
+							/*
+							 * in order to get the tab math right for
+							 * indentations that are not multiples of 8 we
+							 * need to modify both startpos and dec_ind
+							 * (cur_dec_ind) here by eight minus the
+							 * remainder of the current starting column
+							 * divided by eight. This seems to be a
+							 * properly working fix
+							 */
+							startpos = e_code - s_code;
+							cur_dec_ind = dec_ind;
+							pos = startpos;
+							if ((ps.ind_level * ps.ind_size) % 8 != 0) {
+								pos += (ps.ind_level * ps.ind_size) % 8;
+								cur_dec_ind += (ps.ind_level * ps.ind_size) % 8;
+							}
+
+							if (tabs_to_var) {
+								while ((pos & ~7) + 8 <= cur_dec_ind) {
+									CHECK_SIZE_CODE;
+									*e_code++ = '\t';
+									pos = (pos & ~7) + 8;
+								}
+							}
+							while (pos < cur_dec_ind) {
 								CHECK_SIZE_CODE;
 								*e_code++ = ' ';
+								pos++;
 							}
+							if (ps.want_blank && e_code - s_code == startpos)
+								*e_code++ = ' ';
+							ps.want_blank = false;
+						}
 					}
 				} else {
 					if (dec_ind && s_code != e_code)
@@ -1055,7 +1086,7 @@ check_type:
 		case period:	/* treat a period kind of like a binary
 				 * operation */
 			*e_code++ = '.';	/* move the period into line */
-			ps.want_blank = false;	/* dont put a blank after a
+			ps.want_blank = false;	/* don't put a blank after a
 						 * period */
 			break;
 
@@ -1179,7 +1210,7 @@ check_type:
 					while ((c = getc(input)) == '\n');
 					ungetc(c, input);
 				}
-				if (ifdef_level < sizeof state_stack / sizeof state_stack[0]) {
+				if (ifdef_level < (int)(sizeof state_stack / sizeof state_stack[0])) {
 					match_state[ifdef_level].tos = -1;
 					state_stack[ifdef_level++] = ps;
 				} else
@@ -1223,7 +1254,7 @@ check_type:
 						 * line here */
 				flushed_nl = false;
 				dump_line();
-				ps.want_blank = false;	/* dont insert blank at
+				ps.want_blank = false;	/* don't insert blank at
 							 * line start */
 				force_nl = false;
 			}
@@ -1246,7 +1277,7 @@ bakcopy(void)
 {
 	int     n, bakchn;
 	char    buff[8 * 1024];
-	char   *p;
+	const char *p;
 
 	/* construct file name .Bfile */
 	for (p = in_name; *p; p++);	/* skip to end of string */

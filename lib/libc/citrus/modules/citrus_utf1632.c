@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_utf1632.c,v 1.7 2006/10/27 14:13:55 tnozaki Exp $	*/
+/*	$NetBSD: citrus_utf1632.c,v 1.12 2012/02/12 13:51:29 wiz Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_utf1632.c,v 1.7 2006/10/27 14:13:55 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_utf1632.c,v 1.12 2012/02/12 13:51:29 wiz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -37,7 +37,6 @@ __RCSID("$NetBSD: citrus_utf1632.c,v 1.7 2006/10/27 14:13:55 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <limits.h>
 #include <wchar.h>
 #include <sys/types.h>
@@ -128,37 +127,38 @@ refetch:
 		result++;
 	}
 
-	/* judge endian marker */
-	if ((ei->mode & _MODE_UTF32) == 0) {
-		/* UTF16 */
-		if (psenc->ch[0]==0xFE && psenc->ch[1]==0xFF) {
-			psenc->current_endian = _ENDIAN_BIG;
-			chlenbak = 0;
-			goto refetch;
-		} else if (psenc->ch[0]==0xFF && psenc->ch[1]==0xFE) {
-			psenc->current_endian = _ENDIAN_LITTLE;
-			chlenbak = 0;
-			goto refetch;
+	if (psenc->current_endian == _ENDIAN_UNKNOWN) {
+		if ((ei->mode & _MODE_FORCE_ENDIAN) == 0) {
+			/* judge endian marker */
+			if ((ei->mode & _MODE_UTF32) == 0) {
+				/* UTF16 */
+				if (psenc->ch[0]==0xFE && psenc->ch[1]==0xFF) {
+					psenc->current_endian = _ENDIAN_BIG;
+					chlenbak = 0;
+					goto refetch;
+				} else if (psenc->ch[0]==0xFF && psenc->ch[1]==0xFE) {
+					psenc->current_endian = _ENDIAN_LITTLE;
+					chlenbak = 0;
+					goto refetch;
+				}
+			} else {
+				/* UTF32 */
+				if (psenc->ch[0]==0x00 && psenc->ch[1]==0x00 &&
+				    psenc->ch[2]==0xFE && psenc->ch[3]==0xFF) {
+					psenc->current_endian = _ENDIAN_BIG;
+					chlenbak = 0;
+					goto refetch;
+				} else if (psenc->ch[0]==0xFF && psenc->ch[1]==0xFE &&
+					   psenc->ch[2]==0x00 && psenc->ch[3]==0x00) {
+					psenc->current_endian = _ENDIAN_LITTLE;
+					chlenbak = 0;
+					goto refetch;
+				}
+			}
 		}
-	} else {
-		/* UTF32 */
-		if (psenc->ch[0]==0x00 && psenc->ch[1]==0x00 &&
-		    psenc->ch[2]==0xFE && psenc->ch[3]==0xFF) {
-			psenc->current_endian = _ENDIAN_BIG;
-			chlenbak = 0;
-			goto refetch;
-		} else if (psenc->ch[0]==0xFF && psenc->ch[1]==0xFE &&
-			   psenc->ch[2]==0x00 && psenc->ch[3]==0x00) {
-			psenc->current_endian = _ENDIAN_LITTLE;
-			chlenbak = 0;
-			goto refetch;
-		}
+		psenc->current_endian = ei->preffered_endian;
 	}
-	if ((ei->mode & _MODE_FORCE_ENDIAN) != 0 ||
-	    psenc->current_endian == _ENDIAN_UNKNOWN)
-		endian = ei->preffered_endian;
-	else
-		endian = psenc->current_endian;
+	endian = psenc->current_endian;
 
 	/* get wc */
 	if ((ei->mode & _MODE_UTF32) == 0) {
@@ -187,13 +187,13 @@ refetch:
 			wc <<= 10;
 			switch (endian) {
 			case _ENDIAN_LITTLE:
-				if (psenc->ch[2]<0xDC || psenc->ch[2]>0xDF)
+				if (psenc->ch[3]<0xDC || psenc->ch[3]>0xDF)
 					goto ilseq;
 				wc |= psenc->ch[2];
 				wc |= (wchar_t)(psenc->ch[3] & 3) << 8;
 				break;
 			case _ENDIAN_BIG:
-				if (psenc->ch[3]<0xDC || psenc->ch[3]>0xDF)
+				if (psenc->ch[2]<0xDC || psenc->ch[2]>0xDF)
 					goto ilseq;
 				wc |= psenc->ch[3];
 				wc |= (wchar_t)(psenc->ch[2] & 3) << 8;
@@ -250,40 +250,61 @@ _citrus_UTF1632_wcrtomb_priv(_UTF1632EncodingInfo *ei, char *s, size_t n,
 			     wchar_t wc, _UTF1632State *psenc,
 			     size_t *nresult)
 {
-	int ret;
 	wchar_t wc2;
+	static const char _bom[4] = {
+#if BYTE_ORDER == BIG_ENDIAN
+	    0x00, 0x00, 0xFE, 0xFF,
+#else
+	    0xFF, 0xFE, 0x00, 0x00,
+#endif
+	};
+	const char *bom = &_bom[0];
+	size_t cnt;
 
 	_DIAGASSERT(ei != NULL);
 	_DIAGASSERT(nresult != 0);
 	_DIAGASSERT(s != NULL);
+
+	cnt = (size_t)0;
+	if (psenc->current_endian == _ENDIAN_UNKNOWN) {
+		if ((ei->mode & _MODE_FORCE_ENDIAN) == 0) {
+			if (ei->mode & _MODE_UTF32) {
+				cnt = 4;
+			} else {
+				cnt = 2;
+#if BYTE_ORDER == BIG_ENDIAN
+				bom += 2;
+#endif
+			}
+			if (n < cnt)
+				goto e2big;
+			memcpy(s, bom, cnt);
+			s += cnt, n -= cnt;
+		}
+		psenc->current_endian = ei->preffered_endian;
+	}
 
 	wc2 = 0;
 	if ((ei->mode & _MODE_UTF32)==0) {
 		/* UTF16 */
 		if (wc>0xFFFF) {
 			/* surrogate */
-			if (wc>0x10FFFF) {
-				ret = EILSEQ;
-				goto err;
-			}
-			if (n < 4) {
-				ret = E2BIG;
-				goto err;
-			}
+			if (wc>0x10FFFF)
+				goto ilseq;
+			if (n < 4)
+				goto e2big;
+			cnt += 4;
 			wc -= 0x10000;
 			wc2 = (wc & 0x3FF) | 0xDC00;
 			wc = (wc>>10) | 0xD800;
-			*nresult = (size_t)4;
 		} else {
-			if (n < 2) {
-				ret = E2BIG;
-				goto err;
-			}
-			*nresult = (size_t)2;
+			if (n < 2)
+				goto e2big;
+			cnt += 2;
 		}
 
 surrogate:
-		switch (ei->preffered_endian) {
+		switch (psenc->current_endian) {
 		case _ENDIAN_BIG:
 			s[1] = wc;
 			s[0] = (wc >>= 8);
@@ -302,12 +323,11 @@ surrogate:
 	} else {
 		/* UTF32 */
 		if (wc >= 0xD800 && wc <= 0xDFFF)
-			goto err;
-		if (n < 4) {
-			ret = E2BIG;
-			goto err;
-		}
-		switch (ei->preffered_endian) {
+			goto ilseq;
+		if (n < 4)
+			goto e2big;
+		cnt += 4;
+		switch (psenc->current_endian) {
 		case _ENDIAN_BIG:
 			s[3] = wc;
 			s[2] = (wc >>= 8);
@@ -321,14 +341,17 @@ surrogate:
 			s[3] = (wc >>= 8);
 			break;
 		}
-		*nresult = (size_t)4;
 	}
+	*nresult = cnt;
 
 	return 0;
 
-err:
+ilseq:
 	*nresult = (size_t)-1;
-	return ret;
+	return EILSEQ;
+e2big:
+	*nresult = (size_t)-1;
+	return E2BIG;
 }
 
 static void

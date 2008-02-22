@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.18 2006/03/18 09:46:35 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.20 2011/09/06 18:28:18 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.18 2006/03/18 09:46:35 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.20 2011/09/06 18:28:18 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,8 +80,7 @@ gid_t	groupid;	/* user's group ID */
 struct	passwd *pw;	/* pointer to static area used by getpwent */
 struct	group *gr;	/* pointer to static area used by getgrent */
 
-int	main(int, char **);
-static void usage(void);
+__dead static void usage(void);
 static void docmdargs(int, char *[]);
 
 int

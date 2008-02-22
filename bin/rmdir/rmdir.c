@@ -1,4 +1,4 @@
-/* $NetBSD: rmdir.c,v 1.23 2003/09/29 21:11:15 dsl Exp $ */
+/* $NetBSD: rmdir.c,v 1.27 2017/08/10 22:52:13 ginsbach Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -31,31 +31,29 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rmdir.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: rmdir.c,v 1.23 2003/09/29 21:11:15 dsl Exp $");
+__RCSID("$NetBSD: rmdir.c,v 1.27 2017/08/10 22:52:13 ginsbach Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 
 #include <err.h>
-#include <errno.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int	rm_path(char *);
-void	usage(void);
-int	main(int, char *[]);
+static int	rm_path(char *);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -94,7 +92,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-int
+static int
 rm_path(char *path)
 {
 	char *p;
@@ -105,6 +103,10 @@ rm_path(char *path)
 			/* Ignore trailing '/' on deleted name */
 			continue;
 
+		if (*path == 0)
+			/* At top level (root) directory */
+			break;
+
 		if (rmdir(path) < 0) {
 			warn("%s", path);
 			return (1);
@@ -114,7 +116,7 @@ rm_path(char *path)
 	return (0);
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: %s [-p] directory ...\n", getprogname());

@@ -1,4 +1,4 @@
-/* $NetBSD: rsbus.h,v 1.2 2005/12/11 12:16:05 christos Exp $ */
+/* $NetBSD: rsbus.h,v 1.4 2012/10/27 17:17:23 chs Exp $ */
 
 #ifndef _RSBUS_H_
 #define _RSBUS_H_
@@ -6,11 +6,9 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/queue.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct rsbus_softc {
-	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };

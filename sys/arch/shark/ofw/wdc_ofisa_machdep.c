@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_ofisa_machdep.c,v 1.4 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: wdc_ofisa_machdep.c,v 1.8 2012/10/27 17:18:11 chs Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_ofisa_machdep.c,v 1.4 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_ofisa_machdep.c,v 1.8 2012/10/27 17:18:11 chs Exp $");
 
 #include "opt_compat_old_ofw.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ofw/openfirm.h>
@@ -51,10 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: wdc_ofisa_machdep.c,v 1.4 2005/12/11 12:19:05 christ
 #ifdef COMPAT_OLD_OFW
 
 int
-wdc_ofisa_md_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+wdc_ofisa_md_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
 	char type[8];
@@ -76,11 +73,7 @@ wdc_ofisa_md_match(parent, cf, aux)
 }
 
 int
-wdc_ofisa_md_intr_fixup(parent, self, aux, descp, ndescs, ndescsfilled)
-	struct device *parent, *self;
-	void *aux;
-	struct ofisa_intr_desc *descp;
-	int ndescs, ndescsfilled;
+wdc_ofisa_md_intr_fixup(device_t parent, device_t self, void *aux, struct ofisa_intr_desc *descp, int ndescs, int ndescsfilled)
 {
 
 	if (1)			/* XXX old firmware compat enabled */

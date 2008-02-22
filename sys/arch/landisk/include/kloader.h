@@ -1,4 +1,4 @@
-/*	$NetBSD: kloader.h,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: kloader.h,v 1.3 2015/06/11 15:11:14 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2004 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
 #define	_LANDISK_KLOADER_H_
 
 #define PG_VADDR(pg)	SH3_PHYS_TO_P1SEG(VM_PAGE_TO_PHYS(pg))
+extern paddr_t avail_start, avail_end;
 
 #include <dev/kloader.h>
 

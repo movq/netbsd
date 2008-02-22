@@ -1,4 +1,4 @@
-/* $NetBSD: ug.c,v 1.10 2007/11/17 08:23:46 kefren Exp $ */
+/* $NetBSD: ug.c,v 1.13 2018/06/03 10:04:40 maxv Exp $ */
 
 /*
  * Copyright (c) 2007 Mihai Chelaru <kefren@netbsd.ro>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ug.c,v 1.10 2007/11/17 08:23:46 kefren Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ug.c,v 1.13 2018/06/03 10:04:40 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +56,7 @@ uint8_t ug_ver;
  * Imported from linux driver
  */
 
-struct ug2_motherboard_info ug2_mb[] = {
+static const struct ug2_motherboard_info ug2_mb[] = {
 	{ 0x000C, "unknown. Please send-pr(1)", {
 		{ "CPU Core", 0, 0, 10, 1, 0 },
 		{ "DDR", 1, 0, 10, 1, 0 },
@@ -429,6 +429,10 @@ ug_setup_sensors(struct ug_softc *sc)
 	COPYDESCR(sc->sc_sensor[16].desc, "SYS Fan");
 	COPYDESCR(sc->sc_sensor[17].desc, "AUX Fan 1");
 	COPYDESCR(sc->sc_sensor[18].desc, "AUX Fan 2");
+
+	/* All sensors */
+	for (i = 0; i < UG_NUM_SENSORS; i++)
+		sc->sc_sensor[i].units = ENVSYS_SINVALID;
 }
 
 void
@@ -476,36 +480,36 @@ ug_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 }
 
 void
-ug2_attach(struct ug_softc *sc)
+ug2_attach(device_t dv)
 {
+	struct ug_softc *sc = device_private(dv);
 	uint8_t buf[2];
 	int i;
-	struct ug2_motherboard_info *ai;
-	struct ug2_sensor_info *si;
+	const struct ug2_motherboard_info *ai;
+	const struct ug2_sensor_info *si;
 
 	aprint_normal(": Abit uGuru 2005 system monitor\n");
 
 	if (ug2_read(sc, UG2_MISC_BANK, UG2_BOARD_ID, 2, buf) != 2) {
-		aprint_error("%s: Cannot detect board ID. Using default\n",
-			sc->sc_dev.dv_xname);
+		aprint_error_dev(dv, "Cannot detect board ID. Using default\n");
 		buf[0] = UG_MAX_MSB_BOARD;
 		buf[1] = UG_MAX_LSB_BOARD;
 	}
 
 	if (buf[0] > UG_MAX_MSB_BOARD || buf[1] > UG_MAX_LSB_BOARD ||
 		buf[1] < UG_MIN_LSB_BOARD) {
-		aprint_error("%s: Invalid board ID(%X,%X). Using default\n",
-			sc->sc_dev.dv_xname, buf[0], buf[1]);
+		aprint_error_dev(dv, "Invalid board ID(%X,%X). Using default\n",
+			buf[0], buf[1]);
 		buf[0] = UG_MAX_MSB_BOARD;
 		buf[1] = UG_MAX_LSB_BOARD;
 	}
 
 	ai = &ug2_mb[buf[1] - UG_MIN_LSB_BOARD];
 
-	aprint_normal("%s: mainboard %s (%.2X%.2X)\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(dv, "mainboard %s (%.2X%.2X)\n",
 	    ai->name, buf[0], buf[1]);
 
-	sc->mbsens = (void*)ai->sensors;
+	sc->mbsens = (const void *)ai->sensors;
 	sc->sc_sme = sysmon_envsys_create();
 
 	for (i = 0, si = ai->sensors; si && si->name; si++, i++) {
@@ -534,13 +538,12 @@ ug2_attach(struct ug_softc *sc)
 	}
 #undef COPYDESCR
 
-	sc->sc_sme->sme_name = sc->sc_dev.dv_xname;
+	sc->sc_sme->sme_name = device_xname(dv);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = ug2_refresh;
 
 	if (sysmon_envsys_register(sc->sc_sme)) {
-		aprint_error("%s: unable to register with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(dv, "unable to register with sysmon\n");
 		sysmon_envsys_destroy(sc->sc_sme);
 	}
 }
@@ -549,7 +552,8 @@ void
 ug2_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 {
 	struct ug_softc *sc = sme->sme_cookie;
-	struct ug2_sensor_info *si = (struct ug2_sensor_info *)sc->mbsens;
+	const struct ug2_sensor_info *si =
+	    (const struct ug2_sensor_info *)sc->mbsens;
 	int rfact = 1;
 	uint8_t v;
 

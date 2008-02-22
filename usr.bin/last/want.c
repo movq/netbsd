@@ -1,4 +1,4 @@
-/*	$NetBSD: want.c,v 1.11 2007/10/05 07:27:42 lukem Exp $	*/
+/*	$NetBSD: want.c,v 1.17 2012/03/15 03:04:05 dholland Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -29,6 +29,7 @@
  * SUCH DAMAGE.
  */
 static struct utmp *buf;
+static time_t seentime;
 
 static void onintr(int);
 static int want(struct utmp *, int);
@@ -38,15 +39,15 @@ static const char *
 /*ARGSUSED*/
 gethost(struct utmp *ut, const char *host, int numeric)
 {
-#if FIRSTVALID == 0
+#if HAS_UT_SS == 0
 	return numeric ? "" : host;
 #else
 	if (numeric) {
-		static char buf[512];
-		buf[0] = '\0';
-		(void)sockaddr_snprintf(buf, sizeof(buf), "%a",
+		static char hbuf[512];
+		hbuf[0] = '\0';
+		(void)sockaddr_snprintf(hbuf, sizeof(hbuf), "%a",
 		    (struct sockaddr *)&ut->ut_ss);
-		return buf;
+		return hbuf;
 	} else
 		return host;
 #endif
@@ -63,7 +64,7 @@ gethost(struct utmp *ut, const char *host, int numeric)
  * wtmp --
  *	read through the wtmp file
  */
-void
+static void
 wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 {
 	struct utmp	*bp;		/* current structure */
@@ -71,14 +72,15 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 	struct stat	stb;		/* stat of file for sz */
 	off_t	offset;
 	int	wfd;
-	char	*ct, *crmsg;
+	char	*ct;
+	const char *crmsg;
 	size_t  len = sizeof(*buf) * MAXUTMP;
 	char namebuf[sizeof(bp->ut_name) + 1], *namep;
 	char linebuf[sizeof(bp->ut_line) + 1], *linep;
 	char hostbuf[sizeof(bp->ut_host) + 1], *hostp;
-	int checkname = namesz > sizeof(bp->ut_name);
-	int checkline = linesz > sizeof(bp->ut_line);
-	int checkhost = hostsz > sizeof(bp->ut_host);
+	int checkname = namesz > (int)sizeof(bp->ut_name);
+	int checkline = linesz > (int)sizeof(bp->ut_line);
+	int checkhost = hostsz > (int)sizeof(bp->ut_host);
 
 	if ((buf = malloc(len)) == NULL)
 		err(EXIT_FAILURE, "Cannot allocate utmp buffer");
@@ -129,7 +131,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 	if (!S_ISREG(stb.st_mode))
 		errx(EXIT_FAILURE, "%s: Not a regular file", file);
 
-	buf[FIRSTVALID].ut_timefld = time(NULL);
+	seentime = stb.st_mtime;
 	(void)signal(SIGINT, onintr);
 	(void)signal(SIGQUIT, onintr);
 
@@ -141,7 +143,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 		ssize_t ret, i;
 		size_t size;
 
-		size = MIN(len, offset);
+		size = MIN((off_t)len, offset);
 		offset -= size; /* Always a multiple of sizeof(*buf) */
 		ret = pread(wfd, buf, size, offset);
 		if (ret < 0) {
@@ -156,6 +158,9 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 			NULTERM(name);
 			NULTERM(line);
 			NULTERM(host);
+
+			seentime = bp->ut_timefld;
+
 			/*
 			 * if the terminal line is '~', the machine stopped.
 			 * see utmp(5) for more info.
@@ -236,7 +241,8 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));
 					else
-						printf(" (%ld+%s)\n",
+						printf(" (%lld+%s)\n",
+						    (long long)
 						    delta / SECSPERDAY,
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));
@@ -248,7 +254,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 		}
 	}
 	fulltime = 1;	/* show full time */
-	crmsg = fmttime(buf[FIRSTVALID].ut_timefld, FULLTIME);
+	crmsg = fmttime(seentime, FULLTIME);
 	if ((ct = strrchr(file, '/')) != NULL)
 		ct++;
 	printf("\n%s begins %s\n", ct ? ct : file, crmsg);
@@ -303,8 +309,7 @@ static void
 onintr(int signo)
 {
 	/* FIXME: None of this is allowed in a signal handler */
-	printf("\ninterrupted %s\n", fmttime(buf[FIRSTVALID].ut_timefld,
-	    FULLTIME));
+	printf("\ninterrupted %s\n", fmttime(seentime, FULLTIME));
 	if (signo == SIGINT) {
 		(void)raise_default_signal(signo);
 		exit(EXIT_FAILURE);

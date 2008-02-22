@@ -1,4 +1,4 @@
-/*	$NetBSD: dispatcher.c,v 1.30 2008/01/28 18:35:50 pooka Exp $	*/
+/*	$NetBSD: dispatcher.c,v 1.48 2014/10/31 13:56:04 manu Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2008 Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: dispatcher.c,v 1.30 2008/01/28 18:35:50 pooka Exp $");
+__RCSID("$NetBSD: dispatcher.c,v 1.48 2014/10/31 13:56:04 manu Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -39,9 +39,7 @@ __RCSID("$NetBSD: dispatcher.c,v 1.30 2008/01/28 18:35:50 pooka Exp $");
 
 #include <assert.h>
 #include <errno.h>
-#ifdef PUFFS_WITH_THREADS
 #include <pthread.h>
-#endif
 #include <puffs.h>
 #include <puffsdump.h>
 #include <stdio.h>
@@ -50,15 +48,7 @@ __RCSID("$NetBSD: dispatcher.c,v 1.30 2008/01/28 18:35:50 pooka Exp $");
 
 #include "puffs_priv.h"
 
-#if 0 /* me not worka now */
-/*
- * Set the following to 1 to handle each request in a separate pthread.
- * This is not exported as it should not be used yet unless having a
- * very good knowledge of what you're signing up for (libpuffs is not
- * threadsafe).
- */
-int puffs_usethreads;
-#endif
+#define PUFFS_USE_FS_TTL(pu) (pu->pu_flags & PUFFS_KFLAG_CACHE_FS_TTL) 
 
 static void dispatch(struct puffs_cc *);
 
@@ -133,13 +123,31 @@ dispatch(struct puffs_cc *pcc)
 	struct puffs_usermount *pu = pcc->pcc_pu;
 	struct puffs_ops *pops = &pu->pu_ops;
 	struct puffs_req *preq = puffs__framebuf_getdataptr(pcc->pcc_pb);
-	void *auxbuf = preq; /* help with typecasting */
-	void *opcookie = preq->preq_cookie;
-	int error, buildpath;
+	void *auxbuf; /* help with typecasting */
+	puffs_cookie_t opcookie;
+	int error = 0, buildpath, pncookie;
+
+	/* XXX: smaller hammer, please */
+	if ((PUFFSOP_OPCLASS(preq->preq_opclass == PUFFSOP_VFS &&
+	    preq->preq_optype == PUFFS_VFS_VPTOFH)) ||
+	    (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_VN &&
+	    (preq->preq_optype == PUFFS_VN_READDIR
+	    || preq->preq_optype == PUFFS_VN_READ))) {
+		if (puffs_framebuf_reserve_space(pcc->pcc_pb,
+		    PUFFS_MSG_MAXSIZE) == -1)
+			error = errno;
+		preq = puffs__framebuf_getdataptr(pcc->pcc_pb);
+	}
+
+	auxbuf = preq;
+	opcookie = preq->preq_cookie;
 
 	assert((pcc->pcc_flags & PCC_DONE) == 0);
 
 	buildpath = pu->pu_flags & PUFFS_FLAG_BUILDPATH;
+	pncookie = pu->pu_flags & PUFFS_FLAG_PNCOOKIE;
+	assert(!buildpath || pncookie);
+
 	preq->preq_setbacks = 0;
 
 	if (pu->pu_flags & PUFFS_FLAG_OPDUMP)
@@ -150,6 +158,9 @@ dispatch(struct puffs_cc *pcc)
 	/* pre-operation */
 	if (pu->pu_oppre)
 		pu->pu_oppre(pu);
+
+	if (error)
+		goto out;
 
 	/* Execute actual operation */
 	if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_VFS) {
@@ -194,6 +205,9 @@ dispatch(struct puffs_cc *pcc)
 			pni.pni_vtype = &auxt->pvfsr_vtype;
 			pni.pni_size = &auxt->pvfsr_size;
 			pni.pni_rdev = &auxt->pvfsr_rdev;
+			pni.pni_va = NULL;
+			pni.pni_va_ttl = NULL;
+			pni.pni_cn_ttl = NULL;
 
 			error = pops->puffs_fs_fhtonode(pu, auxt->pvfsr_data,
 			    auxt->pvfsr_dsize, &pni);
@@ -212,15 +226,26 @@ dispatch(struct puffs_cc *pcc)
 			break;
 		}
 
-		case PUFFS_VFS_SUSPEND:
+		case PUFFS_VFS_EXTATTRCTL:
 		{
-			struct puffs_vfsmsg_suspend *auxt = auxbuf;
+			struct puffs_vfsmsg_extattrctl *auxt = auxbuf;
+			const char *attrname;
+			int flags;
 
-			error = 0;
-			if (pops->puffs_fs_suspend == NULL)
+			if (pops->puffs_fs_extattrctl == NULL) {
+				error = EOPNOTSUPP;
 				break;
+			}
 
-			pops->puffs_fs_suspend(pu, auxt->pvfsr_status);
+			if (auxt->pvfsr_flags & PUFFS_EXTATTRCTL_HASATTRNAME)
+				attrname = auxt->pvfsr_attrname;
+			else
+				attrname = NULL;
+
+			flags = auxt->pvfsr_flags & PUFFS_EXTATTRCTL_HASNODE;
+			error = pops->puffs_fs_extattrctl(pu, auxt->pvfsr_cmd,
+			    opcookie, flags,
+			    auxt->pvfsr_attrnamespace, attrname);
 			break;
 		}
 
@@ -241,6 +266,7 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_lookup *auxt = auxbuf;
 			struct puffs_newinfo pni;
 			struct puffs_cn pcn;
+			struct puffs_node *pn = NULL;
 
 			pcn.pcn_pkcnp = &auxt->pvnr_cn;
 			PUFFS_KCREDTOCRED(pcn.pcn_cred, &auxt->pvnr_cn_cred);
@@ -248,6 +274,9 @@ dispatch(struct puffs_cc *pcc)
 			pni.pni_vtype = &auxt->pvnr_vtype;
 			pni.pni_size = &auxt->pvnr_size;
 			pni.pni_rdev = &auxt->pvnr_rdev;
+			pni.pni_va = &auxt->pvnr_va;
+			pni.pni_va_ttl = &auxt->pvnr_va_ttl;
+			pni.pni_cn_ttl = &auxt->pvnr_cn_ttl;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
@@ -263,8 +292,6 @@ dispatch(struct puffs_cc *pcc)
 				if (error) {
 					pu->pu_pathfree(pu, &pcn.pcn_po_full);
 				} else {
-					struct puffs_node *pn;
-
 					/*
 					 * did we get a new node or a
 					 * recycled node?
@@ -278,6 +305,11 @@ dispatch(struct puffs_cc *pcc)
 				}
 			}
 
+			if (pncookie && !error) {
+				if (pn == NULL)
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+				pn->pn_nlookup++;
+			}
 			break;
 		}
 
@@ -286,6 +318,7 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_create *auxt = auxbuf;
 			struct puffs_newinfo pni;
 			struct puffs_cn pcn;
+			struct puffs_node *pn = NULL;
 
 			if (pops->puffs_node_create == NULL) {
 				error = 0;
@@ -297,6 +330,9 @@ dispatch(struct puffs_cc *pcc)
 
 			memset(&pni, 0, sizeof(pni));
 			pni.pni_cookie = &auxt->pvnr_newnode;
+			pni.pni_va = &auxt->pvnr_va;
+			pni.pni_va_ttl = &auxt->pvnr_va_ttl;
+			pni.pni_cn_ttl = &auxt->pvnr_cn_ttl;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
@@ -311,13 +347,16 @@ dispatch(struct puffs_cc *pcc)
 				if (error) {
 					pu->pu_pathfree(pu, &pcn.pcn_po_full);
 				} else {
-					struct puffs_node *pn;
-
 					pn = PU_CMAP(pu, auxt->pvnr_newnode);
 					pn->pn_po = pcn.pcn_po_full;
 				}
 			}
 
+			if (pncookie && !error) {
+				if (pn == NULL)
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+				pn->pn_nlookup++;
+			}
 			break;
 		}
 
@@ -326,6 +365,7 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_mknod *auxt = auxbuf;
 			struct puffs_newinfo pni;
 			struct puffs_cn pcn;
+			struct puffs_node *pn = NULL;
 
 			if (pops->puffs_node_mknod == NULL) {
 				error = 0;
@@ -337,6 +377,9 @@ dispatch(struct puffs_cc *pcc)
 
 			memset(&pni, 0, sizeof(pni));
 			pni.pni_cookie = &auxt->pvnr_newnode;
+			pni.pni_va = &auxt->pvnr_va;
+			pni.pni_va_ttl = &auxt->pvnr_va_ttl;
+			pni.pni_cn_ttl = &auxt->pvnr_cn_ttl;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
@@ -351,13 +394,16 @@ dispatch(struct puffs_cc *pcc)
 				if (error) {
 					pu->pu_pathfree(pu, &pcn.pcn_po_full);
 				} else {
-					struct puffs_node *pn;
-
 					pn = PU_CMAP(pu, auxt->pvnr_newnode);
 					pn->pn_po = pcn.pcn_po_full;
 				}
 			}
 
+			if (pncookie && !error) {
+				if (pn == NULL)
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+				pn->pn_nlookup++;
+			}
 			break;
 		}
 
@@ -365,6 +411,14 @@ dispatch(struct puffs_cc *pcc)
 		{
 			struct puffs_vnmsg_open *auxt = auxbuf;
 			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
+
+			if (pops->puffs_node_open2 != NULL) {
+				error = pops->puffs_node_open2(pu,
+				    opcookie, auxt->pvnr_mode, pcr, 
+				    &auxt->pvnr_oflags);
+
+				break;
+			}
 
 			if (pops->puffs_node_open == NULL) {
 				error = 0;
@@ -411,13 +465,24 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_getattr *auxt = auxbuf;
 			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
 
-			if (pops->puffs_node_getattr == NULL) {
-				error = EOPNOTSUPP;
-				break;
-			}
+			if (PUFFS_USE_FS_TTL(pu)) {
+				if (pops->puffs_node_getattr_ttl == NULL) {
+					error = EOPNOTSUPP;
+					break;
+				}
 
-			error = pops->puffs_node_getattr(pu,
-			    opcookie, &auxt->pvnr_va, pcr);
+				error = pops->puffs_node_getattr_ttl(pu,
+				    opcookie, &auxt->pvnr_va, pcr,
+				    &auxt->pvnr_va_ttl);
+			} else {
+				if (pops->puffs_node_getattr == NULL) {
+					error = EOPNOTSUPP;
+					break;
+				}
+
+				error = pops->puffs_node_getattr(pu,
+				    opcookie, &auxt->pvnr_va, pcr);
+			}
 			break;
 		}
 
@@ -426,13 +491,29 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_setattr *auxt = auxbuf;
 			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
 
-			if (pops->puffs_node_setattr == NULL) {
-				error = EOPNOTSUPP;
-				break;
-			}
+			if (PUFFS_USE_FS_TTL(pu)) {
+				int xflag = 0;
 
-			error = pops->puffs_node_setattr(pu,
-			    opcookie, &auxt->pvnr_va, pcr);
+				if (pops->puffs_node_setattr_ttl == NULL) {
+					error = EOPNOTSUPP;
+					break;
+				}
+
+				if (!PUFFSOP_WANTREPLY(preq->preq_opclass))
+					xflag |= PUFFS_SETATTR_FAF;
+
+				error = pops->puffs_node_setattr_ttl(pu,
+				    opcookie, &auxt->pvnr_va, pcr,
+				    &auxt->pvnr_va_ttl, xflag);
+			} else {
+				if (pops->puffs_node_setattr == NULL) {
+					error = EOPNOTSUPP;
+					break;
+				}
+
+				error = pops->puffs_node_setattr(pu,
+				    opcookie, &auxt->pvnr_va, pcr);
+			}
 			break;
 		}
 
@@ -597,6 +678,7 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_mkdir *auxt = auxbuf;
 			struct puffs_newinfo pni;
 			struct puffs_cn pcn;
+			struct puffs_node *pn = NULL;
 
 			if (pops->puffs_node_mkdir == NULL) {
 				error = 0;
@@ -608,6 +690,9 @@ dispatch(struct puffs_cc *pcc)
 
 			memset(&pni, 0, sizeof(pni));
 			pni.pni_cookie = &auxt->pvnr_newnode;
+			pni.pni_va = &auxt->pvnr_va;
+			pni.pni_va_ttl = &auxt->pvnr_va_ttl;
+			pni.pni_cn_ttl = &auxt->pvnr_cn_ttl;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
@@ -622,13 +707,16 @@ dispatch(struct puffs_cc *pcc)
 				if (error) {
 					pu->pu_pathfree(pu, &pcn.pcn_po_full);
 				} else {
-					struct puffs_node *pn;
-
 					pn = PU_CMAP(pu, auxt->pvnr_newnode);
 					pn->pn_po = pcn.pcn_po_full;
 				}
 			}
 
+			if (pncookie && !error) {
+				if (pn == NULL)
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+				pn->pn_nlookup++;
+			}
 			break;
 		}
 
@@ -654,6 +742,7 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_symlink *auxt = auxbuf;
 			struct puffs_newinfo pni;
 			struct puffs_cn pcn;
+			struct puffs_node *pn = NULL;
 
 			if (pops->puffs_node_symlink == NULL) {
 				error = 0;
@@ -665,6 +754,9 @@ dispatch(struct puffs_cc *pcc)
 
 			memset(&pni, 0, sizeof(pni));
 			pni.pni_cookie = &auxt->pvnr_newnode;
+			pni.pni_va = &auxt->pvnr_va;
+			pni.pni_va_ttl = &auxt->pvnr_va_ttl;
+			pni.pni_cn_ttl = &auxt->pvnr_cn_ttl;
 
 			if (buildpath) {
 				error = puffs_path_pcnbuild(pu, &pcn, opcookie);
@@ -680,13 +772,16 @@ dispatch(struct puffs_cc *pcc)
 				if (error) {
 					pu->pu_pathfree(pu, &pcn.pcn_po_full);
 				} else {
-					struct puffs_node *pn;
-
 					pn = PU_CMAP(pu, auxt->pvnr_newnode);
 					pn->pn_po = pcn.pcn_po_full;
 				}
 			}
 
+			if (pncookie && !error) {
+				if (pn == NULL)
+					pn = PU_CMAP(pu, auxt->pvnr_newnode);
+				pn->pn_nlookup++;
+			}
 			break;
 		}
 
@@ -748,10 +843,34 @@ dispatch(struct puffs_cc *pcc)
 
 		case PUFFS_VN_RECLAIM:
 		{
+			struct puffs_vnmsg_reclaim *auxt = auxbuf;
+			struct puffs_node *pn;
+		
+			if (pops->puffs_node_reclaim2 != NULL) {
+				error = pops->puffs_node_reclaim2(pu, opcookie,
+					     auxt->pvnr_nlookup);
+				break;
+			}
 
 			if (pops->puffs_node_reclaim == NULL) {
 				error = 0;
 				break;
+			}
+
+			/*
+			 * This fixes a race condition, 
+			 * where a node in reclaimed by kernel 
+			 * after a lookup request is sent, 
+			 * but before the reply, leaving the kernel
+			 * with a invalid vnode/cookie reference.
+			 */
+			if (pncookie) {
+				pn = PU_CMAP(pu, opcookie);
+				pn->pn_nlookup -= auxt->pvnr_nlookup;
+				if (pn->pn_nlookup >= 1) {
+					error = 0;
+					break;
+				}
 			}
 
 			error = pops->puffs_node_reclaim(pu, opcookie);
@@ -810,6 +929,24 @@ dispatch(struct puffs_cc *pcc)
 			break;
 		}
 
+		case PUFFS_VN_ABORTOP:
+		{
+			struct puffs_vnmsg_abortop *auxt = auxbuf;
+			struct puffs_cn pcn;
+
+			if (pops->puffs_node_abortop == NULL) {
+				error = 0;
+				break;
+			}
+
+			pcn.pcn_pkcnp = &auxt->pvnr_cn;
+			PUFFS_KCREDTOCRED(pcn.pcn_cred, &auxt->pvnr_cn_cred);
+
+			error = pops->puffs_node_abortop(pu, opcookie, &pcn);
+				
+			break;
+		}
+
 		case PUFFS_VN_READ:
 		{
 			struct puffs_vnmsg_read *auxt = auxbuf;
@@ -838,15 +975,27 @@ dispatch(struct puffs_cc *pcc)
 			struct puffs_vnmsg_write *auxt = auxbuf;
 			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
 
-			if (pops->puffs_node_write == NULL) {
+			if (pops->puffs_node_write2 != NULL) {
+				int xflag = 0;
+
+				if (!PUFFSOP_WANTREPLY(preq->preq_opclass))
+					xflag |= PUFFS_SETATTR_FAF;
+
+				error = pops->puffs_node_write2(pu,
+				    opcookie, auxt->pvnr_data,
+				    auxt->pvnr_offset, &auxt->pvnr_resid,
+				    pcr, auxt->pvnr_ioflag, xflag);
+
+			} else if (pops->puffs_node_write != NULL) {
+				error = pops->puffs_node_write(pu,
+				    opcookie, auxt->pvnr_data,
+				    auxt->pvnr_offset, &auxt->pvnr_resid,
+				    pcr, auxt->pvnr_ioflag);
+			} else {
 				error = EIO;
 				break;
 			}
 
-			error = pops->puffs_node_write(pu,
-			    opcookie, auxt->pvnr_data,
-			    auxt->pvnr_offset, &auxt->pvnr_resid,
-			    pcr, auxt->pvnr_ioflag);
 
 			/* don't need to move data back to the kernel */
 			preq->preq_buflen = sizeof(struct puffs_vnmsg_write);
@@ -872,12 +1021,161 @@ dispatch(struct puffs_cc *pcc)
 			break;
 		}
 
+		case PUFFS_VN_GETEXTATTR:
+		{
+			struct puffs_vnmsg_getextattr *auxt = auxbuf;
+			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
+			size_t res, *resp, *sizep;
+			uint8_t *data;
+
+			if (pops->puffs_node_getextattr == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			if (auxt->pvnr_datasize)
+				sizep = &auxt->pvnr_datasize;
+			else
+				sizep = NULL;
+
+			res = auxt->pvnr_resid;
+			if (res > 0) {
+				data = auxt->pvnr_data;
+				resp = &auxt->pvnr_resid;
+			} else {
+				data = NULL;
+				resp = NULL;
+			}
+
+			error = pops->puffs_node_getextattr(pu,
+			    opcookie, auxt->pvnr_attrnamespace,
+			    auxt->pvnr_attrname, sizep, data, resp, pcr);
+
+			/* need to move a bit more? */
+			preq->preq_buflen =
+			    sizeof(struct puffs_vnmsg_getextattr)
+			    + (res - auxt->pvnr_resid);
+			break;
+		}
+
+		case PUFFS_VN_SETEXTATTR:
+		{
+			struct puffs_vnmsg_setextattr *auxt = auxbuf;
+			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
+			size_t *resp;
+			uint8_t *data;
+
+			if (pops->puffs_node_setextattr == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			if (auxt->pvnr_resid > 0) {
+				data = auxt->pvnr_data;
+				resp = &auxt->pvnr_resid;
+			} else {
+				data = NULL;
+				resp = NULL;
+			}
+
+			error = pops->puffs_node_setextattr(pu,
+			    opcookie, auxt->pvnr_attrnamespace,
+			    auxt->pvnr_attrname, data, resp, pcr);
+			break;
+		}
+
+		case PUFFS_VN_LISTEXTATTR:
+		{
+			struct puffs_vnmsg_listextattr *auxt = auxbuf;
+			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
+			size_t res, *resp, *sizep;
+			int flag;
+			uint8_t *data;
+
+			if (pops->puffs_node_listextattr == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			if (auxt->pvnr_datasize)
+				sizep = &auxt->pvnr_datasize;
+			else
+				sizep = NULL;
+
+			res = auxt->pvnr_resid;
+			if (res > 0) {
+				data = auxt->pvnr_data;
+				resp = &auxt->pvnr_resid;
+			} else {
+				data = NULL;
+				resp = NULL;
+			}
+
+			res = auxt->pvnr_resid;
+			flag = auxt->pvnr_flag;
+			error = pops->puffs_node_listextattr(pu,
+			    opcookie, auxt->pvnr_attrnamespace,
+			    sizep, data, resp, flag, pcr);
+
+			/* need to move a bit more? */
+			preq->preq_buflen =
+			    sizeof(struct puffs_vnmsg_listextattr)
+			    + (res - auxt->pvnr_resid);
+			break;
+		}
+
+		case PUFFS_VN_DELETEEXTATTR:
+		{
+			struct puffs_vnmsg_deleteextattr *auxt = auxbuf;
+			PUFFS_MAKECRED(pcr, &auxt->pvnr_cred);
+
+			if (pops->puffs_node_deleteextattr == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			error = pops->puffs_node_deleteextattr(pu,
+			    opcookie, auxt->pvnr_attrnamespace,
+			    auxt->pvnr_attrname, pcr);
+			break;
+		}
+
+		case PUFFS_VN_FALLOCATE:
+		{
+			struct puffs_vnmsg_fallocate *auxt = auxbuf;
+
+			if (pops->puffs_node_fallocate == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			error = pops->puffs_node_fallocate(pu,
+			    opcookie, auxt->pvnr_off, auxt->pvnr_len);
+			break;
+		}
+
+		case PUFFS_VN_FDISCARD:
+		{
+			struct puffs_vnmsg_fdiscard *auxt = auxbuf;
+
+			if (pops->puffs_node_fdiscard == NULL) {
+				error = EOPNOTSUPP;
+				break;
+			}
+
+			error = pops->puffs_node_fdiscard(pu,
+			    opcookie, auxt->pvnr_off, auxt->pvnr_len);
+			break;
+		}
+
 		default:
 			printf("inval op %d\n", preq->preq_optype);
 			error = EINVAL;
 			break;
 		}
 
+#if 0
+	/* not issued by kernel currently */
 	} else if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_CACHE) {
 		struct puffs_cacheinfo *pci = (void *)preq;
 
@@ -886,6 +1184,7 @@ dispatch(struct puffs_cc *pcc)
 			    pci->pcache_nruns, pci->pcache_runs);
 		}
 		error = 0;
+#endif
 
 	} else if (PUFFSOP_OPCLASS(preq->preq_opclass) == PUFFSOP_ERROR) {
 		struct puffs_error *perr = (void *)preq;
@@ -899,6 +1198,8 @@ dispatch(struct puffs_cc *pcc)
 		 */
 		error = EINVAL;
 	}
+
+ out:
 	preq->preq_rv = error;
 
 	if (pu->pu_oppost)

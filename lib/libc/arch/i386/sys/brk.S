@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.21 2007/03/09 14:30:56 ad Exp $	*/
+/*	$NetBSD: brk.S,v 1.24 2014/05/23 02:34:19 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: brk.S,v 1.21 2007/03/09 14:30:56 ad Exp $")
+	RCSID("$NetBSD: brk.S,v 1.24 2014/05/23 02:34:19 uebayasi Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -55,7 +55,7 @@ _C_LABEL(__minbrk):
 	.text
 
 ENTRY(_brk)
-#ifdef PIC
+#ifdef __PIC__
 	movl	4(%esp),%ecx
 	PIC_PROLOGUE
 	movl	PIC_GOT(_C_LABEL(__minbrk)),%edx
@@ -74,10 +74,7 @@ ENTRY(_brk)
 	xorl	%eax,%eax
 	ret
 err:
-	PIC_PROLOGUE
-	mov	PIC_GOT(CERROR),%edx
-	PIC_EPILOGUE
-	jmp	*%edx
+	jmp	CERROR
 #else
 	movl	4(%esp),%ecx
 	cmpl	%ecx,_C_LABEL(__minbrk)
@@ -93,3 +90,4 @@ err:
 err:
 	jmp	CERROR
 #endif
+END(_brk)

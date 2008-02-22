@@ -1,4 +1,4 @@
-/*	$NetBSD: cs80busvar.h,v 1.4 2007/12/25 18:33:37 perry Exp $	*/
+/*	$NetBSD: cs80busvar.h,v 1.6 2012/10/27 17:18:16 chs Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,7 @@ struct cs80bus_attach_args {
 };
 
 struct cs80bus_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 	gpib_chipset_tag_t sc_ic;
 	u_int8_t	sc_rmap[CS80BUS_NSLAVES][CS80BUS_NPUNITS];
 };

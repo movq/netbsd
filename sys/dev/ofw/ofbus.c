@@ -1,4 +1,4 @@
-/*	$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: ofbus.c,v 1.26 2017/03/10 00:26:43 macallan Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.26 2017/03/10 00:26:43 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,17 +40,15 @@ __KERNEL_RCSID(0, "$NetBSD: ofbus.c,v 1.20 2005/12/11 12:22:48 christos Exp $");
 
 #include <dev/ofw/openfirm.h>
 
-int ofbus_match(struct device *, struct cfdata *, void *);
-void ofbus_attach(struct device *, struct device *, void *);
+int ofbus_match(device_t, cfdata_t, void *);
+void ofbus_attach(device_t, device_t, void *);
 static int ofbus_print(void *, const char *);
 
-CFATTACH_DECL(ofbus, sizeof(struct device),
+CFATTACH_DECL_NEW(ofbus, 0,
     ofbus_match, ofbus_attach, NULL, NULL);
 
 static int
-ofbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+ofbus_print(void *aux, const char *pnp)
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -62,10 +60,7 @@ ofbus_print(aux, pnp)
 }
 
 int
-ofbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ofbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -77,13 +72,11 @@ ofbus_match(parent, cf, aux)
 }
 
 void
-ofbus_attach(parent, dev, aux)
-	struct device *parent, *dev;
-	void *aux;
+ofbus_attach(device_t parent, device_t dev, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	struct ofbus_attach_args oba2;
-	char name[64];
+	char name[64], type[64];
 	int child, units;
 
 	printf("\n");
@@ -102,9 +95,15 @@ ofbus_attach(parent, dev, aux)
 			units = 2;
 	}
 
+	/* attach displays first */
 	for (child = OF_child(oba->oba_phandle); child != 0;
 	     child = OF_peer(child)) {
 		oba2.oba_busname = "ofw";
+		type[0] = 0;
+		if (OF_getprop(child, "device_type", type, sizeof(type)) <= 0)
+			continue;
+		if (strncmp(type, "display", sizeof(type)) != 0)
+			continue;
 		of_packagename(child, name, sizeof name);
 		oba2.oba_phandle = child;
 		for (oba2.oba_unit = 0; oba2.oba_unit < units;
@@ -120,4 +119,30 @@ ofbus_attach(parent, dev, aux)
 			config_found(dev, &oba2, ofbus_print);
 		}
 	}
+
+	/* now the rest */
+	for (child = OF_child(oba->oba_phandle); child != 0;
+	     child = OF_peer(child)) {
+		oba2.oba_busname = "ofw";
+		type[0] = 0;
+		if (OF_getprop(child, "device_type", type, sizeof(type)) > 0) {
+			if (strncmp(type, "display", sizeof(type)) == 0)
+				continue;
+		}
+		of_packagename(child, name, sizeof name);
+		oba2.oba_phandle = child;
+		for (oba2.oba_unit = 0; oba2.oba_unit < units;
+		     oba2.oba_unit++) {
+			if (units > 1) {
+				snprintf(oba2.oba_ofname,
+				    sizeof(oba2.oba_ofname), "%s@%d", name,
+				    oba2.oba_unit);
+			} else {
+				strlcpy(oba2.oba_ofname, name,
+				    sizeof(oba2.oba_ofname));
+			}
+			config_found(dev, &oba2, ofbus_print);
+		}
+	}
+
 }

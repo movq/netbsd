@@ -1,4 +1,4 @@
-/*	$NetBSD: finger.c,v 1.27 2006/05/11 01:20:33 mrg Exp $	*/
+/*	$NetBSD: finger.c,v 1.30 2016/09/05 00:40:28 sevan Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -44,15 +44,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)finger.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: finger.c,v 1.27 2006/05/11 01:20:33 mrg Exp $");
+__RCSID("$NetBSD: finger.c,v 1.30 2016/09/05 00:40:28 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -99,7 +99,6 @@ struct utmpentry *ehead;
 
 static void loginlist(void);
 static void userlist(int, char **);
-int main(int, char **);
 
 int
 main(int argc, char **argv)
@@ -192,7 +191,7 @@ loginlist(void)
 	PERSON *pn;
 	DBT data, key;
 	struct passwd *pw;
-	int r, sflag;
+	int r, seqflag;
 	struct utmpentry *ep;
 
 	for (ep = ehead; ep; ep = ep->next) {
@@ -204,10 +203,10 @@ loginlist(void)
 		enter_where(ep, pn);
 	}
 	if (db && lflag)
-		for (sflag = R_FIRST;; sflag = R_NEXT) {
+		for (seqflag = R_FIRST;; seqflag = R_NEXT) {
 			PERSON *tmp;
 
-			r = (*db->seq)(db, &key, &data, sflag);
+			r = (*db->seq)(db, &key, &data, seqflag);
 			if (r == -1)
 				err(1, "db seq");
 			if (r == 1)
@@ -223,7 +222,7 @@ userlist(int argc, char **argv)
 	PERSON *pn;
 	DBT data, key;
 	struct passwd *pw;
-	int r, sflag, *used, *ip;
+	int r, seqflag, *used, *ip;
 	char **ap, **nargv, **np, **p;
 	struct utmpentry *ep;
 
@@ -284,10 +283,10 @@ net:
 		enter_where(ep, pn);
 	}
 	if (db != NULL)
-		for (sflag = R_FIRST;; sflag = R_NEXT) {
+		for (seqflag = R_FIRST;; seqflag = R_NEXT) {
 			PERSON *tmp;
 
-			r = (*db->seq)(db, &key, &data, sflag);
+			r = (*db->seq)(db, &key, &data, seqflag);
 			if (r == -1)
 				err(1, "db seq");
 			if (r == 1)

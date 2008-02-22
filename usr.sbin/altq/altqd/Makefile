@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2002/03/05 04:11:51 itojun Exp $
+#	$NetBSD: Makefile,v 1.8 2011/08/25 16:22:43 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -15,5 +15,7 @@ LDADD+=	-L${LIBALTQOBJ} -laltq
 
 DPADD+=	${LIBUTIL} ${LIBM}
 LDADD+=	-lutil -lm
+
+COPTS.libaltq2.c+=	-Wno-format-nonliteral
 
 .include <bsd.prog.mk>

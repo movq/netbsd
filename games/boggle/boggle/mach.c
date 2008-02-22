@@ -1,4 +1,4 @@
-/*	$NetBSD: mach.c,v 1.17 2007/12/15 19:44:39 perry Exp $	*/
+/*	$NetBSD: mach.c,v 1.21 2011/08/31 16:24:55 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)mach.c	8.1 (Berkeley) 6/11/93";
 #else
-__RCSID("$NetBSD: mach.c,v 1.17 2007/12/15 19:44:39 perry Exp $");
+__RCSID("$NetBSD: mach.c,v 1.21 2011/08/31 16:24:55 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,7 +64,8 @@ __RCSID("$NetBSD: mach.c,v 1.17 2007/12/15 19:44:39 perry Exp $");
 static int ccol, crow, maxw;
 static int colstarts[MAXCOLS], ncolstarts;
 static int lastline;
-int ncols, nlines;
+static int ncols;
+int nlines;
 
 extern const char *pword[], *mword[];
 extern int ngames, nmwords, npwords, tnmwords, tnpwords;
@@ -81,6 +82,10 @@ static void	tty_cleanup(void);
 static int	tty_setup(void);
 static void	tty_showboard(const char *);
 static void	winch_catcher(int);
+static void	getword(char *);
+static void	starttime(void);
+static void	stoptime(void);
+
 
 /*
  * Do system dependent initialization
@@ -162,7 +167,7 @@ prwidth(const char *const base[], int indx)
  * - doesn't accept words longer than MAXWORDLEN or containing caps
  */
 char *
-getline(char *q)
+get_line(char *q)
 {
 	int ch, done;
 	char *p;
@@ -252,7 +257,7 @@ getline(char *q)
 	}
 	*p = '\0';
 	if (ch == EOF)
-		return((char *) NULL);
+		return (NULL);
 	return(q);
 }
 
@@ -281,7 +286,7 @@ static int gone;
 /*
  * Stop the game timer
  */
-void
+static void
 stoptime(void)
 {
 	time_t t;
@@ -293,7 +298,7 @@ stoptime(void)
 /*
  * Restart the game timer
  */
-void
+static void
 starttime(void)
 {
 	time_t t;
@@ -474,16 +479,10 @@ showstr(const char *str, int delaysecs)
 	refresh();
 }
 
-void
-putstr(const char *s)
-{
-	addstr(s);
-}
-
 /*
  * Get a valid word and put it in the buffer
  */
-void
+static void
 getword(char *q)
 {
 	int ch, col, done, i, row;
@@ -558,7 +557,10 @@ prompt(const char *mesg)
 static int
 tty_setup(void)
 {
-	initscr();
+	if (!initscr()) {
+		fprintf(stderr, "couldn't initialize screen\n");
+		exit (0);
+	}
 	raw();
 	noecho();
 

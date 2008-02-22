@@ -1,3 +1,3 @@
-/*	$NetBSD: mcontext.h,v 1.2 2003/01/18 06:12:59 thorpej Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.4 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/mcontext.h>

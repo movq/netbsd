@@ -1,7 +1,7 @@
-/*	$NetBSD: ifaddrlist.c,v 1.7 2003/05/15 14:47:49 itojun Exp $	*/
+/*	$NetBSD: ifaddrlist.c,v 1.10 2011/09/11 01:06:26 christos Exp $	*/
 
 /*
- * Copyright (c) 1997
+ * Copyright (c) 1997, 1998, 1999, 2000
  *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,9 @@
 #if 0
 static const char rcsid[] =
     "@(#) Header: ifaddrlist.c,v 1.2 97/04/22 13:31:05 leres Exp  (LBL)";
+    "@(#) Id: ifaddrlist.c,v 1.9 2000/11/23 20:01:55 leres Exp  (LBL)";
 #else
-__RCSID("$NetBSD: ifaddrlist.c,v 1.7 2003/05/15 14:47:49 itojun Exp $");
+__RCSID("$NetBSD: ifaddrlist.c,v 1.10 2011/09/11 01:06:26 christos Exp $");
 #endif
 #endif
 
@@ -82,29 +83,23 @@ struct rtentry;
 #define ISLOOPBACK(p) (strcmp((p)->ifa_name, "lo0") == 0)
 #endif
 
-#define MAX_IPADDR 256
-
 /*
  * Return the interface list
  */
-int
-ifaddrlist(struct ifaddrlist **ipaddrp, char *errbuf, int buflen)
+ssize_t
+ifaddrlist(struct ifaddrlist **ipaddrp, char *errbuf, size_t buflen)
 {
-	int nipaddr;
 	struct sockaddr_in *sin;
-	struct ifaddrs *ifap, *ifa;
-	struct ifaddrlist *al;
-	static struct ifaddrlist ifaddrlist[MAX_IPADDR];
+	struct ifaddrs *ifap = NULL, *ifa;
+	struct ifaddrlist *al = NULL, *nal;
+	size_t i = 0, maxal = 10;
 
-	al = ifaddrlist;
-	nipaddr = 0;
+	if (getifaddrs(&ifap) != 0)
+		goto out;
 
-	if (getifaddrs(&ifap) != 0) {
-		(void)snprintf(errbuf, buflen, "getifaddrs: %s",
-		    strerror(errno));
-		return (-1);
-	}
-
+	if ((al = malloc(maxal * sizeof(*al))) == NULL)
+		goto out;
+		
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr->sa_family != AF_INET)
 			continue;
@@ -121,12 +116,31 @@ ifaddrlist(struct ifaddrlist **ipaddrp, char *errbuf, int buflen)
 			if (ntohl(sin->sin_addr.s_addr) == INADDR_LOOPBACK)
 				continue;
 
-		al->addr = sin->sin_addr.s_addr;
-		al->device = strdup(ifa->ifa_name);
-		++al;
-		++nipaddr;
+		if (i == maxal) {
+			maxal <<= 1;
+			if ((nal = realloc(al, maxal * sizeof(*al))) == NULL)
+				goto out;
+			al = nal;
+		}
+
+		al[i].addr = sin->sin_addr.s_addr;
+		if ((al[i].device = strdup(ifa->ifa_name)) == NULL)
+			goto out;
+		i++;
 	}
-	*ipaddrp = ifaddrlist;
+	if ((nal = realloc(al, i * sizeof(*al))) == NULL)
+		goto out;
 	freeifaddrs(ifap);
-	return (nipaddr);
+	*ipaddrp = nal;
+	return (ssize_t)i;
+out:
+	if (ifap)
+		freeifaddrs(ifap);
+	if (al) {
+		while (i > 0)
+			free(al[--i].device);
+		free(al);
+	}
+	(void)snprintf(errbuf, buflen, "%s: %s", __func__, strerror(errno));
+	return -1;
 }

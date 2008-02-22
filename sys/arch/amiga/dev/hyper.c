@@ -1,4 +1,4 @@
-/*	$NetBSD: hyper.c,v 1.18 2005/12/11 12:16:28 christos Exp $ */
+/*	$NetBSD: hyper.c,v 1.22 2012/10/27 17:17:29 chs Exp $ */
 
 /*-
  * Copyright (c) 1997,1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hyper.c,v 1.18 2005/12/11 12:16:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hyper.c,v 1.22 2012/10/27 17:17:29 chs Exp $");
 
 /*
  * zbus HyperCom driver
@@ -45,12 +38,11 @@ __KERNEL_RCSID(0, "$NetBSD: hyper.c,v 1.18 2005/12/11 12:16:28 christos Exp $");
 
 #include <sys/types.h>
 
-#include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/conf.h>
 #include <sys/systm.h>
 #include <sys/param.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <amiga/include/cpu.h>
 
@@ -62,15 +54,14 @@ __KERNEL_RCSID(0, "$NetBSD: hyper.c,v 1.18 2005/12/11 12:16:28 christos Exp $");
 
 
 struct hyper_softc {
-	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int hypermatch(struct device *, struct cfdata *, void *);
-void hyperattach(struct device *, struct device *, void *);
-int hyperprint(void *auxp, const char *);
+int hypermatch(device_t, cfdata_t, void *);
+void hyperattach(device_t, device_t, void *);
+int hyperprint(void *, const char *);
 
-CFATTACH_DECL(hyper, sizeof(struct hyper_softc),
+CFATTACH_DECL_NEW(hyper, sizeof(struct hyper_softc),
     hypermatch, hyperattach, NULL, NULL);
 
 struct hyper_prods {
@@ -88,12 +79,11 @@ struct hyper_prods {
 };
 
 int
-hypermatch(struct device *parent, struct cfdata *cfp, void *auxp)
+hypermatch(device_t parent, cfdata_t cf, void *aux)
 {
-
 	struct zbus_args *zap;
 
-	zap = auxp;
+	zap = aux;
 
 	if (zap->manid != 5001)
 		return (0);
@@ -131,7 +121,7 @@ struct hyper_devs {
 };
 
 void
-hyperattach(struct device *parent, struct device *self, void *auxp)
+hyperattach(device_t parent, device_t self, void *aux)
 {
 	struct hyper_softc *hprsc;
 	struct hyper_devs  *hprsd;
@@ -139,8 +129,8 @@ hyperattach(struct device *parent, struct device *self, void *auxp)
 	struct supio_attach_args supa;
 	struct hyper_prods *hprpp;
 
-	hprsc = (struct hyper_softc *)self;
-	zap = auxp;
+	hprsc = device_private(self);
+	zap = aux;
 	hprpp = &hyperproducts[zap->prodid];
 
 	if (parent)
@@ -166,10 +156,10 @@ hyperattach(struct device *parent, struct device *self, void *auxp)
 }
 
 int
-hyperprint(void *auxp, const char *pnp)
+hyperprint(void *aux, const char *pnp)
 {
 	struct supio_attach_args *supa;
-	supa = auxp;
+	supa = aux;
 
 	if (pnp == NULL)
 		return(QUIET);

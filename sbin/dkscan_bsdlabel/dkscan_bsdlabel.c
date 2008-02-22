@@ -1,4 +1,4 @@
-/* $NetBSD: dkscan_bsdlabel.c,v 1.1 2007/03/01 22:01:30 martin Exp $ */
+/* $NetBSD: dkscan_bsdlabel.c,v 1.4 2017/06/08 22:24:29 chs Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,14 @@
 
 #include "dkscan_util.h"
 
+struct disk {
+	const char	*dk_name;	/* disk name */
+	int		dk_blkshift;	/* shift to convert DEV_BSIZE to blks */
+};
+
 #include "dkwedge_bsdlabel.c"
+
+__dead static void usage(void);
 
 int
 main(int argc, char **argv)
@@ -85,7 +85,7 @@ main(int argc, char **argv)
 		devpart = argv[optind];
 
 	memset(&d, 0, sizeof(d));
-	d.dk_name  = __UNCONST(devpart);
+	d.dk_name  = devpart;
 	dkwedge_discover_bsdlabel(&d, NULL);
 
 	close(disk_fd);

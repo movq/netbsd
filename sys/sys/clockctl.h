@@ -1,4 +1,4 @@
-/*      $NetBSD: clockctl.h,v 1.14 2007/03/04 06:03:40 christos Exp $ */
+/*      $NetBSD: clockctl.h,v 1.18 2016/01/23 21:19:24 christos Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,6 +35,7 @@
 #ifndef _SYS_CLOCKCTL_H_
 #define _SYS_CLOCKCTL_H_
 
+#include <sys/ioccom.h>
 #include <sys/time.h>
 #include <sys/timex.h>
 
@@ -43,34 +44,35 @@ struct clockctl_settimeofday {
 	const void *tzp;
 };
 
-#define CLOCKCTL_SETTIMEOFDAY _IOW('C', 0x1, struct clockctl_settimeofday)
+#define CLOCKCTL_SETTIMEOFDAY _IOW('C', 0x5, struct clockctl_settimeofday)
 
 struct clockctl_adjtime {
 	const struct timeval *delta;
 	struct timeval *olddelta;
 };
 
-#define CLOCKCTL_ADJTIME _IOWR('C', 0x2, struct clockctl_adjtime)
+#define CLOCKCTL_ADJTIME _IOWR('C', 0x6, struct clockctl_adjtime)
 
 struct clockctl_clock_settime {
 	clockid_t clock_id;
 	const struct timespec *tp;
 };
 
-#define CLOCKCTL_CLOCK_SETTIME _IOW('C', 0x3, struct clockctl_clock_settime)
+#define CLOCKCTL_CLOCK_SETTIME _IOW('C', 0x7, struct clockctl_clock_settime)
 
 struct clockctl_ntp_adjtime {
 	struct timex *tp;
-	register_t retval;
+	__register_t retval;
 };
 
-#define CLOCKCTL_NTP_ADJTIME _IOWR('C', 0x4, struct clockctl_ntp_adjtime)
+#define CLOCKCTL_NTP_ADJTIME _IOWR('C', 0x8, struct clockctl_ntp_adjtime)
 
 #ifdef _KERNEL
 void    clockctlattach(int);
 int     clockctlopen(dev_t, int, int, struct lwp *);
 int     clockctlclose(dev_t, int, int, struct lwp *);
 int     clockctlioctl(dev_t, u_long, void *, int, struct lwp *);
+int	clockctl_init(void);
 #endif
 
 #endif /* _SYS_CLOCKCTL_H_ */

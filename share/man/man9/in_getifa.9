@@ -1,4 +1,4 @@
-.\" $NetBSD: in_getifa.9,v 1.4 2007/03/02 20:31:58 wiz Exp $
+.\" $NetBSD: in_getifa.9,v 1.9 2017/07/03 21:28:48 wiz Exp $
 .\"
 .\" Copyright (c) 2006 David Young.  All rights reserved.
 .\"
@@ -13,9 +13,6 @@
 .\"    copyright notice, this list of conditions and the following
 .\"    disclaimer in the documentation and/or other materials provided
 .\"    with the distribution.
-.\" 3. David Young's name may not be used to endorse or promote
-.\"    products derived from this software without specific prior
-.\"    written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY DAVID YOUNG ``AS IS'' AND ANY
 .\" EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -31,8 +28,8 @@
 .\" OF SUCH DAMAGE.
 .\"
 .Dd February 22, 2007
-.Os
 .Dt IN_GETIFA 9
+.Os
 .Sh NAME
 .Nm in_getifa
 .Nd Look up the IPv4 source address best matching an IPv4 destination
@@ -197,7 +194,7 @@ net.inet.ip.interfaces.ath0.selectsrc = same-category,common-prefix-len,preferen
 The operator may set a new default,
 .Bd -literal -offset indent
 # sysctl -w net.inet.ip.selectsrc.debug=\
-\*[Gt] same-category,common-prefix-len,preference
+> same-category,common-prefix-len,preference
 # sysctl -w net.inet.ip.interfaces.ath0.selectsrc=
 .Ed
 .Pp
@@ -229,7 +226,7 @@ resembles the family of IPv4 policies that
 .Nm
 enforces.
 .Sh AUTHORS
-.An David Young Aq dyoung@NetBSD.org
+.An David Young Aq Mt dyoung@NetBSD.org
 .Sh BUGS
 With
 .Cd options IPSELSRC ,

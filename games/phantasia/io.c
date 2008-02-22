@@ -1,18 +1,32 @@
-/*	$NetBSD: io.c,v 1.11 2007/12/15 19:44:42 perry Exp $	*/
+/*	$NetBSD: io.c,v 1.14 2009/08/31 08:27:16 dholland Exp $	*/
 
 /*
  * io.c - input/output routines for Phantasia
  */
 
-#include "include.h"
-#undef bool
 #include <sys/cdefs.h>
+
+#include <ctype.h>
+#include <math.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "macros.h"
+#include "phantdefs.h"
+#include "phantstruct.h"
+#include "phantglobs.h"
+//#include "pathnames.h"
+
+#undef bool
 #include <curses.h>
 
+static void catchalarm(int) __dead;
+
 void
-getstring(cp, mx)
-	char   *cp;
-	int     mx;
+getstring(char *cp, int mx)
 {
 	char   *inptr;		/* pointer into string for next string */
 	int     x, y;		/* original x, y coordinates on screen */
@@ -62,15 +76,14 @@ getstring(cp, mx)
 }
 
 void
-more(where)
-	int     where;
+more(int where)
 {
 	mvaddstr(where, 0, "-- more --");
 	getanswer(" ", FALSE);
 }
 
 double
-infloat()
+infloat(void)
 {
 	double  result;		/* return value */
 
@@ -83,7 +96,7 @@ infloat()
 }
 
 int
-inputoption()
+inputoption(void)
 {
 	++Player.p_age;		/* increase age */
 
@@ -99,7 +112,7 @@ inputoption()
 }
 
 void
-interrupt()
+interrupt(void)
 {
 	char    line[81];	/* a place to store data already on screen */
 	int     loop;		/* counter */
@@ -155,9 +168,7 @@ interrupt()
 }
 
 int
-getanswer(choices, def)
-	const char   *choices;
-	phbool  def;
+getanswer(const char *choices, phbool def)
 {
 	int     ch;		/* input */
 	volatile int	loop;	/* counter */
@@ -239,9 +250,8 @@ getanswer(choices, def)
 	return (*choices);
 }
 
-void
-catchalarm(dummy)
-	int dummy __unused;
+static void
+catchalarm(int dummy __unused)
 {
 	longjmp(Timeoenv, 1);
 }

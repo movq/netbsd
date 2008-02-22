@@ -1,4 +1,4 @@
-/*	$NetBSD: plumvideo.c,v 1.38 2007/03/04 05:59:52 christos Exp $ */
+/*	$NetBSD: plumvideo.c,v 1.41 2012/10/27 17:17:53 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumvideo.c,v 1.38 2007/03/04 05:59:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumvideo.c,v 1.41 2012/10/27 17:17:53 chs Exp $");
 
 #undef PLUMVIDEODEBUG
 
@@ -89,7 +82,7 @@ int	plumvideo_debug = 1;
 #endif
 
 struct plumvideo_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	tx_chipset_tag_t sc_tc;
 	plum_chipset_tag_t sc_pc;
 
@@ -118,13 +111,13 @@ struct plumvideo_softc {
 	struct hpcfb_dspconf sc_dspconf;
 };
 
-int	plumvideo_match(struct device*, struct cfdata*, void*);
-void	plumvideo_attach(struct device*, struct device*, void*);
+int	plumvideo_match(device_t, cfdata_t, void *);
+void	plumvideo_attach(device_t, device_t, void *);
 
 int	plumvideo_ioctl(void *, u_long, void *, int, struct lwp *);
 paddr_t	plumvideo_mmap(void *, off_t, int);
 
-CFATTACH_DECL(plumvideo, sizeof(struct plumvideo_softc),
+CFATTACH_DECL_NEW(plumvideo, sizeof(struct plumvideo_softc),
     plumvideo_match, plumvideo_attach, NULL, NULL);
 
 struct hpcfb_accessops plumvideo_ha = {
@@ -154,7 +147,7 @@ void	plumvideo_dump(struct plumvideo_softc*);
 #define OFF	0
 
 int
-plumvideo_match(struct device *parent, struct cfdata *cf, void *aux)
+plumvideo_match(device_t parent, cfdata_t cf, void *aux)
 {
 	/*
 	 * VRAM area also uses as UHOSTC shared RAM.
@@ -163,13 +156,14 @@ plumvideo_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-plumvideo_attach(struct device *parent, struct device *self, void *aux)
+plumvideo_attach(device_t parent, device_t self, void *aux)
 {
 	struct plum_attach_args *pa = aux;
-	struct plumvideo_softc *sc = (void*)self;
+	struct plumvideo_softc *sc = device_private(self);
 	struct hpcfb_attach_args ha;
 	int console, reverse_flag;
 
+	sc->sc_dev = self;
 	sc->sc_console = console = cn_tab ? 0 : 1;
 	sc->sc_pc	= pa->pa_pc;
 	sc->sc_regt	= pa->pa_regt;
@@ -432,7 +426,7 @@ plumvideo_init(struct plumvideo_softc *sc, int *reverse)
 int
 plumvideo_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct plumvideo_softc *sc = (struct plumvideo_softc *)v;
+	struct plumvideo_softc *sc = v;
 	struct hpcfb_fbconf *fbconf;
 	struct hpcfb_dspconf *dspconf;
 	struct wsdisplay_cmap *cmap;
@@ -611,7 +605,7 @@ out:
 paddr_t
 plumvideo_mmap(void *ctx, off_t offset, int prot)
 {
-	struct plumvideo_softc *sc = (struct plumvideo_softc *)ctx;
+	struct plumvideo_softc *sc = ctx;
 
 	if (offset < 0 || (sc->sc_fbconf.hf_bytes_per_plane +
 	    sc->sc_fbconf.hf_offset) <  offset) {
@@ -755,7 +749,7 @@ __plumvideo_clut_access(struct plumvideo_softc *sc, u_int32_t *rgb, int beg,
 
 /* !!! */
 static void
-_flush_cache()
+_flush_cache(void)
 {
 	mips_dcache_wbinv_all();
 	mips_icache_sync_all();
@@ -772,14 +766,14 @@ plumvideo_power(void *ctx, int type, long id, void *msg)
 		if (!sc->sc_console)
 			return (0); /* serial console */
 
-		DPRINTF(("%s: ON\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: ON\n", device_xname(sc->sc_dev)));
 		/* power on */
 		plumvideo_backlight(sc, 1);
 		break;
 	case PWR_SUSPEND:
 		/* FALLTHROUGH */
 	case PWR_STANDBY:
-		DPRINTF(("%s: OFF\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: OFF\n", device_xname(sc->sc_dev)));
 		/* power off */
 		plumvideo_backlight(sc, 0);
 		break;

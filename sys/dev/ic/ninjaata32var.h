@@ -1,7 +1,7 @@
-/*	$NetBSD: ninjaata32var.h,v 1.3 2006/10/01 12:11:52 itohy Exp $	*/
+/*	$NetBSD: ninjaata32var.h,v 1.6 2017/10/07 16:05:32 jdolecek Exp $	*/
 
 /*
- * Copyright (c) 2006 ITOH Yasufumi <itohy@NetBSD.org>.
+ * Copyright (c) 2006 ITOH Yasufumi.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 #ifndef _NJATA32VAR_H_
 #define _NJATA32VAR_H_
 
-#define NJATA32NAME(sc)		(sc->sc_wdcdev.sc_atac.atac_dev.dv_xname)
+#define NJATA32NAME(sc)		(device_xname(sc->sc_wdcdev.sc_atac.atac_dev))
 
 /* ??? */
 #define NJATA32_MAX_XFER	(64 * 1024)
@@ -69,7 +69,6 @@ struct njata32_softc {
 	} sc_ch[NJATA32_NCHAN];
 
 	struct ata_channel	*sc_wdc_chanarray[NJATA32_NCHAN];
-	struct ata_queue	sc_wdc_chqueue;
 	struct wdc_regs		sc_wdc_regs;
 #define NJATA32_REGT(sc)	(sc)->sc_wdc_regs.cmd_iot
 #define NJATA32_REGH(sc)	(sc)->sc_wdc_regs.cmd_baseioh

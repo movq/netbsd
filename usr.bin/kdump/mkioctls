@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: mkioctls,v 1.34 2008/02/11 22:43:39 dyoung Exp $
+#	$NetBSD: mkioctls,v 1.52 2018/06/12 15:40:39 christos Exp $
 #
 # Copyright (c) 1994
 #	The Regents of the University of California.  All rights reserved.
@@ -34,17 +34,25 @@
 #
 #	@(#)mkioctls	8.2 (Berkeley) 4/28/95
 #
+
+: ${AWK:=awk}
+: ${CC:=cc}
+: ${SED:=sed}
+
 echo "/* Automatically generated file, do not edit! */"
 #echo "#define const" 	# XXX: timepps lossage
 echo "#define COMPAT_43"
+echo "#define COMPAT_FREEBSD_NET80211"
 echo "struct lwp;"
 echo "struct crap { int _xxx; };" # XXX arm video lossage
 echo "typedef struct crap videomemory_t;" # XXX arm video lossage
 echo "typedef struct crap RF_AccTotals_t;" # XXX Raidframe lossage
 echo "struct rf_test_acc { int _xxx; };" # XXX Raidframe lossage
+echo "struct map_info { int _xxx[22]; };" # XXX Xorg lossage
 echo "#include <stdio.h>"
 echo "#include <sys/types.h>"
 echo "#include <sys/param.h>"
+echo "#include <sys/mutex.h>"
 echo "#ifndef NBPG"
 echo "#define NBPG 4096 /* workaround / dummy for sparc */"
 echo "#endif /* NBPG */"
@@ -53,6 +61,7 @@ echo "#include <sys/dkbad.h>"
 echo "#include <sys/mount.h>"
 echo "#include <sys/termios.h>"
 echo "#include <sys/disklabel.h>"
+echo "#include <sys/exec_elf.h>"
 echo "#include <net/if.h>"
 echo "#include <net/if_ether.h>"
 echo "#include <net/route.h>"
@@ -66,16 +75,35 @@ echo "#include <net80211/ieee80211.h>"
 echo "#include <net80211/ieee80211_radiotap.h>"
 echo "#include <netinet6/in6_var.h>"
 echo "#include <netinet6/nd6.h>"
-echo "#include <netiso/iso.h>"
 echo "#include <dev/ic/hd44780reg.h>"
 echo "#include <dev/pci/mlyreg.h>"
 echo "#include <prop/proplib.h>"
+echo
+
+# kernel headers <sys/*.h> and <net/*.h> should not include stdbool.h
+# but they do; then xf86Opt.h needs a bool struct field.
+
+needundef=true
 for i
 do
+	case $i in
+	*X11*)
+		if $needundef; then
+			echo "#undef bool"
+			needundef=false;
+		fi;;
+	esac
 	echo "#include <$i>"
-done | sed -e "s,${DESTDIR}/usr/include/,,g"
+done | ${SED} -e "s,${DESTDIR}/usr/include/,,g" \
+	-e "s,${DESTDIR}/usr/X11R7/include/,,g" \
+	-e "s,${NETBSDSRCDIR}/external/cddl/osnet/dist/uts/common/,,g"
 
-${CC:-cc} -E -nostdinc -idirafter $DESTDIR/usr/include -dM ${1+"$@"} | ${AWK:-awk} '
+if ! $needundef; then
+    echo "#define bool _Bool"
+fi
+
+${CC} -E -nostdinc -isystem ${DESTDIR}/usr/include ${CPPFLAGS} -dM "${@}" | \
+    ${AWK} '
 BEGIN {
 	keep["SLIOCGUNIT"] = 1;	# Same as PPPIOCGASYNCMAP
 	keep["TUNSLMODE"] = 1;	# Same as PPPIOCGASYNCMAP
@@ -110,6 +138,16 @@ BEGIN {
 	keep["CLOCKCTL_ADJTIME"] = 1; # Same as TCTRL_MODEM_PWR
 	keep["OFIOCNEXTPROP"] = 1; # Same as PNVIOCGETNUMGE
 	keep["OFIOCGET"] = 1; # Same as PNVIOCGET
+	keep["SIOCPHASE2"] = 1; # Same as GRESADDRS
+	keep["I4B_CTL_CLR_CHIPSTAT"] = 1; # Same as CLOCKCTL_NTP_ADJTIME
+	keep["STICIO_STARTQ"] = 1; # Same as SPKRTONE
+	keep["STICIO_RESET860"] = 1; # Same as SCIOCRESTART
+	keep["STICIO_START860"] = 1; # Same as SPKRTUNE
+	keep["I4B_CTL_SET_DEBUG"] = 1; # Same as CLOCKCTL_SETTIMEOFDAY
+
+	keep["SIOCGETSGCNT_IN6"] = 1; # Type sioc_sg_req6 not exported
+	keep["SIOCGPRLST_IN6"] = 1; Type in6_oprlist not exported
+	keep["SIOCGETMIFCNT_IN6"] = 1; Type sioc_mif_req6 not exported
 
 	i = 1;
 	altqt[i++] = "RED";
@@ -152,7 +190,7 @@ BEGIN {
 	print "\tswitch (val) {\n"
 }
 
-/^#[ 	]*define[ 	]*[A-Z_]*[ 	]*_IO[W]*[R]*[ 	]*\(/ {
+/^#[ 	]*define[ 	]*[A-Z0-9_]*[ 	]*[D]*[R]*[M]*_IO[W]*[R]*[ 	]*\(/ {
 	
 	# find where the name starts
 	for (i = 1; i <= NF; i++)
@@ -163,7 +201,9 @@ BEGIN {
 	# 
 	if ($i ~ /^[A-Z0-9a-z_]*$/) {
 		if (keep[$i] != 1) {
+			printf("\t#ifdef %s\n", $i);
 			printf("\tcase %s:\n\t\treturn \"%s\";\n", $i, $i);
+			printf("\t#endif /* %s */\n", $i);
 			keep[$i] = 1;
 		}
 	}

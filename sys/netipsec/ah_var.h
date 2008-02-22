@@ -1,5 +1,5 @@
-/*	$NetBSD: ah_var.h,v 1.3 2005/12/10 23:44:08 elad Exp $	*/
-/*	$FreeBSD: src/sys/netipsec/ah_var.h,v 1.1.4.1 2003/01/24 05:11:35 sam Exp $	*/
+/*	$NetBSD: ah_var.h,v 1.7 2018/04/19 08:27:38 maxv Exp $	*/
+/*	$FreeBSD: ah_var.h,v 1.1.4.1 2003/01/24 05:11:35 sam Exp $	*/
 /*	$OpenBSD: ip_ah.h,v 1.29 2002/06/09 16:26:10 itojun Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
@@ -40,40 +40,34 @@
 #ifndef _NETIPSEC_AH_VAR_H_
 #define _NETIPSEC_AH_VAR_H_
 
-/*
- * These define the algorithm indices into the histogram.  They're
- * presently based on the PF_KEY v2 protocol values which is bogus;
- * they should be decoupled from the protocol at which time we can
- * pack them and reduce the size of the array to a minimum.
- */
-#define	AH_ALG_MAX	16
+#define	AH_STAT_HDROPS		0	/* packet shorter than header shows */
+#define	AH_STAT_NOPF		1	/* protocol family not supported */
+#define	AH_STAT_NOTDB		2
+#define	AH_STAT_BADKCR		3
+#define	AH_STAT_BADAUTH		4
+#define	AH_STAT_NOXFORM		5
+#define	AH_STAT_QFULL		6
+#define	AH_STAT_WRAP		7
+#define	AH_STAT_REPLAY		8
+#define	AH_STAT_BADAUTHL	9	/* bad authenticator length */
+#define	AH_STAT_INPUT		10	/* input AH packets */
+#define	AH_STAT_OUTPUT		11	/* output AH packets */
+#define	AH_STAT_INVALID		12	/* trying to use an invalid TDB */
+#define	AH_STAT_IBYTES		13	/* input bytes */
+#define	AH_STAT_OBYTES		14	/* output bytes */
+#define	AH_STAT_TOOBIG		15	/* packet got > than IP_MAXPACKET */
+#define	AH_STAT_PDROPS		16	/* packet blocked due to policy */
+#define	AH_STAT_CRYPTO		17	/* crypto processing failure */
+#define	AH_STAT_TUNNEL		18	/* tunnel sanity check failure */
+#define	AH_STAT_HIST		19	/* per-algorithm op count */
 
-struct ahstat {
-	u_int64_t	ahs_hdrops;	/* Packet shorter than header shows */
-	u_int64_t	ahs_nopf;	/* Protocol family not supported */
-	u_int64_t	ahs_notdb;
-	u_int64_t	ahs_badkcr;
-	u_int64_t	ahs_badauth;
-	u_int64_t	ahs_noxform;
-	u_int64_t	ahs_qfull;
-	u_int64_t	ahs_wrap;
-	u_int64_t	ahs_replay;
-	u_int64_t	ahs_badauthl;	/* Bad authenticator length */
-	u_int64_t	ahs_input;	/* Input AH packets */
-	u_int64_t	ahs_output;	/* Output AH packets */
-	u_int64_t	ahs_invalid;	/* Trying to use an invalid TDB */
-	u_int64_t	ahs_ibytes;	/* Input bytes */
-	u_int64_t	ahs_obytes;	/* Output bytes */
-	u_int64_t	ahs_toobig;	/* Packet got larger than IP_MAXPACKET */
-	u_int64_t	ahs_pdrops;	/* Packet blocked due to policy */
-	u_int64_t	ahs_crypto;	/* Crypto processing failure */
-	u_int64_t	ahs_tunnel;	/* Tunnel sanity check failure */
-	u_int64_t	ahs_hist[AH_ALG_MAX];	/* Per-algorithm op count */
-};
+/* space for SADB_AALG_STATS_NUM counters */
+#define	AH_ALG_MAX		SADB_AALG_STATS_NUM
+#define	AH_ALG_STR		SADB_AALG_STATS_STR
+#define	AH_NSTATS		(AH_STAT_HIST + AH_ALG_MAX)
 
 #ifdef _KERNEL
-extern	int ah_enable;
-extern	int ah_cleartos;
-extern	struct ahstat ahstat;
+extern const uint8_t ah_stats[256];
+extern int ah_enable;
 #endif /* _KERNEL */
 #endif /* !_NETIPSEC_AH_VAR_H_ */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2002/12/08 20:20:03 thorpej Exp $
+#	$NetBSD: Makefile,v 1.7 2011/03/18 15:13:55 tsutsui Exp $
 
 HOSTPROGNAME=	${_TOOL_PREFIX}mklocale
 HOST_SRCDIR=	usr.bin/mklocale

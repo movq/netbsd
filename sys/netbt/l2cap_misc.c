@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_misc.c,v 1.5 2007/11/03 17:20:17 plunky Exp $	*/
+/*	$NetBSD: l2cap_misc.c,v 1.7 2009/09/13 18:45:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_misc.c,v 1.5 2007/11/03 17:20:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_misc.c,v 1.7 2009/09/13 18:45:11 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -49,10 +49,7 @@ struct l2cap_channel_list
 struct l2cap_channel_list
 	l2cap_listen_list = LIST_HEAD_INITIALIZER(l2cap_listen_list);
 
-POOL_INIT(l2cap_req_pool, sizeof(struct l2cap_req), 0, 0, 0, "l2cap_req", NULL,
-    IPL_SOFTNET);
-POOL_INIT(l2cap_pdu_pool, sizeof(struct l2cap_pdu), 0, 0, 0, "l2cap_pdu", NULL,
-    IPL_SOFTNET);
+struct pool l2cap_req_pool, l2cap_pdu_pool;
 
 const l2cap_qos_t l2cap_default_qos = {
 	0,			/* flags */
@@ -69,6 +66,16 @@ const l2cap_qos_t l2cap_default_qos = {
  */
 int l2cap_response_timeout = 30;		/* seconds */
 int l2cap_response_extended_timeout = 180;	/* seconds */
+
+void
+l2cap_init(void)
+{
+
+	pool_init(&l2cap_req_pool, sizeof(struct l2cap_req), 0, 0, 0,
+	    "l2cap_req", NULL, IPL_SOFTNET);
+	pool_init(&l2cap_pdu_pool, sizeof(struct l2cap_pdu), 0, 0, 0,
+	    "l2cap_pdu", NULL, IPL_SOFTNET);
+}
 
 /*
  * Set Link Mode on channel
@@ -185,9 +192,8 @@ l2cap_rtx(void *arg)
 {
 	struct l2cap_req *req = arg;
 	struct l2cap_channel *chan;
-	int s;
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&req->lr_rtx);
 
 	chan = req->lr_chan;
@@ -198,7 +204,7 @@ l2cap_rtx(void *arg)
 	if (chan && chan->lc_state != L2CAP_CLOSED)
 		l2cap_close(chan, ETIMEDOUT);
 
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /*

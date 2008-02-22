@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_lid.c,v 1.22 2007/12/09 20:27:53 jmcneill Exp $	*/
+/*	$NetBSD: acpi_lid.c,v 1.44 2015/04/23 23:23:00 pgoyette Exp $	*/
 
 /*
  * Copyright 2001, 2003 Wasabi Systems, Inc.
@@ -40,22 +40,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_lid.c,v 1.22 2007/12/09 20:27:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_lid.c,v 1.44 2015/04/23 23:23:00 pgoyette Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/module.h>
+#include <sys/systm.h>
 
-#include <dev/acpi/acpica.h>
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
-#include <dev/sysmon/sysmonvar.h>
+#define _COMPONENT		 ACPI_LID_COMPONENT
+ACPI_MODULE_NAME		 ("acpi_lid")
+
+#define ACPI_NOTIFY_LID		 0x80
 
 struct acpilid_softc {
-	struct device sc_dev;		/* base device glue */
-	struct acpi_devnode *sc_node;	/* our ACPI devnode */
-	struct sysmon_pswitch sc_smpsw;	/* our sysmon glue */
+	struct acpi_devnode	*sc_node;
+	struct sysmon_pswitch	 sc_smpsw;
+	uint64_t		 sc_status;
 };
 
 static const char * const lid_hid[] = {
@@ -63,16 +66,14 @@ static const char * const lid_hid[] = {
 	NULL
 };
 
-static int	acpilid_match(struct device *, struct cfdata *, void *);
-static void	acpilid_attach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(acpilid, sizeof(struct acpilid_softc),
-    acpilid_match, acpilid_attach, NULL, NULL);
-
+static int	acpilid_match(device_t, cfdata_t, void *);
+static void	acpilid_attach(device_t, device_t, void *);
+static int	acpilid_detach(device_t, int);
 static void	acpilid_status_changed(void *);
-static void	acpilid_notify_handler(ACPI_HANDLE, UINT32, void *);
+static void	acpilid_notify_handler(ACPI_HANDLE, uint32_t, void *);
 
-static bool	acpilid_suspend(device_t);
+CFATTACH_DECL_NEW(acpilid, sizeof(struct acpilid_softc),
+    acpilid_match, acpilid_attach, acpilid_detach, NULL);
 
 /*
  * acpilid_match:
@@ -80,8 +81,7 @@ static bool	acpilid_suspend(device_t);
  *	Autoconfiguration `match' routine.
  */
 static int
-acpilid_match(struct device *parent, struct cfdata *match,
-    void *aux)
+acpilid_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -97,58 +97,34 @@ acpilid_match(struct device *parent, struct cfdata *match,
  *	Autoconfiguration `attach' routine.
  */
 static void
-acpilid_attach(struct device *parent, struct device *self, void *aux)
+acpilid_attach(device_t parent, device_t self, void *aux)
 {
-	struct acpilid_softc *sc = (void *) self;
+	struct acpilid_softc *sc = device_private(self);
 	struct acpi_attach_args *aa = aux;
-	ACPI_STATUS rv;
 
 	aprint_naive(": ACPI Lid Switch\n");
 	aprint_normal(": ACPI Lid Switch\n");
 
 	sc->sc_node = aa->aa_node;
 
-	sc->sc_smpsw.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_smpsw.smpsw_name = device_xname(self);
 	sc->sc_smpsw.smpsw_type = PSWITCH_TYPE_LID;
-	if (sysmon_pswitch_register(&sc->sc_smpsw) != 0) {
-		aprint_error("%s: unable to register with sysmon\n",
-		    sc->sc_dev.dv_xname);
-		return;
-	}
 
-	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
-	    ACPI_DEVICE_NOTIFY, acpilid_notify_handler, sc);
-	if (ACPI_FAILURE(rv)) {
-		aprint_error("%s: unable to register DEVICE NOTIFY handler: %s\n",
-		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		return;
-	}
-
-	acpi_set_wake_gpe(sc->sc_node->ad_handle);
-
-	if (!pmf_device_register(self, acpilid_suspend, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	(void)pmf_device_register(self, NULL, NULL);
+	(void)sysmon_pswitch_register(&sc->sc_smpsw);
+	(void)acpi_register_notify(sc->sc_node, acpilid_notify_handler);
 }
 
-static void
-acpilid_wake_event(struct acpilid_softc *sc, bool enable)
+static int
+acpilid_detach(device_t self, int flags)
 {
-	ACPI_STATUS rv;
-        ACPI_OBJECT_LIST ArgList;
-        ACPI_OBJECT Arg;
+	struct acpilid_softc *sc = device_private(self);
 
-        ArgList.Count = 1;
-	ArgList.Pointer = &Arg;
+	pmf_device_deregister(self);
+	acpi_deregister_notify(sc->sc_node);
+	sysmon_pswitch_unregister(&sc->sc_smpsw);
 
-	Arg.Type = ACPI_TYPE_INTEGER;
-	Arg.Integer.Value = enable ? 1 : 0;
-
-	rv = AcpiEvaluateObject (sc->sc_node->ad_handle, "_PSW",
-	    &ArgList, NULL);
-	if (ACPI_FAILURE(rv) && rv != AE_NOT_FOUND)
-		aprint_error_dev(&sc->sc_dev,
-		    "unable to evaluate _PSW handler: %s\n",
-		    AcpiFormatException(rv));
+	return 0;
 }
 
 /*
@@ -159,15 +135,16 @@ acpilid_wake_event(struct acpilid_softc *sc, bool enable)
 static void
 acpilid_status_changed(void *arg)
 {
-	struct acpilid_softc *sc = arg;
-	ACPI_INTEGER status;
+	device_t dv = arg;
+	struct acpilid_softc *sc = device_private(dv);
 	ACPI_STATUS rv;
 
-	rv = acpi_eval_integer(sc->sc_node->ad_handle, "_LID", &status);
+	rv = acpi_eval_integer(sc->sc_node->ad_handle, "_LID", &sc->sc_status);
+
 	if (ACPI_FAILURE(rv))
 		return;
 
-	sysmon_pswitch_event(&sc->sc_smpsw, status == 0 ?
+	sysmon_pswitch_event(&sc->sc_smpsw, (sc->sc_status == 0) ?
 	    PSWITCH_EVENT_PRESSED : PSWITCH_EVENT_RELEASED);
 }
 
@@ -177,43 +154,57 @@ acpilid_status_changed(void *arg)
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
 static void
-acpilid_notify_handler(ACPI_HANDLE handle, UINT32 notify,
-    void *context)
+acpilid_notify_handler(ACPI_HANDLE handle, uint32_t notify, void *context)
 {
-	struct acpilid_softc *sc = context;
-	int rv;
+	static const int handler = OSL_NOTIFY_HANDLER;
+	device_t dv = context;
 
 	switch (notify) {
-	case ACPI_NOTIFY_LidStatusChanged:
-#ifdef ACPI_LID_DEBUG
-		printf("%s: received LidStatusChanged message\n",
-		    sc->sc_dev.dv_xname);
-#endif
-		rv = AcpiOsExecute(OSL_NOTIFY_HANDLER,
-		    acpilid_status_changed, sc);
-		if (ACPI_FAILURE(rv))
-			printf("%s: WARNING: unable to queue lid change "
-			    "callback: %s\n", sc->sc_dev.dv_xname,
-			    AcpiFormatException(rv));
+
+	case ACPI_NOTIFY_LID:
+		(void)AcpiOsExecute(handler, acpilid_status_changed, dv);
+		break;
+
+	case ACPI_NOTIFY_DEVICE_WAKE:
 		break;
 
 	default:
-		printf("%s: received unknown notify message: 0x%x\n",
-		    sc->sc_dev.dv_xname, notify);
+		aprint_debug_dev(dv, "unknown notify 0x%02X\n", notify);
 	}
 }
 
-static bool
-acpilid_suspend(device_t dv)
+MODULE(MODULE_CLASS_DRIVER, acpilid, "sysmon_power");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+acpilid_modcmd(modcmd_t cmd, void *aux)
 {
-	struct acpilid_softc *sc = device_private(dv);
-	ACPI_INTEGER status;
-	ACPI_STATUS rv;
+	int rv = 0;
 
-	rv = acpi_eval_integer(sc->sc_node->ad_handle, "_LID", &status);
-	if (ACPI_FAILURE(rv))
-		return true;
+	switch (cmd) {
 
-	acpilid_wake_event(sc, status == 0);
-	return true;
+	case MODULE_CMD_INIT:
+
+#ifdef _MODULE
+		rv = config_init_component(cfdriver_ioconf_acpilid,
+		    cfattach_ioconf_acpilid, cfdata_ioconf_acpilid);
+#endif
+		break;
+
+	case MODULE_CMD_FINI:
+
+#ifdef _MODULE
+		rv = config_fini_component(cfdriver_ioconf_acpilid,
+		    cfattach_ioconf_acpilid, cfdata_ioconf_acpilid);
+#endif
+		break;
+
+	default:
+		rv = ENOTTY;
+	}
+
+	return rv;
 }

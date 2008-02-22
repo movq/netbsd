@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc.h,v 1.18 2005/12/11 12:24:50 christos Exp $	*/
+/*	$NetBSD: fdesc.h,v 1.22 2014/07/13 11:23:01 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,9 +37,6 @@
  */
 
 #ifdef _KERNEL
-struct fdescmount {
-	struct vnode	*f_root;	/* Root node */
-};
 
 #define FD_ROOT		2
 #define FD_DEVFD	3
@@ -59,16 +56,16 @@ typedef enum {
 } fdntype;
 
 struct fdescnode {
-	LIST_ENTRY(fdescnode) fd_hash;	/* Hash list */
 	struct vnode	*fd_vnode;	/* Back ptr to vnode */
 	fdntype		fd_type;	/* Type of this node */
 	unsigned	fd_fd;		/* Fd to be dup'ed */
-	char		*fd_link;	/* Link to fd/n */
+	const char	*fd_link;	/* Link to fd/n */
 	int		fd_ix;		/* filesystem index */
 };
 
-#define VFSTOFDESC(mp)	((struct fdescmount *)((mp)->mnt_data))
 #define	VTOFDESC(vp) ((struct fdescnode *)(vp)->v_data)
+
+#define FDESC_MAXNAMLEN	255
 
 extern dev_t devctty;
 extern void fdesc_init(void);
@@ -78,7 +75,4 @@ extern int fdesc_allocvp(fdntype, int, struct mount *, struct vnode **);
 extern int (**fdesc_vnodeop_p)(void *);
 extern struct vfsops fdesc_vfsops;
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_fdesc_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 #endif /* _KERNEL */

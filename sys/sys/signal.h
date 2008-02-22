@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.63 2006/06/03 18:18:26 christos Exp $	*/
+/*	$NetBSD: signal.h,v 1.72 2017/04/21 15:10:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -82,10 +82,8 @@
 #define	SIGUSR1		30	/* user defined signal 1 */
 #define	SIGUSR2		31	/* user defined signal 2 */
 #define	SIGPWR		32	/* power fail/restart (not reset when caught) */
-#ifdef _KERNEL
-#define	SIGRTMIN	33	/* Kernel only; not exposed to userland yet */
-#define	SIGRTMAX	63	/* Kernel only; not exposed to userland yet */
-#endif
+#define	SIGRTMIN	33
+#define	SIGRTMAX	63
 
 #ifndef _KERNEL
 #include <sys/cdefs.h>
@@ -145,7 +143,7 @@ struct	sigaction {
 #if (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
     (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)
 #define SA_ONSTACK	0x0001	/* take signal on signal stack */
-#define SA_RESTART	0x0002	/* restart system on signal return */
+#define SA_RESTART	0x0002	/* restart system call on signal return */
 #define SA_RESETHAND	0x0004	/* reset to SIG_DFL when taking signal */
 #define SA_NODEFER	0x0010	/* don't mask the signal we're delivering */
 #endif /* _XOPEN_SOURCE_EXTENDED || XOPEN_SOURCE >= 500 || _NETBSD_SOURCE */
@@ -172,6 +170,10 @@ struct	sigaction {
 
 #if defined(_NETBSD_SOURCE)
 typedef	void (*sig_t)(int);	/* type of signal function */
+
+#define SS_INIT 		/* Initializer for stack_t */ \
+    ((stack_t) { .ss_sp = NULL, .ss_flags = SS_DISABLE,  .ss_size = 0 })
+
 #endif
 
 #if (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
@@ -215,14 +217,16 @@ struct	sigevent {
 	int	sigev_notify;
 	int	sigev_signo;
 	union sigval	sigev_value;
-	void	(*sigev_notify_function)(union sigval *);
+	void	(*sigev_notify_function)(union sigval);
 	void /* pthread_attr_t */	*sigev_notify_attributes;
 };
 
 #define SIGEV_NONE	0
 #define SIGEV_SIGNAL	1
 #define SIGEV_THREAD	2
+#if defined(_NETBSD_SOURCE)
 #define SIGEV_SA	3
+#endif
 #endif /* (_POSIX_C_SOURCE - 0) >= 199309L || ... */
 
 #endif	/* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
@@ -233,5 +237,12 @@ struct	sigevent {
  */
 __BEGIN_DECLS
 void	(*signal(int, void (*)(int)))(int);
+void	(*bsd_signal(int, void (*)(int)))(int);
+#if (_POSIX_C_SOURCE - 0) >= 200112L || defined(_NETBSD_SOURCE)
+int	sigqueue(pid_t, int, const union sigval);
+#endif
+#if defined(_NETBSD_SOURCE)
+int	sigqueueinfo(pid_t, const siginfo_t *);
+#endif
 __END_DECLS
 #endif	/* !_SYS_SIGNAL_H_ */

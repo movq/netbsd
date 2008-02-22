@@ -1,4 +1,4 @@
-/*	$NetBSD: pass2.c,v 1.13 2005/06/26 23:01:39 christos Exp $	*/
+/*	$NetBSD: pass2.c,v 1.15 2009/10/19 18:41:08 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)pass2.c	8.6 (Berkeley) 10/27/94";
 #else
-__RCSID("$NetBSD: pass2.c,v 1.13 2005/06/26 23:01:39 christos Exp $");
+__RCSID("$NetBSD: pass2.c,v 1.15 2009/10/19 18:41:08 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,6 +77,7 @@ __RCSID("$NetBSD: pass2.c,v 1.13 2005/06/26 23:01:39 christos Exp $");
 #include "fsck.h"
 #include "fsutil.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 #define MINDIRSIZE	(sizeof (struct ext2fs_dirtemplate))
 
@@ -103,9 +99,9 @@ pass2(void)
 	case USTATE:
 		pfatal("ROOT INODE UNALLOCATED");
 		if (reply("ALLOCATE") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-			errexit("CANNOT ALLOCATE ROOT INODE\n");
+			errexit("CANNOT ALLOCATE ROOT INODE");
 		break;
 
 	case DCLEAR:
@@ -113,11 +109,11 @@ pass2(void)
 		if (reply("REALLOCATE")) {
 			freeino(EXT2_ROOTINO);
 			if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-				errexit("CANNOT ALLOCATE ROOT INODE\n");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("CONTINUE") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		break;
 
 	case FSTATE:
@@ -126,11 +122,11 @@ pass2(void)
 		if (reply("REALLOCATE")) {
 			freeino(EXT2_ROOTINO);
 			if (allocdir(EXT2_ROOTINO, EXT2_ROOTINO, 0755) != EXT2_ROOTINO)
-				errexit("CANNOT ALLOCATE ROOT INODE\n");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("FIX") == 0)
-			errexit("%s\n", "");
+			exit(FSCK_EXIT_CHECK_FAILED);
 		dp = ginode(EXT2_ROOTINO);
 		dp->e2di_mode = h2fs16((fs2h16(dp->e2di_mode) & ~IFMT) | IFDIR);
 		inodirty();
@@ -140,7 +136,7 @@ pass2(void)
 		break;
 
 	default:
-		errexit("BAD STATE %d FOR ROOT INODE\n", statemap[EXT2_ROOTINO]);
+		errexit("BAD STATE %d FOR ROOT INODE", statemap[EXT2_ROOTINO]);
 	}
 
 	/*
@@ -453,7 +449,7 @@ again:
 			break;
 
 		default:
-			errexit("BAD STATE %d FOR INODE I=%d\n",
+			errexit("BAD STATE %d FOR INODE I=%d",
 			    statemap[fs2h32(dirp->e2d_ino)], fs2h32(dirp->e2d_ino));
 		}
 	}

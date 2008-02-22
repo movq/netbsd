@@ -1,6 +1,6 @@
-.\"	$NetBSD: softintr.9,v 1.15 2007/12/06 10:27:20 xtraeme Exp $
+.\"	$NetBSD: softintr.9,v 1.22 2018/02/08 09:03:23 dholland Exp $
 .\"
-.\" Copyright (c) 2007 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 .\"
 .\" --(license Id: LICENSE.proto,v 1.1 2000/06/13 21:40:26 cgd Exp )--
 .\"
-.Dd December 6, 2007
+.Dd August 3, 2009
 .Dt SOFTINT 9
 .Os
 .Sh NAME
@@ -78,9 +71,9 @@
 .Sh SYNOPSIS
 .In sys/intr.h
 .Ft void *
-.Fn softint_establish "int flags" "void (*func)(void *)" "void *arg"
+.Fn softint_establish "u_int flags" "void (*func)(void *)" "void *arg"
 .Ft void
-.Fn softint_sisestablish "void *cookie"
+.Fn softint_disestablish "void *cookie"
 .Ft void
 .Fn softint_schedule "void *cookie"
 .Sh DESCRIPTION
@@ -100,13 +93,14 @@ connection with a particular kind of device activity: they are
 only meant as a guide.
 .Pp
 The four priority levels map directly to scheduler priority
-levels, and where the architecture implements 'fast' software
-interrupts, they also map onto interrupt priorities. 
+levels, and where the architecture implements
+.Dq fast
+software interrupts, they also map onto interrupt priorities.
 The interrupt priorities are intended to be hidden from machine
 independent code, which should in general use thread-safe mechanisms
 to synchronize with software interrupts (for example: mutexes).
 .Pp
-Software interrupts run with limited machine context. 
+Software interrupts run with limited machine context.
 In particular, they do not possess any address space context.
 They should not try to operate on user space addresses, or to use
 virtual memory facilities other than those noted as interrupt
@@ -138,7 +132,7 @@ The following is a brief description of each function in the framework:
 Register a software interrupt.
 The
 .Fa flags
-value must contain one of the following constants, specifing
+value must contain one of the following constants, specifying
 the priority level for the soft interrupt:
 .Pp
 .Dv SOFTINT_CLOCK ,
@@ -202,9 +196,13 @@ the same soft interrupt handler can be in flight simultaneously
 (at most one per-CPU).
 .El
 .Sh SEE ALSO
+.Xr callout 9 ,
+.Xr condvar 9 ,
+.Xr kthread 9 ,
 .Xr mutex 9 ,
 .Xr rwlock 9 ,
-.Xr spl 9
+.Xr spl 9 ,
+.Xr workqueue 9
 .Sh HISTORY
 The
 .Nx
@@ -217,5 +215,5 @@ Between
 .Nx 4.0
 and
 .Nx 5.0
-the framework was re-implemented in a machine-independant way to
+the framework was re-implemented in a machine-independent way to
 provide software interrupts with thread context.

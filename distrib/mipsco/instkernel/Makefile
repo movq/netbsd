@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2002/12/11 15:52:47 lukem Exp $
+#	$NetBSD: Makefile,v 1.17 2016/02/20 16:42:33 christos Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -6,7 +6,7 @@
 .include <bsd.kernobj.mk>
 
 IMAGE=		diskimage
-IMAGESIZE=	2m
+IMAGESIZE=	3m
 LISTS=		${.CURDIR}/list
 MTREECONF=	${DISTRIBDIR}/common/mtree.dot
 IMAGEENDIAN=	be
@@ -24,10 +24,8 @@ RAMDISK=	${RAMDISKDIR}/ramdisk.fs
 MDSETTARGETS=		RAMDISK ${RAMDISK} netbsd-INSTALL
 MDSET_RELEASEDIR=	binary/kernel
 
-.if defined(ECOFF_KERNEL)
 MDSET_SUFFIXES.netbsd-INSTALL=	ecoff create-ecoff
 create-ecoff=			${ELF2ECOFF} ${.TARGET:R} ${.TARGET}
-.endif # ECOFF_KERNEL
 
 IMAGE_RELEASEDIR=	installation/diskimage
 

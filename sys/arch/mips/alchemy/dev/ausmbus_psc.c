@@ -1,4 +1,4 @@
-/* $NetBSD: ausmbus_psc.c,v 1.8 2007/10/17 19:55:35 garbled Exp $ */
+/* $NetBSD: ausmbus_psc.c,v 1.12 2016/02/14 19:54:21 chs Exp $ */
 
 /*-
  * Copyright (c) 2006 Shigeyuki Fukushima.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ausmbus_psc.c,v 1.8 2007/10/17 19:55:35 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ausmbus_psc.c,v 1.12 2016/02/14 19:54:21 chs Exp $");
 
 #include "locators.h"
 
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: ausmbus_psc.c,v 1.8 2007/10/17 19:55:35 garbled Exp 
 #include <sys/device.h>
 #include <sys/errno.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 
 #include <mips/alchemy/dev/aupscreg.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ausmbus_psc.c,v 1.8 2007/10/17 19:55:35 garbled Exp 
 #include <dev/i2c/i2c_bitbang.h>
 
 struct ausmbus_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 
 	/* protocol comoon fields */
 	struct aupsc_controller		sc_ctrl;
@@ -71,10 +71,10 @@ struct ausmbus_softc {
 		val); \
 	delay(100);
 
-static int	ausmbus_match(struct device *, struct cfdata *, void *);
-static void	ausmbus_attach(struct device *, struct device *, void *);
+static int	ausmbus_match(device_t, struct cfdata *, void *);
+static void	ausmbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ausmbus, sizeof(struct ausmbus_softc),
+CFATTACH_DECL_NEW(ausmbus, sizeof(struct ausmbus_softc),
 	ausmbus_match, ausmbus_attach, NULL, NULL);
 
 /* fuctions for i2c_controller */
@@ -85,6 +85,8 @@ static int	ausmbus_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 				size_t buflen, int flags);
 
 /* subroutine functions for i2c_controller */
+static int	ausmbus_quick_write(struct ausmbus_softc *);
+static int	ausmbus_quick_read(struct ausmbus_softc *);
 static int	ausmbus_receive_1(struct ausmbus_softc *, uint8_t *);
 static int	ausmbus_read_1(struct ausmbus_softc *, uint8_t, uint8_t *);
 static int	ausmbus_read_2(struct ausmbus_softc *, uint8_t, uint16_t *);
@@ -99,7 +101,7 @@ static int	ausmbus_write_byte(void *arg, uint8_t v, int flags);
 
 
 static int
-ausmbus_match(struct device *parent, struct cfdata *cf, void *aux)
+ausmbus_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct aupsc_attach_args *aa = (struct aupsc_attach_args *)aux;
 
@@ -110,13 +112,15 @@ ausmbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-ausmbus_attach(struct device *parent, struct device *self, void *aux)
+ausmbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct ausmbus_softc *sc = (struct ausmbus_softc *)self;
+	struct ausmbus_softc *sc = device_private(self);
 	struct aupsc_attach_args *aa = (struct aupsc_attach_args *)aux;
 	struct i2cbus_attach_args iba;
 
 	aprint_normal(": Alchemy PSC SMBus protocol\n");
+
+	sc->sc_dev = self;
 
 	/* Initialize PSC */
 	sc->sc_ctrl = aa->aupsc_ctrl;
@@ -133,8 +137,9 @@ ausmbus_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_i2c.ic_exec = ausmbus_exec;
 	sc->sc_smbus_timeout = 10;
 
+	memset(&iba, 0, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
+	(void) config_found_ia(self, "i2cbus", &iba, iicbus_print);
 }
 
 static int
@@ -233,6 +238,11 @@ ausmbus_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *vcmd,
 		return ausmbus_read_2(sc, *cmd, (uint16_t *)vbuf);
 	}
 
+	/* Read quick */
+	if ((I2C_OP_READ_P(op)) && (cmdlen == 0) && (buflen == 0)) {
+		return ausmbus_quick_read(sc);
+	}
+
 	/* Send byte */
 	if ((I2C_OP_WRITE_P(op)) && (cmdlen == 0) && (buflen == 1)) {
 		return ausmbus_send_1(sc, *((uint8_t *)vbuf));
@@ -248,13 +258,19 @@ ausmbus_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *vcmd,
 		return ausmbus_write_2(sc, *cmd, *((uint16_t *)vbuf));
 	}
 
+	/* Write quick */
+	if ((I2C_OP_WRITE_P(op)) && (cmdlen == 0) && (buflen == 0)) {
+		return ausmbus_quick_write(sc);
+	}
+
 	/*
 	 * XXX: TODO Please Support other protocols defined in SMBus 2.0
-	 * - Quick Command
 	 * - Process call
 	 * - Block write/read
 	 * - Clock write-block read process cal
 	 * - SMBus host notify protocol
+	 *
+	 * - Read quick and write quick have not been tested!
 	 */
 
 	return -1;
@@ -414,6 +430,23 @@ ausmbus_write_2(struct ausmbus_softc *sc, uint8_t cmd, uint16_t val)
 	return 0;
 }
 
+/*
+ * XXX The quick_write() and quick_read() routines have not been tested!
+ */
+static int
+ausmbus_quick_write(struct ausmbus_softc *sc)
+{
+	return ausmbus_initiate_xfer(sc, sc->sc_smbus_slave_addr,
+			I2C_F_STOP | I2C_F_WRITE);
+}
+
+static int
+ausmbus_quick_read(struct ausmbus_softc *sc)
+{
+	return ausmbus_initiate_xfer(sc, sc->sc_smbus_slave_addr,
+			I2C_F_STOP | I2C_F_READ);
+}
+
 static int
 ausmbus_wait_mastertx(struct ausmbus_softc *sc)
 {
@@ -494,6 +527,8 @@ ausmbus_initiate_xfer(void *arg, i2c_addr_t addr, int flags)
 	v = (addr << 1) & SMBUS_TXRX_ADDRDATA;
 	if ((flags & I2C_F_READ) != 0)
 		v |= 1;
+	if ((flags & I2C_F_STOP) != 0)
+		v |= SMBUS_TXRX_STP;
 	ausmbus_reg_write(sc, AUPSC_SMBTXRX, v);
 
 	/* Master Start */

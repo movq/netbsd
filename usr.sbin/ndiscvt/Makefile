@@ -1,14 +1,14 @@
+# $NetBSD: Makefile,v 1.11 2009/04/22 15:23:06 lukem Exp $
 # $FreeBSD: src/usr.sbin/ndiscvt/Makefile,v 1.5 2004/02/23 20:21:21 johan Exp $
-
-WARNS?=	4
 
 .PATH:	${.CURDIR}/../../sys/compat/ndis
 
-.if ${MACHINE} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 PROG=	ndiscvt
 .endif
 
 MAN=	ndiscvt.8
+MANSUBDIR=	/i386
 SRCS=	ndiscvt.c
 SRCS+=	subr_pe.c
 SRCS+=	inf.c inf-token.l inf-parse.y

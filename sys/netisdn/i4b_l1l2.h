@@ -1,4 +1,4 @@
-/* $NetBSD: i4b_l1l2.h,v 1.12 2007/03/04 06:03:30 christos Exp $ */
+/* $NetBSD: i4b_l1l2.h,v 1.14 2014/10/18 08:33:29 snj Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 /*
  * This file defines the D-channel interface between layer 1 (physical
  * card hardware) and layer 2 of a passive ISDN card (i.e. a card that
- * does not run it's own ISDN stack in firmware).
+ * does not run its own ISDN stack in firmware).
  *
  * Since each layer 1 driver knows in advance it will need to attach
  * to this layer 2, the whole layer 2 softc struct is typically included

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.90 2007/03/04 06:00:54 christos Exp $	*/
+/*	$NetBSD: locore2.c,v 1.101 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,19 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.90 2007/03/04 06:00:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.101 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include "opt_ddb.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/user.h>
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
 
 #include <uvm/uvm_extern.h>
+
+#include <dev/cons.h>
 
 #include <machine/cpu.h>
 #include <machine/db_machdep.h>
@@ -102,9 +97,6 @@ int cpu_has_vme = 0;
  */
 int delay_divisor = 82;		/* assume the fastest (3/260) */
 
-extern int physmem;
-
-struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
@@ -113,13 +105,13 @@ void _bootstrap(void);
 static void _verify_hardware(void);
 static void _vm_init(void);
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 static void _save_symtab(void);
 
 /*
  * Preserve DDB symbols and strings by setting esym.
  */
-static void 
+static void
 _save_symtab(void)
 {
 	int i;
@@ -163,7 +155,7 @@ _save_symtab(void)
 	 */
 
 	if ((cpu_machine_id == ID_SUN3_50) &&
-	    ((vaddr_t)maxsym > (KERNBASE + OBMEM_BW50_ADDR - USPACE))) {
+	    ((vaddr_t)maxsym > (KERNBASE3 + OBMEM_BW50_ADDR - USPACE))) {
 		mon_printf("_save_symtab: too large for 3/50");
 		return;
 	}
@@ -183,7 +175,7 @@ _save_symtab(void)
  * Once that is done, pmap_bootstrap() is called to do the
  * usual preparations for our use of the MMU.
  */
-static void 
+static void
 _vm_init(void)
 {
 	vaddr_t nextva;
@@ -194,7 +186,7 @@ _vm_init(void)
 	 * if DDB is not part of this kernel, ignore the symbols.
 	 */
 	esym = end + 4;
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* This will advance esym past the symbols. */
 	_save_symtab();
 #endif
@@ -211,16 +203,16 @@ _vm_init(void)
 	 * fault handler works in case we hit an early bug.
 	 * (The fault handler may reference lwp0 stuff.)
 	 */
-	proc0paddr = (struct user *) nextva;
+	memset((void *)nextva, 0, USPACE);
+	uvm_lwp_setuarea(&lwp0, nextva);
+
 	nextva += USPACE;
-	memset((void *)proc0paddr, 0, USPACE);
-	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Now that lwp0 exists, make it the "current" one.
 	 */
 	curlwp = &lwp0;
-	curpcb = &proc0paddr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
 
 	/* This does most of the real work. */
 	pmap_bootstrap(nextva);
@@ -236,7 +228,7 @@ _vm_init(void)
  * XXX: move the rest of this to identifycpu().
  * XXX: Move cache_size stuff to cache.c.
  */
-static void 
+static void
 _verify_hardware(void)
 {
 	unsigned char machtype;
@@ -280,7 +272,7 @@ _verify_hardware(void)
 	case ID_SUN3_260:
 		cpu_match++;
 		cpu_string = "260";
-		delay_divisor = 82; 	/* 25 MHz */
+		delay_divisor = 82;	/* 25 MHz */
 		cpu_has_vme = true;
 #ifdef	HAVECACHE
 		cache_size = 0x10000;	/* 64K */
@@ -311,15 +303,22 @@ _verify_hardware(void)
  * hp300 port (and other m68k) but which we prefer to do in C code.
  * Also do setup specific to the Sun PROM monitor and IDPROM here.
  */
-void 
+void
 _bootstrap(void)
 {
+	extern struct consdev consdev_prom;	/* XXX */
 
 	/* First, Clear BSS. */
 	memset(edata, 0, end - edata);
 
 	/* Set v_handler, get boothowto. */
 	sunmon_init();
+
+	/*
+	 * Initialize console to point to the PROM (output only) table
+	 * for early printf calls.
+	 */
+	cn_tab = &consdev_prom;
 
 	/* Copy the IDPROM from control space. */
 	idprom_init();

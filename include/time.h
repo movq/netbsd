@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.35 2005/09/13 01:44:32 christos Exp $	*/
+/*	$NetBSD: time.h,v 1.47 2016/10/04 09:41:41 kamil Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -89,14 +89,17 @@ struct tm {
 __BEGIN_DECLS
 char *asctime(const struct tm *);
 clock_t clock(void);
-char *ctime(const time_t *);
-double difftime(time_t, time_t);
-struct tm *gmtime(const time_t *);
-struct tm *localtime(const time_t *);
-time_t mktime(struct tm *);
+#ifndef __LIBC12_SOURCE__
+char *ctime(const time_t *) __RENAME(__ctime50);
+double difftime(time_t, time_t) __RENAME(__difftime50);
+struct tm *gmtime(const time_t *) __RENAME(__gmtime50);
+struct tm *localtime(const time_t *) __RENAME(__locatime50);
+time_t time(time_t *) __RENAME(__time50);
+time_t mktime(struct tm *) __RENAME(__mktime50);
+#endif
 size_t strftime(char * __restrict, size_t, const char * __restrict,
-    const struct tm * __restrict);
-time_t time(time_t *);
+    const struct tm * __restrict)
+    __attribute__((__format__(__strftime__, 3, 0)));
 
 #if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
@@ -112,12 +115,14 @@ long __sysconf(int);
 #endif
 
 extern __aconst char *tzname[2];
-void tzset(void);
+#ifndef __LIBC12_SOURCE__
+void tzset(void) __RENAME(__tzset50);
+#endif
 
 /*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 extern int daylight;
 #ifndef __LIBC12_SOURCE__
 extern long int timezone __RENAME(__timezone13);
@@ -126,41 +131,112 @@ char *strptime(const char * __restrict, const char * __restrict,
     struct tm * __restrict);
 #endif
 
+#if (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
+    defined(_NETBSD_SOURCE)
+struct tm *getdate(const char *);
+extern int getdate_err;
+#endif
+
+/* ISO/IEC 9899:201x 7.27.1/3 Components of time */
+#include <sys/timespec.h>
+
 #if (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500 || \
     defined(_NETBSD_SOURCE)
-#include <sys/time.h>		/* XXX for struct timespec */
+#include <sys/time.h>
 struct sigevent;
 struct itimerspec;
-int clock_getres(clockid_t, struct timespec *);
-int clock_gettime(clockid_t, struct timespec *);
-int clock_settime(clockid_t, const struct timespec *);
-int nanosleep(const struct timespec *, struct timespec *);
+int clock_nanosleep(clockid_t, int, const struct timespec *, struct timespec *);
+#ifndef __LIBC12_SOURCE__
+int clock_getres(clockid_t, struct timespec *)
+    __RENAME(__clock_getres50);
+int clock_gettime(clockid_t, struct timespec *)
+    __RENAME(__clock_gettime50);
+int clock_settime(clockid_t, const struct timespec *)
+    __RENAME(__clock_settime50);
+int nanosleep(const struct timespec *, struct timespec *)
+    __RENAME(__nanosleep50);
+int timer_gettime(timer_t, struct itimerspec *) __RENAME(__timer_gettime50);
+int timer_settime(timer_t, int, const struct itimerspec * __restrict, 
+    struct itimerspec * __restrict) __RENAME(__timer_settime50);
+#endif
+#ifdef _NETBSD_SOURCE
+#include <sys/idtype.h>
+int clock_getcpuclockid2(idtype_t, id_t, clockid_t *);
+#endif
+int clock_getcpuclockid(pid_t, clockid_t *);
+
 int timer_create(clockid_t, struct sigevent * __restrict,
     timer_t * __restrict);
 int timer_delete(timer_t);
 int timer_getoverrun(timer_t);
-int timer_gettime(timer_t, struct itimerspec *);
-int timer_settime(timer_t, int, const struct itimerspec * __restrict, 
-    struct itimerspec * __restrict);
 #endif /* _POSIX_C_SOURCE >= 199309 || _XOPEN_SOURCE >= 500 || ... */
 
 #if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
     defined(_REENTRANT) || defined(_NETBSD_SOURCE)
 char *asctime_r(const struct tm * __restrict, char * __restrict);
-char *ctime_r(const time_t *, char *);
-struct tm *gmtime_r(const time_t * __restrict, struct tm * __restrict);
-struct tm *localtime_r(const time_t * __restrict, struct tm * __restrict);
+#ifndef __LIBC12_SOURCE__
+char *ctime_r(const time_t *, char *) __RENAME(__ctime_r50);
+struct tm *gmtime_r(const time_t * __restrict, struct tm * __restrict)
+    __RENAME(__gmtime_r50);
+struct tm *localtime_r(const time_t * __restrict, struct tm * __restrict)
+    __RENAME(__localtime_r50);
+#endif
+#endif
+
+#if (_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
+size_t strftime_l(char * __restrict, size_t, const char * __restrict,
+    const struct tm * __restrict, locale_t)
+    __attribute__((__format__(__strftime__, 3, 0)));
 #endif
 
 #if defined(_NETBSD_SOURCE)
-time_t time2posix(time_t);
-time_t posix2time(time_t);
-time_t timegm(struct tm *);
-time_t timeoff(struct tm *, long);
-time_t timelocal(struct tm *);
-void tzsetwall(void);
-struct tm *offtime(const time_t *, long);
+
+typedef struct __state *timezone_t;
+
+#ifndef __LIBC12_SOURCE__
+time_t time2posix(time_t) __RENAME(__time2posix50);
+time_t posix2time(time_t) __RENAME(__posix2time50);
+time_t timegm(struct tm *) __RENAME(__timegm50);
+time_t timeoff(struct tm *, long) __RENAME(__timeoff50);
+time_t timelocal(struct tm *) __RENAME(__timelocal50);
+struct tm *offtime(const time_t *, long) __RENAME(__offtime50);
+void tzsetwall(void) __RENAME(__tzsetwall50);
+
+struct tm *offtime_r(const time_t *, long, struct tm *) __RENAME(__offtime_r50);
+struct tm *localtime_rz(timezone_t __restrict, const time_t * __restrict,
+    struct tm * __restrict) __RENAME(__localtime_rz50);
+char *ctime_rz(timezone_t __restrict, const time_t *, char *)
+    __RENAME(__ctime_rz50);
+time_t mktime_z(timezone_t __restrict, struct tm * __restrict)
+    __RENAME(__mktime_z50);
+time_t timelocal_z(timezone_t __restrict, struct tm *)
+    __RENAME(__timelocal_z50);
+time_t time2posix_z(timezone_t __restrict, time_t) __RENAME(__time2posix_z50);
+time_t posix2time_z(timezone_t __restrict, time_t) __RENAME(__posix2time_z50);
+timezone_t tzalloc(const char *) __RENAME(__tzalloc50);
+void tzfree(timezone_t __restrict) __RENAME(__tzfree50);
+const char *tzgetname(timezone_t __restrict, int) __RENAME(__tzgetname50);
+long tzgetgmtoff(timezone_t __restrict, int) __RENAME(__tzgetgmtoff50);
+#endif
+
+size_t strftime_lz(timezone_t __restrict, char * __restrict, size_t,
+    const char * __restrict, const struct tm * __restrict, locale_t)
+    __attribute__((__format__(__strftime__, 4, 0)));
+size_t strftime_z(timezone_t __restrict, char * __restrict, size_t,
+    const char * __restrict, const struct tm * __restrict)
+    __attribute__((__format__(__strftime__, 4, 0)));
+char *strptime_l(const char * __restrict, const char * __restrict,
+    struct tm * __restrict, locale_t);
+
 #endif /* _NETBSD_SOURCE */
+
+/* ISO/IEC 9899:201x 7.27.2.5 The timespec_get function */
+#define TIME_UTC	1	/* time elapsed since epoch */
+int timespec_get(struct timespec *ts, int base);
 
 __END_DECLS
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ether_if.c,v 1.2 2007/02/21 22:59:42 thorpej Exp $	*/
+/*	$NetBSD: ether_if.c,v 1.6 2014/11/21 00:53:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,8 @@
 #include <lib/libsa/bootp.h>
 #include <lib/libsa/dev_net.h>
 
+#include <dev/clock_subr.h>
+
 #include <machine/sbd.h>
 #define	_SBD_TR2A_PRIVATE
 #include <machine/sbd_tr2a.h>	/* getsecs. */
@@ -62,7 +57,7 @@ struct devsw netdevsw = {
 int ether_match(struct netif *, void *);
 int ether_probe(struct netif *, void *);
 void ether_init(struct iodesc *, void *);
-int ether_get(struct iodesc *, void *, size_t, time_t);
+int ether_get(struct iodesc *, void *, size_t, saseconds_t);
 int ether_put(struct iodesc *, void *, size_t);
 void ether_end(struct netif *);
 
@@ -116,7 +111,7 @@ ether_init(struct iodesc *iodesc, void *hint)
 }
 
 int
-ether_get(struct iodesc *iodesc, void *pkt, size_t len, time_t timeout)
+ether_get(struct iodesc *iodesc, void *pkt, size_t len, saseconds_t timeout)
 {
 
 	return lance_get(pkt, len) ? len : -1;
@@ -144,9 +139,16 @@ _rtt(void)
 	/* NOTREACHED */
 }
 
-time_t
+satime_t
 getsecs(void)
 {
+	volatile uint8_t *mkclock;
+	u_int t;
 
-	return (time_t)*(RTC_MK48T18_ADDR + 4);
+	mkclock = RTC_MK48T18_ADDR;
+	t =  bcdtobin(*(mkclock +  4));
+	t += bcdtobin(*(mkclock +  8)) * 60;
+	t += bcdtobin(*(mkclock + 12)) * 60 * 60;
+
+	return (satime_t)t;
 }

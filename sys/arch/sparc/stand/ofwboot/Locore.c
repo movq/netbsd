@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.10 2007/10/17 19:57:16 garbled Exp $	*/
+/*	$NetBSD: Locore.c,v 1.16 2017/09/15 13:25:34 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -35,15 +35,16 @@
 #include "openfirm.h"
 
 #include <machine/cpu.h>
+#include <machine/vmparam.h>
 
-vaddr_t	OF_claim_virt(vaddr_t, int);
-vaddr_t	OF_alloc_virt(int, int);
-int	OF_free_virt(vaddr_t, int);
-int	OF_unmap_virt(vaddr_t, int);
-vaddr_t	OF_map_phys(paddr_t, off_t, vaddr_t, int);
-paddr_t	OF_alloc_phys(int, int);
-paddr_t	OF_claim_phys(paddr_t, int);
-int	OF_free_phys(paddr_t, int);
+/*
+ * We are trying to boot a sparc v9 cpu, so openfirmware has to be 64bit,
+ * and the kernel we load will be dealing with 64bits too (even if it is
+ * a 32bit kernel.
+ * Make sure we picked up the right defines:
+ */
+__CTASSERT(sizeof(cell_t)==8);
+__CTASSERT(sizeof(paddr_t)==8);
 
 extern int openfirmware(void *);
 
@@ -154,6 +155,26 @@ OF_instance_to_path(int ihandle, char *buf, int buflen)
 }
 
 int
+OF_parent(int phandle)
+{
+	struct {
+		cell_t name;
+		cell_t nargs;
+		cell_t nreturns;
+		cell_t phandle;
+		cell_t parent;
+	} args;
+
+	args.name = ADR2CELL("parent");
+	args.nargs = 1;
+	args.nreturns = 1;
+	args.phandle = HDL2CELL(phandle);
+	if (openfirmware(&args) == -1)
+		return 0;
+	return args.parent;
+}
+
+int
 OF_getprop(int handle, const char *prop, void *buf, int buflen)
 {
 	struct {
@@ -208,6 +229,66 @@ OF_setprop(u_int handle, char *prop, void *buf, int len)
 #endif
 
 int
+OF_interpret(const char *cmd, int nargs, int nreturns, ...)
+{
+	va_list ap;
+	struct {
+		cell_t name;
+		cell_t nargs;
+		cell_t nreturns;
+		cell_t slot[16];
+	} args;
+	cell_t status;
+	int i = 0;
+
+	args.name = ADR2CELL("interpret");
+	args.nargs = ++nargs;
+	args.nreturns = ++nreturns;
+	args.slot[i++] = ADR2CELL(cmd);
+	va_start(ap, nreturns);
+	while (i < nargs) {
+		args.slot[i++] = va_arg(ap, cell_t);
+	}
+	if (openfirmware(&args) == -1) {
+		va_end(ap);
+		return (-1);
+	}
+	status = args.slot[i++];
+	while (i < nargs+nreturns) {
+		*va_arg(ap, cell_t *) = args.slot[i++];
+	}
+	va_end(ap);
+
+	return status;
+}
+
+int
+OF_package_to_path(int phandle, char *buf, int buflen)
+{
+	struct {
+		cell_t name;
+		cell_t nargs;
+		cell_t nreturns;
+		cell_t phandle;
+		cell_t buf;
+		cell_t buflen;
+		cell_t length;
+	} args;
+
+	if (buflen > PAGE_SIZE)
+		return -1;
+	args.name = ADR2CELL("package-to-path");
+	args.nargs = 3;
+	args.nreturns = 1;
+	args.phandle = HDL2CELL(phandle);
+	args.buf = ADR2CELL(buf);
+	args.buflen = buflen;
+	if (openfirmware(&args) < 0)
+		return -1;
+	return args.length;
+}
+
+int
 OF_open(const char *dname)
 {
 	struct {
@@ -240,7 +321,7 @@ OF_close(int handle)
 	
 	args.name = ADR2CELL("close");
 	args.nargs = 1;
-	args.nreturns = 1;
+	args.nreturns = 0;
 	args.handle = HDL2CELL(handle);
 	openfirmware(&args);
 }
@@ -311,8 +392,8 @@ OF_seek(int handle, u_quad_t pos)
 	args.nargs = 3;
 	args.nreturns = 1;
 	args.handle = HDL2CELL(handle);
-	args.poshi = HDL2CELL(pos >> 32);
-	args.poslo = HDL2CELL(pos);
+	args.poshi = HDQ2CELL_HI(pos);
+	args.poslo = HDQ2CELL_LO(pos);
 	if (openfirmware(&args) == -1) {
 		return -1;
 	}
@@ -450,9 +531,9 @@ OF_claim_virt(vaddr_t vaddr, int len)
 	args.align = 0;
 	args.len = len;
 	args.vaddr = ADR2CELL(vaddr);
-	if(openfirmware(&args) != 0)
+	if (openfirmware(&args) != 0)
 		return -1LL;
-	return args.retaddr; /* Kluge till we go 64-bit */
+	return (vaddr_t)args.retaddr;
 }
 
 /* 
@@ -486,13 +567,13 @@ OF_alloc_virt(int len, int align)
 	args.nargs = 4;
 	args.nreturns = 2;
 	args.method = ADR2CELL("claim");
-	args.ihandle = mmuh;
+	args.ihandle = HDL2CELL(mmuh);
 	args.align = align;
 	args.len = len;
 	args.retaddr = ADR2CELL(&retaddr);
-	if(openfirmware(&args) != 0)
+	if (openfirmware(&args) != 0)
 		return -1LL;
-	return (vaddr_t)args.retaddr; /* Kluge till we go 64-bit */
+	return (vaddr_t)args.retaddr;
 }
 
 /* 
@@ -601,8 +682,8 @@ OF_map_phys(paddr_t paddr, off_t size, vaddr_t vaddr, int mode)
 	args.mode = mode;
 	args.size = size;
 	args.vaddr = ADR2CELL(vaddr);
-	args.paddr_hi = ADR2CELL(paddr>>32);
-	args.paddr_lo = ADR2CELL(paddr);
+	args.paddr_hi = HDQ2CELL_HI(paddr);
+	args.paddr_lo = HDQ2CELL_LO(paddr);
 
 	if (openfirmware(&args) == -1)
 		return -1;
@@ -620,7 +701,6 @@ OF_map_phys(paddr_t paddr, off_t size, vaddr_t vaddr, int mode)
 paddr_t
 OF_alloc_phys(int len, int align)
 {
-	paddr_t paddr;
 	struct {
 		cell_t name;
 		cell_t nargs;
@@ -647,10 +727,9 @@ OF_alloc_phys(int len, int align)
 	args.ihandle = HDL2CELL(memh);
 	args.align = align;
 	args.len = len;
-	if(openfirmware(&args) != 0)
+	if (openfirmware(&args) != 0)
 		return -1LL;
-	paddr = (paddr_t)(args.phys_hi<<32)|((unsigned int)(args.phys_lo));
-	return paddr; /* Kluge till we go 64-bit */
+	return (paddr_t)CELL2HDQ(args.phys_hi, args.phys_lo);
 }
 
 /* 
@@ -661,7 +740,6 @@ OF_alloc_phys(int len, int align)
 paddr_t
 OF_claim_phys(paddr_t phys, int len)
 {
-	paddr_t paddr;
 	struct {
 		cell_t name;
 		cell_t nargs;
@@ -691,12 +769,11 @@ OF_claim_phys(paddr_t phys, int len)
 	args.ihandle = HDL2CELL(memh);
 	args.align = 0;
 	args.len = len;
-	args.phys_hi = HDL2CELL(phys>>32);
-	args.phys_lo = HDL2CELL(phys);
-	if(openfirmware(&args) != 0)
+	args.phys_hi = HDQ2CELL_HI(phys);
+	args.phys_lo = HDQ2CELL_LO(phys);
+	if (openfirmware(&args) != 0)
 		return 0LL;
-	paddr = (paddr_t)(args.rphys_hi<<32)|((unsigned int)(args.rphys_lo));
-	return paddr;
+	return (paddr_t)CELL2HDQ(args.rphys_hi, args.rphys_lo);
 }
 
 /* 
@@ -730,8 +807,8 @@ OF_free_phys(paddr_t phys, int len)
 	args.method = ADR2CELL("release");
 	args.ihandle = HDL2CELL(memh);
 	args.len = len;
-	args.phys_hi = HDL2CELL(phys>>32);
-	args.phys_lo = HDL2CELL(phys);
+	args.phys_hi = HDQ2CELL_HI(phys);
+	args.phys_lo = HDQ2CELL_LO(phys);
 	return openfirmware(&args);
 }
 
@@ -777,22 +854,23 @@ OF_claim(void *virt, u_int size, u_int align)
 
 	if (virt == NULL) {
 		if ((virt = (void*)OF_alloc_virt(size, align)) == (void*)-1) {
-			printf("OF_alloc_virt(%d,%d) failed w/%x\n", size, align, virt);
+			printf("OF_alloc_virt(%d,%d) failed w/%p\n", size, align, virt);
 			return (void *)-1;
 		}
 	} else {
 		if ((newvirt = (void*)OF_claim_virt((vaddr_t)virt, size)) == (void*)-1) {
-			printf("OF_claim_virt(%x,%d) failed w/%x\n", virt, size, newvirt);
+			printf("OF_claim_virt(%p,%d) failed w/%p\n", virt, size, newvirt);
 			return (void *)-1;
 		}
 	}
-	if ((paddr = OF_alloc_phys(size, align)) == -1) {
+	if ((paddr = OF_alloc_phys(size, align)) == (paddr_t)-1) {
 		printf("OF_alloc_phys(%d,%d) failed\n", size, align);
 		OF_free_virt((vaddr_t)virt, size);
 		return (void *)-1;
 	}
 	if (OF_map_phys(paddr, size, (vaddr_t)virt, -1) == -1) {
-		printf("OF_map_phys(%x,%d,%x,%d) failed\n", paddr, size, virt, -1);
+		printf("OF_map_phys(0x%lx,%d,%p,%d) failed\n",
+		    (u_long)paddr, size, virt, -1);
 		OF_free_phys((paddr_t)paddr, size);
 		OF_free_virt((vaddr_t)virt, size);
 		return (void *)-1;

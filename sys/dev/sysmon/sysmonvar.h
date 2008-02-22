@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmonvar.h,v 1.23 2007/12/16 21:07:46 dyoung Exp $	*/
+/*	$NetBSD: sysmonvar.h,v 1.50 2017/09/11 06:02:09 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -36,17 +36,21 @@
 #ifndef _DEV_SYSMON_SYSMONVAR_H_
 #define	_DEV_SYSMON_SYSMONVAR_H_
 
+#include <sys/param.h>
 #include <sys/envsys.h>
 #include <sys/wdog.h>
 #include <sys/power.h>
 #include <sys/queue.h>
 #include <sys/callout.h>
-#include <sys/workqueue.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+#include <sys/rndsource.h>
 
 struct lwp;
 struct proc;
 struct knote;
 struct uio;
+struct workqueue;
 
 #define	SYSMON_MINOR_ENVSYS	0
 #define	SYSMON_MINOR_WDOG	1
@@ -56,8 +60,97 @@ struct uio;
  * Environmental sensor support
  *****************************************************************************/
 
+/*
+ * Thresholds/limits that are being monitored
+ */
+
+enum envsys_lims {
+	ENVSYS_LIM_CRITMAX,
+	ENVSYS_LIM_WARNMAX,
+	ENVSYS_LIM_WARNMIN,
+	ENVSYS_LIM_CRITMIN,
+	ENVSYS_LIM_LASTLIM
+};
+
+struct sysmon_envsys_lim {
+	int32_t critmax;
+	int32_t warnmax;
+	int32_t warnmin;
+	int32_t critmin;
+};
+
+typedef union {
+	int32_t sel_limit_list[ENVSYS_LIM_LASTLIM];
+	struct sysmon_envsys_lim sel_limits;
+} sysmon_envsys_lim_t;
+
+#define	sel_critmax sel_limits.critmax
+#define	sel_warnmax sel_limits.warnmax
+#define	sel_warnmin sel_limits.warnmin
+#define	sel_critmin sel_limits.critmin
+
+/* struct used by a sensor */
+struct envsys_data {
+	TAILQ_ENTRY(envsys_data)	sensors_head;
+	uint32_t	sensor;		/* sensor number */
+	uint32_t	units;		/* type of sensor */
+	uint32_t	state;		/* sensor state */
+	uint32_t	flags;		/* sensor flags */
+	uint32_t	rpms;		/* for fans, nominal RPMs */
+	int32_t		rfact;		/* for volts, factor x 10^4 */
+	int32_t		value_cur;	/* current value */
+	int32_t		value_prev;	/* previous value */
+	int32_t		value_max;	/* max value */
+	int32_t		value_min;	/* min value */
+	int32_t		private;	/* private data for drivers */
+	sysmon_envsys_lim_t limits;	/* thresholds for monitoring */
+	uint32_t	upropset;	/* userland property set? */
+	krndsource_t	rnd_src;	/* source element for rnd(4) */
+	char		desc[ENVSYS_DESCLEN];	/* sensor description */
+};
+
+typedef struct envsys_data envsys_data_t;
+
+/* sensor flags */
+#define ENVSYS_FPERCENT 	0x00000001	/* sensor wants a percentage */
+#define ENVSYS_FVALID_MAX	0x00000002	/* max value is ok */
+#define ENVSYS_FVALID_MIN	0x00000004	/* min value is ok */
+#define ENVSYS_F_OBSOLETE	0x00000008
+#define ENVSYS_FCHANGERFACT	0x00000010	/* sensor can change rfact */
+
+/* monitoring flags */
+#define ENVSYS_FMONCRITICAL	0x00000020	/* monitor a critical state */
+#define ENVSYS_FMONLIMITS	0x00000040	/* monitor limits/thresholds */
+#define ENVSYS_FMONSTCHANGED	0x00000400	/* monitor a battery/drive state */
+#define ENVSYS_FMONANY	\
+	(ENVSYS_FMONCRITICAL | ENVSYS_FMONLIMITS | ENVSYS_FMONSTCHANGED)
+#define ENVSYS_FMONNOTSUPP	0x00000800	/* monitoring not supported */
+#define ENVSYS_FNEED_REFRESH	0x00001000	/* sensor needs refreshing */
+#define ENVSYS_FHAS_ENTROPY	0x00002000	/* sensor provides entropy
+						   for rnd(4) */
+
+/*
+ * Properties that can be set in upropset (and in the event_limit's
+ * flags field)
+ */
+#define	PROP_CRITMAX		0x0001
+#define	PROP_CRITMIN		0x0002
+#define	PROP_WARNMAX		0x0004
+#define	PROP_WARNMIN		0x0008
+#define	PROP_BATTCAP		0x0010
+#define	PROP_BATTWARN		0x0020
+#define	PROP_BATTHIGH		0x0040
+#define	PROP_BATTMAX		0x0080
+#define	PROP_DESC		0x0100
+#define	PROP_RFACT		0x0200
+
+#define	PROP_DRIVER_LIMITS	0x8000
+#define	PROP_CAP_LIMITS		(PROP_BATTCAP  | PROP_BATTWARN | \
+				 PROP_BATTHIGH | PROP_BATTMAX)
+#define	PROP_VAL_LIMITS		(PROP_CRITMAX  | PROP_CRITMIN | \
+				 PROP_WARNMAX  | PROP_WARNMIN)
+#define	PROP_LIMITS		(PROP_CAP_LIMITS | PROP_VAL_LIMITS)
 struct sme_event;
-struct sme_sensor_names;
 
 struct sysmon_envsys {
 	const char *sme_name;		/* envsys device name */
@@ -70,7 +163,10 @@ struct sysmon_envsys {
 	int sme_flags;			/* additional flags */
 #define SME_FLAG_BUSY 		0x00000001 	/* device busy */
 #define SME_DISABLE_REFRESH	0x00000002	/* disable sme_refresh */
-#define SME_CALLOUT_INITIALIZED	0x00000004	/* callout was initialized */
+#define SME_INIT_REFRESH        0x00000008      /* call sme_refresh() after
+						   interrupts are enabled in
+						   the autoconf(9) process. */
+#define SME_POLL_ONLY           0x00000010      /* only poll sme_refresh */
 
 	void *sme_cookie;		/* for ENVSYS back-end */
 
@@ -79,8 +175,23 @@ struct sysmon_envsys {
 	 */
 	void (*sme_refresh)(struct sysmon_envsys *, envsys_data_t *);
 
+	/*
+	 * Function callbacks to exchange limit/threshold values
+	 * with device
+	 */
+	void (*sme_set_limits)(struct sysmon_envsys *, envsys_data_t *,
+			       sysmon_envsys_lim_t *, uint32_t *);
+	void (*sme_get_limits)(struct sysmon_envsys *, envsys_data_t *,
+			       sysmon_envsys_lim_t *, uint32_t *);
+
 	struct workqueue *sme_wq;	/* the workqueue for the events */
 	struct callout sme_callout;	/* for the events */
+	int sme_callout_state;		/* state of the event's callout */
+
+#define	SME_CALLOUT_INVALID	0x0	/* callout is not initialized */
+#define	SME_CALLOUT_READY	0x1	/* callout is ready for use */
+#define	SME_CALLOUT_HALTED	0x2	/* callout can be destroyed */
+
 	uint64_t sme_events_timeout;	/* the timeout used in the callout */
 
 	/* 
@@ -97,6 +208,16 @@ struct sysmon_envsys {
 	 * tailq for the sensors that a device maintains.
 	 */
 	TAILQ_HEAD(, envsys_data) sme_sensors_list;
+
+	/*
+	 * Locking/synchronization.
+	 */
+	int sme_busy;			/* number of items on workqueue,
+					   sme_mtx or sme_work_mtx to read,
+					   both to write */
+	kmutex_t sme_mtx;
+	kmutex_t sme_work_mtx;
+	kcondvar_t sme_condvar;
 };
 
 int	sysmonopen_envsys(dev_t, int, int, struct lwp *);
@@ -112,7 +233,22 @@ void	sysmon_envsys_unregister(struct sysmon_envsys *);
 int	sysmon_envsys_sensor_attach(struct sysmon_envsys *, envsys_data_t *);
 int	sysmon_envsys_sensor_detach(struct sysmon_envsys *, envsys_data_t *);
 
-void	sysmon_envsys_init(void);
+uint32_t	sysmon_envsys_get_max_value(bool (*)(const envsys_data_t*), bool);
+
+void	sysmon_envsys_sensor_event(struct sysmon_envsys *, envsys_data_t *,
+				   int);
+
+void	sysmon_envsys_refresh_sensor(struct sysmon_envsys *, envsys_data_t *);
+
+typedef	bool (*sysmon_envsys_callback_t)(const struct sysmon_envsys *,
+					 const envsys_data_t *, void*);
+
+void	sysmon_envsys_foreach_sensor(sysmon_envsys_callback_t, void *, bool);
+
+int	sysmon_envsys_update_limits(struct sysmon_envsys *, envsys_data_t *);
+
+int	sysmon_envsys_init(void);
+int	sysmon_envsys_fini(void);
 
 /*****************************************************************************
  * Watchdog timer support
@@ -136,10 +272,12 @@ int	sysmonopen_wdog(dev_t, int, int, struct lwp *);
 int	sysmonclose_wdog(dev_t, int, int, struct lwp *);
 int	sysmonioctl_wdog(dev_t, u_long, void *, int, struct lwp *);
 
+int     sysmon_wdog_setmode(struct sysmon_wdog *, int, u_int);
 int     sysmon_wdog_register(struct sysmon_wdog *);
 int     sysmon_wdog_unregister(struct sysmon_wdog *);
 
-void	sysmon_wdog_init(void);
+int	sysmon_wdog_init(void);
+int	sysmon_wdog_fini(void);
 
 /*****************************************************************************
  * Power management support
@@ -167,6 +305,23 @@ void	sysmon_pswitch_unregister(struct sysmon_pswitch *);
 void	sysmon_pswitch_event(struct sysmon_pswitch *, int);
 void	sysmon_penvsys_event(struct penvsys_state *, int);
 
-void	sysmon_power_init(void);
+int	sysmon_power_init(void);
+int	sysmon_power_fini(void);
+
+/*
+ * Interface to sysmon common code used for autoloading
+ */
+struct sysmon_opvec {
+	int (*so_open)(dev_t, int, int, struct lwp*);
+	int (*so_close)(dev_t, int, int, struct lwp*);
+	int (*so_ioctl)(dev_t, u_long, void *, int, struct lwp*);
+	int (*so_read)(dev_t, struct uio*, int);
+	int (*so_poll)(dev_t, int, struct lwp*);
+	int (*so_filter)(dev_t, struct knote*);
+};
+
+int	sysmon_init(void);
+int	sysmon_fini(void);
+int	sysmon_attach_minor(int, struct sysmon_opvec*);
 
 #endif /* _DEV_SYSMON_SYSMONVAR_H_ */

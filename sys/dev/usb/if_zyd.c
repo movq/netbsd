@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_zyd.c,v 1.52 2007/02/11 00:08:04 jsg Exp $	*/
-/*	$NetBSD: if_zyd.c,v 1.12 2007/10/21 17:03:37 degroote Exp $	*/
+/*	$NetBSD: if_zyd.c,v 1.48 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2006 by Damien Bergamini <damien.bergamini@free.fr>
@@ -18,19 +18,23 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*
+/*-
  * ZyDAS ZD1211/ZD1211B USB WLAN driver.
  */
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.12 2007/10/21 17:03:37 degroote Exp $");
 
-#include "bpfilter.h"
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.48 2018/06/26 06:48:02 msaitoh Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
+#include <sys/kmem.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -40,9 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.12 2007/10/21 17:03:37 degroote Exp $")
 #include <sys/bus.h>
 #include <machine/endian.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -68,10 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.12 2007/10/21 17:03:37 degroote Exp $")
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_zydreg.h>
-
-#ifdef USB_DEBUG
-#define ZYD_DEBUG
-#endif
 
 #ifdef ZYD_DEBUG
 #define DPRINTF(x)	do { if (zyddebug > 0) printf x; } while (0)
@@ -101,6 +99,7 @@ static const struct zyd_type {
 	ZYD_ZD1211_DEV(ASUSTEK,		WL159G),
 	ZYD_ZD1211_DEV(CYBERTAN,	TG54USB),
 	ZYD_ZD1211_DEV(DRAYTEK,		VIGOR550),
+	ZYD_ZD1211_DEV(PLANEX2,		GWUS54GD),
 	ZYD_ZD1211_DEV(PLANEX2,		GWUS54GZL),
 	ZYD_ZD1211_DEV(PLANEX3,		GWUS54GZ),
 	ZYD_ZD1211_DEV(PLANEX3,		GWUS54MINI),
@@ -120,39 +119,53 @@ static const struct zyd_type {
 	ZYD_ZD1211_DEV(ZYDAS,		ZD1211),
 	ZYD_ZD1211_DEV(ZYXEL,		AG225H),
 	ZYD_ZD1211_DEV(ZYXEL,		ZYAIRG220),
+	ZYD_ZD1211_DEV(ZYXEL,		G200V2),
 
 	ZYD_ZD1211B_DEV(ACCTON,		SMCWUSBG),
+	ZYD_ZD1211B_DEV(ACCTON,		WN4501H_LF_IR),
+	ZYD_ZD1211B_DEV(ACCTON,		WUS201),
 	ZYD_ZD1211B_DEV(ACCTON,		ZD1211B),
 	ZYD_ZD1211B_DEV(ASUSTEK,	A9T_WIFI),
 	ZYD_ZD1211B_DEV(BELKIN,		F5D7050C),
 	ZYD_ZD1211B_DEV(BELKIN,		ZD1211B),
+	ZYD_ZD1211B_DEV(BEWAN,		BWIFI_USB54AR),
 	ZYD_ZD1211B_DEV(CISCOLINKSYS,	WUSBF54G),
+	ZYD_ZD1211B_DEV(CYBERTAN,	ZD1211B),
 	ZYD_ZD1211B_DEV(FIBERLINE,	WL430U),
 	ZYD_ZD1211B_DEV(MELCO,		KG54L),
 	ZYD_ZD1211B_DEV(PHILIPS,	SNU5600),
+	ZYD_ZD1211B_DEV(PHILIPS,	SNU5630NS05),
+	ZYD_ZD1211B_DEV(PLANEX2,	GWUS54GXS),
 	ZYD_ZD1211B_DEV(SAGEM,		XG76NA),
+	ZYD_ZD1211B_DEV(SITECOMEU,	WL603),
 	ZYD_ZD1211B_DEV(SITECOMEU,	ZD1211B),
+	ZYD_ZD1211B_DEV(SONY,		IFU_WLM2),
 	ZYD_ZD1211B_DEV(UMEDIA,		TEW429UBC1),
-#if 0	/* Shall we needs? */
 	ZYD_ZD1211B_DEV(UNKNOWN1,	ZD1211B_1),
 	ZYD_ZD1211B_DEV(UNKNOWN1,	ZD1211B_2),
 	ZYD_ZD1211B_DEV(UNKNOWN2,	ZD1211B),
 	ZYD_ZD1211B_DEV(UNKNOWN3,	ZD1211B),
-#endif
 	ZYD_ZD1211B_DEV(USR,		USR5423),
 	ZYD_ZD1211B_DEV(VTECH,		ZD1211B),
 	ZYD_ZD1211B_DEV(ZCOM,		ZD1211B),
 	ZYD_ZD1211B_DEV(ZYDAS,		ZD1211B),
+	ZYD_ZD1211B_DEV(ZYDAS,		ZD1211B_2),
 	ZYD_ZD1211B_DEV(ZYXEL,		M202),
 	ZYD_ZD1211B_DEV(ZYXEL,		G220V2),
-	ZYD_ZD1211B_DEV(PLANEX2,	GWUS54GXS),
 };
 #define zyd_lookup(v, p)	\
 	((const struct zyd_type *)usb_lookup(zyd_devs, v, p))
 
-USB_DECLARE_DRIVER(zyd);
+int zyd_match(device_t, cfdata_t, void *);
+void zyd_attach(device_t, device_t, void *);
+int zyd_detach(device_t, int);
+int zyd_activate(device_t, enum devact);
+extern struct cfdriver zyd_cd;
 
-Static int	zyd_attachhook(void *);
+CFATTACH_DECL_NEW(zyd, sizeof(struct zyd_softc), zyd_match,
+    zyd_attach, zyd_detach, zyd_activate);
+
+Static void	zyd_attachhook(device_t);
 Static int	zyd_complete_attach(struct zyd_softc *);
 Static int	zyd_open_pipes(struct zyd_softc *);
 Static void	zyd_close_pipes(struct zyd_softc *);
@@ -208,10 +221,10 @@ Static int	zyd_set_rxfilter(struct zyd_softc *);
 Static void	zyd_set_chan(struct zyd_softc *, struct ieee80211_channel *);
 Static int	zyd_set_beacon_interval(struct zyd_softc *, int);
 Static uint8_t	zyd_plcp_signal(int);
-Static void	zyd_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
+Static void	zyd_intr(struct usbd_xfer *, void *, usbd_status);
 Static void	zyd_rx_data(struct zyd_softc *, const uint8_t *, uint16_t);
-Static void	zyd_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
-Static void	zyd_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
+Static void	zyd_rxeof(struct usbd_xfer *, void *, usbd_status);
+Static void	zyd_txeof(struct usbd_xfer *, void *, usbd_status);
 Static int	zyd_tx_mgt(struct zyd_softc *, struct mbuf *,
 		    struct ieee80211_node *);
 Static int	zyd_tx_data(struct zyd_softc *, struct mbuf *,
@@ -226,24 +239,19 @@ Static void	zyd_iter_func(void *, struct ieee80211_node *);
 Static void	zyd_amrr_timeout(void *);
 Static void	zyd_newassoc(struct ieee80211_node *, int);
 
-static const struct ieee80211_rateset zyd_rateset_11b =
-	{ 4, { 2, 4, 11, 22 } };
-
-static const struct ieee80211_rateset zyd_rateset_11g =
-	{ 12, { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 } };
-
-USB_MATCH(zyd)
+int
+zyd_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(zyd, uaa);
+	struct usb_attach_arg *uaa = aux;
 
-	return (zyd_lookup(uaa->vendor, uaa->product) != NULL) ?
+	return (zyd_lookup(uaa->uaa_vendor, uaa->uaa_product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
 }
 
-Static int
-zyd_attachhook(void *xsc)
+Static void
+zyd_attachhook(device_t self)
 {
-	struct zyd_softc *sc = xsc;
+	struct zyd_softc *sc = device_private(self);
 	firmware_handle_t fwh;
 	const char *fwname;
 	u_char *fw;
@@ -252,67 +260,69 @@ zyd_attachhook(void *xsc)
 
 	fwname = (sc->mac_rev == ZYD_ZD1211) ? "zyd-zd1211" : "zyd-zd1211b";
 	if ((error = firmware_open("zyd", fwname, &fwh)) != 0) {
-		printf("%s: failed to open firmware %s (error=%d)\n",
-		    USBDEVNAME(sc->sc_dev), fwname, error);
-		return error;
+		aprint_error_dev(sc->sc_dev,
+		    "failed to open firmware %s (error=%d)\n", fwname, error);
+		return;
 	}
 	size = firmware_get_size(fwh);
 	fw = firmware_malloc(size);
 	if (fw == NULL) {
-		printf("%s: failed to allocate firmware memory\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "failed to allocate firmware memory\n");
 		firmware_close(fwh);
-		return ENOMEM;;
+		return;
 	}
 	error = firmware_read(fwh, 0, fw, size);
 	firmware_close(fwh);
 	if (error != 0) {
-		printf("%s: failed to read firmware (error %d)\n",
-		    USBDEVNAME(sc->sc_dev), error);
-		firmware_free(fw, 0);
-		return error;
+		aprint_error_dev(sc->sc_dev,
+		    "failed to read firmware (error %d)\n", error);
+		firmware_free(fw, size);
+		return;
 	}
 
 	error = zyd_loadfirmware(sc, fw, size);
 	if (error != 0) {
-		printf("%s: could not load firmware (error=%d)\n",
-		    USBDEVNAME(sc->sc_dev), error);
-		firmware_free(fw, 0);
-		return ENXIO;
+		aprint_error_dev(sc->sc_dev,
+		    "could not load firmware (error=%d)\n", error);
+		firmware_free(fw, size);
+		return;
 	}
 
-	firmware_free(fw, 0);
-	sc->sc_flags |= ZD1211_FWLOADED;
+	firmware_free(fw, size);
 
 	/* complete the attach process */
 	if ((error = zyd_complete_attach(sc)) == 0)
 		sc->attached = 1;
-	return error;
+	return;
 }
 
-USB_ATTACH(zyd)
+void
+zyd_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(zyd, sc, uaa);
+	struct zyd_softc *sc = device_private(self);
+	struct usb_attach_arg *uaa = aux;
 	char *devinfop;
 	usb_device_descriptor_t* ddesc;
 	struct ifnet *ifp = &sc->sc_if;
 
-	sc->sc_udev = uaa->device;
-	sc->sc_flags = 0;
+	sc->sc_dev = self;
+	sc->sc_udev = uaa->uaa_device;
 
-	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	devinfop = usbd_devinfo_alloc(uaa->uaa_device, 0);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	sc->mac_rev = zyd_lookup(uaa->vendor, uaa->product)->rev;
+	sc->mac_rev = zyd_lookup(uaa->uaa_vendor, uaa->uaa_product)->rev;
 
 	ddesc = usbd_get_device_descriptor(sc->sc_udev);
 	if (UGETW(ddesc->bcdDevice) < 0x4330) {
-		printf("%s: device version mismatch: 0x%x "
-		    "(only >= 43.30 supported)\n", USBDEVNAME(sc->sc_dev),
-		    UGETW(ddesc->bcdDevice));
-		USB_ATTACH_ERROR_RETURN;
+		aprint_error_dev(self, "device version mismatch: 0x%x "
+		    "(only >= 43.30 supported)\n", UGETW(ddesc->bcdDevice));
+		return;
 	}
 
 	ifp->if_softc = sc;
@@ -323,15 +333,12 @@ USB_ATTACH(zyd)
 	ifp->if_watchdog = zyd_watchdog;
 	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
 	IFQ_SET_READY(&ifp->if_snd);
-	memcpy(ifp->if_xname, USBDEVNAME(sc->sc_dev), IFNAMSIZ);
-
-	if_attach(ifp);
-	/* XXXX: alloc temporarily until the layer2 can be configured. */
-	if_alloc_sadl(ifp);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 
 	SIMPLEQ_INIT(&sc->sc_rqh);
 
-	USB_ATTACH_SUCCESS_RETURN;
+	/* defer configrations after file system is ready to load firmware */
+	config_mountroot(self, zyd_attachhook);
 }
 
 Static int
@@ -342,51 +349,52 @@ zyd_complete_attach(struct zyd_softc *sc)
 	usbd_status error;
 	int i;
 
-	usb_init_task(&sc->sc_task, zyd_task, sc);
-	usb_callout_init(sc->sc_scan_ch);
+	usb_init_task(&sc->sc_task, zyd_task, sc, 0);
+	callout_init(&(sc->sc_scan_ch), 0);
 
 	sc->amrr.amrr_min_success_threshold =  1;
 	sc->amrr.amrr_max_success_threshold = 10;
-	usb_callout_init(sc->sc_amrr_ch);
+	callout_init(&sc->sc_amrr_ch, 0);
 
 	error = usbd_set_config_no(sc->sc_udev, ZYD_CONFIG_NO, 1);
 	if (error != 0) {
-		printf("%s: setting config no failed\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "failed to set configuration"
+		    ", err=%s\n", usbd_errstr(error));
 		goto fail;
 	}
 
 	error = usbd_device2interface_handle(sc->sc_udev, ZYD_IFACE_INDEX,
 	    &sc->sc_iface);
 	if (error != 0) {
-		printf("%s: getting interface handle failed\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "getting interface handle failed\n");
 		goto fail;
 	}
 
 	if ((error = zyd_open_pipes(sc)) != 0) {
-		printf("%s: could not open pipes\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "could not open pipes\n");
 		goto fail;
 	}
 
 	if ((error = zyd_read_eeprom(sc)) != 0) {
-		printf("%s: could not read EEPROM\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "could not read EEPROM\n");
 		goto fail;
 	}
 
 	if ((error = zyd_rf_attach(sc, sc->rf_rev)) != 0) {
-		printf("%s: could not attach RF\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "could not attach RF\n");
 		goto fail;
 	}
 
 	if ((error = zyd_hw_init(sc)) != 0) {
-		printf("%s: hardware initialization failed\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "hardware initialization failed\n");
 		goto fail;
 	}
 
-	printf("%s: HMAC ZD1211%s, FW %02x.%02x, RF %s, PA %x, address %s\n",
-	    USBDEVNAME(sc->sc_dev), (sc->mac_rev == ZYD_ZD1211) ? "": "B",
+	aprint_normal_dev(sc->sc_dev,
+	    "HMAC ZD1211%s, FW %02x.%02x, RF %s, PA %x, address %s\n",
+	    (sc->mac_rev == ZYD_ZD1211) ? "": "B",
 	    sc->fw_rev >> 8, sc->fw_rev & 0xff, zyd_rf_name(sc->rf_rev),
 	    sc->pa_rev, ether_sprintf(ic->ic_myaddr));
 
@@ -403,8 +411,8 @@ zyd_complete_attach(struct zyd_softc *sc)
 	    IEEE80211_C_WEP;		/* s/w WEP */
 
 	/* set supported .11b and .11g rates */
-	ic->ic_sup_rates[IEEE80211_MODE_11B] = zyd_rateset_11b;
-	ic->ic_sup_rates[IEEE80211_MODE_11G] = zyd_rateset_11g;
+	ic->ic_sup_rates[IEEE80211_MODE_11B] = ieee80211_std_rateset_11b;
+	ic->ic_sup_rates[IEEE80211_MODE_11G] = ieee80211_std_rateset_11g;
 
 	/* set supported .11b and .11g channels (1 through 14) */
 	for (i = 1; i <= 14; i++) {
@@ -415,7 +423,7 @@ zyd_complete_attach(struct zyd_softc *sc)
 		    IEEE80211_CHAN_DYN | IEEE80211_CHAN_2GHZ;
 	}
 
-	if_free_sadl(ifp);
+	if_attach(ifp);
 	ieee80211_ifattach(ic);
 	ic->ic_node_alloc = zyd_node_alloc;
 	ic->ic_newassoc = zyd_newassoc;
@@ -425,62 +433,55 @@ zyd_complete_attach(struct zyd_softc *sc)
 	ic->ic_newstate = zyd_newstate;
 	ieee80211_media_init(ic, zyd_media_change, ieee80211_media_status);
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof (struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
 	    &sc->sc_drvbpf);
 
-	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
+	sc->sc_rxtap_len = sizeof(sc->sc_rxtapu);
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
 	sc->sc_rxtap.wr_ihdr.it_present = htole32(ZYD_RX_RADIOTAP_PRESENT);
 
-	sc->sc_txtap_len = sizeof sc->sc_txtapu;
+	sc->sc_txtap_len = sizeof(sc->sc_txtapu);
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(ZYD_TX_RADIOTAP_PRESENT);
-#endif
 
 	ieee80211_announce(ic);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-	    USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
 
 fail:	return error;
 }
 
-USB_DETACH(zyd)
+int
+zyd_detach(device_t self, int flags)
 {
-	USB_DETACH_START(zyd, sc);
+	struct zyd_softc *sc = device_private(self);
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &sc->sc_if;
 	int s;
 
-	if (!sc->attached) {
-		if_free_sadl(ifp);
-		if_detach(ifp);
+	if (!sc->attached)
 		return 0;
-	}
 
 	s = splusb();
 
 	zyd_stop(ifp, 1);
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, zyd_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, zyd_amrr_timeout, sc);
+	callout_stop(&sc->sc_scan_ch);
+	callout_stop(&sc->sc_amrr_ch);
 
+	/* Abort, etc. done by zyd_stop */
 	zyd_close_pipes(sc);
 
 	sc->attached = 0;
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	ieee80211_ifdetach(ic);
 	if_detach(ifp);
 
 	splx(s);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	    USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
 
 	return 0;
 }
@@ -489,7 +490,6 @@ Static int
 zyd_open_pipes(struct zyd_softc *sc)
 {
 	usb_endpoint_descriptor_t *edesc;
-	int isize;
 	usbd_status error;
 
 	/* interrupt in */
@@ -497,20 +497,18 @@ zyd_open_pipes(struct zyd_softc *sc)
 	if (edesc == NULL)
 		return EINVAL;
 
-	isize = UGETW(edesc->wMaxPacketSize);
-	if (isize == 0)	/* should not happen */
+	sc->ibuf_size = UGETW(edesc->wMaxPacketSize);
+	if (sc->ibuf_size == 0)	/* should not happen */
 		return EINVAL;
 
-	sc->ibuf = malloc(isize, M_USBDEV, M_NOWAIT);
-	if (sc->ibuf == NULL)
-		return ENOMEM;
+	sc->ibuf = kmem_alloc(sc->ibuf_size, KM_SLEEP);
 
 	error = usbd_open_pipe_intr(sc->sc_iface, 0x83, USBD_SHORT_XFER_OK,
-	    &sc->zyd_ep[ZYD_ENDPT_IIN], sc, sc->ibuf, isize, zyd_intr,
+	    &sc->zyd_ep[ZYD_ENDPT_IIN], sc, sc->ibuf, sc->ibuf_size, zyd_intr,
 	    USBD_DEFAULT_INTERVAL);
 	if (error != 0) {
 		printf("%s: open rx intr pipe failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(error));
+		    device_xname(sc->sc_dev), usbd_errstr(error));
 		goto fail;
 	}
 
@@ -519,7 +517,7 @@ zyd_open_pipes(struct zyd_softc *sc)
 	    &sc->zyd_ep[ZYD_ENDPT_IOUT]);
 	if (error != 0) {
 		printf("%s: open tx intr pipe failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(error));
+		    device_xname(sc->sc_dev), usbd_errstr(error));
 		goto fail;
 	}
 
@@ -528,7 +526,7 @@ zyd_open_pipes(struct zyd_softc *sc)
 	    &sc->zyd_ep[ZYD_ENDPT_BIN]);
 	if (error != 0) {
 		printf("%s: open rx pipe failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(error));
+		    device_xname(sc->sc_dev), usbd_errstr(error));
 		goto fail;
 	}
 
@@ -537,7 +535,7 @@ zyd_open_pipes(struct zyd_softc *sc)
 	    &sc->zyd_ep[ZYD_ENDPT_BOUT]);
 	if (error != 0) {
 		printf("%s: open tx pipe failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(error));
+		    device_xname(sc->sc_dev), usbd_errstr(error));
 		goto fail;
 	}
 
@@ -554,13 +552,12 @@ zyd_close_pipes(struct zyd_softc *sc)
 
 	for (i = 0; i < ZYD_ENDPT_CNT; i++) {
 		if (sc->zyd_ep[i] != NULL) {
-			usbd_abort_pipe(sc->zyd_ep[i]);
 			usbd_close_pipe(sc->zyd_ep[i]);
 			sc->zyd_ep[i] = NULL;
 		}
 	}
 	if (sc->ibuf != NULL) {
-		free(sc->ibuf, M_USBDEV);
+		kmem_free(sc->ibuf, sc->ibuf_size);
 		sc->ibuf = NULL;
 	}
 }
@@ -577,23 +574,17 @@ zyd_alloc_tx_list(struct zyd_softc *sc)
 
 		data->sc = sc;	/* backpointer for callbacks */
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
-		if (data->xfer == NULL) {
+		error = usbd_create_xfer(sc->zyd_ep[ZYD_ENDPT_BOUT],
+		    ZYD_MAX_TXBUFSZ, USBD_FORCE_SHORT_XFER, 0, &data->xfer);
+		if (error) {
 			printf("%s: could not allocate tx xfer\n",
-			    USBDEVNAME(sc->sc_dev));
-			error = ENOMEM;
+			    device_xname(sc->sc_dev));
 			goto fail;
 		}
-		data->buf = usbd_alloc_buffer(data->xfer, ZYD_MAX_TXBUFSZ);
-		if (data->buf == NULL) {
-			printf("%s: could not allocate tx buffer\n",
-			    USBDEVNAME(sc->sc_dev));
-			error = ENOMEM;
-			goto fail;
-		}
+		data->buf = usbd_get_buffer(data->xfer);
 
 		/* clear Tx descriptor */
-		bzero(data->buf, sizeof (struct zyd_tx_desc));
+		memset(data->buf, 0, sizeof(struct zyd_tx_desc));
 	}
 	return 0;
 
@@ -610,7 +601,7 @@ zyd_free_tx_list(struct zyd_softc *sc)
 		struct zyd_tx_data *data = &sc->tx_data[i];
 
 		if (data->xfer != NULL) {
-			usbd_free_xfer(data->xfer);
+			usbd_destroy_xfer(data->xfer);
 			data->xfer = NULL;
 		}
 		if (data->ni != NULL) {
@@ -630,20 +621,14 @@ zyd_alloc_rx_list(struct zyd_softc *sc)
 
 		data->sc = sc;	/* backpointer for callbacks */
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
-		if (data->xfer == NULL) {
+		error = usbd_create_xfer(sc->zyd_ep[ZYD_ENDPT_BIN],
+		    ZYX_MAX_RXBUFSZ, 0, 0, &data->xfer);
+		if (error) {
 			printf("%s: could not allocate rx xfer\n",
-			    USBDEVNAME(sc->sc_dev));
-			error = ENOMEM;
+			    device_xname(sc->sc_dev));
 			goto fail;
 		}
-		data->buf = usbd_alloc_buffer(data->xfer, ZYX_MAX_RXBUFSZ);
-		if (data->buf == NULL) {
-			printf("%s: could not allocate rx buffer\n",
-			    USBDEVNAME(sc->sc_dev));
-			error = ENOMEM;
-			goto fail;
-		}
+		data->buf = usbd_get_buffer(data->xfer);
 	}
 	return 0;
 
@@ -660,7 +645,7 @@ zyd_free_rx_list(struct zyd_softc *sc)
 		struct zyd_rx_data *data = &sc->rx_data[i];
 
 		if (data->xfer != NULL) {
-			usbd_free_xfer(data->xfer);
+			usbd_destroy_xfer(data->xfer);
 			data->xfer = NULL;
 		}
 	}
@@ -672,10 +657,9 @@ zyd_node_alloc(struct ieee80211_node_table *nt __unused)
 {
 	struct zyd_node *zn;
 
-	zn = malloc(sizeof (struct zyd_node), M_DEVBUF, M_NOWAIT);
-	if (zn != NULL)
-		bzero(zn, sizeof (struct zyd_node));
-	return (struct ieee80211_node *)zn;
+	zn = malloc(sizeof(struct zyd_node), M_80211_NODE, M_NOWAIT | M_ZERO);
+
+	return &zn->ni;
 }
 
 Static int
@@ -729,7 +713,7 @@ zyd_task(void *arg)
 
 	case IEEE80211_S_SCAN:
 		zyd_set_chan(sc, ic->ic_curchan);
-		usb_callout(sc->sc_scan_ch, hz / 5, zyd_next_scan, sc);
+		callout_reset(&sc->sc_scan_ch, hz / 5, zyd_next_scan, sc);
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -760,7 +744,7 @@ zyd_task(void *arg)
 
 		/* start automatic rate control timer */
 		if (ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE)
-			usb_callout(sc->sc_amrr_ch, hz, zyd_amrr_timeout, sc);
+			callout_reset(&sc->sc_amrr_ch, hz, zyd_amrr_timeout, sc);
 
 		break;
 	}
@@ -774,9 +758,12 @@ zyd_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 {
 	struct zyd_softc *sc = ic->ic_ifp->if_softc;
 
+	if (!sc->attached)
+		return ENXIO;
+
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, zyd_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, zyd_amrr_timeout, sc);
+	callout_stop(&sc->sc_scan_ch);
+	callout_stop(&sc->sc_amrr_ch);
 
 	/* do it in a process context */
 	sc->sc_state = nstate;
@@ -789,18 +776,21 @@ Static int
 zyd_cmd(struct zyd_softc *sc, uint16_t code, const void *idata, int ilen,
     void *odata, int olen, u_int flags)
 {
-	usbd_xfer_handle xfer;
+	struct usbd_xfer *xfer;
 	struct zyd_cmd cmd;
 	struct rq rq;
 	uint16_t xferflags;
-	usbd_status error;
+	int error;
+	usbd_status uerror;
 	int s = 0;
 
-	if ((xfer = usbd_alloc_xfer(sc->sc_udev)) == NULL)
-		return ENOMEM;
+	error = usbd_create_xfer(sc->zyd_ep[ZYD_ENDPT_IOUT],
+	    sizeof(uint16_t) + ilen, USBD_FORCE_SHORT_XFER, 0, &xfer);
+	if (error)
+		return error;
 
 	cmd.code = htole16(code);
-	bcopy(idata, cmd.data, ilen);
+	memcpy(cmd.data, idata, ilen);
 
 	xferflags = USBD_FORCE_SHORT_XFER;
 	if (!(flags & ZYD_CMD_FLAG_READ))
@@ -809,33 +799,33 @@ zyd_cmd(struct zyd_softc *sc, uint16_t code, const void *idata, int ilen,
 		s = splusb();
 		rq.idata = idata;
 		rq.odata = odata;
-		rq.len = olen / sizeof (struct zyd_pair);
+		rq.len = olen / sizeof(struct zyd_pair);
 		SIMPLEQ_INSERT_TAIL(&sc->sc_rqh, &rq, rq);
 	}
 
-	usbd_setup_xfer(xfer, sc->zyd_ep[ZYD_ENDPT_IOUT], 0, &cmd,
-	    sizeof (uint16_t) + ilen, xferflags, ZYD_INTR_TIMEOUT, NULL);
-	error = usbd_transfer(xfer);
-	if (error != USBD_IN_PROGRESS && error != 0) {
+	usbd_setup_xfer(xfer, 0, &cmd, sizeof(uint16_t) + ilen, xferflags,
+	    ZYD_INTR_TIMEOUT, NULL);
+	uerror = usbd_transfer(xfer);
+	if (uerror != USBD_IN_PROGRESS && uerror != 0) {
 		if (flags & ZYD_CMD_FLAG_READ)
 			splx(s);
 		printf("%s: could not send command (error=%s)\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(error));
-		(void)usbd_free_xfer(xfer);
+		    device_xname(sc->sc_dev), usbd_errstr(uerror));
+		(void)usbd_destroy_xfer(xfer);
 		return EIO;
 	}
 	if (!(flags & ZYD_CMD_FLAG_READ)) {
-		(void)usbd_free_xfer(xfer);
+		(void)usbd_destroy_xfer(xfer);
 		return 0;	/* write: don't wait for reply */
 	}
 	/* wait at most one second for command reply */
 	error = tsleep(odata, PCATCH, "zydcmd", hz);
 	if (error == EWOULDBLOCK)
-		printf("%s: zyd_read sleep timeout\n", USBDEVNAME(sc->sc_dev));
+		printf("%s: zyd_read sleep timeout\n", device_xname(sc->sc_dev));
 	SIMPLEQ_REMOVE(&sc->sc_rqh, &rq, rq, rq);
 	splx(s);
 
-	(void)usbd_free_xfer(xfer);
+	(void)usbd_destroy_xfer(xfer);
 	return error;
 }
 
@@ -846,10 +836,12 @@ zyd_read16(struct zyd_softc *sc, uint16_t reg, uint16_t *val)
 	int error;
 
 	reg = htole16(reg);
-	error = zyd_cmd(sc, ZYD_CMD_IORD, &reg, sizeof reg, &tmp, sizeof tmp,
+	error = zyd_cmd(sc, ZYD_CMD_IORD, &reg, sizeof(reg), &tmp, sizeof(tmp),
 	    ZYD_CMD_FLAG_READ);
 	if (error == 0)
 		*val = le16toh(tmp.val);
+	else
+		*val = 0;
 	return error;
 }
 
@@ -862,10 +854,12 @@ zyd_read32(struct zyd_softc *sc, uint16_t reg, uint32_t *val)
 
 	regs[0] = htole16(ZYD_REG32_HI(reg));
 	regs[1] = htole16(ZYD_REG32_LO(reg));
-	error = zyd_cmd(sc, ZYD_CMD_IORD, regs, sizeof regs, tmp, sizeof tmp,
+	error = zyd_cmd(sc, ZYD_CMD_IORD, regs, sizeof(regs), tmp, sizeof(tmp),
 	    ZYD_CMD_FLAG_READ);
 	if (error == 0)
 		*val = le16toh(tmp[0].val) << 16 | le16toh(tmp[1].val);
+	else
+		*val = 0;
 	return error;
 }
 
@@ -877,7 +871,7 @@ zyd_write16(struct zyd_softc *sc, uint16_t reg, uint16_t val)
 	pair.reg = htole16(reg);
 	pair.val = htole16(val);
 
-	return zyd_cmd(sc, ZYD_CMD_IOWR, &pair, sizeof pair, NULL, 0, 0);
+	return zyd_cmd(sc, ZYD_CMD_IOWR, &pair, sizeof(pair), NULL, 0, 0);
 }
 
 Static int
@@ -890,7 +884,7 @@ zyd_write32(struct zyd_softc *sc, uint16_t reg, uint32_t val)
 	pair[1].reg = htole16(ZYD_REG32_LO(reg));
 	pair[1].val = htole16(val & 0xffff);
 
-	return zyd_cmd(sc, ZYD_CMD_IOWR, pair, sizeof pair, NULL, 0, 0);
+	return zyd_cmd(sc, ZYD_CMD_IOWR, pair, sizeof(pair), NULL, 0, 0);
 }
 
 Static int
@@ -940,26 +934,25 @@ zyd_unlock_phy(struct zyd_softc *sc)
 Static int
 zyd_rfmd_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_RFMD_PHY;
 	static const uint32_t rfini[] = ZYD_RFMD_RF;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
 	}
 
 	/* init RFMD radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
 	return 0;
-#undef N
 }
 
 Static int
@@ -993,51 +986,59 @@ zyd_rfmd_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_al2230_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_AL2230_PHY;
+	static const struct zyd_phy_pair phy2230s[] = ZYD_AL2230S_PHY_INIT;
 	static const uint32_t rfini[] = ZYD_AL2230_RF;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
 	}
 
+	if (sc->rf_rev == ZYD_RF_AL2230S) {
+		for (i = 0; i < __arraycount(phy2230s); i++) {
+			error = zyd_write16(sc, phy2230s[i].reg,
+			    phy2230s[i].val);
+			if (error != 0)
+				return error;
+		}
+	}
+
 	/* init AL2230 radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
 	return 0;
-#undef N
 }
 
 Static int
 zyd_al2230_init_b(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_AL2230_PHY_B;
 	static const uint32_t rfini[] = ZYD_AL2230_RF_B;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
 	}
 
 	/* init AL2230 radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
 	return 0;
-#undef N
 }
 
 Static int
@@ -1076,48 +1077,47 @@ zyd_al2230_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_al7230B_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini_1[] = ZYD_AL7230B_PHY_1;
 	static const struct zyd_phy_pair phyini_2[] = ZYD_AL7230B_PHY_2;
 	static const struct zyd_phy_pair phyini_3[] = ZYD_AL7230B_PHY_3;
 	static const uint32_t rfini_1[] = ZYD_AL7230B_RF_1;
 	static const uint32_t rfini_2[] = ZYD_AL7230B_RF_2;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* for AL7230B, PHY and RF need to be initialized in "phases" */
 
 	/* init RF-dependent PHY registers, part one */
-	for (i = 0; i < N(phyini_1); i++) {
+	for (i = 0; i < __arraycount(phyini_1); i++) {
 		error = zyd_write16(sc, phyini_1[i].reg, phyini_1[i].val);
 		if (error != 0)
 			return error;
 	}
 	/* init AL7230B radio, part one */
-	for (i = 0; i < N(rfini_1); i++) {
+	for (i = 0; i < __arraycount(rfini_1); i++) {
 		if ((error = zyd_rfwrite(sc, rfini_1[i])) != 0)
 			return error;
 	}
 	/* init RF-dependent PHY registers, part two */
-	for (i = 0; i < N(phyini_2); i++) {
+	for (i = 0; i < __arraycount(phyini_2); i++) {
 		error = zyd_write16(sc, phyini_2[i].reg, phyini_2[i].val);
 		if (error != 0)
 			return error;
 	}
 	/* init AL7230B radio, part two */
-	for (i = 0; i < N(rfini_2); i++) {
+	for (i = 0; i < __arraycount(rfini_2); i++) {
 		if ((error = zyd_rfwrite(sc, rfini_2[i])) != 0)
 			return error;
 	}
 	/* init RF-dependent PHY registers, part three */
-	for (i = 0; i < N(phyini_3); i++) {
+	for (i = 0; i < __arraycount(phyini_3); i++) {
 		error = zyd_write16(sc, phyini_3[i].reg, phyini_3[i].val);
 		if (error != 0)
 			return error;
 	}
 
 	return 0;
-#undef N
 }
 
 Static int
@@ -1134,18 +1134,18 @@ zyd_al7230B_switch_radio(struct zyd_rf *rf, int on)
 Static int
 zyd_al7230B_set_channel(struct zyd_rf *rf, uint8_t chan)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct {
 		uint32_t	r1, r2;
 	} rfprog[] = ZYD_AL7230B_CHANTABLE;
 	static const uint32_t rfsc[] = ZYD_AL7230B_RF_SETCHANNEL;
-	int i, error;
+	int error;
+	size_t i;
 
 	(void)zyd_write16(sc, ZYD_CR240, 0x57);
 	(void)zyd_write16(sc, ZYD_CR251, 0x2f);
 
-	for (i = 0; i < N(rfsc); i++) {
+	for (i = 0; i < __arraycount(rfsc); i++) {
 		if ((error = zyd_rfwrite(sc, rfsc[i])) != 0)
 			return error;
 	}
@@ -1165,7 +1165,6 @@ zyd_al7230B_set_channel(struct zyd_rf *rf, uint8_t chan)
 	(void)zyd_write16(sc, ZYD_CR240, 0x08);
 
 	return 0;
-#undef N
 }
 
 /*
@@ -1174,23 +1173,23 @@ zyd_al7230B_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_al2210_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_AL2210_PHY;
 	static const uint32_t rfini[] = ZYD_AL2210_RF;
 	uint32_t tmp;
-	int i, error;
+	int error;
+	size_t i;
 
 	(void)zyd_write32(sc, ZYD_CR18, 2);
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
 	}
 	/* init AL2210 radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
@@ -1204,7 +1203,6 @@ zyd_al2210_init(struct zyd_rf *rf)
 	(void)zyd_write32(sc, ZYD_CR18, 3);
 
 	return 0;
-#undef N
 }
 
 Static int
@@ -1246,25 +1244,24 @@ zyd_al2210_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_gct_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_GCT_PHY;
 	static const uint32_t rfini[] = ZYD_GCT_RF;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
 	}
 	/* init cgt radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
 	return 0;
-#undef N
 }
 
 Static int
@@ -1294,15 +1291,15 @@ zyd_gct_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_maxim_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_MAXIM_PHY;
 	static const uint32_t rfini[] = ZYD_MAXIM_RF;
 	uint16_t tmp;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
@@ -1311,7 +1308,7 @@ zyd_maxim_init(struct zyd_rf *rf)
 	(void)zyd_write16(sc, ZYD_CR203, tmp & ~(1 << 4));
 
 	/* init maxim radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
@@ -1319,7 +1316,6 @@ zyd_maxim_init(struct zyd_rf *rf)
 	(void)zyd_write16(sc, ZYD_CR203, tmp | (1 << 4));
 
 	return 0;
-#undef N
 }
 
 Static int
@@ -1333,7 +1329,6 @@ zyd_maxim_switch_radio(struct zyd_rf *rf, int on)
 Static int
 zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_MAXIM_PHY;
 	static const uint32_t rfini[] = ZYD_MAXIM_RF;
@@ -1341,7 +1336,8 @@ zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 		uint32_t	r1, r2;
 	} rfprog[] = ZYD_MAXIM_CHANTABLE;
 	uint16_t tmp;
-	int i, error;
+	int error;
+	size_t i;
 
 	/*
 	 * Do the same as we do when initializing it, except for the channel
@@ -1349,7 +1345,7 @@ zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 	 */
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
@@ -1362,7 +1358,7 @@ zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 	(void)zyd_rfwrite(sc, rfprog[chan - 1].r2);
 
 	/* init maxim radio - skipping the two first values */
-	for (i = 2; i < N(rfini); i++) {
+	for (i = 2; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
@@ -1370,7 +1366,6 @@ zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 	(void)zyd_write16(sc, ZYD_CR203, tmp | (1 << 4));
 
 	return 0;
-#undef N
 }
 
 /*
@@ -1379,15 +1374,15 @@ zyd_maxim_set_channel(struct zyd_rf *rf, uint8_t chan)
 Static int
 zyd_maxim2_init(struct zyd_rf *rf)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_MAXIM2_PHY;
 	static const uint32_t rfini[] = ZYD_MAXIM2_RF;
 	uint16_t tmp;
-	int i, error;
+	int error;
+	size_t i;
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
@@ -1396,7 +1391,7 @@ zyd_maxim2_init(struct zyd_rf *rf)
 	(void)zyd_write16(sc, ZYD_CR203, tmp & ~(1 << 4));
 
 	/* init maxim2 radio */
-	for (i = 0; i < N(rfini); i++) {
+	for (i = 0; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
@@ -1404,7 +1399,6 @@ zyd_maxim2_init(struct zyd_rf *rf)
 	(void)zyd_write16(sc, ZYD_CR203, tmp | (1 << 4));
 
 	return 0;
-#undef N
 }
 
 Static int
@@ -1418,7 +1412,6 @@ zyd_maxim2_switch_radio(struct zyd_rf *rf, int on)
 Static int
 zyd_maxim2_set_channel(struct zyd_rf *rf, uint8_t chan)
 {
-#define N(a)	(sizeof (a) / sizeof ((a)[0]))
 	struct zyd_softc *sc = rf->rf_sc;
 	static const struct zyd_phy_pair phyini[] = ZYD_MAXIM2_PHY;
 	static const uint32_t rfini[] = ZYD_MAXIM2_RF;
@@ -1426,7 +1419,8 @@ zyd_maxim2_set_channel(struct zyd_rf *rf, uint8_t chan)
 		uint32_t	r1, r2;
 	} rfprog[] = ZYD_MAXIM2_CHANTABLE;
 	uint16_t tmp;
-	int i, error;
+	int error;
+	size_t i;
 
 	/*
 	 * Do the same as we do when initializing it, except for the channel
@@ -1434,7 +1428,7 @@ zyd_maxim2_set_channel(struct zyd_rf *rf, uint8_t chan)
 	 */
 
 	/* init RF-dependent PHY registers */
-	for (i = 0; i < N(phyini); i++) {
+	for (i = 0; i < __arraycount(phyini); i++) {
 		error = zyd_write16(sc, phyini[i].reg, phyini[i].val);
 		if (error != 0)
 			return error;
@@ -1447,7 +1441,7 @@ zyd_maxim2_set_channel(struct zyd_rf *rf, uint8_t chan)
 	(void)zyd_rfwrite(sc, rfprog[chan - 1].r2);
 
 	/* init maxim2 radio - skipping the two first values */
-	for (i = 2; i < N(rfini); i++) {
+	for (i = 2; i < __arraycount(rfini); i++) {
 		if ((error = zyd_rfwrite(sc, rfini[i])) != 0)
 			return error;
 	}
@@ -1455,7 +1449,6 @@ zyd_maxim2_set_channel(struct zyd_rf *rf, uint8_t chan)
 	(void)zyd_write16(sc, ZYD_CR203, tmp | (1 << 4));
 
 	return 0;
-#undef N
 }
 
 Static int
@@ -1473,6 +1466,7 @@ zyd_rf_attach(struct zyd_softc *sc, uint8_t type)
 		rf->width        = 24;	/* 24-bit RF values */
 		break;
 	case ZYD_RF_AL2230:
+	case ZYD_RF_AL2230S:
 		if (sc->mac_rev == ZYD_ZD1211B)
 			rf->init = zyd_al2230_init_b;
 		else
@@ -1513,7 +1507,7 @@ zyd_rf_attach(struct zyd_softc *sc, uint8_t type)
 		break;
 	default:
 		printf("%s: sorry, radio \"%s\" is not supported yet\n",
-		    USBDEVNAME(sc->sc_dev), zyd_rf_name(type));
+		    device_xname(sc->sc_dev), zyd_rf_name(type));
 		return EINVAL;
 	}
 	return 0;
@@ -1525,7 +1519,7 @@ zyd_rf_name(uint8_t type)
 	static const char * const zyd_rfs[] = {
 		"unknown", "unknown", "UW2451",   "UCHIP",     "AL2230",
 		"AL7230B", "THETA",   "AL2210",   "MAXIM_NEW", "GCT",
-		"PV2000",  "RALINK",  "INTERSIL", "RFMD",      "MAXIM_NEW2",
+		"AL2230S", "RALINK",  "INTERSIL", "RFMD",      "MAXIM_NEW2",
 		"PHILIPS"
 	};
 
@@ -1604,7 +1598,7 @@ zyd_hw_init(struct zyd_softc *sc)
 	zyd_unlock_phy(sc);
 	if (error != 0) {
 		printf("%s: radio initialization failed\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		goto fail;
 	}
 
@@ -1811,7 +1805,7 @@ zyd_plcp_signal(int rate)
 }
 
 Static void
-zyd_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
+zyd_intr(struct usbd_xfer *xfer, void * priv, usbd_status status)
 {
 	struct zyd_softc *sc = (struct zyd_softc *)priv;
 	struct zyd_cmd *cmd;
@@ -1882,7 +1876,7 @@ zyd_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 				continue;
 
 			/* copy answer into caller-supplied buffer */
-			bcopy(cmd->data, rqp->odata,
+			memcpy(rqp->odata, cmd->data,
 			    sizeof(struct zyd_pair) * rqp->len);
 			wakeup(rqp->odata);	/* wakeup caller */
 
@@ -1890,7 +1884,7 @@ zyd_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 		}
 		return;	/* unexpected IORD notification */
 	} else {
-		printf("%s: unknown notification %x\n", USBDEVNAME(sc->sc_dev),
+		printf("%s: unknown notification %x\n", device_xname(sc->sc_dev),
 		    le16toh(cmd->code));
 	}
 }
@@ -1909,31 +1903,31 @@ zyd_rx_data(struct zyd_softc *sc, const uint8_t *buf, uint16_t len)
 
 	if (len < ZYD_MIN_FRAGSZ) {
 		printf("%s: frame too short (length=%d)\n",
-		    USBDEVNAME(sc->sc_dev), len);
+		    device_xname(sc->sc_dev), len);
 		ifp->if_ierrors++;
 		return;
 	}
 
 	plcp = (const struct zyd_plcphdr *)buf;
 	stat = (const struct zyd_rx_stat *)
-	    (buf + len - sizeof (struct zyd_rx_stat));
+	    (buf + len - sizeof(struct zyd_rx_stat));
 
 	if (stat->flags & ZYD_RX_ERROR) {
 		DPRINTF(("%s: RX status indicated error (%x)\n",
-		    USBDEVNAME(sc->sc_dev), stat->flags));
+		    device_xname(sc->sc_dev), stat->flags));
 		ifp->if_ierrors++;
 		return;
 	}
 
 	/* compute actual frame length */
-	rlen = len - sizeof (struct zyd_plcphdr) -
-	    sizeof (struct zyd_rx_stat) - IEEE80211_CRC_LEN;
+	rlen = len - sizeof(struct zyd_plcphdr) -
+	    sizeof(struct zyd_rx_stat) - IEEE80211_CRC_LEN;
 
 	/* allocate a mbuf to store the frame */
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL) {
 		printf("%s: could not allocate rx mbuf\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		ifp->if_ierrors++;
 		return;
 	}
@@ -1941,19 +1935,18 @@ zyd_rx_data(struct zyd_softc *sc, const uint8_t *buf, uint16_t len)
 		MCLGET(m, M_DONTWAIT);
 		if (!(m->m_flags & M_EXT)) {
 			printf("%s: could not allocate rx mbuf cluster\n",
-			    USBDEVNAME(sc->sc_dev));
+			    device_xname(sc->sc_dev));
 			m_freem(m);
 			ifp->if_ierrors++;
 			return;
 		}
 	}
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_pkthdr.len = m->m_len = rlen;
-	bcopy((const uint8_t *)(plcp + 1), mtod(m, uint8_t *), rlen);
+	memcpy(mtod(m, uint8_t *), (const uint8_t *)(plcp + 1), rlen);
 
 	s = splnet();
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct zyd_rx_radiotap_header *tap = &sc->sc_rxtap;
 		static const uint8_t rates[] = {
@@ -1968,9 +1961,8 @@ zyd_rx_data(struct zyd_softc *sc, const uint8_t *buf, uint16_t len)
 		tap->wr_rssi = stat->rssi;
 		tap->wr_rate = rates[plcp->signal & 0xf];
 
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
+		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m, BPF_D_IN);
 	}
-#endif
 
 	wh = mtod(m, struct ieee80211_frame *);
 	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
@@ -1983,7 +1975,7 @@ zyd_rx_data(struct zyd_softc *sc, const uint8_t *buf, uint16_t len)
 }
 
 Static void
-zyd_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
+zyd_rxeof(struct usbd_xfer *xfer, void * priv, usbd_status status)
 {
 	struct zyd_rx_data *data = priv;
 	struct zyd_softc *sc = data->sc;
@@ -2004,13 +1996,13 @@ zyd_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 
 	if (len < ZYD_MIN_RXBUFSZ) {
 		printf("%s: xfer too short (length=%d)\n",
-		    USBDEVNAME(sc->sc_dev), len);
+		    device_xname(sc->sc_dev), len);
 		ifp->if_ierrors++;
 		goto skip;
 	}
 
 	desc = (const struct zyd_rx_desc *)
-	    (data->buf + len - sizeof (struct zyd_rx_desc));
+	    (data->buf + len - sizeof(struct zyd_rx_desc));
 
 	if (UGETW(desc->tag) == ZYD_TAG_MULTIFRAME) {
 		const uint8_t *p = data->buf, *end = p + len;
@@ -2035,8 +2027,8 @@ zyd_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 	}
 
 skip:	/* setup a new transfer */
-	usbd_setup_xfer(xfer, sc->zyd_ep[ZYD_ENDPT_BIN], data, NULL,
-	    ZYX_MAX_RXBUFSZ, USBD_NO_COPY | USBD_SHORT_XFER_OK,
+
+	usbd_setup_xfer(xfer, data, NULL, ZYX_MAX_RXBUFSZ, USBD_SHORT_XFER_OK,
 	    USBD_NO_TIMEOUT, zyd_rxeof);
 	(void)usbd_transfer(xfer);
 }
@@ -2073,7 +2065,7 @@ zyd_tx_mgt(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 
 	wh = mtod(m0, struct ieee80211_frame *);
 
-	xferlen = sizeof (struct zyd_tx_desc) + m0->m_pkthdr.len;
+	xferlen = sizeof(struct zyd_tx_desc) + m0->m_pkthdr.len;
 	totlen = m0->m_pkthdr.len + IEEE80211_CRC_LEN;
 
 	/* fill Tx descriptor */
@@ -2108,7 +2100,7 @@ zyd_tx_mgt(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		desc->phy |= ZYD_TX_PHY_SHPREAMBLE;
 
 	/* actual transmit length (XXX why +10?) */
-	pktlen = sizeof (struct zyd_tx_desc) + 10;
+	pktlen = sizeof(struct zyd_tx_desc) + 10;
 	if (sc->mac_rev == ZYD_ZD1211)
 		pktlen += totlen;
 	desc->pktlen = htole16(pktlen);
@@ -2121,7 +2113,6 @@ zyd_tx_mgt(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 			desc->plcp_service |= ZYD_PLCP_LENGEXT;
 	}
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct zyd_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -2130,21 +2121,19 @@ zyd_tx_mgt(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		tap->wt_chan_freq = htole16(ic->ic_curchan->ic_freq);
 		tap->wt_chan_flags = htole16(ic->ic_curchan->ic_flags);
 
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
+		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0, BPF_D_OUT);
 	}
-#endif
 
 	m_copydata(m0, 0, m0->m_pkthdr.len,
-	    data->buf + sizeof (struct zyd_tx_desc));
+	    data->buf + sizeof(struct zyd_tx_desc));
 
 	DPRINTFN(10, ("%s: sending mgt frame len=%zu rate=%u xferlen=%u\n",
-	    USBDEVNAME(sc->sc_dev), (size_t)m0->m_pkthdr.len, rate, xferlen));
+	    device_xname(sc->sc_dev), (size_t)m0->m_pkthdr.len, rate, xferlen));
 
 	m_freem(m0);	/* mbuf no longer needed */
 
-	usbd_setup_xfer(data->xfer, sc->zyd_ep[ZYD_ENDPT_BOUT], data,
-	    data->buf, xferlen, USBD_FORCE_SHORT_XFER | USBD_NO_COPY,
-	    ZYD_TX_TIMEOUT, zyd_txeof);
+	usbd_setup_xfer(data->xfer, data, data->buf, xferlen,
+	    USBD_FORCE_SHORT_XFER, ZYD_TX_TIMEOUT, zyd_txeof);
 	error = usbd_transfer(data->xfer);
 	if (error != USBD_IN_PROGRESS && error != 0) {
 		ifp->if_oerrors++;
@@ -2156,7 +2145,7 @@ zyd_tx_mgt(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 }
 
 Static void
-zyd_txeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
+zyd_txeof(struct usbd_xfer *xfer, void * priv, usbd_status status)
 {
 	struct zyd_tx_data *data = priv;
 	struct zyd_softc *sc = data->sc;
@@ -2168,7 +2157,7 @@ zyd_txeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 			return;
 
 		printf("%s: could not transmit buffer: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(status));
+		    device_xname(sc->sc_dev), usbd_errstr(status));
 
 		if (status == USBD_STALLED) {
 			usbd_clear_endpoint_stall_async(
@@ -2233,7 +2222,7 @@ zyd_tx_data(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 
 	data->ni = ni;
 
-	xferlen = sizeof (struct zyd_tx_desc) + m0->m_pkthdr.len;
+	xferlen = sizeof(struct zyd_tx_desc) + m0->m_pkthdr.len;
 	totlen = m0->m_pkthdr.len + IEEE80211_CRC_LEN;
 
 	/* fill Tx descriptor */
@@ -2268,7 +2257,7 @@ zyd_tx_data(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		desc->phy |= ZYD_TX_PHY_SHPREAMBLE;
 
 	/* actual transmit length (XXX why +10?) */
-	pktlen = sizeof (struct zyd_tx_desc) + 10;
+	pktlen = sizeof(struct zyd_tx_desc) + 10;
 	if (sc->mac_rev == ZYD_ZD1211)
 		pktlen += totlen;
 	desc->pktlen = htole16(pktlen);
@@ -2281,7 +2270,6 @@ zyd_tx_data(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 			desc->plcp_service |= ZYD_PLCP_LENGEXT;
 	}
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct zyd_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -2290,21 +2278,19 @@ zyd_tx_data(struct zyd_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		tap->wt_chan_freq = htole16(ic->ic_curchan->ic_freq);
 		tap->wt_chan_flags = htole16(ic->ic_curchan->ic_flags);
 
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
+		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0, BPF_D_OUT);
 	}
-#endif
 
 	m_copydata(m0, 0, m0->m_pkthdr.len,
-	    data->buf + sizeof (struct zyd_tx_desc));
+	    data->buf + sizeof(struct zyd_tx_desc));
 
 	DPRINTFN(10, ("%s: sending data frame len=%zu rate=%u xferlen=%u\n",
-	    USBDEVNAME(sc->sc_dev), (size_t)m0->m_pkthdr.len, rate, xferlen));
+	    device_xname(sc->sc_dev), (size_t)m0->m_pkthdr.len, rate, xferlen));
 
 	m_freem(m0);	/* mbuf no longer needed */
 
-	usbd_setup_xfer(data->xfer, sc->zyd_ep[ZYD_ENDPT_BOUT], data,
-	    data->buf, xferlen, USBD_FORCE_SHORT_XFER | USBD_NO_COPY,
-	    ZYD_TX_TIMEOUT, zyd_txeof);
+	usbd_setup_xfer(data->xfer, data, data->buf, xferlen,
+	    USBD_FORCE_SHORT_XFER, ZYD_TX_TIMEOUT, zyd_txeof);
 	error = usbd_transfer(data->xfer);
 	if (error != USBD_IN_PROGRESS && error != 0) {
 		ifp->if_oerrors++;
@@ -2333,12 +2319,9 @@ zyd_start(struct ifnet *ifp)
 			}
 			IF_DEQUEUE(&ic->ic_mgtq, m0);
 
-			ni = (struct ieee80211_node *)m0->m_pkthdr.rcvif;
-			m0->m_pkthdr.rcvif = NULL;
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			ni = M_GETCTX(m0, struct ieee80211_node *);
+			M_CLEARCTX(m0);
+			bpf_mtap3(ic->ic_rawbpf, m0, BPF_D_OUT);
 			if (zyd_tx_mgt(sc, m0, ni) != 0)
 				break;
 		} else {
@@ -2363,19 +2346,13 @@ zyd_start(struct ifnet *ifp)
 				m_freem(m0);
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ifp->if_bpf != NULL)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0, BPF_D_OUT);
 			if ((m0 = ieee80211_encap(ic, m0, ni)) == NULL) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			bpf_mtap3(ic->ic_rawbpf, m0, BPF_D_OUT);
 			if (zyd_tx_data(sc, m0, ni) != 0) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
@@ -2398,7 +2375,7 @@ zyd_watchdog(struct ifnet *ifp)
 
 	if (sc->tx_timer > 0) {
 		if (--sc->tx_timer == 0) {
-			printf("%s: device timeout\n", USBDEVNAME(sc->sc_dev));
+			printf("%s: device timeout\n", device_xname(sc->sc_dev));
 			/* zyd_init(ifp); XXX needs a process context ? */
 			ifp->if_oerrors++;
 			return;
@@ -2420,20 +2397,23 @@ zyd_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
-		if (ifp->if_flags & IFF_UP) {
-			if (!(ifp->if_flags & IFF_RUNNING))
-				zyd_init(ifp);
-		} else {
-			if (ifp->if_flags & IFF_RUNNING)
-				zyd_stop(ifp, 1);
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_UP:
+			zyd_init(ifp);
+			break;
+		case IFF_RUNNING:
+			zyd_stop(ifp, 1);
+			break;
+		default:
+			break;
 		}
 		break;
 
 	default:
-		if (!sc->attached)
-			error = ENOTTY;
-		else
-			error = ieee80211_ioctl(ic, cmd, data);
+		error = ieee80211_ioctl(ic, cmd, data);
 	}
 
 	if (error == ENETRESET) {
@@ -2454,10 +2434,6 @@ zyd_init(struct ifnet *ifp)
 	struct zyd_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	int i, error;
-
-	if ((sc->sc_flags & ZD1211_FWLOADED) == 0)
-		if ((error = zyd_attachhook(sc)) != 0)
-			return error;
 
 	zyd_stop(ifp, 0);
 
@@ -2510,12 +2486,12 @@ zyd_init(struct ifnet *ifp)
 	 */
 	if ((error = zyd_alloc_tx_list(sc)) != 0) {
 		printf("%s: could not allocate Tx list\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		goto fail;
 	}
 	if ((error = zyd_alloc_rx_list(sc)) != 0) {
 		printf("%s: could not allocate Rx list\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		goto fail;
 	}
 
@@ -2525,13 +2501,12 @@ zyd_init(struct ifnet *ifp)
 	for (i = 0; i < ZYD_RX_LIST_CNT; i++) {
 		struct zyd_rx_data *data = &sc->rx_data[i];
 
-		usbd_setup_xfer(data->xfer, sc->zyd_ep[ZYD_ENDPT_BIN], data,
-		    NULL, ZYX_MAX_RXBUFSZ, USBD_NO_COPY | USBD_SHORT_XFER_OK,
-		    USBD_NO_TIMEOUT, zyd_rxeof);
+		usbd_setup_xfer(data->xfer, data, NULL, ZYX_MAX_RXBUFSZ,
+		    USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT, zyd_rxeof);
 		error = usbd_transfer(data->xfer);
 		if (error != USBD_IN_PROGRESS && error != 0) {
 			printf("%s: could not queue Rx transfer\n",
-			    USBDEVNAME(sc->sc_dev));
+			    device_xname(sc->sc_dev));
 			goto fail;
 		}
 	}
@@ -2622,7 +2597,7 @@ zyd_loadfirmware(struct zyd_softc *sc, u_char *fw, size_t size)
 	req.bRequest = ZYD_DOWNLOADSTS;
 	USETW(req.wValue, 0);
 	USETW(req.wIndex, 0);
-	USETW(req.wLength, sizeof stat);
+	USETW(req.wLength, sizeof(stat));
 	if (usbd_do_request(sc->sc_udev, &req, &stat) != 0)
 		return EIO;
 
@@ -2652,7 +2627,7 @@ zyd_amrr_timeout(void *arg)
 		ieee80211_iterate_nodes(&ic->ic_sta, zyd_iter_func, sc);
 	splx(s);
 
-	usb_callout(sc->sc_amrr_ch, hz, zyd_amrr_timeout, sc);
+	callout_reset(&sc->sc_amrr_ch, hz, zyd_amrr_timeout, sc);
 }
 
 Static void
@@ -2671,17 +2646,15 @@ zyd_newassoc(struct ieee80211_node *ni, int isnew)
 }
 
 int
-zyd_activate(device_ptr_t self, enum devact act)
+zyd_activate(device_t self, enum devact act)
 {
-	struct zyd_softc *sc = (struct zyd_softc *)self;
+	struct zyd_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return 0;
 }

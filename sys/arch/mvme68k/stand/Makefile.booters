@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile.booters,v 1.14 2005/12/24 22:22:33 tsutsui Exp $
+#	$NetBSD: Makefile.booters,v 1.26 2017/04/08 19:53:21 christos Exp $
 
 S?=		${.CURDIR}/../../../..
 MDEC_DIR?=	/usr/mdec
 RELOC?=		0x3F0000
-COPTS?=		-O2 -Wall -Wno-main -Wmissing-prototypes -Wstrict-prototypes \
-		-ffreestanding
+COPTS?=		-Os -Wall -Wno-main -Wmissing-prototypes -Wstrict-prototypes \
+		-ffreestanding -fomit-frame-pointer -fno-unwind-tables
 DEFS?= 
 STRIPFLAG?=
 
@@ -20,32 +20,24 @@ INCPATH=-I${.OBJDIR} -I${.CURDIR} -I${.CURDIR}/../libsa -I${.CURDIR}/../libbug \
         -I${.CURDIR}/../../include -I${S} -I${S}/lib/libsa
 CFLAGS= -nostdinc -m68020-60 -Wa,-m68030
 CPPFLAGS+= -D__daddr_t=int32_t
-CPPFLAGS+= -D_STANDALONE -DLIBSA_USE_MEMSET -DLIBSA_USE_MEMCPY
+CPPFLAGS+= -D_STANDALONE
 CPPFLAGS+= ${INCPATH} ${DEFS}
 BINDIR= ${MDEC_DIR}
 
-.if exists(${.CURDIR}/version)
-SRCS+= vers.c
-CLEANFILES+= vers.c
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBCRTI=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=
 
-vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${.CURDIR}/version "mvme68k"
-.endif
+.include "${S}/conf/newvers_stand.mk"
 
-CLEANFILES+= machine m68k
-
-machine :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/mvme68k/include machine
-
-m68k :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/m68k/include m68k
+.include <bsd.klinks.mk>
 
 .if defined(LIB)
 
-lib${LIB}.a:: machine m68k ${OBJS}
-beforedepend:	machine m68k
+lib${LIB}.a:: ${OBJS}
 
 .else
 
@@ -59,18 +51,10 @@ ${PROG}: machine m68k ${PROGDEPENDS}
 
 LIB_SA_DIR=	${.CURDIR}/../libsa
 LIBSA_DIR!=	cd ${LIB_SA_DIR} && ${PRINTOBJDIR}
-LIBSA=${LIBSA_DIR}/libsa.a
-
-.PHONY: ${LIBSA}
-${LIBSA}:
-	@echo making sure the libsa is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE}
+LIBSA=		${LIBSA_DIR}/lib/sa/libsa.a
+LIBKERN=	${LIBSA_DIR}/lib/kern/libkern.a
 
 SRTOBJ?= ${LIBSA_DIR}/SRT0.o
-.PHONY: ${SRTOBJ}
-${SRTOBJ}:
-	@echo making sure the libsa is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE} SRT0.o
 
 LIB_BUG_DIR=	${.CURDIR}/../libbug
 LIBBUG_DIR!=	cd ${LIB_BUG_DIR} && ${PRINTOBJDIR}

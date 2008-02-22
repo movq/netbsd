@@ -1,9 +1,7 @@
-/*	$NetBSD: cpu.h,v 1.3 2007/10/31 15:57:20 pooka Exp $	*/
+/*	$NetBSD: cpu.h,v 1.22 2015/04/22 17:38:33 pooka Exp $	*/
 
 /*
- * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by Google Summer of Code.
+ * Copyright (c) 2008-2011 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,21 +25,71 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * CPU defitions for a generic arch.  Unfortunately there are some
+ * MD #ifdefs here.  They are required because of MD inlines and macros.
+ */
+
 #ifndef _SYS_RUMP_CPU_H_
 #define _SYS_RUMP_CPU_H_
 
+#ifndef _LOCORE
+
 #include <sys/cpu_data.h>
+#include <machine/pcb.h>
+
+#include "rump_curlwp.h"
 
 struct cpu_info {
-        struct cpu_data ci_data;
+	struct cpu_data ci_data;
 	cpuid_t ci_cpuid;
+	struct lwp *ci_curlwp;
+
+	struct cpu_info *ci_next;
+
+#ifdef __alpha__
+	uint64_t ci_pcc_freq;
+#endif
+
+#ifdef __vax__
+	int ci_ipimsgs;
+#define IPI_SEND_CNCHAR 0
+#define IPI_DDB 0
+#endif /* __vax__ */
+
+#ifdef __powerpc__
+	struct cache_info {
+		int dcache_size;
+		int dcache_line_size;
+		int icache_size;
+		int icache_line_size;
+	} ci_ci;
+#endif /* __powerpc */
 };
 
-extern struct cpu_info rump_cpu;
-#define curcpu() (&rump_cpu)
-#define cpu_number() 0 /* XXX: good enuf? */
+#ifdef __vax__
+static __inline void cpu_handle_ipi(void) {}
+#endif /* __vax__ */
 
-struct lwp *rump_get_curlwp(void); /* XXX */
-#define curlwp rump_get_curlwp()
+#ifdef __powerpc__
+void __syncicache(void *, size_t);
+#endif /* __powerpc__ */
+
+#define curlwp rump_curlwp_fast()
+
+#define curcpu() (curlwp->l_cpu)
+#define cpu_number() (cpu_index(curcpu))
+
+extern struct cpu_info *rumpcpu_info_list;
+#define CPU_INFO_ITERATOR		int __unused
+#define CPU_INFO_FOREACH(_cii_, _ci_)	_cii_ = 0, _ci_ = rumpcpu_info_list; \
+					_ci_ != NULL; _ci_ = _ci_->ci_next
+#define CPU_IS_PRIMARY(_ci_)		(_ci_->ci_index == 0)
+
+#define CLKF_USERMODE(framep)	0
+#define CLKF_PC(framep)		0
+#define CLKF_INTR(framep)	0
+
+#endif /* !_LOCORE */
 
 #endif /* _SYS_RUMP_CPU_H_ */

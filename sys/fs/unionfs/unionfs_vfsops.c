@@ -47,14 +47,19 @@
 #include <sys/vnode.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/module.h>
 
 #include <fs/unionfs/unionfs.h>
+
+MODULE(MODULE_CLASS_VFS, unionfs, "layerfs");
 
 MALLOC_DEFINE(M_UNIONFSMNT, "UNIONFS mount", "UNIONFS mount structure");
 
 struct vfsops unionfs_vfsops;
 
 VFS_PROTOS(unionfs);
+
+static struct sysctllog *unionfs_sysctl_log;
 
 /*
  * Mount unionfs layer.
@@ -73,6 +78,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	u_short		ufile;
 	unionfs_copymode copymode;
 	unionfs_whitemode whitemode;
+	struct pathbuf *pb;
 	struct componentname fakecn;
 	struct nameidata nd, *ndp;
 	struct vattr	va;
@@ -83,6 +89,8 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	const char	*cp;
 	char		*xp;
 
+	if (args == NULL)
+		return EINVAL;
 	if (*data_len < sizeof *args)
 		return EINVAL;
 
@@ -132,7 +140,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		uid = va.va_uid;
 		gid = va.va_gid;
 	}
-	VOP_UNLOCK(mp->mnt_vnodecovered, 0);
+	VOP_UNLOCK(mp->mnt_vnodecovered);
 	if (error)
 		return (error);
 
@@ -163,9 +171,15 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * Find upper node
 	 */
-	NDINIT(ndp, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE, args->target);
-	if ((error = namei(ndp)))
-		return (error);
+	error = pathbuf_copyin(args->target, &pb);
+	if (error) {
+		return error;
+	}
+	NDINIT(ndp, LOOKUP, FOLLOW | LOCKLEAF, pb);
+	if ((error = namei(ndp))) {
+		pathbuf_destroy(pb);
+		return error;
+	}
 
 	/* get root vnodes */
 	lowerrootvp = mp->mnt_vnodecovered;
@@ -173,6 +187,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 
 	vrele(ndp->ni_dvp);
 	ndp->ni_dvp = NULLVP;
+	pathbuf_destroy(pb);
 
 	/* create unionfs_mount */
 	ump = (struct unionfs_mount *)malloc(sizeof(struct unionfs_mount),
@@ -182,7 +197,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * Save reference
 	 */
 	if (below) {
-		VOP_UNLOCK(upperrootvp, 0);
+		VOP_UNLOCK(upperrootvp);
 		vn_lock(lowerrootvp, LK_EXCLUSIVE | LK_RETRY);
 		ump->um_lowervp = upperrootvp;
 		ump->um_uppervp = lowerrootvp;
@@ -217,7 +232,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		error = VOP_WHITEOUT(ump->um_uppervp, &fakecn, LOOKUP);
 		if (error) {
 			if (below) {
-				VOP_UNLOCK(ump->um_uppervp, 0);
+				VOP_UNLOCK(ump->um_uppervp);
 				vrele(upperrootvp);
 			} else
 				vput(ump->um_uppervp);
@@ -230,7 +245,7 @@ unionfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * Unlock the node
 	 */
-	VOP_UNLOCK(ump->um_uppervp, 0);
+	VOP_UNLOCK(ump->um_uppervp);
 
 	ump->um_op = args->mntflags & UNMNT_OPMASK;
 
@@ -332,7 +347,7 @@ unionfs_unmount(struct mount *mp, int mntflags)
 		return (error);
 
 	free(ump, M_UNIONFSMNT);
-	mp->mnt_data = 0;
+	mp->mnt_data = NULL;
 
 	return (0);
 }
@@ -358,7 +373,7 @@ unionfs_root(struct mount *mp, struct vnode **vpp)
 }
 
 int
-unionfs_quotactl(struct mount *mp, int cmd, uid_t uid, void *arg)
+unionfs_quotactl(struct mount *mp, struct quotactl_args *args)
 {
 	struct unionfs_mount *ump;
 
@@ -367,7 +382,7 @@ unionfs_quotactl(struct mount *mp, int cmd, uid_t uid, void *arg)
 	/*
 	 * Writing is always performed to upper vnode.
 	 */
-	return (VFS_QUOTACTL(ump->um_uppervp->v_mount, cmd, uid, arg));
+	return (VFS_QUOTACTL(ump->um_uppervp->v_mount, args));
 }
 
 int
@@ -498,27 +513,6 @@ unionfs_done(void)
 	vn_union_readdir_hook = NULL;
 }
 
-SYSCTL_SETUP(sysctl_vfs_unionfs_setup, "sysctl vfs.union subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "union",
-		       SYSCTL_DESCR("Union file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 15, CTL_EOL);
-	/*
-	 * XXX the "15" above could be dynamic, thereby eliminating
-	 * one more instance of the "number to vfs" mapping problem,
-	 * but "15" is the order as taken from sys/mount.h
-	 */
-}
-
 extern const struct vnodeopv_desc unionfs_vnodeop_opv_desc;
 
 const struct vnodeopv_desc * const unionfs_vnodeopv_descs[] = {
@@ -527,29 +521,61 @@ const struct vnodeopv_desc * const unionfs_vnodeopv_descs[] = {
 };
 
 struct vfsops unionfs_vfsops = {
-	MOUNT_UNION,
-	sizeof (struct unionfs_args),
-	unionfs_mount,
-	unionfs_start,
-	unionfs_unmount,
-	unionfs_root,
-	(void *)eopnotsupp,		/* vfs_quotactl */
-	unionfs_statvfs,
-	unionfs_sync,
-	unionfs_vget,
-	(void *)eopnotsupp,		/* vfs_fhtovp */
-	(void *)eopnotsupp,		/* vfs_vptofh */
-	unionfs_init,
-	NULL,				/* vfs_reinit */
-	unionfs_done,
-	NULL,				/* vfs_mountroot */
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
-	unionfs_renamelock_enter,
-	unionfs_renamelock_exit,
-	unionfs_vnodeopv_descs,
-	0,				/* vfs_refcount */
-	{ NULL, NULL },
+	.vfs_name = MOUNT_UNION,
+	.vfs_min_mount_data = sizeof (struct unionfs_args),
+	.vfs_mount = unionfs_mount,
+	.vfs_start = unionfs_start,
+	.vfs_unmount = unionfs_unmount,
+	.vfs_root = unionfs_root,
+	.vfs_quotactl = (void *)eopnotsupp,
+	.vfs_statvfs = unionfs_statvfs,
+	.vfs_sync = unionfs_sync,
+	.vfs_vget = unionfs_vget,
+	.vfs_fhtovp = (void *)eopnotsupp,
+	.vfs_vptofh = (void *)eopnotsupp,
+	.vfs_init = unionfs_init,
+	.vfs_done = unionfs_done,
+	.vfs_snapshot = (void *)eopnotsupp,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = (void *)eopnotsupp,
+	.vfs_renamelock_enter = unionfs_renamelock_enter,
+	.vfs_renamelock_exit = unionfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = unionfs_vnodeopv_descs
 };
-VFS_ATTACH(unionfs_vfsops);
+
+static int
+unionfs_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&unionfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&unionfs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "union",
+			       SYSCTL_DESCR("Union file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 15, CTL_EOL);
+		/*
+		 * XXX the "15" above could be dynamic, thereby eliminating
+		 * one more instance of the "number to vfs" mapping problem,
+		 * but "15" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&unionfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&unionfs_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa.c,v 1.42 2007/10/19 11:59:41 ad Exp $	*/
+/*	$NetBSD: eisa.c,v 1.46 2016/07/11 11:31:50 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Christopher G. Demetriou
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.42 2007/10/19 11:59:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.46 2016/07/11 11:31:50 msaitoh Exp $");
 
 #include "opt_eisaverbose.h"
 
@@ -55,17 +55,17 @@ __KERNEL_RCSID(0, "$NetBSD: eisa.c,v 1.42 2007/10/19 11:59:41 ad Exp $");
 
 #include "locators.h"
 
-static int	eisamatch(struct device *, struct cfdata *, void *);
-static void	eisaattach(struct device *, struct device *, void *);
+static int	eisamatch(device_t, cfdata_t, void *);
+static void	eisaattach(device_t, device_t, void *);
 
-CFATTACH_DECL(eisa, sizeof(struct device),
+CFATTACH_DECL_NEW(eisa, 0,
     eisamatch, eisaattach, NULL, NULL);
 
 static int	eisaprint(void *, const char *);
 static void	eisa_devinfo(const char *, char *, size_t);
 
 static int
-eisamatch(struct device *parent, struct cfdata *cf,
+eisamatch(device_t parent, cfdata_t cf,
     void *aux)
 {
 	/* XXX check other indicators */
@@ -88,7 +88,7 @@ eisaprint(void *aux, const char *pnp)
 }
 
 static void
-eisaattach(struct device *parent, struct device *self, void *aux)
+eisaattach(device_t parent, device_t self, void *aux)
 {
 	struct eisabus_attach_args *eba = aux;
 	bus_space_tag_t iot, memt;
@@ -131,8 +131,8 @@ eisaattach(struct device *parent, struct device *self, void *aux)
 		 * about it.
 		 */
 		if (bus_space_map(iot, slotaddr, EISA_SLOT_SIZE, 0, &slotioh)) {
-			printf("%s: can't map I/O space for slot %d\n",
-			    self->dv_xname, slot);
+			aprint_error_dev(self,
+			    "can't map I/O space for slot %d\n", slot);
 			continue;
 		}
 
@@ -144,10 +144,9 @@ eisaattach(struct device *parent, struct device *self, void *aux)
 		/* Check for device existence */
 		if (EISA_VENDID_NODEV(ea.ea_vid)) {
 #if 0
-			printf("no device at %s slot %d\n", self->dv_xname,
+			printf("no device at %s slot %d\n", device_xname(self),
 			    slot);
-			printf("\t(0x%x, 0x%x)\n", ea.ea_vid[0],
-			    ea.ea_vid[1]);
+			printf("\t(0x%x, 0x%x)\n", ea.ea_vid[0], ea.ea_vid[1]);
 #endif
 			bus_space_unmap(iot, slotioh, EISA_SLOT_SIZE);
 			continue;
@@ -156,7 +155,7 @@ eisaattach(struct device *parent, struct device *self, void *aux)
 		/* And check that the firmware didn't biff something badly */
 		if (EISA_VENDID_IDDELAY(ea.ea_vid)) {
 			printf("%s slot %d not configured by BIOS?\n",
-			    self->dv_xname, slot);
+			    device_xname(self), slot);
 			bus_space_unmap(iot, slotioh, EISA_SLOT_SIZE);
 			continue;
 		}

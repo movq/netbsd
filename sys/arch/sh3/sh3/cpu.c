@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.11 2007/12/03 15:34:19 ad Exp $	*/
+/*	$NetBSD: cpu.c,v 1.14 2009/04/05 00:04:51 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.11 2007/12/03 15:34:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.14 2009/04/05 00:04:51 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,15 +42,16 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.11 2007/12/03 15:34:19 ad Exp $");
 
 extern struct cfdriver cpu_cd;
 
-static int cpu_match(struct device *, struct cfdata *, void *);
-static void cpu_attach(struct device *, struct device *, void *);
+static int cpu_match(device_t, struct cfdata *, void *);
+static void cpu_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpu, sizeof (struct device),
+
+CFATTACH_DECL_NEW(cpu, 0,
     cpu_match, cpu_attach, NULL, NULL);
 
 
 static int
-cpu_match(struct device *parent, struct cfdata *cf, void *aux)
+cpu_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -68,7 +62,7 @@ cpu_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-cpu_attach(struct device *parent, struct device *self, void *aux)
+cpu_attach(device_t parent, device_t self, void *aux)
 {
 
 #define	MHZ(x) ((x) / 1000000), (((x) % 1000000) / 1000)
@@ -83,4 +77,7 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 
 	sh_cache_information();
 	sh_mmu_information();
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }

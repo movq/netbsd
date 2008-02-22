@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses_line.3,v 1.4 2003/04/16 13:35:01 wiz Exp $
+.\"	$NetBSD: curses_line.3,v 1.6 2010/02/20 10:23:04 wiz Exp $
 .\"
 .\" Copyright (c) 2002
 .\"	Brett Lymn (blymn@NetBSD.org, brett_lymn@yahoo.com.au)
@@ -30,7 +30,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd August 12, 2002
+.Dd February 19, 2010
 .Dt CURSES_LINE 3
 .Os
 .Sh NAME
@@ -154,6 +154,18 @@ The
 .Nx
 Curses library complies with the X/Open Curses specification, part of
 the Single Unix Specification.
+.Pp
+The use of
+.Dv ACS_HLINE
+and
+.Dv ACS_VLINE
+as default drawing character in
+.Fn hline
+and
+.Fn vline
+is a
+.Nx
+extension which should not be relied on in portable code.
 .Sh HISTORY
 The Curses package appeared in
 .Bx 4.0 .

@@ -1,4 +1,4 @@
-/*       $NetBSD: bootinfo.h,v 1.3 2006/02/11 17:57:31 cdi Exp $        */
+/*       $NetBSD: bootinfo.h,v 1.8 2017/09/15 13:25:34 martin Exp $        */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -104,6 +97,8 @@
 #define BTINFO_DTLB			102
 #define BTINFO_ITLB			103
 #define BTINFO_KERNEND			104
+#define BTINFO_BOOTDEV			105
+#define BTINFO_BOOTDEV_UNIT		106
 
 #define LOOKUP_BOOTINFO(btp, info) \
 do { \
@@ -130,6 +125,20 @@ struct btinfo_tlb {
 struct btinfo_kernend {
 	struct btinfo_common common;
 	uint64_t addr;
+};
+
+struct btinfo_bootdev {
+	struct btinfo_common common;
+	char name[1];
+};
+
+struct btinfo_bootdev_unit {
+	struct btinfo_common common;
+	uint32_t phandle;	/* the boot path package handle */
+	uint32_t parent;	/* the controller handle */
+	uint32_t lun;		/* scsi address details */
+	uint32_t target;	/* or primary/secondary channel for IDE */
+	uint64_t wwn;		/* zero for non FC-AL drives */
 };
 
 #endif /* _BOOTINFO_H_ */

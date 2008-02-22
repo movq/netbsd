@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.23 2007/02/22 05:10:30 matt Exp $ */
+/*	$NetBSD: db_machdep.h,v 1.35 2017/11/06 03:47:48 christos Exp $ */
 
 /*
  * Mach Operating System
@@ -33,16 +33,25 @@
  * Machine-dependent defines for new kernel debugger.
  */
 
+#include <sys/types.h>
+
 #include <uvm/uvm_extern.h>
 
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/reg.h>
 
 
+/* use 64-bit types explicitly for 32-bit kernels */
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
-typedef	long		db_expr_t;	/* expression - signed */
+#ifdef __arch64__
+#define	DDB_EXPR_FMT	"l"		/* expression is int64_t (long) */
+#else
+#define	DDB_EXPR_FMT	"ll"		/* expression is int64_t (long long) */
+#endif
+typedef	int64_t		db_expr_t;	/* expression - signed */
 
 struct trapstate {
 	int64_t tstate;
@@ -56,15 +65,13 @@ typedef struct {
 	struct frame64		db_fr;
 	struct trapstate	db_ts[5];
 	int			db_tl;
-	struct fpstate64	db_fpstate;
+	struct fpstate64	db_fpstate __aligned(SPARC64_BLOCK_SIZE);
 } db_regs_t;
 
 /* Current CPU register state */
-extern struct cpu_info	*ddb_cpuinfo;
-extern db_regs_t	*ddb_regp;
-#define	DDB_REGS	ddb_regp
-#define	DDB_TF		(&ddb_regp->db_tf)
-#define	DDB_FP		(&ddb_regp->db_fpstate)
+#define	DDB_REGS	((db_regs_t*)__UNVOLATILE(curcpu()->ci_ddb_regs))
+#define	DDB_TF		(&DDB_REGS->db_tf)
+#define	DDB_FP		(&DDB_REGS->db_fpstate)
 
 /* DDB commands not in db_interface.c */
 void	db_dump_ts(db_expr_t, bool, db_expr_t, const char *);
@@ -117,25 +124,17 @@ db_addr_t	db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs);
 
 /* see note in db_interface.c about reversed breakpoint addrs */
 #define next_instr_address(pc, bd) \
-	((bd) ? (pc) : ddb_regp->db_tf.tf_npc)
+	((bd) ? (pc) : DDB_REGS->db_tf.tf_npc)
 
 #define DB_MACHINE_COMMANDS
 
 int kdb_trap(int, struct trapframe64 *);
 
 /*
- * We will use elf symbols in DDB when they work.
+ * We use elf symbols in DDB.
  */
-#if 1
 #define	DB_ELF_SYMBOLS
-#ifdef __arch64__
-#define DB_ELFSIZE	64
-#else
-#define DB_ELFSIZE	32
-#endif
-#else
-#define DB_AOUT_SYMBOLS
-#endif
+
 /*
  * KGDB definitions
  */

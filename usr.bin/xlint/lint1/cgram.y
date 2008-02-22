@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.95 2018/01/15 21:58:54 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.95 2018/01/15 21:58:54 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -44,6 +44,7 @@ __RCSID("$NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $");
 
 #include "lint1.h"
 
+extern char *yytext;
 /*
  * Contains the level of current declaration. 0 is extern.
  * Used for symbol table entries.
@@ -52,7 +53,7 @@ int	blklev;
 
 /*
  * level for memory allocation. Normaly the same as blklev.
- * An exeption is the declaration of arguments in prototypes. Memory
+ * An exception is the declaration of arguments in prototypes. Memory
  * for these can't be freed after the declaration, but symbols must
  * be removed from the symbol table after the declaration.
  */
@@ -62,11 +63,13 @@ int	mblklev;
  * Save the no-warns state and restore it to avoid the problem where
  * if (expr) { stmt } / * NOLINT * / stmt;
  */
-static int onowarn = -1;
+static int olwarn = LWARN_BAD;
 
 static	int	toicon(tnode_t *, int);
 static	void	idecl(sym_t *, int, sbuf_t *);
 static	void	ignuptorp(void);
+static	sym_t	*symbolrename(sym_t *, sbuf_t *);
+
 
 #ifdef DEBUG
 static inline void CLRWFLGS(const char *file, size_t line);
@@ -75,36 +78,46 @@ static inline void CLRWFLGS(const char *file, size_t line)
 	printf("%s, %d: clear flags %s %zu\n", curr_pos.p_file,
 	    curr_pos.p_line, file, line);
 	clrwflgs();
-	onowarn = -1;
+	olwarn = LWARN_BAD;
 }
 
 static inline void SAVE(const char *file, size_t line);
 static inline void SAVE(const char *file, size_t line)
 {
-	if (onowarn != -1)
+	if (olwarn != LWARN_BAD)
 		abort();
 	printf("%s, %d: save flags %s %zu = %d\n", curr_pos.p_file,
-	    curr_pos.p_line, file, line, nowarn);
-	onowarn = nowarn;
+	    curr_pos.p_line, file, line, lwarn);
+	olwarn = lwarn;
 }
 
 static inline void RESTORE(const char *file, size_t line);
 static inline void RESTORE(const char *file, size_t line)
 {
-	if (onowarn != -1) {
-		nowarn = onowarn;
+	if (olwarn != LWARN_BAD) {
+		lwarn = olwarn;
 		printf("%s, %d: restore flags %s %zu = %d\n", curr_pos.p_file,
-		    curr_pos.p_line, file, line, nowarn);
-		onowarn = -1;
+		    curr_pos.p_line, file, line, lwarn);
+		olwarn = LWARN_BAD;
 	} else
 		CLRWFLGS(file, line);
 }
 #else
-#define CLRWFLGS(f, l) clrwflgs(), onowarn = -1
-#define SAVE(f, l)	onowarn = nowarn
-#define RESTORE(f, l) (void)(onowarn == -1 ? (clrwflgs(), 0) : (nowarn = onowarn))
+#define CLRWFLGS(f, l) clrwflgs(), olwarn = LWARN_BAD
+#define SAVE(f, l)	olwarn = lwarn
+#define RESTORE(f, l) (void)(olwarn == LWARN_BAD ? (clrwflgs(), 0) : (lwarn = olwarn))
 #endif
+
+/* unbind the anonymous struct members from the struct */
+static void
+anonymize(sym_t *s)
+{
+	for ( ; s; s = s->s_nxt)
+		s->s_styp = NULL;
+}
 %}
+
+%expect 138
 
 %union {
 	int	y_int;
@@ -127,6 +140,10 @@ static inline void RESTORE(const char *file, size_t line)
 %token	<y_op>		T_UNOP
 %token	<y_op>		T_INCDEC
 %token			T_SIZEOF
+%token			T_BUILTIN_OFFSETOF
+%token			T_TYPEOF
+%token			T_EXTENSION
+%token			T_ALIGNOF
 %token	<y_op>		T_MULT
 %token	<y_op>		T_DIVOP
 %token	<y_op>		T_ADDOP
@@ -145,6 +162,10 @@ static inline void RESTORE(const char *file, size_t line)
 %token			T_COMMA
 %token			T_SEMI
 %token			T_ELLIPSE
+%token			T_REAL
+%token			T_IMAG
+%token			T_GENERIC
+%token			T_NORETURN
 
 /* storage classes (extern, static, auto, register and typedef) */
 %token	<y_scl>		T_SCLASS
@@ -176,6 +197,42 @@ static inline void RESTORE(const char *file, size_t line)
 %token			T_RETURN
 %token			T_ASM
 %token			T_SYMBOLRENAME
+%token			T_PACKED
+/* Type Attributes */
+%token <y_type>		T_ATTRIBUTE
+%token <y_type>		T_AT_ALIAS
+%token <y_type>		T_AT_ALIGNED
+%token <y_type>		T_AT_ALWAYS_INLINE
+%token <y_type>		T_AT_BOUNDED
+%token <y_type>		T_AT_BUFFER
+%token <y_type>		T_AT_COLD
+%token <y_type>		T_AT_CONSTRUCTOR
+%token <y_type>		T_AT_DEPRECATED
+%token <y_type>		T_AT_FORMAT
+%token <y_type>		T_AT_FORMAT_ARG
+%token <y_type>		T_AT_FORMAT_PRINTF
+%token <y_type>		T_AT_FORMAT_SCANF
+%token <y_type>		T_AT_FORMAT_STRFMON
+%token <y_type>		T_AT_FORMAT_STRFTIME
+%token <y_type>		T_AT_GNU_INLINE
+%token <y_type>		T_AT_MAY_ALIAS
+%token <y_type>		T_AT_MINBYTES
+%token <y_type>		T_AT_MODE
+%token <y_type>		T_AT_NONNULL
+%token <y_type>		T_AT_NORETURN
+%token <y_type>		T_AT_NO_INSTRUMENT_FUNCTION
+%token <y_type>		T_AT_PACKED
+%token <y_type>		T_AT_PCS
+%token <y_type>		T_AT_PURE
+%token <y_type>		T_AT_RETURNS_TWICE
+%token <y_type>		T_AT_SECTION
+%token <y_type>		T_AT_SENTINEL
+%token <y_type>		T_AT_STRING
+%token <y_type>		T_AT_TUNION
+%token <y_type>		T_AT_UNUSED
+%token <y_type>		T_AT_USED
+%token <y_type>		T_AT_VISIBILITY
+%token <y_type>		T_AT_WEAK
 
 %left	T_COMMA
 %right	T_ASSIGN T_OPASS
@@ -190,7 +247,7 @@ static inline void RESTORE(const char *file, size_t line)
 %left	T_SHFTOP
 %left	T_ADDOP
 %left	T_MULT T_DIVOP
-%right	T_UNOP T_INCDEC T_SIZEOF
+%right	T_UNOP T_INCDEC T_SIZEOF TBUILTIN_SIZEOF T_ALIGNOF T_REAL T_IMAG
 %left	T_LPARN T_LBRACK T_STROP
 
 %token	<y_sb>		T_NAME
@@ -206,6 +263,7 @@ static inline void RESTORE(const char *file, size_t line)
 %type	<y_type>	notype_typespec
 %type	<y_type>	struct_spec
 %type	<y_type>	enum_spec
+%type	<y_type>	type_attribute
 %type	<y_sym>		struct_tag
 %type	<y_sym>		enum_tag
 %type	<y_tspec>	struct
@@ -246,6 +304,7 @@ static inline void RESTORE(const char *file, size_t line)
 %type	<y_tnode>	expr_stmnt_val
 %type	<y_tnode>	expr_stmnt_list
 %type	<y_tnode>	term
+%type	<y_tnode>	generic_expr
 %type	<y_tnode>	func_arg_list
 %type	<y_op>		point_or_arrow
 %type	<y_type>	type_name
@@ -342,7 +401,7 @@ func_def:
 	  func_decl {
 		if ($1->s_type->t_tspec != FUNC) {
 			/* syntax error */
-			error(249);
+			error(249, yytext);
 			YYERROR;
 		}
 		if ($1->s_type->t_typedef) {
@@ -353,7 +412,7 @@ func_def:
 		funcdef($1);
 		blklev++;
 		pushdecl(ARG);
-		if (nowarn)
+		if (lwarn == LWARN_NONE)
 			$1->s_used = 1;
 	  } opt_arg_declaration_list {
 		popdecl();
@@ -448,6 +507,85 @@ declaration:
 	| error T_SEMI
 	;
 
+type_attribute_format_type:
+	  T_AT_FORMAT_PRINTF
+	| T_AT_FORMAT_SCANF
+	| T_AT_FORMAT_STRFMON
+	| T_AT_FORMAT_STRFTIME
+	;
+
+type_attribute_bounded_type:
+	  T_AT_MINBYTES
+	| T_AT_STRING
+	| T_AT_BUFFER
+	;
+
+type_attribute_spec:
+	  /* empty */	
+	| T_AT_DEPRECATED
+	| T_AT_ALIGNED T_LPARN constant T_RPARN
+	| T_AT_BOUNDED T_LPARN type_attribute_bounded_type
+	  T_COMMA constant T_COMMA constant T_RPARN
+	| T_AT_SENTINEL T_LPARN constant T_RPARN
+	| T_AT_FORMAT_ARG T_LPARN constant T_RPARN
+	| T_AT_NONNULL T_LPARN constant T_RPARN
+	| T_AT_MODE T_LPARN T_NAME T_RPARN
+	| T_AT_ALIAS T_LPARN string T_RPARN
+	| T_AT_PCS T_LPARN string T_RPARN
+	| T_AT_SECTION T_LPARN string T_RPARN
+	| T_AT_ALIGNED 
+	| T_AT_CONSTRUCTOR 
+	| T_AT_MAY_ALIAS
+	| T_AT_NO_INSTRUMENT_FUNCTION
+	| T_AT_NORETURN
+	| T_AT_COLD
+	| T_AT_RETURNS_TWICE
+	| T_AT_PACKED {
+		addpacked();
+	}
+	| T_AT_PURE
+	| T_AT_TUNION
+	| T_AT_GNU_INLINE
+	| T_AT_ALWAYS_INLINE
+	| T_AT_FORMAT T_LPARN type_attribute_format_type T_COMMA
+	    constant T_COMMA constant T_RPARN
+	| T_AT_USED {
+		addused();
+	}
+	| T_AT_UNUSED {
+		addused();
+	}
+	| T_AT_WEAK
+	| T_AT_VISIBILITY T_LPARN constant T_RPARN
+	| T_QUAL {
+		if ($1 != CONST)	
+			yyerror("Bad attribute");
+	}
+	;
+
+type_attribute_spec_list:
+	  type_attribute_spec
+	| type_attribute_spec_list T_COMMA type_attribute_spec
+	;
+
+type_attribute:
+	  T_ATTRIBUTE T_LPARN T_LPARN {
+	    attron = 1;
+	} type_attribute_spec_list {
+	    attron = 0;
+	} T_RPARN T_RPARN
+	| T_PACKED {
+		addpacked();
+	}
+	| T_NORETURN {
+	}
+	;
+
+type_attribute_list:
+	  type_attribute
+	| type_attribute_list type_attribute
+	;
+
 clrtyp:
 	  {
 		clrtyp();
@@ -467,6 +605,7 @@ declspecs:
 	| declmods typespec {
 		addtype($2);
 	  }
+	| type_attribute declspecs
 	| declspecs declmod
 	| declspecs notype_typespec {
 		addtype($2);
@@ -490,6 +629,7 @@ declmod:
 	| T_SCLASS {
 		addscl($1);
 	  }
+	| type_attribute_list
 	;
 
 clrtyp_typespec:
@@ -514,6 +654,9 @@ notype_typespec:
 	  T_TYPE {
 		$$ = gettyp($1);
 	  }
+	| T_TYPEOF term {
+		$$ = $2->tn_type;
+	  }
 	| struct_spec {
 		popdecl();
 		$$ = $1;
@@ -531,7 +674,7 @@ struct_spec:
 		 * a new tag if "a" is not declared at current level
 		 *
 		 * yychar is valid because otherwise the parser would
-		 * not been able to deceide if he must shift or reduce
+		 * not been able to decide if he must shift or reduce
 		 */
 		$$ = mktag($2, $1, 0, yychar == T_SEMI);
 	  }
@@ -552,7 +695,8 @@ struct_spec:
 	;
 
 struct:
-	  T_SOU {
+	  struct type_attribute
+	| T_SOU {
 		symtyp = FTAG;
 		pushdecl($1 == STRUCT ? MOS : MOU);
 		dcs->d_offset = 0;
@@ -598,6 +742,11 @@ member_declaration_list_with_rbrace:
 	  }
 	;
 
+opt_type_attribute:
+	  /* empty */
+	| type_attribute
+	;
+
 member_declaration_list:
 	  member_declaration {
 		$$ = $1;
@@ -611,25 +760,33 @@ member_declaration:
 	  noclass_declmods deftyp {
 		/* too late, i know, but getsym() compensates it */
 		symtyp = FMOS;
-	  } notype_member_decls {
+	  } notype_member_decls opt_type_attribute {
 		symtyp = FVFT;
 		$$ = $4;
 	  }
 	| noclass_declspecs deftyp {
 		symtyp = FMOS;
-	  } type_member_decls {
+	  } type_member_decls opt_type_attribute {
 		symtyp = FVFT;
 		$$ = $4;
 	  }
-	| noclass_declmods deftyp {
+	| noclass_declmods deftyp opt_type_attribute {
+		symtyp = FVFT;
 		/* struct or union member must be named */
-		warning(49);
-		$$ = NULL;
+		if (!Sflag)
+			warning(49);
+		/* add all the members of the anonymous struct/union */
+		$$ = dcs->d_type->t_str->memb;
+		anonymize($$);
 	  }
-	| noclass_declspecs deftyp {
+	| noclass_declspecs deftyp opt_type_attribute {
+		symtyp = FVFT;
 		/* struct or union member must be named */
-		warning(49);
-		$$ = NULL;
+		if (!Sflag)
+			warning(49);
+		$$ = dcs->d_type->t_str->memb;
+		/* add all the members of the anonymous struct/union */
+		anonymize($$);
 	  }
 	| error {
 		symtyp = FVFT;
@@ -641,6 +798,7 @@ noclass_declspecs:
 	  clrtyp_typespec {
 		addtype($1);
 	  }
+	| type_attribute noclass_declspecs
 	| noclass_declmods typespec {
 		addtype($2);
 	  }
@@ -650,6 +808,7 @@ noclass_declspecs:
 	| noclass_declspecs notype_typespec {
 		addtype($2);
 	  }
+	| noclass_declspecs type_attribute
 	;
 
 noclass_declmods:
@@ -767,7 +926,7 @@ enums_with_opt_comma:
 			error(54);
 		} else {
 			/* trailing "," prohibited in enum declaration */
-			(void)gnuism(54);
+			c99ism(54);
 		}
 		$$ = $1;
 	  }
@@ -812,7 +971,7 @@ type_init_decls:
 	;
 
 notype_init_decl:
-	  notype_decl opt_asm_or_symbolrename {
+	notype_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -824,7 +983,7 @@ notype_init_decl:
 	;
 
 type_init_decl:
-	  type_decl opt_asm_or_symbolrename {
+	type_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -851,17 +1010,21 @@ notype_direct_decl:
 	| T_LPARN type_decl T_RPARN {
 		$$ = $2;
 	  }
+	| type_attribute notype_direct_decl {
+		$$ = $2;
+	}
 	| notype_direct_decl T_LBRACK T_RBRACK {
 		$$ = addarray($1, 0, 0);
 	  }
 	| notype_direct_decl T_LBRACK constant T_RBRACK {
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
-	| notype_direct_decl param_list {
-		$$ = addfunc($1, $2);
+	| notype_direct_decl param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename($1, $3), $2);
 		popdecl();
 		blklev--;
 	  }
+	| notype_direct_decl type_attribute_list
 	;
 
 type_decl:
@@ -880,17 +1043,21 @@ type_direct_decl:
 	| T_LPARN type_decl T_RPARN {
 		$$ = $2;
 	  }
+	| type_attribute type_direct_decl {
+		$$ = $2;
+	}
 	| type_direct_decl T_LBRACK T_RBRACK {
 		$$ = addarray($1, 0, 0);
 	  }
 	| type_direct_decl T_LBRACK constant T_RBRACK {
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
-	| type_direct_decl param_list {
-		$$ = addfunc($1, $2);
+	| type_direct_decl param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename($1, $3), $2);
 		popdecl();
 		blklev--;
 	  }
+	| type_direct_decl type_attribute_list
 	;
 
 /*
@@ -910,7 +1077,10 @@ param_decl:
 	;
 
 direct_param_decl:
-	  identifier {
+	  identifier type_attribute_list {
+		$$ = dname(getsym($1));
+	  }
+	| identifier {
 		$$ = dname(getsym($1));
 	  }
 	| T_LPARN notype_param_decl T_RPARN {
@@ -922,8 +1092,8 @@ direct_param_decl:
 	| direct_param_decl T_LBRACK constant T_RBRACK {
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
-	| direct_param_decl param_list {
-		$$ = addfunc($1, $2);
+	| direct_param_decl param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename($1, $3), $2);
 		popdecl();
 		blklev--;
 	  }
@@ -939,7 +1109,7 @@ notype_param_decl:
 	;
 
 direct_notype_param_decl:
-	  T_NAME {
+	  identifier {
 		$$ = dname(getsym($1));
 	  }
 	| T_LPARN notype_param_decl T_RPARN {
@@ -951,8 +1121,8 @@ direct_notype_param_decl:
 	| direct_notype_param_decl T_LBRACK constant T_RBRACK {
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
-	| direct_notype_param_decl param_list {
-		$$ = addfunc($1, $2);
+	| direct_notype_param_decl param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename($1, $3), $2);
 		popdecl();
 		blklev--;
 	  }
@@ -1120,22 +1290,26 @@ opt_asm_or_symbolrename:		/* expect only one */
 	;
 
 initializer:
-	  init_expr
+	  init_assign_expr
 	;
 
-init_expr:
+init_assign_expr:
+	| init_by_name init_base_expr	%prec T_COMMA
+	| init_base_expr
+
+init_base_expr:
 	  expr				%prec T_COMMA {
 		mkinit($1);
 	  }
-	| init_by_name init_expr	%prec T_COMMA
+	| init_lbrace init_rbrace
 	| init_lbrace init_expr_list init_rbrace
 	| init_lbrace init_expr_list T_COMMA init_rbrace
 	| error
 	;
 
 init_expr_list:
-	  init_expr			%prec T_COMMA
-	| init_expr_list T_COMMA init_expr
+	  init_assign_expr		%prec T_COMMA
+	| init_expr_list T_COMMA init_assign_expr
 	;
 
 lorange: 
@@ -1154,16 +1328,25 @@ range:
 	  }
 	;
 
-init_by_name:
-	  T_LBRACK range T_RBRACK T_ASSIGN {
+init_field:
+	  T_LBRACK range T_RBRACK {
 		if (!Sflag)
 			warning(321);
 	  }
-	| point identifier T_ASSIGN {
+	| point identifier {
 		if (!Sflag)
 			warning(313);
 		memberpush($2);
 	  }
+	;
+
+init_field_list:
+	  init_field
+	| init_field_list init_field
+	;
+
+init_by_name:
+	  init_field_list T_ASSIGN
 	| identifier T_COLON {
 		gnuism(315);
 		memberpush($1);
@@ -1183,7 +1366,7 @@ init_rbrace:
 	;
 
 type_name:
-	  {
+  	  {
 		pushdecl(ABSTRACT);
 	  } abstract_declaration {
 		popdecl();
@@ -1216,6 +1399,9 @@ abs_decl:
 	| pointer direct_abs_decl {
 		$$ = addptr($2, $1);
 	  }
+	| T_TYPEOF term {
+		$$ = mktempsym($2->tn_type);
+	  }
 	;
 
 direct_abs_decl:
@@ -1228,22 +1414,26 @@ direct_abs_decl:
 	| T_LBRACK constant T_RBRACK {
 		$$ = addarray(aname(), 1, toicon($2, 0));
 	  }
+	| type_attribute direct_abs_decl {
+		$$ = $2;
+	}
 	| direct_abs_decl T_LBRACK T_RBRACK {
 		$$ = addarray($1, 0, 0);
 	  }
 	| direct_abs_decl T_LBRACK constant T_RBRACK {
 		$$ = addarray($1, 1, toicon($3, 0));
 	  }
-	| abs_decl_param_list {
-		$$ = addfunc(aname(), $1);
+	| abs_decl_param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename(aname(), $2), $1);
 		popdecl();
 		blklev--;
 	  }
-	| direct_abs_decl abs_decl_param_list {
-		$$ = addfunc($1, $2);
+	| direct_abs_decl abs_decl_param_list opt_asm_or_symbolrename {
+		$$ = addfunc(symbolrename($1, $3), $2);
 		popdecl();
 		blklev--;
 	  }
+	| direct_abs_decl type_attribute_list
 	;
 
 non_expr_stmnt:
@@ -1266,23 +1456,38 @@ labeled_stmnt:
 	;
 
 label:
-	  identifier T_COLON {
+	  T_NAME T_COLON {
 		symtyp = FLAB;
 		label(T_NAME, getsym($1), NULL);
 	  }
 	| T_CASE constant T_COLON {
 		label(T_CASE, NULL, $2);
 		ftflg = 1;
-	  }
+	}
+	| T_CASE constant T_ELLIPSE constant T_COLON {
+		/* XXX: We don't fill all cases */
+		label(T_CASE, NULL, $2);
+		ftflg = 1;
+	}
 	| T_DEFAULT T_COLON {
 		label(T_DEFAULT, NULL, NULL);
 		ftflg = 1;
 	  }
 	;
 
+stmnt_d_list:
+	  stmnt_list
+	| stmnt_d_list declaration_list stmnt_list {
+		if (!Sflag)
+			c99ism(327);
+	}
+	;
+
 comp_stmnt:
-	  comp_stmnt_lbrace declaration_list opt_stmnt_list comp_stmnt_rbrace
-	| comp_stmnt_lbrace opt_stmnt_list comp_stmnt_rbrace
+	  comp_stmnt_lbrace comp_stmnt_rbrace
+	| comp_stmnt_lbrace stmnt_d_list comp_stmnt_rbrace
+	| comp_stmnt_lbrace declaration_list comp_stmnt_rbrace
+	| comp_stmnt_lbrace declaration_list stmnt_d_list comp_stmnt_rbrace
 	;
 
 comp_stmnt_lbrace:
@@ -1303,11 +1508,6 @@ comp_stmnt_rbrace:
 	  }
 	;
 
-opt_stmnt_list:
-	  /* empty */
-	| stmnt_list
-	;
-
 stmnt_list:
 	  stmnt
 	| stmnt_list stmnt {
@@ -1318,7 +1518,7 @@ stmnt_list:
 
 expr_stmnt:
 	  expr T_SEMI {
-		expr($1, 0, 0, 1);
+		expr($1, 0, 0, 0);
 		ftflg = 0;
 	  }
 	| T_SEMI {
@@ -1399,6 +1599,22 @@ switch_expr:
 	  }
 	;
 
+association:
+	  type_name T_COLON expr
+	| T_DEFAULT T_COLON expr 
+	;
+
+association_list:
+	  association
+	| association_list T_COMMA association
+	;
+
+generic_expr:
+	  T_GENERIC T_LPARN expr T_COMMA association_list T_RPARN {
+		$$ = $3;
+	  }
+	;
+
 do_stmnt:
 	  do stmnt {
 		CLRWFLGS(__FILE__, __LINE__);
@@ -1425,10 +1641,14 @@ iteration_stmnt:
 	| for_exprs stmnt {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
+		popdecl();
+		blklev--;
 	  }
 	| for_exprs error {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
+		popdecl();
+		blklev--;
 	  }
 	;
 
@@ -1451,9 +1671,21 @@ do_while_expr:
 	  }
 	;
 
+for_start:
+	  T_FOR T_LPARN {
+		pushdecl(AUTO);
+		blklev++;
+	  }
+	;
 for_exprs:
-	  T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
-		for1($3, $5, $7);
+	    for_start declspecs deftyp notype_init_decls T_SEMI opt_expr
+	    T_SEMI opt_expr T_RPARN {
+		c99ism(325);
+		for1(NULL, $6, $8);
+		CLRWFLGS(__FILE__, __LINE__);
+	    }
+	  | for_start opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
+		for1($2, $4, $6);
 		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
@@ -1574,6 +1806,9 @@ expr:
 	| term {
 		$$ = $1;
 	  }
+	| generic_expr {
+		$$ = $1;
+	  }
 	;
 
 term:
@@ -1659,12 +1894,35 @@ term:
 			$$ = NULL;
 		}
 	  }
+	| T_REAL term {
+		$$ = build(REAL, $2, NULL);
+	  }
+	| T_IMAG term {
+		$$ = build(IMAG, $2, NULL);
+	  }
+	| T_EXTENSION term {
+		$$ = $2;
+	  }
+	| T_REAL T_LPARN term T_RPARN {
+		$$ = build(REAL, $3, NULL);
+	  }
+	| T_IMAG T_LPARN term T_RPARN {
+		$$ = build(IMAG, $3, NULL);
+	  }
+	| T_BUILTIN_OFFSETOF T_LPARN type_name T_COMMA identifier T_RPARN
+						    %prec T_BUILTIN_OFFSETOF {
+		symtyp = FMOS;
+		$$ = bldoffsetof($3, getsym($5));
+	  }
 	| T_SIZEOF term					%prec T_SIZEOF {
 		if (($$ = $2 == NULL ? NULL : bldszof($2->tn_type)) != NULL)
 			chkmisc($2, 0, 0, 0, 0, 0, 1);
 	  }
 	| T_SIZEOF T_LPARN type_name T_RPARN		%prec T_SIZEOF {
 		$$ = bldszof($3);
+	  }
+	| T_ALIGNOF T_LPARN type_name T_RPARN		%prec T_ALIGNOF {
+		$$ = bldalof($3);
 	  }
 	| T_LPARN type_name T_RPARN term		%prec T_UNOP {
 		$$ = cast($4, $2);
@@ -1719,8 +1977,9 @@ point_or_arrow:
 
 point:
 	  T_STROP {
-		if ($1 != POINT)
-			error(249);
+		if ($1 != POINT) {
+			error(249, yytext);
+		}
 	  }
 	;
 
@@ -1737,9 +1996,9 @@ identifier:
 
 /* ARGSUSED */
 int
-yyerror(char *msg)
+yyerror(const char *msg)
 {
-	error(249);
+	error(249, yytext);
 	if (++sytxerr >= 5)
 		norecover();
 	return (0);
@@ -1785,8 +2044,10 @@ toicon(tnode_t *tn, int required)
 	/*
 	 * Abstract declarations are used inside expression. To free
 	 * the memory would be a fatal error.
+	 * We don't free blocks that are inside casts because these
+	 * will be used later to match types.
 	 */
-	if (dcs->d_ctx != ABSTRACT)
+	if (tn->tn_op != CON && dcs->d_ctx != ABSTRACT)
 		tfreeblk();
 
 	if ((t = v->v_tspec) == FLOAT || t == DOUBLE || t == LDOUBLE) {
@@ -1797,13 +2058,13 @@ toicon(tnode_t *tn, int required)
 		i = (int)v->v_quad;
 		if (isutyp(t)) {
 			if (uq_gt((uint64_t)v->v_quad,
-				  (uint64_t)INT_MAX)) {
+				  (uint64_t)TARG_INT_MAX)) {
 				/* integral constant too large */
 				warning(56);
 			}
 		} else {
-			if (q_gt(v->v_quad, (int64_t)INT_MAX) ||
-			    q_lt(v->v_quad, (int64_t)INT_MIN)) {
+			if (q_gt(v->v_quad, (int64_t)TARG_INT_MAX) ||
+			    q_lt(v->v_quad, (int64_t)TARG_INT_MIN)) {
 				/* integral constant too large */
 				warning(56);
 			}
@@ -1814,7 +2075,7 @@ toicon(tnode_t *tn, int required)
 }
 
 static void
-idecl(sym_t *decl, int initflg, sbuf_t *rename)
+idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 {
 	char *s;
 
@@ -1823,37 +2084,37 @@ idecl(sym_t *decl, int initflg, sbuf_t *rename)
 
 	switch (dcs->d_ctx) {
 	case EXTERN:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			if (decl->s_rename != NULL)
-				LERROR("idecl()");
+				LERROR("idecl(rename)");
 
-			s = getlblk(1, rename->sb_len + 1);
-	                (void)memcpy(s, rename->sb_name, rename->sb_len + 1);
+			s = getlblk(1, renaming->sb_len + 1);
+	                (void)memcpy(s, renaming->sb_name, renaming->sb_len + 1);
 			decl->s_rename = s;
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 		}
 		decl1ext(decl, initflg);
 		break;
 	case ARG:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			/* symbol renaming can't be used on function arguments */
 			error(310);
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 			break;
 		}
 		(void)decl1arg(decl, initflg);
 		break;
 	case AUTO:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			/* symbol renaming can't be used on automatic variables */
 			error(311);
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 			break;
 		}
 		decl1loc(decl, initflg);
 		break;
 	default:
-		LERROR("idecl()");
+		LERROR("idecl(%d)", dcs->d_ctx);
 	}
 
 	if (initflg && !initerr)
@@ -1884,4 +2145,12 @@ ignuptorp(void)
 	}
 
 	yyclearin;
+}
+
+static	sym_t *
+symbolrename(sym_t *s, sbuf_t *sb)
+{
+	if (sb)
+		s->s_rename = sb->sb_name;
+	return s;
 }

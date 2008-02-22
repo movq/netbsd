@@ -1,4 +1,4 @@
-/*	$NetBSD: armadillo9_com.c,v 1.2 2006/02/13 12:24:21 hamajima Exp $ */
+/*	$NetBSD: armadillo9_com.c,v 1.6 2012/11/12 18:00:38 skrll Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armadillo9_com.c,v 1.2 2006/02/13 12:24:21 hamajima Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armadillo9_com.c,v 1.6 2012/11/12 18:00:38 skrll Exp $");
 
 /* Front-end of epcom */
 
@@ -46,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: armadillo9_com.c,v 1.2 2006/02/13 12:24:21 hamajima 
 #include <sys/termios.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ep93xx/epcomreg.h>
 #include <arm/ep93xx/epcomvar.h>
@@ -59,15 +53,15 @@ __KERNEL_RCSID(0, "$NetBSD: armadillo9_com.c,v 1.2 2006/02/13 12:24:21 hamajima 
 #endif
 #include <evbarm/armadillo/armadillo9var.h>
 
-static int armadillo9com_match(struct device *, struct cfdata *, void *);
-static void armadillo9com_attach(struct device *, struct device *, void *);
+static int armadillo9com_match(device_t, cfdata_t, void *);
+static void armadillo9com_attach(device_t, device_t, void *);
 static int armadillo9com_intr(void *);
 
-CFATTACH_DECL(armadillo9com, sizeof(struct epcom_softc),
+CFATTACH_DECL_NEW(armadillo9com, sizeof(struct epcom_softc),
     armadillo9com_match, armadillo9com_attach, NULL, NULL);
 
 static int
-armadillo9com_match(struct device *parent, struct cfdata *match, void *aux)
+armadillo9com_match(device_t parent, cfdata_t match, void *aux)
 {
 	if (strcmp(match->cf_name, "epcom") == 0)
 		return 1;
@@ -75,13 +69,14 @@ armadillo9com_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-armadillo9com_attach(struct device *parent, struct device *self, void *aux)
+armadillo9com_attach(device_t parent, device_t self, void *aux)
 {
-	struct epcom_softc *sc = (struct epcom_softc *)self;
+	struct epcom_softc *sc = device_private(self);
 	struct epsoc_attach_args *sa = aux;
-	u_int32_t pwrcnt;
+	uint32_t pwrcnt;
 	bus_space_handle_t ioh;
 
+	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_hwbase = sa->sa_addr;
 

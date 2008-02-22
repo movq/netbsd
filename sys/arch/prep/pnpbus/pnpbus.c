@@ -1,4 +1,4 @@
-/*	$NetBSD: pnpbus.c,v 1.7 2007/10/17 19:56:52 garbled Exp $	*/
+/*	$NetBSD: pnpbus.c,v 1.11 2011/07/01 16:55:42 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pnpbus.c,v 1.7 2007/10/17 19:56:52 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pnpbus.c,v 1.11 2011/07/01 16:55:42 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: pnpbus.c,v 1.7 2007/10/17 19:56:52 garbled Exp $");
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 #include <machine/intr.h>
 #include <machine/platform.h>
@@ -60,33 +53,37 @@ __KERNEL_RCSID(0, "$NetBSD: pnpbus.c,v 1.7 2007/10/17 19:56:52 garbled Exp $");
 
 #include "isadma.h"
 
-static int	pnpbus_match(struct device *, struct cfdata *, void *);
-static void	pnpbus_attach(struct device *, struct device *, void *);
+static int	pnpbus_match(device_t, cfdata_t, void *);
+static void	pnpbus_attach(device_t, device_t, void *);
 static int	pnpbus_print(void *, const char *);
-static int	pnpbus_search(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	pnpbus_search(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(pnpbus, sizeof(struct pnpbus_softc),
+CFATTACH_DECL_NEW(pnpbus, sizeof(struct pnpbus_softc),
     pnpbus_match, pnpbus_attach, NULL, NULL);
 
 struct pnpbus_softc *pnpbus_softc;
 extern struct cfdriver pnpbus_cd;
 
 static int
-pnpbus_match(struct device *parent, struct cfdata *cf, void *aux)
+pnpbus_match(device_t parent, cfdata_t cf, void *aux)
 {
-	return 1;
+	struct pnpbus_attach_args *paa = aux;
+
+	if (paa->paa_name != NULL && strcmp(paa->paa_name, "pnpbus") == 0)
+		return 1;
+	return 0;
 }
 
 static void
-pnpbus_attach(struct device *parent, struct device *self, void *aux)
+pnpbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct pnpbus_softc *sc = (struct pnpbus_softc *)self;
+	struct pnpbus_softc *sc = device_private(self);
 	struct pnpbus_attach_args *paa = aux;
 
 	aprint_normal("\n");
 
 	pnpbus_softc = sc;
+	sc->sc_dev = self;
 	sc->sc_ic = paa->paa_ic;
 	sc->sc_iot = paa->paa_iot;
 	sc->sc_memt = paa->paa_memt;
@@ -390,8 +387,7 @@ pnp_getpna(struct pnpbus_dev_attach_args *pna, struct pnpbus_attach_args *paa,
 }
 
 static int
-pnpbus_search(struct device *parent, struct cfdata *cf,
-	    const int *ldesc, void *aux)
+pnpbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct pnpbus_dev_attach_args pna;
 	struct pnpbus_attach_args *paa = aux;
@@ -491,7 +487,7 @@ pnpbus_print(void *args, const char *name)
  * Set up an interrupt handler to start being called.
  */
 void *
-pnpbus_intr_establish(int idx, int level, int (*ih_fun)(void *),
+pnpbus_intr_establish(int idx, int level, int tover, int (*ih_fun)(void *),
     void *ih_arg, struct pnpresources *r)
 {
 	struct pnpbus_irq *irq;
@@ -506,6 +502,8 @@ pnpbus_intr_establish(int idx, int level, int (*ih_fun)(void *),
 
 	irqnum = ffs(irq->mask) - 1;
 	type = (irq->flags & 0x0c) ? IST_LEVEL : IST_EDGE;
+	if (tover != IST_PNP)
+		type = tover;
 
 	return (void *)intr_establish(irqnum, type, level, ih_fun, ih_arg);
 }

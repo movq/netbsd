@@ -1,4 +1,5 @@
-/* $NetBSD: lcd.c,v 1.2 2000/01/07 05:13:08 nisimura Exp $ */
+/* $NetBSD: lcd.c,v 1.9 2018/03/08 03:12:02 mrg Exp $ */
+/* $OpenBSD: lcd.c,v 1.7 2015/02/10 22:42:35 miod Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,17 +32,21 @@
 
 #include <sys/cdefs.h>		/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.2 2000/01/07 05:13:08 nisimura Exp $");
-
-/*
- * XXX
- * Following code segments are subject to change.
- * XXX
- */
+__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.9 2018/03/08 03:12:02 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/ioctl.h>
+#include <sys/fcntl.h>
+#include <sys/errno.h>
+
+#include <machine/autoconf.h>
+#include <machine/cpu.h>
+#include <machine/lcd.h>
+
+#include "ioconf.h"
 
 #define PIO1_MODE_OUTPUT	0x84
 #define PIO1_MODE_INPUT		0x94
@@ -70,6 +68,8 @@ __KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.2 2000/01/07 05:13:08 nisimura Exp $");
 #define LCD_HOME	0x02
 #define LCD_LOCATE(X, Y)	(((Y) & 1 ? 0xc0 : 0x80) | ((X) & 0x0f))
 
+#define LCD_MAXBUFLEN	80
+
 struct pio {
 	volatile u_int8_t portA;
 	volatile u_int8_t portB;
@@ -77,17 +77,208 @@ struct pio {
 	volatile u_int8_t cntrl;
 };
 
-void lcdbusywait __P((void));
-void lcdput __P((int));
-void lcdctrl __P((int));
-void lcdshow __P((char *));
-void greeting __P((void));
+/* Autoconf stuff */
+static int  lcd_match(device_t, cfdata_t, void *);
+static void lcd_attach(device_t, device_t, void *);
+
+dev_type_open(lcdopen);
+dev_type_close(lcdclose);
+dev_type_write(lcdwrite);
+dev_type_ioctl(lcdioctl);
+
+const struct cdevsw lcd_cdevsw = {
+	.d_open     = lcdopen,
+	.d_close    = lcdclose,
+	.d_read     = noread,
+	.d_write    = lcdwrite,
+	.d_ioctl    = lcdioctl,
+	.d_stop     = nostop,
+	.d_tty      = notty,
+	.d_poll     = nopoll,
+	.d_mmap     = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard  = nodiscard,
+	.d_flag     = 0
+};
+
+struct lcd_softc {
+	device_t sc_dev;
+
+	bool sc_opened;
+};
+
+CFATTACH_DECL_NEW(lcd, sizeof(struct lcd_softc),
+    lcd_match, lcd_attach, NULL, NULL);
+
+void lcdbusywait(void);
+void lcdput(int);
+void lcdctrl(int);
+void lcdshow(char *);
+void greeting(void);
 			       /* "1234567890123456" */
 static char lcd_boot_message1[] = " NetBSD/luna68k ";
 static char lcd_boot_message2[] = "   SX-9100/DT   ";
 
+/*
+ * Autoconf functions
+ */
+static int
+lcd_match(device_t parent, cfdata_t cf, void *aux)
+{
+	struct mainbus_attach_args *ma = aux;
+
+	if (strcmp(ma->ma_name, lcd_cd.cd_name))
+		return 0;
+	if (badaddr((void *)ma->ma_addr, 4))
+		return 0;
+	return 1;
+}
+
+static void
+lcd_attach(device_t parent, device_t self, void *aux)
+{
+
+	printf("\n");
+
+	/* Say hello to the world on LCD. */
+	greeting();
+}
+
+/*
+ * open/close/write/ioctl
+ */
+int
+lcdopen(dev_t dev, int flags, int fmt, struct lwp *l)
+{
+	int unit;
+	struct lcd_softc *sc;
+
+	unit = minor(dev);
+	sc = device_lookup_private(&lcd_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
+	if (sc->sc_opened)
+		return EBUSY;
+	sc->sc_opened = true;
+
+	return 0;
+}
+
+int
+lcdclose(dev_t dev, int flags, int fmt, struct lwp *l)
+{
+	int unit;
+	struct lcd_softc *sc;
+
+	unit = minor(dev);
+	sc = device_lookup_private(&lcd_cd, unit);
+	sc->sc_opened = false;
+
+	return 0;
+}
+
+int
+lcdwrite(dev_t dev, struct uio *uio, int flag)
+{
+	int error;
+	size_t len, i;
+	char buf[LCD_MAXBUFLEN];
+
+	len = uio->uio_resid;
+
+	if (len > LCD_MAXBUFLEN)
+		return EIO;
+
+	error = uiomove(buf, len, uio);
+	if (error)
+		return EIO;
+
+	for (i = 0; i < len; i++) {
+		lcdput((int)buf[i]);
+	}
+
+	return 0;
+}
+
+int
+lcdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+{
+	int val;
+
+	/* check if the device opened with write mode */
+	switch (cmd) {
+	case LCDCLS:
+	case LCDHOME:
+	case LCDMODE:
+	case LCDDISP:
+	case LCDMOVE:
+	case LCDSEEK:
+	case LCDRESTORE:
+		if ((flag & FWRITE) == 0)
+			return EACCES;
+	}
+
+	switch (cmd) {
+	case LCDCLS:
+		lcdctrl(LCD_CLS);
+		break;
+
+	case LCDHOME:
+		lcdctrl(LCD_HOME);
+		break;
+
+	case LCDMODE:
+		val = *(int *)addr;
+		switch (val) {
+		case LCDMODE_C_LEFT:
+		case LCDMODE_C_RIGHT:
+		case LCDMODE_D_LEFT:
+		case LCDMODE_D_RIGHT:
+			lcdctrl(val);
+			break;
+		default:
+			return EINVAL;
+		}
+		break;
+
+	case LCDDISP:
+		val = *(int *)addr;
+		if ((val & 0x7) != val)
+			return EINVAL;
+		lcdctrl(val | 0x8);
+		break;
+
+	case LCDMOVE:
+		val = *(int *)addr;
+		switch (val) {
+		case LCDMOVE_C_LEFT:
+		case LCDMOVE_C_RIGHT:
+		case LCDMOVE_D_LEFT:
+		case LCDMOVE_D_RIGHT:
+			lcdctrl(val);
+			break;
+		default:
+			return EINVAL;
+		}
+		break;
+
+	case LCDSEEK:
+		val = *(int *)addr & 0x7f;
+		lcdctrl(val | 0x80);
+		break;
+
+	case LCDRESTORE:
+		greeting();
+		break;
+
+	default:
+		return ENOTTY;
+	}
+	return EPASSTHROUGH;
+}
+
 void
-lcdbusywait()
+lcdbusywait(void)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int msb, s;
@@ -108,8 +299,7 @@ lcdbusywait()
 }	
 
 void
-lcdput(cc)
-	int cc;
+lcdput(int cc)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -126,8 +316,7 @@ lcdput(cc)
 }
 
 void
-lcdctrl(cc)
-	int cc;
+lcdctrl(int cc)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -144,8 +333,7 @@ lcdctrl(cc)
 }
 
 void
-lcdshow(s)
-	char *s;
+lcdshow(char *s)
 {
 	int cc;
 
@@ -154,7 +342,7 @@ lcdshow(s)
 }
 
 void
-greeting()
+greeting(void)
 {
 	lcdctrl(LCD_INIT);
 	lcdctrl(LCD_ENTRY);
@@ -166,5 +354,7 @@ greeting()
 	lcdctrl(LCD_LOCATE(0, 0));
 	lcdshow(lcd_boot_message1);
 	lcdctrl(LCD_LOCATE(0, 1));
+	if (machtype == LUNA_II)
+		lcd_boot_message2[13] = '2';
 	lcdshow(lcd_boot_message2);
 }

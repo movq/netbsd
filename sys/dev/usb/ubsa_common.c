@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsa_common.c,v 1.2 2008/01/21 12:16:31 ichiro Exp $	*/
+/*	$NetBSD: ubsa_common.c,v 1.10 2016/04/23 10:15:32 skrll Exp $	*/
 /*-
  * Copyright (c) 2002, Alexander Kabaev <kan.FreeBSD.org>.
  * All rights reserved.
@@ -39,13 +39,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,25 +54,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubsa_common.c,v 1.2 2008/01/21 12:16:31 ichiro Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsa_common.c,v 1.10 2016/04/23 10:15:32 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
-#ifdef __FreeBSD__
-#include <sys/bus.h>
-#endif
+#include <sys/kmem.h>
 #include <sys/ioccom.h>
 #include <sys/fcntl.h>
 #include <sys/conf.h>
 #include <sys/tty.h>
 #include <sys/file.h>
-#if __FreeBSD_version >= 500014
-#include <sys/selinfo.h>
-#else
 #include <sys/select.h>
-#endif
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/poll.h>
@@ -101,7 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: ubsa_common.c,v 1.2 2008/01/21 12:16:31 ichiro Exp $
 extern	int	ubsadebug;
 #define	DPRINTFN(n, x)	do { \
 				if (ubsadebug > (n)) \
-					logprintf x; \
+					printf x; \
 			} while (0)
 #else
 #define	DPRINTFN(n, x)
@@ -109,7 +95,7 @@ extern	int	ubsadebug;
 #define	DPRINTF(x) DPRINTFN(0, x)
 
 int
-ubsa_request(struct ubsa_softc *sc, int portno, u_int8_t request, u_int16_t value)
+ubsa_request(struct ubsa_softc *sc, int portno, uint8_t request, uint16_t value)
 {
 	usb_device_request_t req;
 	usbd_status err;
@@ -119,10 +105,10 @@ ubsa_request(struct ubsa_softc *sc, int portno, u_int8_t request, u_int16_t valu
 	else
 		req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 
-	if (portno > UBSA_MAXCONN) {
+	if (portno >= UBSA_MAXCONN) {
 		printf("%s: ubsa_request: invalid port(%d)#\n",
-			USBDEVNAME(sc->sc_dev), portno);
-		return USBD_INVAL; 
+			device_xname(sc->sc_dev), portno);
+		return USBD_INVAL;
 	}
 
 	req.bRequest = request;
@@ -133,8 +119,8 @@ ubsa_request(struct ubsa_softc *sc, int portno, u_int8_t request, u_int16_t valu
 	err = usbd_do_request(sc->sc_udev, &req, 0);
 	if (err)
 		printf("%s: ubsa_request: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(err));
-	return (err);
+		    device_xname(sc->sc_dev), usbd_errstr(err));
+	return err;
 }
 
 void
@@ -230,7 +216,7 @@ ubsa_set(void *addr, int portno, int reg, int onoff)
 void
 ubsa_baudrate(struct ubsa_softc *sc, int portno, speed_t speed)
 {
-	u_int16_t value = 0;
+	uint16_t value = 0;
 
 	DPRINTF(("ubsa_baudrate: speed = %d\n", speed));
 
@@ -253,7 +239,7 @@ ubsa_baudrate(struct ubsa_softc *sc, int portno, speed_t speed)
 	default:
 		printf("%s: ubsa_param: unsupported baudrate, "
 		    "forcing default of 9600\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		value = B230400 / B9600;
 		break;
 	};
@@ -296,7 +282,7 @@ ubsa_databits(struct ubsa_softc *sc, int portno, tcflag_t cflag)
 	default:
 		printf("%s: ubsa_param: unsupported databits requested, "
 		    "forcing default of 8\n",
-		    USBDEVNAME(sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		value = 3;
 	}
 
@@ -346,7 +332,7 @@ ubsa_param(void *addr, int portno, struct termios *ti)
 		ubsa_flow(sc, portno, ti->c_cflag, ti->c_iflag);
 	}
 
-	return (0);
+	return 0;
 }
 
 int
@@ -356,10 +342,10 @@ ubsa_open(void *addr, int portno)
 	int err;
 
 	if (sc->sc_dying)
-		return (ENXIO);
+		return ENXIO;
 
 	if (sc->sc_intr_number != -1 && sc->sc_intr_pipe == NULL) {
-		sc->sc_intr_buf = malloc(sc->sc_isize, M_USBDEV, M_WAITOK);
+		sc->sc_intr_buf = kmem_alloc(sc->sc_isize, KM_SLEEP);
 		/* XXX only iface# = 0 has intr line */
 		/* XXX E220 specific? need to check */
 		err = usbd_open_pipe_intr(sc->sc_iface[0],
@@ -373,13 +359,13 @@ ubsa_open(void *addr, int portno)
 		    UBSA_INTR_INTERVAL);
 		if (err) {
 			printf("%s: cannot open interrupt pipe (addr %d)\n",
-			    USBDEVNAME(sc->sc_dev),
+			    device_xname(sc->sc_dev),
 			    sc->sc_intr_number);
-			return (EIO);
+			return EIO;
 		}
 	}
 
-	return (0);
+	return 0;
 }
 
 void
@@ -397,20 +383,20 @@ ubsa_close(void *addr, int portno)
 		err = usbd_abort_pipe(sc->sc_intr_pipe);
 		if (err)
 			printf("%s: abort interrupt pipe failed: %s\n",
-			    USBDEVNAME(sc->sc_dev),
+			    device_xname(sc->sc_dev),
 			    usbd_errstr(err));
 		err = usbd_close_pipe(sc->sc_intr_pipe);
 		if (err)
 			printf("%s: close interrupt pipe failed: %s\n",
-			    USBDEVNAME(sc->sc_dev),
+			    device_xname(sc->sc_dev),
 			    usbd_errstr(err));
-		free(sc->sc_intr_buf, M_USBDEV);
+		kmem_free(sc->sc_intr_buf, sc->sc_isize);
 		sc->sc_intr_pipe = NULL;
 	}
 }
 
 void
-ubsa_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
+ubsa_intr(struct usbd_xfer *xfer, void *priv,
     usbd_status status)
 {
 	struct ubsa_softc *sc = priv;
@@ -426,7 +412,7 @@ ubsa_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
 			return;
 
 		DPRINTF(("%s: ubsa_intr: abnormal status: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(status)));
+		    device_xname(sc->sc_dev), usbd_errstr(status)));
 		usbd_clear_endpoint_stall_async(sc->sc_intr_pipe);
 		return;
 	}
@@ -436,10 +422,10 @@ ubsa_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
 	sc->sc_msr = buf[3];
 
 	DPRINTF(("%s: ubsa lsr = 0x%02x, msr = 0x%02x\n",
-	    USBDEVNAME(sc->sc_dev), sc->sc_lsr, sc->sc_msr));
+	    device_xname(sc->sc_dev), sc->sc_lsr, sc->sc_msr));
 
 	for (i = 0; i < sc->sc_numif; i++) {
-		ucom_status_change((struct ucom_softc *)sc->sc_subdevs[i]);
+		ucom_status_change(device_private(sc->sc_subdevs[i]));
 	}
 }
 

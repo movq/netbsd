@@ -1,4 +1,4 @@
-/*	$NetBSD: gencons.c,v 1.48 2007/11/19 18:51:44 ad Exp $	*/
+/*	$NetBSD: gencons.c,v 1.56 2017/05/22 16:46:15 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Gordon W. Ross
@@ -13,9 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
  * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
@@ -36,31 +33,29 @@
  /* All bugs are subject to removal without further notice */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gencons.c,v 1.48 2007/11/19 18:51:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gencons.c,v 1.56 2017/05/22 16:46:15 ragge Exp $");
 
 #include "opt_ddb.h"
 #include "opt_cputype.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#include <sys/file.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
-#include <sys/reboot.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
+#include <sys/proc.h>
+#include <sys/tty.h>
 
 #include <dev/cons.h>
 
-#include <machine/mtpr.h>
 #include <machine/sid.h>
-#include <machine/cpu.h>
 #include <machine/scb.h>
-#include <machine/../vax/gencons.h>
+#include <vax/vax/gencons.h>
 
 static	struct gc_softc {
 	short alive;
@@ -77,8 +72,8 @@ static	int pr_rxdb[4] = {PR_RXDB, PR_RXDB1, PR_RXDB2, PR_RXDB3};
 
 cons_decl(gen);
 
-static	int gencnparam __P((struct tty *, struct termios *));
-static	void gencnstart __P((struct tty *));
+static	int gencnparam(struct tty *, struct termios *);
+static	void gencnstart(struct tty *);
 
 dev_type_open(gencnopen);
 dev_type_close(gencnclose);
@@ -89,8 +84,18 @@ dev_type_tty(gencntty);
 dev_type_poll(gencnpoll);
 
 const struct cdevsw gen_cdevsw = {
-	gencnopen, gencnclose, gencnread, gencnwrite, gencnioctl,
-	nostop, gencntty, gencnpoll, nommap, ttykqfilter, D_TTY
+	.d_open = gencnopen,
+	.d_close = gencnclose,
+	.d_read = gencnread,
+	.d_write = gencnwrite,
+	.d_ioctl = gencnioctl,
+	.d_stop = nostop,
+	.d_tty = gencntty,
+	.d_poll = gencnpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 int
@@ -104,7 +109,7 @@ gencnopen(dev_t dev, int flag, int mode, struct lwp *l)
 		return ENXIO;
 
 	if (gc_softc[unit].gencn_tty == NULL)
-		gc_softc[unit].gencn_tty = ttymalloc();
+		gc_softc[unit].gencn_tty = tty_alloc();
 
 	gc_softc[unit].alive = 1;
 	gc_softc[unit].unit = unit;
@@ -305,7 +310,7 @@ gencninit(struct consdev *cndev)
 	}
 #if 0
 	mtpr(0, PR_RXCS);
-	mtpr(0, PR_TXCS); 
+	mtpr(0, PR_TXCS);
 	mtpr(0, PR_TBIA); /* ??? */
 #endif
 }
@@ -363,7 +368,7 @@ gencnpollc(dev_t dev, int pollflag)
 {
 	if (pollflag)  {
 		mtpr(0, PR_RXCS);
-		mtpr(0, PR_TXCS); 
+		mtpr(0, PR_TXCS);
 	} else {
 		mtpr(GC_RIE, PR_RXCS);
 		mtpr(GC_TIE, PR_TXCS);
@@ -372,7 +377,7 @@ gencnpollc(dev_t dev, int pollflag)
 
 #if defined(MULTIPROCESSOR)
 void
-gencnstarttx()
+gencnstarttx(void)
 {
 	gencnstart(gc_softc[0].gencn_tty);
 }

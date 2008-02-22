@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.29 2006/02/24 19:33:09 drochner Exp $	*/
+/*	$NetBSD: sysctl.c,v 1.37 2018/05/16 20:21:39 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.29 2006/02/24 19:33:09 drochner Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.37 2018/05/16 20:21:39 joerg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -43,6 +43,7 @@ __RCSID("$NetBSD: sysctl.c,v 1.29 2006/02/24 19:33:09 drochner Exp $");
 #define __COMPAT_SYSCTL
 #include <sys/sysctl.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <paths.h>
 #include <stdio.h>
@@ -69,12 +70,9 @@ static size_t __cvt_node_out(uint, const struct sysctlnode *, void **,
 #include <stdlib.h>
 
 int
-sysctl(name, namelen, oldp, oldlenp, newp, newlen)
-	const int *name;
-	unsigned int namelen;
-	void *oldp;
-	const void *newp;
-	size_t *oldlenp, newlen;
+sysctl(const int *name, unsigned int namelen,
+	void *oldp, size_t *oldlenp,
+	const void *newp, size_t newlen)
 {
 	size_t oldlen, savelen;
 	int error;
@@ -104,21 +102,18 @@ sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 }
 
 static int
-user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
-	const int *name;
-	unsigned int namelen;
-	void *oldp;
-	const void *newp;
-	size_t *oldlenp, newlen;
+user_sysctl(const int *name, unsigned int namelen,
+	void *oldp, size_t *oldlenp,
+	const void *newp, size_t newlen)
 {
 #define _INT(s, n, v, d) {					\
 	.sysctl_flags = CTLFLAG_IMMEDIATE|CTLFLAG_PERMANENT|	\
 			CTLTYPE_INT|SYSCTL_VERSION,		\
-	sysc_init_field(_sysctl_size, sizeof(int)),		\
+	.sysctl_size = sizeof(int),				\
 	.sysctl_name = (s),					\
 	.sysctl_num = (n),					\
-	.sysctl_un = { .scu_idata = (v), },			\
-	sysc_init_field(_sysctl_desc, (d)),			\
+	.sysctl_un.scu_idata = (v),				\
+	.sysctl_desc = (d),					\
 	}
 
 	/*
@@ -134,22 +129,11 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		{
 			.sysctl_flags = SYSCTL_VERSION|CTLFLAG_PERMANENT|
 				CTLTYPE_STRING,
-			sysc_init_field(_sysctl_size, sizeof(_PATH_STDPATH)),
+			.sysctl_size = sizeof(_PATH_STDPATH),
 			.sysctl_name = "cs_path",
 			.sysctl_num = USER_CS_PATH,
-			/*
-			 * XXX these nasty initializers (and the one in
-			 * the _INT() macro) can go away once all ports
-			 * are using gcc3, and become
-			 *
-			 *	.sysctl_data = _PATH_STDPATH,
-			 *	.sysctl_desc = NULL,
-			 */
-			.sysctl_un = { .scu_data = { 
-				sysc_init_field(_sud_data,
-				__UNCONST(_PATH_STDPATH)),
-				}, },
-			sysc_init_field(_sysctl_desc,
+			.sysctl_data = __UNCONST(_PATH_STDPATH),
+			.sysctl_desc = __UNCONST(
 				"A value for the PATH environment variable "
 				"that finds all the standard utilities"),
 		},
@@ -176,7 +160,7 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		_INT("posix2_version", USER_POSIX2_VERSION, _POSIX2_VERSION,
 		     "The version of POSIX 1003.2 with which the system "
 		     "attempts to comply"),
-#ifdef POSIX2_C_BIND
+#ifdef _POSIX2_C_BIND
 		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 1,
 		     "Whether the system's C-language development facilities "
 		     "support the C-Language Bindings Option"),
@@ -317,15 +301,19 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 			if (sysctl_usermib[ni].sysctl_desc == NULL)
 				d1->descr_len = 1;
 			else {
+				size_t dlen;
 				(void)strlcpy(d1->descr_str,
 					sysctl_usermib[ni].sysctl_desc,
 					sizeof(buf) - sizeof(*d1));
-				d1->descr_len = strlen(d1->descr_str) + 1;
+				dlen = strlen(d1->descr_str) + 1;
+				_DIAGASSERT(__type_fit(uint32_t, dlen));
+				d1->descr_len = (uint32_t)dlen;
 			}
-			d = (size_t)__sysc_desc_adv(NULL, d1->descr_len);
+			d = (size_t)__sysc_desc_len(d1->descr_len);
 			if (d2 != NULL)
 				memcpy(d2, d1, d);
 			sz += d;
+			d2 = (void *)((char *)(void *)d2 + d);
 			if (node != NULL)
 				break;
 		}

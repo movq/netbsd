@@ -27,28 +27,32 @@
  * SUCH DAMAGE.
  */
 
-#if defined(SYSLIBC_SCCS) && !defined(lint)
-	/* .asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93" */
-	.asciz "$NetBSD: brk.S,v 1.12 2003/12/26 11:21:48 martin Exp $"
-#endif /* SYSLIBC_SCCS and not lint */
-
 #include "SYS.h"
 
-	.globl	CURBRK
+#if defined(SYSLIBC_SCCS) && !defined(lint)
+	/* .asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93" */
+RCSID("$NetBSD: brk.S,v 1.15 2014/03/18 18:20:37 riastradh Exp $")
+#endif /* SYSLIBC_SCCS and not lint */
+
+	.globl	_C_LABEL(__curbrk)
 	.globl	_C_LABEL(__minbrk)
+	.hidden _C_LABEL(__curbrk)
+	.hidden	_C_LABEL(__minbrk)
 
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(brk, _brk)
 #endif
 
 ENTRY(_brk, 0)
-	cmpl	_C_LABEL(__minbrk),4(%ap)	# gtr > _end 
+	moval	_C_LABEL(__minbrk),%r5		# gtr > _end 
+	cmpl	(%r5),4(%ap)			# gtr > _end 
 	blequ	1f				#   is fine
-	movl	_C_LABEL(__minbrk),4(%ap)	# shrink back to _end
+	movl	(%r5),4(%ap)			# shrink back to _end
 1:	chmk	$ SYS_break			# do it
 	jcs	err
-	movl	4(%ap),CURBRK
+	movl	4(%ap),_C_LABEL(__curbrk)
 	clrl	%r0
 	ret
 err:
 	jmp	CERROR+2
+END(_brk)

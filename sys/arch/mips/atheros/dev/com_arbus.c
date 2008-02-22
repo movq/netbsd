@@ -1,4 +1,4 @@
-/* $Id: com_arbus.c,v 1.5 2007/02/17 23:25:26 jmcneill Exp $ */
+/* $NetBSD: com_arbus.c,v 1.12 2014/02/23 20:56:29 martin Exp $ */
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -55,13 +55,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -108,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_arbus.c,v 1.5 2007/02/17 23:25:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_arbus.c,v 1.12 2014/02/23 20:56:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -118,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_arbus.c,v 1.5 2007/02/17 23:25:26 jmcneill Exp $
 #include <sys/ttydefaults.h>
 #include <sys/types.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/cons.h>
 #include <dev/ic/comreg.h>
@@ -126,7 +119,6 @@ __KERNEL_RCSID(0, "$NetBSD: com_arbus.c,v 1.5 2007/02/17 23:25:26 jmcneill Exp $
 
 #include <mips/cpuregs.h>
 #include <mips/atheros/include/arbusvar.h>
-#include <mips/atheros/include/ar531xvar.h>
 
 #include "opt_com.h"
 
@@ -136,10 +128,10 @@ struct com_arbus_softc {
 
 static void com_arbus_initmap(struct com_regs *);
 //static bus_space_tag_t com_arbus_get_bus_space_tag(void);
-static int com_arbus_match(struct device *, struct cfdata *, void *);
-static void com_arbus_attach(struct device *, struct device *, void *);
+static int com_arbus_match(device_t, cfdata_t , void *);
+static void com_arbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(com_arbus, sizeof(struct com_arbus_softc),
+CFATTACH_DECL_NEW(com_arbus, sizeof(struct com_arbus_softc),
     com_arbus_match, com_arbus_attach, NULL, NULL);
 
 #if 0
@@ -163,7 +155,7 @@ int	com_arbus_baud = COM_ARBUS_BAUD;
 #endif
 
 int
-com_arbus_match(struct device *parent, struct cfdata *cf, void *aux)
+com_arbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct arbus_attach_args	*aa = aux;
 	struct com_regs			regs;
@@ -192,28 +184,30 @@ com_arbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-com_arbus_attach(struct device *parent, struct device *self, void *aux)
+com_arbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_arbus_softc *arsc = (void *)self;
+	struct com_arbus_softc *arsc = device_private(self);
 	struct com_softc *sc = &arsc->sc_com;
 	struct arbus_attach_args *aa = aux;
 	prop_number_t prop;
 	bus_space_handle_t ioh;
 
-	prop = prop_dictionary_get(device_properties(&sc->sc_dev),
+	sc->sc_dev = self;
+
+	prop = prop_dictionary_get(device_properties(sc->sc_dev),
 	    "frequency");
 	if (prop == NULL) {
-		printf(": unable to get frequency property\n");
+		aprint_error(": unable to get frequency property\n");
 		return;
 	}
 	KASSERT(prop_object_type(prop) == PROP_TYPE_NUMBER);
 
 	sc->sc_frequency = (int)prop_number_integer_value(prop);
 
-	if (!com_is_console(aa->aa_bst, aa->aa_addr, &ioh) &&
-	    bus_space_map(aa->aa_bst, aa->aa_addr, aa->aa_size, 0,
-		&ioh) != 0) {
-		printf(": can't map registers\n");
+	if (!com_is_console(aa->aa_bst, aa->aa_addr, &ioh)
+	    && bus_space_map(aa->aa_bst, aa->aa_addr, aa->aa_size, 0,
+		    &ioh) != 0) {
+		aprint_error(": can't map registers\n");
 		return;
 	}
 
@@ -229,12 +223,15 @@ com_arbus_attach(struct device *parent, struct device *self, void *aux)
 void
 com_arbus_initmap(struct com_regs *regsp)
 {
-	int	i;
+#if _BYTE_ORDER == _BIG_ENDIAN
+	int off = 3;
+#else
+	int off = 0;
+#endif
 
 	/* rewrite the map to shift for alignment */
-	for (i = 0;
-	     i < (sizeof (regsp->cr_map) / sizeof (regsp->cr_map[0])); i++) {
-		regsp->cr_map[i] = (com_std_map[i] * 4) + 3;
+	for (size_t i = 0; i < __arraycount(regsp->cr_map); i++) {
+		regsp->cr_map[i] = (com_std_map[i] * 4) + off;
 	}
 }
 

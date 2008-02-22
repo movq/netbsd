@@ -1,4 +1,4 @@
-/*	$NetBSD: vnconfig.c,v 1.34 2005/08/19 02:09:50 christos Exp $	*/
+/*	$NetBSD: vnconfig.c,v 1.46 2018/03/12 01:15:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1993 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -73,46 +67,6 @@
  *	@(#)vnconfig.c	8.1 (Berkeley) 12/15/93
  */
 
-/*
- * Copyright (c) 1993 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: vnconfig.c 1.1 93/12/15$
- *
- *	@(#)vnconfig.c	8.1 (Berkeley) 12/15/93
- */
-
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -126,36 +80,43 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
+#include <paths.h>
+#include <limits.h>
 
 #define VND_CONFIG	1
 #define VND_UNCONFIG	2
 #define VND_GET		3
 
-int	verbose = 0;
-int	readonly = 0;
-int	force = 0;
-int	compressed = 0;
-char	*tabname;
+/* with -l we always print at least this many entries */
+#define	DUMMY_FREE	4
 
-int	config __P((char *, char *, char *, int));
-int	getgeom __P((struct vndgeom *, char *));
-int	main __P((int, char **));
-char   *rawdevice __P((char *));
-void	usage __P((void));
+static int	verbose = 0;
+static int	readonly = 0;
+static int	force = 0;
+static int	compressed = 0;
+static int	minimum = DUMMY_FREE;
+static char	*tabname;
+
+static int	show(int, int, const char * const);
+static int	config(char *, char *, char *, int);
+static int	getgeom(struct vndgeom *, char *);
+__dead static void	usage(void);
+static void	show_unused(int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, rv, action = VND_CONFIG;
+	char *end;
+	unsigned long cnt;
 
-	while ((ch = getopt(argc, argv, "Fcf:lrt:uvz")) != -1) {
+	while ((ch = getopt(argc, argv, "Fcf:lm:rt:uvz")) != -1) {
 		switch (ch) {
 		case 'F':
 			force = 1;
@@ -169,6 +130,12 @@ main(argc, argv)
 			break;
 		case 'l':
 			action = VND_GET;
+			break;
+		case 'm':
+			cnt = strtoul(optarg, &end, 10);
+			if (cnt >= INT_MAX || end == optarg || *end != '\0')
+				usage();
+			minimum = (int)cnt;
 			break;
 		case 'r':
 			readonly = 1;
@@ -206,85 +173,114 @@ main(argc, argv)
 			usage();
 		rv = config(argv[0], NULL, NULL, action);
 	} else { /* VND_GET */
-		char *vn, path[64];
-		struct vnd_user vnu;
-		int v, n;
+		int n, vdisk;
+		const char *vn;
+		char path[64];
 
-		if (argc != 0 && argc != 1)
-			usage();
+		if (argc == 0) {
+			vn = "vnd0";
 
-		vn = argc ? argv[0] : "vnd0";
-
-		v = opendisk(vn, O_RDONLY, path, sizeof(path), 0);
-		if (v == -1)
-			err(1, "open: %s", vn);
-
-		for (n = 0; ; n++) {
-			vnu.vnu_unit = argc ? -1 : n;
-			rv = ioctl(v, VNDIOCGET, &vnu);
-			if (rv == -1) {
-				if (errno == ENXIO)
-					break;
-				err(1, "VNDIOCGET");
+			vdisk = opendisk(vn, O_RDONLY, path, sizeof(path), 0);
+			if (vdisk == -1) {
+				if (minimum == 0)
+					return 1;
+				err(1, "open: %s", vn);
 			}
 
-			if (vnu.vnu_ino == 0)
-				printf("vnd%d: not in use\n",
-				    vnu.vnu_unit);
-			else {
-				char *dev;
-				struct statvfs *mnt = NULL;
-				int i, n;
-
-				n = 0;	/* XXXGCC -Wuninitialized */
-
-				printf("vnd%d: ", vnu.vnu_unit);
-
-				dev = devname(vnu.vnu_dev, S_IFBLK);
-				if (dev != NULL)
-					n = getmntinfo(&mnt, MNT_NOWAIT);
-				else
-					mnt = NULL;
-				if (mnt != NULL) {
-					for (i = 0; i < n; i++) {
-						if (strncmp(
-						    mnt[i].f_mntfromname,
-						    "/dev/", 5) == 0 &&
-						    strcmp(
-						    mnt[i].f_mntfromname + 5,
-						    dev) == 0)
-							break;
-					}
-					if (i < n)
-						printf("%s (%s) ",
-						    mnt[i].f_mntonname,
-						    mnt[i].f_mntfromname);
-					else
-						printf("%s ", dev);
-				}
-				else if (dev != NULL)
-					printf("%s ", dev);
-				else
-					printf("dev %d,%d ",
-					    major(vnu.vnu_dev),
-					    minor(vnu.vnu_dev));
-
-				printf("inode %llu\n",
-				    (unsigned long long)vnu.vnu_ino);
-			}
-
-			if (argc)
-				break;
+			for (n = 0; show(vdisk, n, 0); n++)
+				continue;
+			while (n < minimum)
+				show_unused(n++);
+			close(vdisk);
+			return 0;
 		}
-		close(v);
+			
+		rv = 0;
+		while (--argc >= 0) {
+			vn = *argv++;
+
+			vdisk = opendisk(vn, O_RDONLY, path, sizeof(path), 0);
+			if (vdisk == -1) {
+				warn("open: %s", vn);
+				rv = 1;
+				continue;
+			}
+
+			if (!show(vdisk, -1, vn))
+				rv = 1;
+			close(vdisk);
+		}
 	}
-	exit(rv);
+	return rv;
 }
 
-int
-config(dev, file, geom, action)
-	char *dev, *file, *geom;
-	int action;
+static void
+show_unused(int n)
+{
+	if (minimum == 0) 
+		return;
+
+	printf("vnd%d: not in use\n", n);
+}
+
+static int
+show(int v, int n, const char * const name)
+{
+	struct vnd_user vnu;
+	char *dev;
+	struct statvfs *mnt;
+	int i, nmount;
+
+	vnu.vnu_unit = n;
+	if (ioctl(v, VNDIOCGET, &vnu) == -1) {
+		if (errno != ENXIO) {
+			if (n != -1)
+				err(1, "VNDIOCGET");
+			warn("%s: VNDIOCGET", name);
+		}
+		return 0;
+	}
+
+	if (vnu.vnu_ino == 0) {
+		show_unused(vnu.vnu_unit);
+		return -1;
+	}
+
+	printf("vnd%d: ", vnu.vnu_unit);
+
+	dev = devname(vnu.vnu_dev, S_IFBLK);
+	if (dev != NULL)
+		nmount = getmntinfo(&mnt, MNT_NOWAIT);
+	else {
+		mnt = NULL;
+		nmount = 0;
+	}
+
+	if (mnt != NULL) {
+		for (i = 0; i < nmount; i++) {
+			if (strncmp(mnt[i].f_mntfromname, "/dev/", 5) == 0 &&
+			    strcmp(mnt[i].f_mntfromname + 5, dev) == 0)
+				break;
+		}
+		if (i < nmount)
+			printf("%s (%s) ", mnt[i].f_mntonname,
+			    mnt[i].f_mntfromname);
+		else
+			printf("%s ", dev);
+	}
+	else if (dev != NULL)
+		printf("%s ", dev);
+	else
+		printf("dev %llu,%llu ",
+		    (unsigned long long)major(vnu.vnu_dev),
+		    (unsigned long long)minor(vnu.vnu_dev));
+
+	printf("inode %llu\n", (unsigned long long)vnu.vnu_ino);
+	return 1;
+}
+
+static int
+config(char *dev, char *file, char *geom, int action)
 {
 	struct vnd_ioctl vndio;
 	struct disklabel *lp;
@@ -332,6 +328,10 @@ config(dev, file, geom, action)
 		if (force)
 			vndio.vnd_flags |= VNDIOF_FORCE;
 		rv = ioctl(fd, VNDIOCCLR, &vndio);
+#ifdef VNDIOOCCLR
+		if (rv && errno == ENOTTY)
+			rv = ioctl(fd, VNDIOOCCLR, &vndio);
+#endif
 		if (rv)
 			warn("%s: VNDIOCCLR", rdev);
 		else if (verbose)
@@ -344,16 +344,23 @@ config(dev, file, geom, action)
 		int	ffd;
 
 		ffd = open(file, readonly ? O_RDONLY : O_RDWR);
-		if (ffd < 0)
+		if (ffd < 0) {
 			warn("%s", file);
-		else {
+			rv = -1;
+		} else {
 			(void) close(ffd);
 
 			rv = ioctl(fd, VNDIOCSET, &vndio);
+#ifdef VNDIOOCSET
+			if (rv && errno == ENOTTY) {
+				rv = ioctl(fd, VNDIOOCSET, &vndio);
+				vndio.vnd_size = vndio.vnd_osize;
+			}
+#endif
 			if (rv)
 				warn("%s: VNDIOCSET", rdev);
 			else if (verbose) {
-				printf("%s: %d bytes on %s", rdev,
+				printf("%s: %" PRIu64 " bytes on %s", rdev,
 				    vndio.vnd_size, file);
 				if (vndio.vnd_flags & VNDIOF_HASGEOM)
 					printf(" using geometry %d/%d/%d/%d",
@@ -371,10 +378,8 @@ config(dev, file, geom, action)
 	return (rv < 0);
 }
 
-int
-getgeom(vng, cp)
-	struct vndgeom *vng;
-	char *cp;
+static int
+getgeom(struct vndgeom *vng, char *cp)
 {
 	char *secsize, *nsectors, *ntracks, *ncylinders;
 
@@ -415,14 +420,14 @@ getgeom(vng, cp)
 	return (0);
 }
 
-void
-usage()
+static void
+usage(void)
 {
-
-	(void)fprintf(stderr, "%s%s",
-	    "usage: vnconfig [-crvz] [-f disktab] [-t typename] vnode_disk"
-		" regular-file [geomspec]\n",
-	    "       vnconfig -u [-Fv] vnode_disk\n"
-	    "       vnconfig -l [vnode_disk]\n");
+	const char *p = getprogname();
+	(void)fprintf(stderr, 
+	    "Usage: %s [-crvz] [-f dsktab] [-t type] vnode_disk"
+		" reg-file [geomspec]\n"
+	    "       %s -u [-Fv] vnode_disk\n"
+	    "       %s -l [-m num | vnode_disk...]\n", p, p, p);
 	exit(1);
 }

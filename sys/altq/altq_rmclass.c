@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_rmclass.c,v 1.20 2007/03/04 05:59:02 christos Exp $	*/
+/*	$NetBSD: altq_rmclass.c,v 1.22 2011/11/19 22:51:18 tls Exp $	*/
 /*	$KAME: altq_rmclass.c,v 1.19 2005/04/13 03:44:25 suz Exp $	*/
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_rmclass.c,v 1.20 2007/03/04 05:59:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_rmclass.c,v 1.22 2011/11/19 22:51:18 tls Exp $");
 
 /* #ident "@(#)rm_class.c  1.48     97/12/05 SMI" */
 
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_rmclass.c,v 1.20 2007/03/04 05:59:02 christos E
 #ifdef ALTQ3_COMPAT
 #include <sys/kernel.h>
 #endif
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #ifdef ALTQ3_COMPAT
@@ -1448,11 +1449,10 @@ rmc_dropall(struct rm_class *cl)
 }
 
 #if (__FreeBSD_version > 300000)
-/* hzto() is removed from FreeBSD-3.0 */
-static int hzto(struct timeval *);
+static int tvhzto(struct timeval *);
 
 static int
-hzto(struct timeval *tv)
+tvhzto(struct timeval *tv)
 {
 	struct timeval t2;
 
@@ -1524,10 +1524,10 @@ rmc_delay_action(struct rm_class *cl, struct rm_class *borrow)
 		if (ndelay > tick * 2) {
 #ifdef __FreeBSD__
 			/* FreeBSD rounds up the tick */
-			t = hzto(&cl->undertime_);
+			t = tvhzto(&cl->undertime_);
 #else
 			/* other BSDs round down the tick */
-			t = hzto(&cl->undertime_) + 1;
+			t = tvhzto(&cl->undertime_) + 1;
 #endif
 		} else
 			t = 2;
@@ -1778,7 +1778,7 @@ _getq_random(class_queue_t *q)
 	} else {
 		struct mbuf *prev = NULL;
 
-		n = arc4random() % qlen(q) + 1;
+		n = cprng_fast32() % qlen(q) + 1;
 		for (i = 0; i < n; i++) {
 			prev = m;
 			m = m->m_nextpkt;

@@ -1,4 +1,4 @@
-/* $NetBSD: vnode.c,v 1.8 2007/10/10 20:42:20 ad Exp $ */
+/* $NetBSD: vnode.c,v 1.15 2015/08/19 20:33:29 dholland Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,10 +35,10 @@
 #include <sys/mount.h>
 #include <sys/queue.h>
 
-#include <ufs/ufs/inode.h>
-#include <ufs/ufs/ufsmount.h>
+#define VU_DIROP 0x01000000 /* XXX XXX from sys/vnode.h */
 #define vnode uvnode
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_inode.h>
 #undef vnode
 
 #include <assert.h>
@@ -60,6 +53,7 @@
 
 #include "bufcache.h"
 #include "vnode.h"
+#include "kernelops.h"
 
 struct uvnodelst vnodelist;
 struct uvnodelst getvnodelist[VNODE_HASH_MAX];
@@ -80,11 +74,11 @@ int
 raw_vop_strategy(struct ubuf * bp)
 {
 	if (bp->b_flags & B_READ) {
-		return pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
-		    dbtob(bp->b_blkno));
+		return kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		    bp->b_blkno * dev_bsize);
 	} else {
-		return pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
-		    dbtob(bp->b_blkno));
+		return kops.ko_pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		    bp->b_blkno * dev_bsize);
 	}
 }
 
@@ -147,7 +141,7 @@ vnode_destroy(struct uvnode *tossvp)
 		buf_destroy(bp);
 	}
 	free(VTOI(tossvp)->inode_ext.lfs);
-	free(VTOI(tossvp)->i_din.ffs1_din);
+	free(VTOI(tossvp)->i_din);
 	memset(VTOI(tossvp), 0, sizeof(struct inode));
 	free(tossvp->v_data);
 	memset(tossvp, 0, sizeof(*tossvp));

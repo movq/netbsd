@@ -1,4 +1,4 @@
-/*	$NetBSD: cyzfirm2h.c,v 1.5 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: cyzfirm2h.c,v 1.13 2014/04/01 15:35:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cyzfirm2h.c,v 1.5 2005/12/11 12:22:18 christos Exp $");
+__RCSID("$NetBSD: cyzfirm2h.c,v 1.13 2014/04/01 15:35:41 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -51,8 +51,12 @@ __RCSID("$NetBSD: cyzfirm2h.c,v 1.5 2005/12/11 12:22:18 christos Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-int	main(int argc, char *argv[]);
-void	usage(void);
+static void	usage(void) __dead;
+#ifdef DEBUG
+#define MAXLINE 8
+#else
+#define MAXLINE 10
+#endif
 
 int
 main(int argc, char *argv[])
@@ -83,8 +87,8 @@ main(int argc, char *argv[])
 		err(1, "unable to allocate include name");
 
 	for (cp = include_name; *cp != '\0'; cp++) {
-		if (isalpha(*cp))
-			*cp = toupper(*cp);
+		if (isalpha((unsigned char)*cp))
+			*cp = toupper((unsigned char)*cp);
 		else if (*cp == '.')
 			*cp = '_';
 	}
@@ -99,14 +103,14 @@ main(int argc, char *argv[])
 		err(1, "unable to mmap input file");
 	(void) close(i);
 
-	fprintf(out_file, "/*\t$NetBSD: cyzfirm2h.c,v 1.5 2005/12/11 12:22:18 christos Exp $\t*/\n\n");
-	fprintf(out_file, "\
-/*
- * Firmware for Cyclades Z series multiport serial boards.
- * Automatically generated from:
- *
- *	%s
- */\n\n", argv[1]);
+	fprintf(out_file, "/*\t$""NetBSD""$\t*/\n\n");
+	fprintf(out_file,
+	    "/*\n"
+	    " * Firmware for Cyclades Z series multiport serial boards.\n"
+	    " * Automatically generated from:\n"
+	    " *\n"
+	    " *\t%s\n"
+	    " */\n\n", argv[1]);
 	fprintf(out_file, "#ifndef _%s_\n", include_name);
 	fprintf(out_file, "#define\t_%s_\n\n", include_name);
 
@@ -116,22 +120,38 @@ main(int argc, char *argv[])
 	while (in_len != 0) {
 		if (i == 0)
 			fprintf(out_file, "\t");
-		fprintf(out_file, "0x%02x, ", *in_ptr);
+		if (*in_ptr == '@' && in_len > 4 &&
+		    memcmp(in_ptr, "@(#)", 4) == 0)
+			fprintf(out_file, "0x%02x,", '_');
+		else
+			fprintf(out_file, "0x%02x,", *in_ptr);
 		in_ptr++;
 		in_len--;
 		i++;
-		if (i == 10) {
+		if (i == MAXLINE) {
+#ifdef DEBUG
+			size_t j;
+			fprintf(out_file, "\t/* ");
+			for (j = 0; j < 8; j++) {
+				unsigned char c = (in_ptr - 8)[j];
+				fputc(isprint(c) ? c : '.', out_file);
+			}
+			fprintf(out_file, " */");
+#endif
 			fprintf(out_file, "\n");
 			i = 0;
+		} else if (in_len != 0) {
+			fprintf(out_file, " ");
 		}
 	}
 	fprintf(out_file, "\n};\n\n");
 
 	fprintf(out_file, "#endif /* _%s_ */\n", include_name);
+	return 0;
 }
 
-void
-usage()
+__dead static void
+usage(void)
 {
 
 	fprintf(stderr, "usage: %s infile outfile\n", getprogname());

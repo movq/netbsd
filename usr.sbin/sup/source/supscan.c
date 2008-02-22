@@ -1,4 +1,4 @@
-/*	$NetBSD: supscan.c,v 1.16 2007/12/20 20:17:52 christos Exp $	*/
+/*	$NetBSD: supscan.c,v 1.24 2017/05/04 16:26:10 sevan Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -158,10 +158,9 @@ TREE *refuseT = NULL;		/* list of all files specified by <coll>.list */
 
 
 void usage(void);
-void init(int, char **);
+int init(int, char **);
 static SCAN_COLLECTION *getscancoll(char *, char *, char *);
 int localhost(char *);
-int main(int, char **);
 
 /*************************************
  ***    M A I N   R O U T I N E    ***
@@ -171,6 +170,7 @@ int
 main(int argc, char **argv)
 {
 	SCAN_COLLECTION * volatile c;	/* Avoid longjmp clobbering */
+	volatile int errs;
 #ifdef RLIMIT_DATA
 	struct rlimit dlim;
 
@@ -185,27 +185,37 @@ main(int argc, char **argv)
 	}
 #endif
 
-	init(argc, argv);	/* process arguments */
+	errs = init(argc, argv);	/* process arguments */
+	if (errs) {
+		fprintf(stderr, "supscan: %d collections had errors", errs);
+		return 1;
+	}
 	for (c = firstC; c; c = c->Cnext) {
 		collname = c->Cname;
 		basedir = c->Cbase;
 		prefix = c->Cprefix;
-		(void) chdir(basedir);
-		scantime = time((time_t *) NULL);
+		if (chdir(basedir) < 0) {
+			fprintf(stderr, "supscan: Can't chdir to %s (%s)",
+			    basedir, strerror(errno));
+			return 1;
+		}
+		scantime = time(NULL);
 		if (!quiet)
 			printf("SUP Scan for %s starting at %s", collname,
 			    ctime(&scantime));
 		(void) fflush(stdout);
 		if (!setjmp(sjbuf)) {
 			makescanlists();	/* record names in scan files */
-			scantime = time((time_t *) NULL);
+			scantime = time(NULL);
 			if (!quiet)
 				printf("SUP Scan for %s completed at %s",
 				    collname, ctime(&scantime));
-		} else
+		} else {
 			fprintf(stderr,
 			    "SUP: Scan for %s aborted at %s", collname,
 			    ctime(&scantime));
+			errs++;
+		}
 		if (!quiet)
 			(void) fflush(stdout);
 	}
@@ -217,7 +227,7 @@ main(int argc, char **argv)
 			free(c->Cprefix);
 		free(c);
 	}
-	exit(0);
+	return errs ? 1 : 0;
 }
 /*****************************************
  ***    I N I T I A L I Z A T I O N    ***
@@ -232,7 +242,7 @@ usage(void)
 	exit(1);
 }
 
-void
+int
 init(int argc, char **argv)
 {
 	char buf[STRINGLENGTH], fbuf[STRINGLENGTH], *p, *q;
@@ -240,6 +250,7 @@ init(int argc, char **argv)
 	SCAN_COLLECTION **c;
 	int fflag, sflag;
 	char *filename = NULL;
+	int errs = 0;
 
 	quiet = FALSE;
 	trace = FALSE;
@@ -285,22 +296,23 @@ init(int argc, char **argv)
 		if ((f = fopen(buf, "r")) == NULL)
 			quit(1, "supscan: Unable to open %s\n", buf);
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			collname = nxtarg(&p, " \t=");
 			p = skipover(p, " \t=");
 			if (!localhost(p))
 				continue;
-			*c = getscancoll(filename, estrdup(collname),
-			    (char *) NULL);
+			*c = getscancoll(filename, estrdup(collname), NULL);
 			if (*c)
 				c = &((*c)->Cnext);
+			else
+				errs++;
 		}
 		(void) fclose(f);
-		return;
+		return errs;
 	}
 	if (argc < 2 && fflag) {
 		firstC = NULL;
@@ -308,24 +320,29 @@ init(int argc, char **argv)
 		if ((f = fopen(filename, "r")) == NULL)
 			quit(1, "supscan: Unable to open %s\n", filename);
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			q = nxtarg(&p, " \t=");
 			p = skipover(p, " \t=");
 			*c = getscancoll(filename, estrdup(q), estrdup(p));
 			if (*c)
 				c = &((*c)->Cnext);
+			else
+				errs++;
 		}
 		(void) fclose(f);
-		return;
+		return errs;
 	}
 	if (argc < 2 || argc > 3)
 		usage();
 	firstC = getscancoll(filename, estrdup(argv[1]),
-	    argc > 2 ? estrdup(argv[2]) : (char *) NULL);
+	    argc > 2 ? estrdup(argv[2]) : NULL);
+	if (firstC == NULL)
+		errs++;
+	return errs;
 }
 
 static SCAN_COLLECTION *
@@ -338,10 +355,10 @@ getscancoll(char *filename, char *collname, char *basedir)
 	if (basedir == NULL) {
 		if ((f = fopen(filename, "r")) != NULL) {
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-				q = index(p, '\n');
+				q = strchr(p, '\n');
 				if (q)
 					*q = 0;
-				if (index("#;:", *p))
+				if (strchr("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t=");
 				if (strcmp(q, collname) == 0) {
@@ -358,23 +375,24 @@ getscancoll(char *filename, char *collname, char *basedir)
 		}
 	}
 	if (chdir(basedir) < 0) {
-		fprintf(stderr, "supscan:  Can't chdir to base directory %s for %s\n",
-		    basedir, collname);
+		fprintf(stderr, "supscan: Can't chdir to base directory %s "
+		    "for %s (%s)\n", basedir, collname, strerror(errno));
 		return (NULL);
 	}
 	prefix = NULL;
 	(void) sprintf(buf, FILEPREFIX, collname);
 	if ((f = fopen(buf, "r")) != NULL) {
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			prefix = estrdup(p);
 			if (chdir(prefix) < 0) {
-				fprintf(stderr, "supscan: can't chdir to %s from base directory %s for %s\n",
-				    prefix, basedir, collname);
+				fprintf(stderr, "supscan: can't chdir to %s "
+				    " from base directory %s for %s (%s)\n",
+				    prefix, basedir, collname, strerror(errno));
 				fclose(f);
 				free(prefix);
 				return (NULL);
@@ -383,7 +401,7 @@ getscancoll(char *filename, char *collname, char *basedir)
 		}
 		(void) fclose(f);
 	}
-	if ((c = (SCAN_COLLECTION *) malloc(sizeof(SCAN_COLLECTION))) == NULL)
+	if ((c = malloc(sizeof(*c))) == NULL)
 		quit(1, "supscan: can't malloc collection structure\n");
 	c->Cname = collname;
 	c->Cbase = basedir;
@@ -393,7 +411,7 @@ getscancoll(char *filename, char *collname, char *basedir)
 }
 
 void
-goaway(char *fmt, ...)
+goaway(const char *fmt, ...)
 {
 	va_list ap;
 

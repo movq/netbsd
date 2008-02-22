@@ -1,31 +1,32 @@
 #ifndef _IF_SRT_H_1b91f8f1_
 #define _IF_SRT_H_1b91f8f1_
 
-/* $NetBSD: if_srt.h,v 1.2 2006/12/29 10:40:48 wiz Exp $ */
+/* $NetBSD: if_srt.h,v 1.4 2015/09/06 06:01:01 dholland Exp $ */
 
 /* This file is in the public domain. */
 
+#include <sys/ioccom.h> /* for _IOR etc */
 #include <net/if.h> /* XXX for IFNAMSIZ */
 #include <netinet/in.h> /* for in_addr/in6_addr */
 
 struct srt_rt {
-  unsigned int inx;
-  int af;
-  union {
-    struct in_addr v4;
-    struct in6_addr v6;
-    } srcmatch;
-  unsigned int srcmask;
-  union {
-    struct ifnet *dstifp;
-    char dstifn[IFNAMSIZ];
-    } u;
-  union {
-    struct sockaddr_in sin;
-    struct sockaddr_in6 sin6;
-    struct sockaddr sa;
-    } dst;
-  } ;
+	unsigned int inx;
+	int af;
+	union {
+		struct in_addr v4;
+		struct in6_addr v6;
+	} srcmatch;
+	unsigned int srcmask;
+	union {
+		struct ifnet *dstifp;
+		char dstifn[IFNAMSIZ];
+	} u;
+	union {
+		struct sockaddr_in sin;
+		struct sockaddr_in6 sin6;
+		struct sockaddr sa;
+	} dst;
+};
 
 /* Gets the number of slots in the rts array */
 #define SRT_GETNRT _IOR('e',0,unsigned int)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga_clock.c,v 1.12 2008/01/20 16:28:24 joerg Exp $ */
+/*	$NetBSD: ifpga_clock.c,v 1.15 2013/02/19 10:57:10 skrll Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -31,15 +31,16 @@
 
 /* 
  * The IFPGA has three timers.  Timer 0 is clocked by the system bus clock,
- * while timers 1 and 2 are clocked at 24MHz.  To keep things simple here,
- * we use timers 1 and 2 only.  All three timers are 16-bit counters that
- * are programmable in either periodic mode or in one-shot mode.
+ * while timers 1 and 2 are clocked at 24MHz (1Mhz for Integrator CP).  To
+ * keep things simple here, we use timers 1 and 2 only.  All three timers
+ * are 16-bit counters that are programmable in either periodic mode or in
+ * one-shot mode.
  */
 
 /* Include header files */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga_clock.c,v 1.12 2008/01/20 16:28:24 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga_clock.c,v 1.15 2013/02/19 10:57:10 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -99,6 +100,7 @@ static struct timecounter ifpga_timecounter = {
 static volatile uint32_t ifpga_base;
 
 extern struct ifpga_softc *ifpga_sc;
+extern device_t ifpga_dev;
 
 static int clock_started = 0;
 
@@ -197,8 +199,13 @@ load_timer(int base, int intvl)
 	if (intvl & ~0x0000ffff)
 		panic("clock: Invalid interval");
 
+#if defined(INTEGRATOR_CP)
+	control = (TIMERx_CTRL_ENABLE | TIMERx_CTRL_MODE_PERIODIC | 
+	    TIMERx_CTRL_PRESCALE_DIV16 | TIMERx_CTRL_RAISE_IRQ);
+#else
 	control = (TIMERx_CTRL_ENABLE | TIMERx_CTRL_MODE_PERIODIC | 
 	    TIMERx_CTRL_PRESCALE_DIV16);
+#endif
 
 	bus_space_write_4(ifpga_sc->sc_iot, ifpga_sc->sc_tmr_ioh,
 	    base + TIMERx_LOAD, intvl);
@@ -233,7 +240,7 @@ setstatclockrate(int new_hz)
  */
  
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
 	int intvl;
 	int statint;
@@ -287,7 +294,7 @@ cpu_initclocks()
 	    IPL_CLOCK, clockhandler, 0);
 	if (ifpga_sc->sc_clockintr == NULL)
 		panic("%s: Cannot install timer 1 interrupt handler",
-		    ifpga_sc->sc_dev.dv_xname);
+		    device_xname(ifpga_dev));
 
 	ifpga_sc->sc_clock_count
 	    = load_timer(IFPGA_TIMER1_BASE, intvl);
@@ -306,7 +313,7 @@ cpu_initclocks()
 	    IPL_HIGH, statclockhandler, 0);
 	if (ifpga_sc->sc_statclockintr == NULL)
 		panic("%s: Cannot install timer 2 interrupt handler",
-		    ifpga_sc->sc_dev.dv_xname);
+		    device_xname(ifpga_dev));
 	load_timer(IFPGA_TIMER2_BASE, statint);
 
 	tc_init(&ifpga_timecounter);

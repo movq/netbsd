@@ -1,3 +1,5 @@
+/*	$NetBSD: logutmp.c,v 1.12 2011/09/16 16:13:17 plunky Exp $	*/
+
 /*
  * Portions Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -52,6 +54,11 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: logutmp.c,v 1.12 2011/09/16 16:13:17 plunky Exp $");
+#endif /* not lint */
+
 #include <sys/types.h>
 #include <sys/param.h>
 
@@ -91,7 +98,7 @@ ftpd_login(const struct utmp *ut)
 	 */
 	if (topslot < 0) {
 		topslot = 0;
-		while (getttyent() != (struct ttyent *)NULL)
+		while (getttyent() != NULL)
 			topslot++;
 	}
 	if ((topslot < 0) || ((fd < 0)

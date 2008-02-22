@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365var.h,v 1.28 2007/12/05 07:58:30 ad Exp $	*/
+/*	$NetBSD: i82365var.h,v 1.32 2012/10/27 17:18:20 chs Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -50,11 +50,11 @@ struct pcic_event {
 #define	PCIC_EVENT_REMOVAL	1
 
 struct pcic_handle {
-	struct device *ph_parent;
+	device_t ph_parent;
 	bus_space_tag_t ph_bus_t;	/* I/O or MEM?  I don't mind */
 	bus_space_handle_t ph_bus_h;
-	u_int8_t (*ph_read)(struct pcic_handle *, int);
-	void (*ph_write)(struct pcic_handle *, int, u_int8_t);
+	uint8_t (*ph_read)(struct pcic_handle *, int);
+	void (*ph_write)(struct pcic_handle *, int, uint8_t);
 
 	int	vendor;		/* vendor of chip */
 	int	chip;		/* chip index 0 or 1 */
@@ -76,7 +76,7 @@ struct pcic_handle {
 		int		width;
 	} io[PCIC_IO_WINS];
 	int	ih_irq;
-	struct device *pcmcia;
+	device_t pcmcia;
 
 	int shutdown;
 	struct lwp *event_thread;
@@ -117,7 +117,7 @@ struct pcic_handle {
 #define	PCIC_NSLOTS	4
 
 struct pcic_softc {
-	struct device dev;
+	device_t dev;
 
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
@@ -168,10 +168,10 @@ void	pcic_attach_sockets(struct pcic_softc *);
 void	pcic_attach_sockets_finish(struct pcic_softc *);
 int	pcic_intr(void *arg);
 
-/*
+#if 0
 static __inline int pcic_read(struct pcic_handle *, int);
-static __inline void pcic_write(struct pcic_handle *, int, u_int8_t);
-*/
+static __inline void pcic_write(struct pcic_handle *, int, uint8_t);
+#endif
 
 int	pcic_chip_mem_alloc(pcmcia_chipset_handle_t, bus_size_t,
 	    struct pcmcia_mem_handle *);

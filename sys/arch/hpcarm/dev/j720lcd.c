@@ -1,4 +1,4 @@
-/*	$NetBSD: j720lcd.c,v 1.3 2006/06/27 14:36:50 peter Exp $	*/
+/*	$NetBSD: j720lcd.c,v 1.5 2009/05/29 14:15:45 rjs Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 /* Jornada 720 LCD screen driver. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: j720lcd.c,v 1.3 2006/06/27 14:36:50 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: j720lcd.c,v 1.5 2009/05/29 14:15:45 rjs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,29 +52,29 @@ __KERNEL_RCSID(0, "$NetBSD: j720lcd.c,v 1.3 2006/06/27 14:36:50 peter Exp $");
 #include <hpcarm/dev/sed1356var.h>
 
 #ifdef DEBUG
-#define DPRINTF(arg)	printf arg
+#define DPRINTF(arg)	aprint_normal arg
 #else
 #define DPRINTF(arg)	/* nothing */
 #endif
 
 struct j720lcd_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 	struct j720ssp_softc	*sc_ssp;
 };
 
-static int	j720lcd_match(struct device *, struct cfdata *, void *);
-static void	j720lcd_attach(struct device *, struct device *, void *);
+static int	j720lcd_match(device_t, cfdata_t, void *);
+static void	j720lcd_attach(device_t, device_t, void *);
 
 static int	j720lcd_param(void *, int, long, void *);
 int		j720lcd_power(void *, int, long, void *);
 
-CFATTACH_DECL(j720lcd, sizeof(struct j720lcd_softc),
+CFATTACH_DECL_NEW(j720lcd, sizeof(struct j720lcd_softc),
     j720lcd_match, j720lcd_attach, NULL, NULL);
 
 
 static int
-j720lcd_match(struct device *parent, struct cfdata *cf, void *aux)
+j720lcd_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (!platid_match(&platid, &platid_mask_MACH_HP_JORNADA_7XX))
@@ -93,12 +86,13 @@ j720lcd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-j720lcd_attach(struct device *parent, struct device *self, void *aux)
+j720lcd_attach(device_t parent, device_t self, void *aux)
 {
-	struct j720lcd_softc *sc = (struct j720lcd_softc *)self;
+	struct j720lcd_softc *sc = device_private(self);
 	int brightness, contrast;
 
-	sc->sc_ssp = (struct j720ssp_softc *)parent;
+	sc->sc_dev = self;
+	sc->sc_ssp = device_private(parent);
 
 	/* LCD brightness hooks. */
 	config_hook(CONFIG_HOOK_SET, CONFIG_HOOK_BRIGHTNESS,
@@ -127,7 +121,7 @@ j720lcd_attach(struct device *parent, struct device *self, void *aux)
 	config_hook_call(CONFIG_HOOK_GET, CONFIG_HOOK_BRIGHTNESS, &brightness);
 	config_hook_call(CONFIG_HOOK_GET, CONFIG_HOOK_CONTRAST, &contrast);
 
-	printf(": brightness %d, contrast %d\n", brightness, contrast);
+	aprint_normal(": brightness %d, contrast %d\n", brightness, contrast);
 }
 
 static int

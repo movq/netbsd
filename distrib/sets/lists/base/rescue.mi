@@ -1,4 +1,4 @@
-# $NetBSD: rescue.mi,v 1.27 2008/01/03 20:47:57 jdc Exp $
+# $NetBSD: rescue.mi,v 1.41 2018/04/11 00:26:38 rin Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -11,7 +11,7 @@
 ./rescue/bzip2					base-rescue-root
 ./rescue/cat					base-rescue-root
 ./rescue/ccdconfig				base-rescue-root
-./rescue/cgdconfig				base-rescue-root	crypto
+./rescue/cgdconfig				base-rescue-root
 ./rescue/chgrp					base-rescue-root
 ./rescue/chio					base-rescue-root
 ./rescue/chmod					base-rescue-root
@@ -34,6 +34,7 @@
 ./rescue/echo					base-rescue-root
 ./rescue/ed					base-rescue-root
 ./rescue/egrep					base-rescue-root
+./rescue/ekermit				base-rescue-root
 ./rescue/ex					base-rescue-root
 ./rescue/expr					base-rescue-root
 ./rescue/fdisk					base-rescue-root
@@ -46,6 +47,7 @@
 ./rescue/fsdb					base-rescue-root
 ./rescue/fsirand				base-rescue-root
 ./rescue/ftp					base-rescue-root
+./rescue/gpt					base-rescue-root
 ./rescue/grep					base-rescue-root
 ./rescue/gunzip					base-rescue-root
 ./rescue/gzcat					base-rescue-root
@@ -65,14 +67,15 @@
 ./rescue/ldd					base-rescue-root
 ./rescue/less					base-rescue-root
 ./rescue/lfs_cleanerd				base-rescue-root
-./rescue/lmcctl					base-rescue-root	obsolete
 ./rescue/lmcconfig				base-rescue-root
+./rescue/lmcctl					base-obsolete	obsolete
 ./rescue/ln					base-rescue-root
 ./rescue/ls					base-rescue-root
 ./rescue/mbrlabel				base-rescue-root
 ./rescue/mkdir					base-rescue-root
 ./rescue/mknod					base-rescue-root
 ./rescue/modload				base-rescue-root
+./rescue/modstat				base-rescue-root
 ./rescue/modunload				base-rescue-root
 ./rescue/more					base-rescue-root
 ./rescue/mount					base-rescue-root
@@ -91,7 +94,7 @@
 ./rescue/mount_ntfs				base-rescue-root
 ./rescue/mount_null				base-rescue-root
 ./rescue/mount_overlay				base-rescue-root
-./rescue/mount_portal				base-rescue-root
+./rescue/mount_portal				base-obsolete		obsolete
 ./rescue/mount_procfs				base-rescue-root
 ./rescue/mount_smbfs				base-rescue-root
 ./rescue/mount_tmpfs				base-rescue-root
@@ -104,9 +107,11 @@
 ./rescue/newfs_lfs				base-rescue-root
 ./rescue/newfs_msdos				base-rescue-root
 ./rescue/pax					base-rescue-root
+./rescue/pdisk					base-rescue-root
 ./rescue/ping					base-rescue-root
 ./rescue/ping6					base-rescue-root	use_inet6
 ./rescue/pppoectl				base-rescue-root
+./rescue/progress				base-rescue-root
 ./rescue/ps					base-rescue-root
 ./rescue/pwd					base-rescue-root
 ./rescue/raidctl				base-rescue-root
@@ -123,33 +128,35 @@
 ./rescue/route					base-rescue-root
 ./rescue/routed					base-rescue-root
 ./rescue/rrestore				base-rescue-root
-./rescue/rtsol					base-rescue-root	use_inet6
+./rescue/rtsol					base-obsolete		obsolete
 ./rescue/savecore				base-rescue-root
 ./rescue/scan_ffs				base-rescue-root
-./rescue/scp					base-rescue-root	crypto
+./rescue/scp					base-rescue-root
 ./rescue/scsictl				base-rescue-root
 ./rescue/setkey					base-rescue-root
 ./rescue/sh					base-rescue-root
 ./rescue/shutdown				base-rescue-root
 ./rescue/slattach				base-rescue-root
 ./rescue/sleep					base-rescue-root
-./rescue/slogin					base-rescue-root	crypto
-./rescue/ssh					base-rescue-root	crypto
+./rescue/slogin					base-rescue-root
+./rescue/ssh					base-rescue-root
 ./rescue/stty					base-rescue-root
 ./rescue/swapctl				base-rescue-root
 ./rescue/swapon					base-rescue-root
 ./rescue/sync					base-rescue-root
 ./rescue/sysctl					base-rescue-root
-./rescue/systrace				base-rescue-root	obsolete
+./rescue/systrace				base-obsolete		obsolete
 ./rescue/tar					base-rescue-root
+./rescue/terminfo.db				base-obsolete		obsolete
 ./rescue/test					base-rescue-root
 ./rescue/tetris					base-rescue-root
 ./rescue/ttyflags				base-rescue-root
 ./rescue/tunefs					base-rescue-root
 ./rescue/umount					base-rescue-root
 ./rescue/veriexecctl				base-rescue-root
-./rescue/vnconfig				base-rescue-root
 ./rescue/vi					base-rescue-root
+./rescue/vnconfig				base-rescue-root
+./rescue/vndconfig				base-rescue-root
 ./rescue/wdogctl				base-rescue-root
 ./rescue/wsconsctl				base-rescue-root
 ./rescue/zcat					base-rescue-root

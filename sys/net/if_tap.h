@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tap.h,v 1.4 2007/09/10 10:35:55 cube Exp $	*/
+/*	$NetBSD: if_tap.h,v 1.6 2015/09/06 06:01:01 dholland Exp $	*/
 
 /*
  *  Copyright (c) 2004 The NetBSD Foundation.
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -31,6 +28,8 @@
 
 #ifndef _NET_IF_TAP_H_
 #define _NET_IF_TAP_H_
+
+#include <sys/ioccom.h>
 
 /* 'e' comes from former name 'ethfoo' */
 #define TAPGIFNAME	_IOR('e', 0, struct ifreq)

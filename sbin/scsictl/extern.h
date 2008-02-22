@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.5 2005/02/05 13:37:39 xtraeme Exp $	*/
+/*	$NetBSD: extern.h,v 1.7 2012/02/21 02:19:41 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@ char	*scsi_decode_sense(const unsigned char *, int, char *, size_t);
 void	scsi_print_sense(const char *, const scsireq_t *, int);
 
 /* scsi_subr.c */
-void	scsi_command(int, void *, size_t, void *, size_t, int, int);
+void	scsi_command(int, const void *, size_t, void *, size_t, int, int);
 void	scsi_mode_sense(int, u_int8_t, u_int8_t, void *, size_t);
 void	scsi_mode_select(int, u_int8_t, void *, size_t);
 void	scsi_request_sense(int, void *, size_t);

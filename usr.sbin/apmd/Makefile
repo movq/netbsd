@@ -1,18 +1,18 @@
-#	$NetBSD: Makefile,v 1.12 2007/07/29 14:34:45 nonaka Exp $
+#	$NetBSD: Makefile,v 1.16 2013/05/02 03:56:42 matt Exp $
 
-.if (${MACHINE} == "i386" || \
+.include <bsd.own.mk>
+
+.if (${MACHINE_ARCH} == "i386" || \
+     ${MACHINE_CPU} == "arm" || \
      ${MACHINE} == "hpcmips" || \
      ${MACHINE} == "hpcsh" || \
      ${MACHINE} == "macppc" || \
-     ${MACHINE} == "sparc" || \
-     ${MACHINE} == "zaurus")
+     ${MACHINE} == "sparc")
 PROG=	apmd
 SRCS=	apmd.c apmsubr.c
 .endif
 
 MAN=	apmd.8
-
-WARNS=  3
 
 LDADD+=	-lutil
 DPADD+=	${LIBUTIL}

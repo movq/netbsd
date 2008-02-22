@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $	*/
+/*	$NetBSD: fault.c,v 1.105 2017/10/28 00:37:12 pgoyette Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -81,15 +81,15 @@
 #include "opt_kgdb.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.105 2017/10/28 00:37:12 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
 #include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_stat.h>
@@ -97,11 +97,9 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $");
 #include <uvm/uvm.h>
 #endif
 
-#include <arm/cpuconf.h>
+#include <arm/locore.h>
 
-#include <machine/frame.h>
-#include <arm/arm32/katelib.h>
-#include <machine/intr.h>
+#include <machine/pcb.h>
 #if defined(DDB) || defined(KGDB)
 #include <machine/db_machdep.h>
 #ifdef KGDB
@@ -114,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $");
 
 #include <arch/arm/arm/disassem.h>
 #include <arm/arm32/machdep.h>
- 
+
 extern char fusubailout[];
 
 #ifdef DEBUG
@@ -155,9 +153,6 @@ static const struct data_abort data_aborts[] = {
 	{NULL,		"Permission Fault (P)"}
 };
 
-/* Determine if a fault came from user mode */
-#define	TRAP_USERMODE(tf)	((tf->tf_spsr & PSR_MODE) == PSR_USR32_MODE)
-
 /* Determine if 'x' is a permission fault */
 #define	IS_PERMISSION_FAULT(x)					\
 	(((1 << ((x) & FAULT_TYPE_MASK)) &			\
@@ -171,12 +166,25 @@ static const struct data_abort data_aborts[] = {
 #endif
 
 static inline void
-call_trapsignal(struct lwp *l, ksiginfo_t *ksi)
+call_trapsignal(struct lwp *l, const struct trapframe *tf, ksiginfo_t *ksi)
 {
+	if (l->l_proc->p_pid == 1 || cpu_printfataltraps) {
+		printf("%d.%d(%s): trap: signo=%d code=%d addr=%p trap=%#x\n",
+		    l->l_proc->p_pid, l->l_lid, l->l_proc->p_comm,
+		    ksi->ksi_signo, ksi->ksi_code, ksi->ksi_addr,
+		    ksi->ksi_trap);
+		printf("r0=%08x r1=%08x r2=%08x r3=%08x\n",
+		    tf->tf_r0, tf->tf_r1, tf->tf_r2, tf->tf_r3);
+		printf("r4=%08x r5=%08x r6=%08x r7=%08x\n",
+		    tf->tf_r4, tf->tf_r5, tf->tf_r6, tf->tf_r7);
+		printf("r8=%08x r9=%08x rA=%08x rB=%08x\n",
+		    tf->tf_r8, tf->tf_r9, tf->tf_r10, tf->tf_r11);
+		printf("ip=%08x sp=%08x lr=%08x pc=%08x spsr=%08x\n",
+		    tf->tf_r12, tf->tf_usr_sp, tf->tf_usr_lr, tf->tf_pc,
+		    tf->tf_spsr);
+	}
 
-	KERNEL_LOCK(1, l);
 	TRAPSIGNAL(l, ksi);
-	KERNEL_UNLOCK_LAST(l);
 }
 
 static inline int
@@ -193,13 +201,13 @@ data_abort_fixup(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l)
 	/*
 	 * Oops, couldn't fix up the instruction
 	 */
-	printf("data_abort_fixup: fixup for %s mode data abort failed.\n",
+	printf("%s: fixup for %s mode data abort failed.\n", __func__,
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((uint16 *)(tf->tf_pc & ~1)),
+		    *((uint16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -223,44 +231,58 @@ void
 data_abort_handler(trapframe_t *tf)
 {
 	struct vm_map *map;
-	struct pcb *pcb;
-	struct lwp *l;
-	u_int user, far, fsr;
+	struct lwp * const l = curlwp;
+	struct cpu_info * const ci = curcpu();
+	u_int far, fsr;
 	vm_prot_t ftype;
 	void *onfault;
 	vaddr_t va;
 	int error;
 	ksiginfo_t ksi;
 
-	UVMHIST_FUNC("data_abort_handler"); 
+	UVMHIST_FUNC(__func__);
+	UVMHIST_CALLED(maphist);
 
 	/* Grab FAR/FSR before enabling interrupts */
 	far = cpu_faultaddress();
 	fsr = cpu_faultstatus();
 
-	UVMHIST_CALLED(maphist);
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	ci->ci_data.cpu_ntrap++;
 
 	/* Re-enable interrupts if they were enabled previously */
-	if (__predict_true((tf->tf_spsr & I32_bit) == 0))
-		enable_interrupts(I32_bit);
+	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+#ifdef __NO_FIQ
+	if (__predict_true((tf->tf_spsr & I32_bit) != I32_bit))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
+#else
+	if (__predict_true((tf->tf_spsr & IF32_bits) != IF32_bits))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
+#endif
 
-	/* Get the current lwp structure or lwp0 if there is none */
-	l = (curlwp != NULL) ? curlwp : &lwp0;
+	/* Get the current lwp structure */
 
-	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, far=0x%x, fsr=0x%x)",
-	    tf->tf_pc, l, far, fsr);
+	UVMHIST_LOG(maphist, " (l=%#jx, far=%#jx, fsr=%#jx",
+	    (uintptr_t)l, far, fsr, 0);
+	UVMHIST_LOG(maphist, "  tf=%#jx, pc=%#jx)",
+	    (uintptr_t)tf, (uintptr_t)tf->tf_pc, 0, 0);
 
 	/* Data abort came from user mode? */
-	if ((user = TRAP_USERMODE(tf)) != 0)
+	bool user = (TRAP_USERMODE(tf) != 0);
+	if (user)
 		LWP_CACHE_CREDS(l, l->l_proc);
 
 	/* Grab the current pcb */
-	pcb = &l->l_addr->u_pcb;
+	struct pcb * const pcb = lwp_getpcb(l);
+
+	curcpu()->ci_abt_evs[fsr & FAULT_TYPE_MASK].ev_count++;
 
 	/* Invoke the appropriate handler, if necessary */
 	if (__predict_false(data_aborts[fsr & FAULT_TYPE_MASK].func != NULL)) {
+#ifdef DIAGNOSTIC
+		printf("%s: data_aborts fsr=0x%x far=0x%x\n",
+		    __func__, fsr, far);
+#endif
 		if ((data_aborts[fsr & FAULT_TYPE_MASK].func)(tf, fsr, far,
 		    l, &ksi))
 			goto do_trapsignal;
@@ -284,12 +306,12 @@ data_abort_handler(trapframe_t *tf)
 	/* fusubailout is used by [fs]uswintr to avoid page faulting */
 	if (__predict_false(pcb->pcb_onfault == fusubailout)) {
 		tf->tf_r0 = EFAULT;
-		tf->tf_pc = (register_t)(intptr_t) pcb->pcb_onfault;
+		tf->tf_pc = (intptr_t) pcb->pcb_onfault;
 		return;
 	}
 
-	if (user)
-		l->l_addr->u_pcb.pcb_tf = tf;
+	KASSERTMSG(!user || tf == lwp_trapframe(l), "tf %p vs %p", tf,
+	    lwp_trapframe(l));
 
 	/*
 	 * Make sure the Program Counter is sane. We could fall foul of
@@ -298,13 +320,13 @@ data_abort_handler(trapframe_t *tf)
 	 * further down if we have to decode the current instruction.
 	 */
 #ifdef THUMB_CODE
-	/* 
+	/*
 	 * XXX: It would be nice to be able to support Thumb in the kernel
 	 * at some point.
 	 */
 	if (__predict_false(!user && (tf->tf_pc & 3) != 0)) {
-		printf("\ndata_abort_fault: Misaligned Kernel-mode "
-		    "Program Counter\n");
+		printf("\n%s: Misaligned Kernel-mode Program Counter\n",
+		    __func__);
 		dab_fatal(tf, fsr, far, l, NULL);
 	}
 #else
@@ -317,7 +339,7 @@ data_abort_handler(trapframe_t *tf)
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_signo = SIGILL;
 			ksi.ksi_code = ILL_ILLOPC;
-			ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
+			ksi.ksi_addr = (uint32_t *)(intptr_t) far;
 			ksi.ksi_trap = fsr;
 			goto do_trapsignal;
 		}
@@ -325,8 +347,8 @@ data_abort_handler(trapframe_t *tf)
 		/*
 		 * The kernel never executes Thumb code.
 		 */
-		printf("\ndata_abort_fault: Misaligned Kernel-mode "
-		    "Program Counter\n");
+		printf("\n%s: Misaligned Kernel-mode Program Counter\n",
+		    __func__);
 		dab_fatal(tf, fsr, far, l, NULL);
 	}
 #endif
@@ -340,7 +362,7 @@ data_abort_handler(trapframe_t *tf)
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
-		ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
+		ksi.ksi_addr = (uint32_t *)(intptr_t) far;
 		ksi.ksi_trap = fsr;
 		goto do_trapsignal;
 	default:
@@ -355,10 +377,10 @@ data_abort_handler(trapframe_t *tf)
 	 *	2. pcb_onfault not set or
 	 *	3. pcb_onfault set and not LDRT/LDRBT/STRT/STRBT instruction.
 	 */
-	if (user == 0 && (va >= VM_MIN_KERNEL_ADDRESS ||
+	if (!user && (va >= VM_MIN_KERNEL_ADDRESS ||
 	    (va < VM_MIN_ADDRESS && vector_page == ARM_VECTORS_LOW)) &&
 	    __predict_true((pcb->pcb_onfault == NULL ||
-	     (ReadWord(tf->tf_pc) & 0x05200000) != 0x04200000))) {
+	     (read_insn(tf->tf_pc, false) & 0x05200000) != 0x04200000))) {
 		map = kernel_map;
 
 		/* Was the fault due to the FPE/IPKDB ? */
@@ -366,7 +388,7 @@ data_abort_handler(trapframe_t *tf)
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_signo = SIGSEGV;
 			ksi.ksi_code = SEGV_ACCERR;
-			ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
+			ksi.ksi_addr = (uint32_t *)(intptr_t) far;
 			ksi.ksi_trap = fsr;
 
 			/*
@@ -375,31 +397,33 @@ data_abort_handler(trapframe_t *tf)
 			 * userland that actually runs in a priveledged mode
 			 * but uses USR mode permissions for its accesses.
 			 */
-			user = 1;
+			user = true;
 			goto do_trapsignal;
 		}
-	} else
+	} else {
 		map = &l->l_proc->p_vmspace->vm_map;
+	}
 
 	/*
-	 * We need to know whether the page should be mapped
-	 * as R or R/W. The MMU does not give us the info as
-	 * to whether the fault was caused by a read or a write.
+	 * We need to know whether the page should be mapped as R or R/W.
+	 * Before ARMv6, the MMU did not give us the info as to whether the
+	 * fault was caused by a read or a write.
 	 *
-	 * However, we know that a permission fault can only be
-	 * the result of a write to a read-only location, so
-	 * we can deal with those quickly.
+	 * However, we know that a permission fault can only be the result of
+	 * a write to a read-only location, so we can deal with those quickly.
 	 *
-	 * Otherwise we need to disassemble the instruction
-	 * responsible to determine if it was a write.
+	 * Otherwise we need to disassemble the instruction responsible to
+	 * determine if it was a write.
 	 */
-	if (IS_PERMISSION_FAULT(fsr))
-		ftype = VM_PROT_WRITE; 
-	else {
+	if (CPU_IS_ARMV6_P() || CPU_IS_ARMV7_P()) {
+		ftype = (fsr & FAULT_WRITE) ? VM_PROT_WRITE : VM_PROT_READ;
+	} else if (IS_PERMISSION_FAULT(fsr)) {
+		ftype = VM_PROT_WRITE;
+	} else {
 #ifdef THUMB_CODE
 		/* Fast track the ARM case.  */
 		if (__predict_false(tf->tf_spsr & PSR_T_bit)) {
-			u_int insn = fusword((void *)(tf->tf_pc & ~1));
+			u_int insn = read_thumb_insn(tf->tf_pc, user);
 			u_int insn_f8 = insn & 0xf800;
 			u_int insn_fe = insn & 0xfe00;
 
@@ -418,16 +442,17 @@ data_abort_handler(trapframe_t *tf)
 		else
 #endif
 		{
-			u_int insn = ReadWord(tf->tf_pc);
+			u_int insn = read_insn(tf->tf_pc, user);
 
 			if (((insn & 0x0c100000) == 0x04000000) || /* STR[B] */
 			    ((insn & 0x0e1000b0) == 0x000000b0) || /* STR[HD]*/
-			    ((insn & 0x0a100000) == 0x08000000))   /* STM/CDT*/
-				ftype = VM_PROT_WRITE; 
+			    ((insn & 0x0a100000) == 0x08000000) || /* STM/CDT*/
+			    ((insn & 0x0f9000f0) == 0x01800090))   /* STREX[BDH] */
+				ftype = VM_PROT_WRITE;
 			else if ((insn & 0x0fb00ff0) == 0x01000090)/* SWP */
-				ftype = VM_PROT_READ | VM_PROT_WRITE; 
+				ftype = VM_PROT_READ | VM_PROT_WRITE;
 			else
-				ftype = VM_PROT_READ; 
+				ftype = VM_PROT_READ;
 		}
 	}
 
@@ -443,7 +468,7 @@ data_abort_handler(trapframe_t *tf)
 		goto out;
 	}
 
-	if (__predict_false(curcpu()->ci_idepth > 0)) {
+	if (__predict_false(curcpu()->ci_intr_depth > 0)) {
 		if (pcb->pcb_onfault) {
 			tf->tf_r0 = EINVAL;
 			tf->tf_pc = (register_t)(intptr_t) pcb->pcb_onfault;
@@ -461,6 +486,8 @@ data_abort_handler(trapframe_t *tf)
 	if (__predict_true(error == 0)) {
 		if (user)
 			uvm_grow(l->l_proc, va); /* Record any stack growth */
+		else
+			ucas_ras_check(tf);
 		UVMHIST_LOG(maphist, " <- uvm", 0, 0, 0, 0);
 		goto out;
 	}
@@ -479,21 +506,32 @@ data_abort_handler(trapframe_t *tf)
 
 	KSI_INIT_TRAP(&ksi);
 
-	if (error == ENOMEM) {
+	switch (error) {
+	case ENOMEM:
 		printf("UVM: pid %d (%s), uid %d killed: "
 		    "out of swap\n", l->l_proc->p_pid, l->l_proc->p_comm,
 		    l->l_cred ? kauth_cred_geteuid(l->l_cred) : -1);
 		ksi.ksi_signo = SIGKILL;
-	} else
+		break;
+	case EACCES:
 		ksi.ksi_signo = SIGSEGV;
-
-	ksi.ksi_code = (error == EACCES) ? SEGV_ACCERR : SEGV_MAPERR;
-	ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
+		ksi.ksi_code = SEGV_ACCERR;
+		break;
+	case EINVAL:
+		ksi.ksi_signo = SIGBUS;
+		ksi.ksi_code = BUS_ADRERR;
+		break;
+	default:
+		ksi.ksi_signo = SIGSEGV;
+		ksi.ksi_code = SEGV_MAPERR;
+		break;
+	}
+	ksi.ksi_addr = (uint32_t *)(intptr_t) far;
 	ksi.ksi_trap = fsr;
-	UVMHIST_LOG(maphist, " <- erorr (%d)", error, 0, 0, 0);
+	UVMHIST_LOG(maphist, " <- error (%jd)", error, 0, 0, 0);
 
 do_trapsignal:
-	call_trapsignal(l, &ksi);
+	call_trapsignal(l, tf, &ksi);
 out:
 	/* If returning to user mode, make sure to invoke userret() */
 	if (user)
@@ -516,9 +554,7 @@ out:
 static int
 dab_fatal(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 {
-	const char *mode;
-
-	mode = TRAP_USERMODE(tf) ? "user" : "kernel";
+	const char * const mode = TRAP_USERMODE(tf) ? "user" : "kernel";
 
 	if (l != NULL) {
 		printf("Fatal %s mode data abort: '%s'\n", mode,
@@ -570,13 +606,12 @@ dab_fatal(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 static int
 dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 {
-
 	/* Alignment faults are always fatal if they occur in kernel mode */
 	if (!TRAP_USERMODE(tf))
 		dab_fatal(tf, fsr, far, l, NULL);
 
 	/* pcb_onfault *must* be NULL at this point */
-	KDASSERT(l->l_addr->u_pcb.pcb_onfault == NULL);
+	KDASSERT(((struct pcb *)lwp_getpcb(l))->pcb_onfault == NULL);
 
 	/* See if the CPU state needs to be fixed up */
 	(void) data_abort_fixup(tf, fsr, far, l);
@@ -585,10 +620,10 @@ dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 	KSI_INIT_TRAP(ksi);
 	ksi->ksi_signo = SIGBUS;
 	ksi->ksi_code = BUS_ADRALN;
-	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
+	ksi->ksi_addr = (uint32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	KASSERTMSG(tf == lwp_trapframe(l), "tf %p vs %p", tf, lwp_trapframe(l));
 
 	return (1);
 }
@@ -619,7 +654,7 @@ static int
 dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
     ksiginfo_t *ksi)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 #ifdef __XSCALE__
 	if ((fsr & FAULT_IMPRECISE) != 0 &&
@@ -638,7 +673,7 @@ dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
 		 * If the current trapframe is at the top of the kernel stack,
 		 * the fault _must_ have come from user mode.
 		 */
-		if (tf != ((trapframe_t *)pcb->pcb_un.un_32.pcb32_sp) - 1) {
+		if (tf != ((trapframe_t *)pcb->pcb_ksp) - 1) {
 			/*
 			 * Kernel mode. We're either about to die a
 			 * spectacular death, or pcb_onfault will come
@@ -692,10 +727,10 @@ dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
 	KSI_INIT_TRAP(ksi);
 	ksi->ksi_signo = SIGBUS;
 	ksi->ksi_code = BUS_ADRERR;
-	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
+	ksi->ksi_addr = (uint32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	KASSERTMSG(tf == lwp_trapframe(l), "tf %p vs %p", tf, lwp_trapframe(l));
 
 	return (1);
 }
@@ -714,14 +749,13 @@ prefetch_abort_fixup(trapframe_t *tf)
 	/*
 	 * Oops, couldn't fix up the instruction
 	 */
-	printf(
-	    "prefetch_abort_fixup: fixup for %s mode prefetch abort failed.\n",
+	printf("%s: fixup for %s mode prefetch abort failed.\n", __func__,
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((uint16 *)(tf->tf_pc & ~1)),
+		    *((uint16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -756,17 +790,20 @@ void
 prefetch_abort_handler(trapframe_t *tf)
 {
 	struct lwp *l;
+	struct pcb *pcb __diagused;
 	struct vm_map *map;
 	vaddr_t fault_pc, va;
 	ksiginfo_t ksi;
 	int error, user;
 
-	UVMHIST_FUNC("prefetch_abort_handler"); UVMHIST_CALLED(maphist);
+	UVMHIST_FUNC(__func__);
+	UVMHIST_CALLED(maphist);
 
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	l = curlwp;
+	pcb = lwp_getpcb(l);
 
 	if ((user = TRAP_USERMODE(tf)) != 0)
 		LWP_CACHE_CREDS(l, l->l_proc);
@@ -776,20 +813,28 @@ prefetch_abort_handler(trapframe_t *tf)
 	 * from user mode so we know interrupts were not disabled.
 	 * But we check anyway.
 	 */
-	if (__predict_true((tf->tf_spsr & I32_bit) == 0))
-		enable_interrupts(I32_bit);
+	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+#ifdef __NO_FIQ
+	if (__predict_true((tf->tf_spsr & I32_bit) != I32_bit))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
+#else
+	if (__predict_true((tf->tf_spsr & IF32_bits) != IF32_bits))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
+#endif
 
 	/* See if the CPU state needs to be fixed up */
 	switch (prefetch_abort_fixup(tf)) {
 	case ABORT_FIXUP_RETURN:
+		KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
 		return;
 	case ABORT_FIXUP_FAILED:
 		/* Deliver a SIGILL to the process */
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
-		ksi.ksi_addr = (u_int32_t *)(intptr_t) tf->tf_pc;
-		l->l_addr->u_pcb.pcb_tf = tf;
+		ksi.ksi_addr = (uint32_t *)(intptr_t) tf->tf_pc;
+		KASSERTMSG(tf == lwp_trapframe(l), "tf %p vs %p", tf,
+		    lwp_trapframe(l));
 		goto do_trapsignal;
 	default:
 		break;
@@ -801,10 +846,9 @@ prefetch_abort_handler(trapframe_t *tf)
 
 	/* Get fault address */
 	fault_pc = tf->tf_pc;
-	l = curlwp;
-	l->l_addr->u_pcb.pcb_tf = tf;
-	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, tf=0x%x)", fault_pc, l, tf,
-	    0);
+	KASSERTMSG(tf == lwp_trapframe(l), "tf %p vs %p", tf, lwp_trapframe(l));
+	UVMHIST_LOG(maphist, " (pc=0x%jx, l=0x%#jx, tf=0x%#jx)",
+	    fault_pc, (uintptr_t)l, (uintptr_t)tf, 0);
 
 	/* Ok validate the address, can only execute in USER space */
 	if (__predict_false(fault_pc >= VM_MAXUSER_ADDRESS ||
@@ -812,7 +856,7 @@ prefetch_abort_handler(trapframe_t *tf)
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGSEGV;
 		ksi.ksi_code = SEGV_ACCERR;
-		ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
+		ksi.ksi_addr = (uint32_t *)(intptr_t) fault_pc;
 		ksi.ksi_trap = fault_pc;
 		goto do_trapsignal;
 	}
@@ -826,18 +870,20 @@ prefetch_abort_handler(trapframe_t *tf)
 #ifdef DEBUG
 	last_fault_code = -1;
 #endif
-	if (pmap_fault_fixup(map->pmap, va, VM_PROT_READ, 1)) {
+	if (pmap_fault_fixup(map->pmap, va, VM_PROT_READ|VM_PROT_EXECUTE, 1)) {
 		UVMHIST_LOG (maphist, " <- emulated", 0, 0, 0, 0);
 		goto out;
 	}
 
 #ifdef DIAGNOSTIC
-	if (__predict_false(cpu_intr_p())) {
+	if (__predict_false(curcpu()->ci_intr_depth > 0)) {
 		printf("\nNon-emulated prefetch abort with intr_depth > 0\n");
 		dab_fatal(tf, 0, tf->tf_pc, NULL, NULL);
 	}
 #endif
-	error = uvm_fault(map, va, VM_PROT_READ);
+
+	KASSERT(pcb->pcb_onfault == NULL);
+	error = uvm_fault(map, va, VM_PROT_READ|VM_PROT_EXECUTE);
 
 	if (__predict_true(error == 0)) {
 		UVMHIST_LOG (maphist, " <- uvm", 0, 0, 0, 0);
@@ -845,7 +891,8 @@ prefetch_abort_handler(trapframe_t *tf)
 	}
 	KSI_INIT_TRAP(&ksi);
 
-	UVMHIST_LOG (maphist, " <- fatal (%d)", error, 0, 0, 0);
+	UVMHIST_LOG (maphist, " <- fatal (%jd)", error, 0, 0, 0);
+
 	if (error == ENOMEM) {
 		printf("UVM: pid %d (%s), uid %d killed: "
 		    "out of swap\n", l->l_proc->p_pid, l->l_proc->p_comm,
@@ -855,13 +902,14 @@ prefetch_abort_handler(trapframe_t *tf)
 		ksi.ksi_signo = SIGSEGV;
 
 	ksi.ksi_code = SEGV_MAPERR;
-	ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
+	ksi.ksi_addr = (uint32_t *)(intptr_t) fault_pc;
 	ksi.ksi_trap = fault_pc;
 
 do_trapsignal:
-	call_trapsignal(l, &ksi);
+	call_trapsignal(l, tf, &ksi);
 
 out:
+	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
 	userret(l);
 }
 
@@ -881,19 +929,11 @@ badaddr_read(void *addr, size_t size, void *rptr)
 		uint16_t v2;
 		uint32_t v4;
 	} u;
-	struct pcb *curpcb_save;
 	int rv, s;
 
 	cpu_drain_writebuf();
 
-	/*
-	 * We might be called at interrupt time, so arrange to steal
-	 * lwp0's PCB temporarily, if required, so that pcb_onfault
-	 * handling works correctly.
-	 */
 	s = splhigh();
-	if ((curpcb_save = curpcb) == NULL)
-		curpcb = &lwp0.l_addr->u_pcb;
 
 	/* Read from the test address. */
 	switch (size) {
@@ -916,12 +956,9 @@ badaddr_read(void *addr, size_t size, void *rptr)
 		break;
 
 	default:
-		curpcb = curpcb_save;
-		panic("badaddr: invalid size (%lu)", (u_long) size);
+		panic("%s: invalid size (%zu)", __func__, size);
 	}
 
-	/* Restore curpcb */
-	curpcb = curpcb_save;
 	splx(s);
 
 	/* Return EFAULT if the address was invalid, else zero */

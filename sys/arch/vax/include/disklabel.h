@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.4 1997/03/09 15:55:58 ragge Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.7 2013/04/04 12:50:03 martin Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -33,10 +33,33 @@
 #ifndef _MACHINE_DISKLABEL_H_
 #define _MACHINE_DISKLABEL_H_
 
-#define	LABELSECTOR	0			/* sector containing label */
-#define	LABELOFFSET	64			/* offset of label in sector */
-#define	MAXPARTITIONS	8			/* number of partitions */
-#define	RAW_PART	2			/* raw partition: xx?c */
+#define LABELUSESMBR		0	/* no MBR partitionning */
+#define	LABELSECTOR		0	/* sector containing label */
+#define	LABELOFFSET		64	/* offset of label in sector */
+#define	MAXPARTITIONS		12	/* number of partitions */
+#define	OLDMAXPARTITIONS 	8	/* number of partitions before nb-6 */
+#define	RAW_PART		2	/* raw partition: xx?c */
+/*
+ * In NetBSD 6 we eroneously used a too large MAXPARTITIONS value (disklabel
+ * overlapped with important parts of the bootblocks and made some machines
+ * unbootable).
+ */
+#define	__TMPBIGMAXPARTITIONS	16	/* compatibility with 6.0 installs */
+
+/*
+ * We use the highest bit of the minor number for the partition number.
+ * This maintains backward compatibility with device nodes created before
+ * MAXPARTITIONS was increased.
+ * Temporarily MAXPARTITIONS was 16, so we use that to keep compatibility
+ * with existing installations.
+ */
+#define __VAX_MAXDISKS	((1 << 20) / __TMPBIGMAXPARTITIONS)
+#define DISKUNIT(dev)	((minor(dev) / OLDMAXPARTITIONS) % __VAX_MAXDISKS)
+#define DISKPART(dev)	((minor(dev) % OLDMAXPARTITIONS) + \
+    ((minor(dev) / (__VAX_MAXDISKS * OLDMAXPARTITIONS)) * OLDMAXPARTITIONS))
+#define	DISKMINOR(unit, part) \
+    (((unit) * OLDMAXPARTITIONS) + ((part) % OLDMAXPARTITIONS) + \
+     ((part) / OLDMAXPARTITIONS) * (__VAX_MAXDISKS * OLDMAXPARTITIONS))
 
 /* Just a dummy */
 #ifndef _LOCORE

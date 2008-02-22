@@ -1,4 +1,4 @@
-/*	$NetBSD: diskio.c,v 1.1 2002/02/24 20:51:08 leo Exp $	*/
+/*	$NetBSD: diskio.c,v 1.4 2014/03/26 18:04:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -59,8 +59,7 @@ static int	setsizes PROTO((disk_t *));
 static int	ahdi_compatible PROTO((void));
 
 disk_t *
-disk_open(name)
-	char	*name;
+disk_open(char *name)
 {
 	disk_t	*dd;
 	
@@ -75,8 +74,7 @@ disk_open(name)
 }
 
 void
-disk_close(dd)
-	disk_t	*dd;
+disk_close(disk_t *dd)
 {
 	if (dd) {
 		free(dd->product);
@@ -138,7 +136,7 @@ disk_write(dd, start, count, buffer)
 }
 
 static int
-ahdi_compatible()
+ahdi_compatible(void)
 {
 	static int	ahdi_compat;
 
@@ -155,9 +153,7 @@ ahdi_compatible()
 }
 
 static int
-setmami(dd, name)
-	disk_t	*dd;
-	char	*name;
+setmami(disk_t *dd, char *name)
 {
 	char	*p = name;
 	u_int	target, lun;
@@ -217,8 +213,7 @@ setmami(dd, name)
 }
 
 static int
-setnames(dd)
-	disk_t	*dd;
+setnames(disk_t *dd)
 {
 	char	sn[16], us[16], ls[16], *bs;
 	int	b, u, l;
@@ -242,18 +237,18 @@ setnames(dd)
 		error(-1, "invalid %s target `%d'", bs, u);
 		return(-1);
 	}
-	sprintf(us, " target %d", u);
+	snprintf(us, sizeof(us), " target %d", u);
 
 	if (l < 0 || l > 7 || (b == IDE && l > 0)) {
 		error(-1, "invalid %s lun `%d'", bs, l);
 		return(-1);
 	}
 	if (b == IDE) {
-		sprintf(sn, "i%d", u);
+		snprintf(sn, sizeof(sn), "i%d", u);
 		ls[0] = '\0';
 	} else {
-		sprintf(sn, "%c%d%d", tolower(*bs), u, l);
-		sprintf(ls, " lun %d", l);
+		snprintf(sn, sizeof(sn), "%c%d%d", tolower(*bs), u, l);
+		snprintf(ls, sizeof(ls), " lun %d", l);
 	}
 
 	dd->fname = strbd(bs, us, ls, NULL);
@@ -262,8 +257,7 @@ setnames(dd)
 }
 
 static int
-setsizes(dd)
-	disk_t	*dd;
+setsizes(disk_t *dd)
 {
 	if (XHGetVersion() != -1) {
 	    char	*p, prod[1024];
@@ -318,8 +312,7 @@ setsizes(dd)
 }
 
 static char *
-strbd(string1)
-	char	*string1;
+strbd(char *string1)
 {
 	char		*p, *result;
 	size_t		length = 1;

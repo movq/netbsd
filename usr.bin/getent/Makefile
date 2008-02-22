@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.3 2007/05/28 12:06:26 tls Exp $
+#	$NetBSD: Makefile,v 1.5 2011/10/11 19:25:07 christos Exp $
 
 USE_FORT?= yes	# XXX network client?
-WARNS=	3
+
 PROG=	getent
+LINKS=  ${BINDIR}/getent ${BINDIR}/getcap
+MLINKS=	getent.1 getcap.1
 
 .include <bsd.prog.mk>

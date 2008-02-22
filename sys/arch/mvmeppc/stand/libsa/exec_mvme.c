@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_mvme.c,v 1.3 2005/12/11 12:18:20 christos Exp $	*/
+/*	$NetBSD: exec_mvme.c,v 1.5 2009/03/14 15:36:11 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -84,10 +77,7 @@ typedef void (*kentry_t)(u_int, u_int, struct mvmeppc_bootinfo *);
 
 /*ARGSUSED*/
 void
-exec_mvme(file, flag, part)
-	const char *file;
-	int	flag;
-	int	part;
+exec_mvme(const char *file, int flag, int part)
 {
 	kentry_t	entry;
 	u_long		marks[MARK_MAX];

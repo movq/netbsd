@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile.buildboot,v 1.12 2006/04/02 22:13:32 bjh21 Exp $
+#	$NetBSD: Makefile.buildboot,v 1.24 2017/04/09 16:29:46 christos Exp $
 
 S?=	${.CURDIR}/../../../..
 
 .PATH: ${.CURDIR}/../lib
+
+KLINK_MACHINE= acorn32
 
 SRCS=	${PROGSOURCE}
 NOMAN=# defined
@@ -12,6 +14,7 @@ FILESDIR=/usr/mdec
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
+LIBCRTI=
 LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
@@ -28,25 +31,20 @@ RELOC=8000
 LINKFLAGS+=-N -Ttext ${RELOC}
 .endif
 
-SRCS+=		vers.c
-CLEANFILES+=	vers.c
-.PHONY: vers.c
-vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE} ${NEWVERSWHAT}
+.include "${S}/conf/newvers_stand.mk"
+
+.include <bsd.own.mk>
+.include <bsd.klinks.mk>
 
 CPPFLAGS+=	-D_STANDALONE 
 CPPFLAGS+=	-I. -I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
 CPPFLAGS+=	-I${.CURDIR}/../lib
+CPPFLAGS+=	${ARM_APCS_FLAGS} -march=armv3m
+CPPFLAGS+=	-marm
+CPUFLAGS=
 CFLAGS=		-O2
-CFLAGS+=	-ffreestanding
+CFLAGS+=	-ffreestanding -fno-unwind-tables
 CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	-rm -f machine ${MACHINE_ARCH}
-	ln -s $S/arch/${MACHINE}/include machine
-	ln -s $S/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
-.endif
 
 CLEANFILES+= machine ${MACHINE_ARCH}
 
@@ -64,7 +62,6 @@ LIBZ=		${ZLIB}
 SA_AS=		library
 SAMISCMAKEFLAGS+= SA_INCLUDE_NET=no
 CPPFLAGS+=	-DLIBSA_NO_RAW_ACCESS \
-		-DLIBSA_USE_MEMCPY -DLIBSA_USE_MEMSET \
 		-DHEAP_VARIABLE
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}

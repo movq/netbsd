@@ -1,4 +1,4 @@
-/*	$NetBSD: getpwent.c,v 1.74 2007/02/03 16:22:48 christos Exp $	*/
+/*	$NetBSD: getpwent.c,v 1.82 2017/01/14 22:19:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997-2000, 2004-2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -95,7 +88,7 @@
 #if 0
 static char sccsid[] = "@(#)getpwent.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: getpwent.c,v 1.74 2007/02/03 16:22:48 christos Exp $");
+__RCSID("$NetBSD: getpwent.c,v 1.82 2017/01/14 22:19:29 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -124,7 +117,6 @@ __RCSID("$NetBSD: getpwent.c,v 1.74 2007/02/03 16:22:48 christos Exp $");
 #endif
 
 #ifdef YP
-#include <machine/param.h>
 #include <rpc/rpc.h>
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
@@ -136,12 +128,6 @@ __RCSID("$NetBSD: getpwent.c,v 1.74 2007/02/03 16:22:48 christos Exp $");
 
 #ifdef __weak_alias
 __weak_alias(endpwent,_endpwent)
-__weak_alias(getpwent,_getpwent)
-__weak_alias(getpwent_r,_getpwent_r)
-__weak_alias(getpwnam,_getpwnam)
-__weak_alias(getpwnam_r,_getpwnam_r)
-__weak_alias(getpwuid,_getpwuid)
-__weak_alias(getpwuid_r,_getpwuid_r)
 __weak_alias(setpassent,_setpassent)
 __weak_alias(setpwent,_setpwent)
 #endif
@@ -191,13 +177,16 @@ _pw_parse(const char *entry, struct passwd *pw, char *buf, size_t buflen,
  *	upon permissions, etc)
  */
 static int
-_pw_opendb(DB **db)
+_pw_opendb(DB **db, int *version)
 {
 	static int	warned;
+	DBT		key;
+	DBT		value;
 
 	const char	*dbfile = NULL;
 
 	_DIAGASSERT(db != NULL);
+	_DIAGASSERT(version != NULL);
 	if (*db != NULL)					/* open *db */
 		return NS_SUCCESS;
 
@@ -218,6 +207,22 @@ _pw_opendb(DB **db)
 		warned = 1;
 		return NS_UNAVAIL;
 	}
+	key.data = __UNCONST("VERSION");
+	key.size = strlen((char *)key.data) + 1;
+	switch ((*(*db)->get)(*db, &key, &value, 0)) {
+	case 0:
+		if (sizeof(*version) != value.size)
+			return NS_UNAVAIL;
+		(void)memcpy(version, value.data, value.size);
+		break;			/* found */
+	case 1:
+		*version = 0;		/* not found */
+		break;
+	case -1:
+		return NS_UNAVAIL;	/* error in db routines */
+	default:
+		abort();
+	}
 	return NS_SUCCESS;
 }
 
@@ -230,7 +235,8 @@ _pw_opendb(DB **db)
  */
 static int
 _pw_getkey(DB *db, DBT *key,
-	struct passwd *pw, char *buffer, size_t buflen, int *pwflags)
+	struct passwd *pw, char *buffer, size_t buflen, int *pwflags,
+	int version)
 {
 	char		*p, *t;
 	DBT		data;
@@ -265,18 +271,29 @@ _pw_getkey(DB *db, DBT *key,
 			 * THE DECODING BELOW MUST MATCH THAT IN pwd_mkdb.
 			 */
 	t = buffer;
-#define	EXPAND(e)	e = t; while ((*t++ = *p++));
-#define	SCALAR(v)	memmove(&(v), p, sizeof v); p += sizeof v
+#define MACRO(a)	do { a } while (/*CONSTCOND*/0)
+#define	EXPAND(e)	MACRO(e = t; while ((*t++ = *p++));)
+#define	SCALAR(v)	MACRO(memmove(&(v), p, sizeof v); p += sizeof v;)
 	EXPAND(pw->pw_name);
 	EXPAND(pw->pw_passwd);
 	SCALAR(pw->pw_uid);
 	SCALAR(pw->pw_gid);
-	SCALAR(pw->pw_change);
+	if (version == 0) {
+		int32_t tmp;
+		SCALAR(tmp);
+		pw->pw_change = tmp;
+	} else
+		SCALAR(pw->pw_change);
 	EXPAND(pw->pw_class);
 	EXPAND(pw->pw_gecos);
 	EXPAND(pw->pw_dir);
 	EXPAND(pw->pw_shell);
-	SCALAR(pw->pw_expire);
+	if (version == 0) {
+		int32_t tmp;
+		SCALAR(tmp);
+		pw->pw_expire = tmp;
+	} else
+		SCALAR(pw->pw_expire);
 	if (pwflags) {
 		/* See if there's any data left.  If so, read in flags. */
 		if (data.size > (size_t) (p - (char *)data.data)) {
@@ -388,6 +405,7 @@ struct files_state {
 	int	 stayopen;		/* see getpassent(3) */
 	DB	*db;			/* passwd file handle */
 	int	 keynum;		/* key counter, -1 if no more */
+	int	 version;
 };
 
 static struct files_state	_files_state;
@@ -403,7 +421,7 @@ _files_start(struct files_state *state)
 	_DIAGASSERT(state != NULL);
 
 	state->keynum = 0;
-	rv = _pw_opendb(&state->db);
+	rv = _pw_opendb(&state->db, &state->version);
 	if (rv != NS_SUCCESS)
 		return rv;
 	return NS_SUCCESS;
@@ -486,7 +504,8 @@ _files_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 		key.data = (u_char *)buffer;
 
 							/* search for key */
-		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, NULL);
+		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, NULL,
+		    state->version);
 		if (rv != NS_SUCCESS)			/* no match */
 			break;
 		if (pw->pw_name[0] == '+' || pw->pw_name[0] == '-') {
@@ -1106,7 +1125,7 @@ struct nis_state {
 	char		*current;	/* current first/next match */
 	int		 currentlen;	/* length of _nis_current */
 	enum {				/* shadow map type */
-		NISMAP_UNKNOWN,		/*  unknown ... */
+		NISMAP_UNKNOWN = 0,	/*  unknown ... */
 		NISMAP_NONE,		/*  none: use "passwd.by*" */
 		NISMAP_ADJUNCT,		/*  pw_passwd from "passwd.adjunct.*" */
 		NISMAP_MASTER		/*  all from "master.passwd.by*" */
@@ -1118,11 +1137,17 @@ static struct nis_state		_nis_state;
 static struct passwd		_nis_passwd;
 static char			_nis_passwdbuf[_GETPW_R_SIZE_MAX];
 
+static const char __nis_pw_n_1[] = "master.passwd.byname";
+static const char __nis_pw_n_2[] = "passwd.byname";
+static const char __nis_pw_u_1[] = "master.passwd.byuid";
+static const char __nis_pw_u_2[] = "passwd.byuid";
+
+static const char * const __nis_pw_n_map[4] = { __nis_pw_n_2, __nis_pw_n_2, __nis_pw_n_2, __nis_pw_n_1 };
+static const char * const __nis_pw_u_map[4] = { __nis_pw_u_2, __nis_pw_u_2, __nis_pw_u_2, __nis_pw_u_1 };
+
 	/* macros for deciding which NIS maps to use. */
-#define	PASSWD_BYNAME(x)	((x)->maptype == NISMAP_MASTER \
-				    ? "master.passwd.byname" : "passwd.byname")
-#define	PASSWD_BYUID(x)		((x)->maptype == NISMAP_MASTER \
-				    ? "master.passwd.byuid" : "passwd.byuid")
+#define	PASSWD_BYNAME(x)	((x)->maptype == NISMAP_MASTER ? __nis_pw_n_1 : __nis_pw_n_2)
+#define	PASSWD_BYUID(x)		((x)->maptype == NISMAP_MASTER ? __nis_pw_u_1 : __nis_pw_u_2)
 
 static int
 _nis_start(struct nis_state *state)
@@ -1204,7 +1229,7 @@ _nis_parse(const char *entry, struct passwd *pw, char *buf, size_t buflen,
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(state != NULL);
 
-	elen = strlen(entry);
+	elen = strlen(entry) + 1;
 	if (elen >= buflen)
 		return 0;
 	if (! _pw_parse(entry, pw, buf, buflen,
@@ -1222,10 +1247,14 @@ _nis_parse(const char *entry, struct passwd *pw, char *buf, size_t buflen,
 			char	*bp, *ep;
 						/* skip name to get password */
 			ep = data;
-			if ((bp = strsep(&ep, ":")) != NULL &&
+			if (strsep(&ep, ":") != NULL &&
 			    (bp = strsep(&ep, ":")) != NULL) {
 					/* store new pw_passwd after entry */
-				strlcpy(buf + elen, bp, buflen - elen);
+				if (strlcpy(buf + elen, bp, buflen - elen) >=
+				    buflen - elen) {
+					free(data);
+					return 0;
+				}
 				pw->pw_passwd = &buf[elen];
 			}
 			free(data);
@@ -1243,7 +1272,7 @@ _nis_parse(const char *entry, struct passwd *pw, char *buf, size_t buflen,
  */
 static int
 _nis_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
-	struct nis_state *state, const char *map)
+	struct nis_state *state, const char * const *map_arr, size_t nmaps)
 {
 	char	*data;
 	int	nisr, rv, datalen;
@@ -1252,7 +1281,7 @@ _nis_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 	_DIAGASSERT(pw != NULL);
 	_DIAGASSERT(buffer != NULL);
 	_DIAGASSERT(state != NULL);
-	_DIAGASSERT(map != NULL);
+	_DIAGASSERT(map_arr != NULL);
 
 	*retval = 0;
 
@@ -1264,9 +1293,11 @@ _nis_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 
 	data = NULL;
 	rv = NS_NOTFOUND;
+	_DIAGASSERT(state->maptype != NISMAP_UNKNOWN &&
+		    (unsigned)state->maptype < nmaps);
 
 							/* search map */
-	nisr = yp_match(state->domain, map, buffer, (int)strlen(buffer),
+	nisr = yp_match(state->domain, map_arr[state->maptype], buffer, (int)strlen(buffer),
 	    &data, &datalen);
 	switch (nisr) {
 	case 0:
@@ -1501,7 +1532,7 @@ _nis_getpwuid(void *nsrv, void *nscb, va_list ap)
 	snprintf(_nis_passwdbuf, sizeof(_nis_passwdbuf), "%u", (unsigned int)uid);
 	rv = _nis_pwscan(&rerror, &_nis_passwd,
 	    _nis_passwdbuf, sizeof(_nis_passwdbuf),
-	    &_nis_state, PASSWD_BYUID(&_nis_state));
+	    &_nis_state, __nis_pw_u_map, __arraycount(__nis_pw_u_map));
 	if (!_nis_state.stayopen)
 		_nis_end(&_nis_state);
 	if (rv == NS_SUCCESS && uid == _nis_passwd.pw_uid)
@@ -1529,14 +1560,21 @@ _nis_getpwuid_r(void *nsrv, void *nscb, va_list ap)
 	_DIAGASSERT(result != NULL);
 
 	*result = NULL;
-	memset(&state, 0, sizeof(state));
-	rv = _nis_start(&state);
-	if (rv != NS_SUCCESS)
-		return rv;
 	snprintf(buffer, buflen, "%u", (unsigned int)uid);
-	rv = _nis_pwscan(retval, pw, buffer, buflen,
-	    &state, PASSWD_BYUID(&state));
-	_nis_end(&state);
+/* remark: we run under a global mutex inside of this module ... */
+	if (_nis_state.stayopen)
+	  { /* use global state only if stayopen is set - otherwise we would blow up getpwent_r() ... */
+	    rv = _nis_pwscan(retval, pw, buffer, buflen,
+		&_nis_state, __nis_pw_u_map, __arraycount(__nis_pw_u_map));
+	  }
+	else
+	  { /* keep old semantic if no stayopen set - no need to call _nis_start() here - _nis_pwscan() will do it for us ... */
+	    /* use same way as in getgrent.c ... */
+	    memset(&state, 0, sizeof(state));
+	    rv = _nis_pwscan(retval, pw, buffer, buflen,
+		&state, __nis_pw_u_map, __arraycount(__nis_pw_u_map));
+	    _nis_end(&state);
+	  }
 	if (rv != NS_SUCCESS)
 		return rv;
 	if (uid == pw->pw_uid) {
@@ -1564,7 +1602,7 @@ _nis_getpwnam(void *nsrv, void *nscb, va_list ap)
 	snprintf(_nis_passwdbuf, sizeof(_nis_passwdbuf), "%s", name);
 	rv = _nis_pwscan(&rerror, &_nis_passwd,
 	    _nis_passwdbuf, sizeof(_nis_passwdbuf),
-	    &_nis_state, PASSWD_BYNAME(&_nis_state));
+	    &_nis_state, __nis_pw_n_map, __arraycount(__nis_pw_n_map));
 	if (!_nis_state.stayopen)
 		_nis_end(&_nis_state);
 	if (rv == NS_SUCCESS && strcmp(name, _nis_passwd.pw_name) == 0)
@@ -1593,13 +1631,20 @@ _nis_getpwnam_r(void *nsrv, void *nscb, va_list ap)
 
 	*result = NULL;
 	snprintf(buffer, buflen, "%s", name);
-	memset(&state, 0, sizeof(state));
-	rv = _nis_start(&state);
-	if (rv != NS_SUCCESS)
-		return rv;
-	rv = _nis_pwscan(retval, pw, buffer, buflen,
-	    &state, PASSWD_BYNAME(&state));
-	_nis_end(&state);
+/* remark: we run under a global mutex inside of this module ... */
+	if (_nis_state.stayopen)
+	  { /* use global state only if stayopen is set - otherwise we would blow up getpwent_r() ... */
+	    rv = _nis_pwscan(retval, pw, buffer, buflen,
+		&_nis_state, __nis_pw_n_map, __arraycount(__nis_pw_n_map));
+	  }
+	else
+	  { /* keep old semantic if no stayopen set - no need to call _nis_start() here - _nis_pwscan() will do it for us ... */
+	    /* use same way as in getgrent.c ... */
+	    memset(&state, 0, sizeof(state));
+	    rv = _nis_pwscan(retval, pw, buffer, buflen,
+		&state, __nis_pw_n_map, __arraycount(__nis_pw_n_map));
+	    _nis_end(&state);
+	  }
 	if (rv != NS_SUCCESS)
 		return rv;
 	if (strcmp(name, pw->pw_name) == 0) {
@@ -1636,6 +1681,7 @@ struct compat_state {
 	char		 protobuf[_GETPW_R_SIZE_MAX];
 					/* buffer for proto ptrs */
 	int		 protoflags;	/* proto passwd flags */
+	int		 version;
 };
 
 static struct compat_state	_compat_state;
@@ -1656,7 +1702,7 @@ _compat_start(struct compat_state *state)
 		DBT	pkey, pdata;
 		char	bf[MAXLOGNAME];
 
-		rv = _pw_opendb(&state->db);
+		rv = _pw_opendb(&state->db, &state->version);
 		if (rv != NS_SUCCESS)
 			return rv;
 
@@ -2041,7 +2087,8 @@ _compat_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 		key.size = fromlen + 1;
 		key.data = (u_char *)buffer;
 
-		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, &pwflags);
+		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, &pwflags,
+		    state->version);
 		if (rv != NS_SUCCESS)		/* stop on error */
 			break;
 
@@ -2055,7 +2102,7 @@ _compat_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 				state->mode = COMPAT_FULL;
 						/* reset passwd_compat search */
 /* XXXREENTRANT: setpassent is not thread safe ? */
-				(void) _passwdcompat_setpassent(0);
+				(void) _passwdcompat_setpassent(_compat_state.stayopen);
 				break;
 			case '@':		/* `+@netgroup' */
 				state->mode = COMPAT_NETGROUP;

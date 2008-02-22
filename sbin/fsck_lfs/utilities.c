@@ -1,4 +1,4 @@
-/* $NetBSD: utilities.c,v 1.26 2006/11/09 19:36:36 christos Exp $	 */
+/* $NetBSD: utilities.c,v 1.41 2015/08/12 18:28:00 dholland Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -33,11 +33,10 @@
 #include <sys/time.h>
 #include <sys/mount.h>
 
-#include <ufs/ufs/inode.h>
-#include <ufs/ufs/dir.h>
 #define buf ubuf
 #define vnode uvnode
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
 
 #include <err.h>
 #include <stdio.h>
@@ -45,6 +44,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <signal.h>
 
@@ -56,29 +56,29 @@
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 long diskreads, totalreads;	/* Disk cache statistics */
 
-extern int returntosingle;
 extern off_t locked_queue_bytes;
 
 int
-ftypeok(struct ufs1_dinode * dp)
+ftypeok(union lfs_dinode * dp)
 {
-	switch (dp->di_mode & IFMT) {
+	switch (lfs_dino_getmode(fs, dp) & LFS_IFMT) {
 
-	case IFDIR:
-	case IFREG:
-	case IFBLK:
-	case IFCHR:
-	case IFLNK:
-	case IFSOCK:
-	case IFIFO:
+	case LFS_IFDIR:
+	case LFS_IFREG:
+	case LFS_IFBLK:
+	case LFS_IFCHR:
+	case LFS_IFLNK:
+	case LFS_IFSOCK:
+	case LFS_IFIFO:
 		return (1);
 
 	default:
 		if (debug)
-			pwarn("bad file type 0%o\n", dp->di_mode);
+			pwarn("bad file type 0%o\n", lfs_dino_getmode(fs, dp));
 		return (0);
 	}
 }
@@ -90,7 +90,7 @@ reply(const char *question)
 	char c;
 
 	if (preen)
-		err(1, "INTERNAL ERROR: GOT TO reply()");
+		err(EXIT_FAILURE, "INTERNAL ERROR: GOT TO reply()");
 	persevere = !strcmp(question, "CONTINUE");
 	pwarn("\n");
 	if (!persevere && nflag) {
@@ -119,10 +119,10 @@ static void
 write_superblocks(void)
 {
 	if (debug)
-		pwarn("writing superblocks with lfs_idaddr = 0x%x\n",
-			(int)fs->lfs_idaddr);
-	lfs_writesuper(fs, fs->lfs_sboffs[0]);
-	lfs_writesuper(fs, fs->lfs_sboffs[1]);
+		pwarn("writing superblocks with lfs_idaddr = 0x%jx\n",
+			(uintmax_t)lfs_sb_getidaddr(fs));
+	lfs_writesuper(fs, lfs_sb_getsboff(fs, 0));
+	lfs_writesuper(fs, lfs_sb_getsboff(fs, 1));
 	fsmodified = 1;
 }
 
@@ -139,8 +139,8 @@ ckfini(int markclean)
 		}
 	}
 
-	if (!nflag && (fs->lfs_pflags & LFS_PF_CLEAN) == 0) {
-		fs->lfs_pflags |= LFS_PF_CLEAN;
+	if (!nflag && (lfs_sb_getpflags(fs) & LFS_PF_CLEAN) == 0) {
+		lfs_sb_setpflags(fs, lfs_sb_getpflags(fs) | LFS_PF_CLEAN);
 		fsmodified = 1;
 	}
 
@@ -157,7 +157,7 @@ ckfini(int markclean)
 		else if (!reply("MARK FILE SYSTEM CLEAN"))
 			markclean = 0;
 		if (markclean) {
-			fs->lfs_pflags |= LFS_PF_CLEAN;
+			lfs_sb_setpflags(fs, lfs_sb_getpflags(fs) | LFS_PF_CLEAN);
 			sbdirty();
 			write_superblocks();
 			if (!preen)
@@ -193,7 +193,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	struct inodesc idesc;
 	static int busy = 0;
 
-	if (curdir == ino && ino == ROOTINO) {
+	if (curdir == ino && ino == ULFS_ROOTINO) {
 		(void) strlcpy(namebuf, "/", namebuflen);
 		return;
 	}
@@ -212,7 +212,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 		idesc.id_parent = curdir;
 		goto namelookup;
 	}
-	while (ino != ROOTINO) {
+	while (ino != ULFS_ROOTINO) {
 		idesc.id_number = ino;
 		idesc.id_func = findino;
 		idesc.id_name = "..";
@@ -236,41 +236,11 @@ namelookup:
 		ino = idesc.id_number;
 	}
 	busy = 0;
-	if (ino != ROOTINO)
+	if (ino != ULFS_ROOTINO)
 		*--cp = '?';
 	memcpy(namebuf, cp, (size_t) (&namebuf[MAXPATHLEN] - cp));
 }
 
-void
-catch(int n)
-{
-	ckfini(0);
-	exit(12);
-}
-/*
- * When preening, allow a single quit to signal
- * a special exit after filesystem checks complete
- * so that reboot sequence may be interrupted.
- */
-void
-catchquit(int n)
-{
-	printf("returning to single-user after filesystem check\n");
-	returntosingle = 1;
-	(void) signal(SIGQUIT, SIG_DFL);
-}
-/*
- * Ignore a single quit signal; wait and flush just in case.
- * Used by child processes in preen.
- */
-void
-voidquit(int n)
-{
-
-	sleep(1);
-	(void) signal(SIGQUIT, SIG_IGN);
-	(void) signal(SIGQUIT, SIG_DFL);
-}
 /*
  * determine whether an inode should be fixed.
  */
@@ -305,7 +275,7 @@ dofix(struct inodesc * idesc, const char *msg)
 		return (0);
 
 	default:
-		err(EEXIT, "UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
+		err(EEXIT, "UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
 	}
 	/* NOTREACHED */
 }

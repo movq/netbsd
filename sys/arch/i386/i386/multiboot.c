@@ -1,4 +1,4 @@
-/*	$NetBSD: multiboot.c,v 1.12 2007/03/07 21:43:45 thorpej Exp $	*/
+/*	$NetBSD: multiboot.c,v 1.23 2016/05/30 17:45:26 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: multiboot.c,v 1.12 2007/03/07 21:43:45 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: multiboot.c,v 1.23 2016/05/30 17:45:26 dholland Exp $");
+
+#include "opt_multiboot.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -183,7 +178,7 @@ void
 multiboot_post_reloc(void)
 {
 	struct multiboot_info *mi;
-	
+
 	if (! Multiboot_Loader)
 		return;
 
@@ -281,12 +276,11 @@ copy_syms(struct multiboot_info *mi)
 {
 #define RELOC(type, x) ((type)((vaddr_t)(x) - KERNBASE))
 	int i;
-	Elf32_Shdr *symtabp, *strtabp;
 	struct multiboot_symbols *ms;
-	size_t symsize, strsize;
-	paddr_t symaddr, straddr;
-	paddr_t symstart, strstart;
-
+	Elf32_Shdr *symtabp, *strtabp;
+	Elf32_Word symsize, strsize;
+	Elf32_Addr symaddr, straddr;
+	Elf32_Addr symstart, strstart;
 
 	/*
 	 * Check if the Multiboot information header has symbols or not.
@@ -341,39 +335,41 @@ copy_syms(struct multiboot_info *mi)
 	 * that if the tables start before the kernel's end address,
 	 * they will not grow over this address.
 	 */
-        if ((paddr_t)symtabp < (paddr_t)&end - KERNBASE &&
-	    (paddr_t)strtabp < (paddr_t)&end - KERNBASE) {
-		symstart = (paddr_t)((vaddr_t)&end - KERNBASE);
+        if ((void *)symtabp < RELOC(void *, &end) &&
+	    (void *)strtabp < RELOC(void *, &end)) {
+		symstart = RELOC(Elf32_Addr, &end);
 		strstart = symstart + symsize;
 		memcpy((void *)symstart, (void *)symaddr, symsize);
 		memcpy((void *)strstart, (void *)straddr, strsize);
-        } else if ((paddr_t)symtabp > (paddr_t)&end - KERNBASE &&
-	           (paddr_t)strtabp < (paddr_t)&end - KERNBASE) {
-		symstart = (paddr_t)((vaddr_t)&end - KERNBASE);
+        } else if ((void *)symtabp > RELOC(void *, &end) &&
+	           (void *)strtabp < RELOC(void *, &end)) {
+		symstart = RELOC(Elf32_Addr, &end);
 		strstart = symstart + symsize;
 		memcpy((void *)symstart, (void *)symaddr, symsize);
 		memcpy((void *)strstart, (void *)straddr, strsize);
-        } else if ((paddr_t)symtabp < (paddr_t)&end - KERNBASE &&
-	           (paddr_t)strtabp > (paddr_t)&end - KERNBASE) {
-		strstart = (paddr_t)((vaddr_t)&end - KERNBASE);
+        } else if ((void *)symtabp < RELOC(void *, &end) &&
+	           (void *)strtabp > RELOC(void *, &end)) {
+		strstart = RELOC(Elf32_Addr, &end);
 		symstart = strstart + strsize;
 		memcpy((void *)strstart, (void *)straddr, strsize);
 		memcpy((void *)symstart, (void *)symaddr, symsize);
 	} else {
 		/* symtabp and strtabp are both over end */
-		if ((paddr_t)symtabp < (paddr_t)strtabp) {
-			symstart = (paddr_t)((vaddr_t)&end - KERNBASE);
+		if (symtabp < strtabp) {
+			symstart = RELOC(Elf32_Addr, &end);
 			strstart = symstart + symsize;
 			memcpy((void *)symstart, (void *)symaddr, symsize);
 			memcpy((void *)strstart, (void *)straddr, strsize);
 		} else {
-			strstart = (paddr_t)((vaddr_t)&end - KERNBASE);
+			strstart = RELOC(Elf32_Addr, &end);
 			symstart = strstart + strsize;
 			memcpy((void *)strstart, (void *)straddr, strsize);
 			memcpy((void *)symstart, (void *)symaddr, symsize);
 		}
 	}
-	*RELOC(int *, &esym) = (int)(strstart + strsize + KERNBASE);
+
+	*RELOC(int *, &esym) =
+	    (int)(symstart + symsize + strsize + KERNBASE);
 
 	ms->s_symstart = (void *)(symstart + KERNBASE);
 	ms->s_symsize  = symsize;
@@ -510,7 +506,7 @@ setup_bootpath(struct multiboot_info *mi)
 		*cl2 = '\0';
 		memcpy(bi.bootpath, cl, MIN(sizeof(bi.bootpath), len));
 		*cl2 = old;
-		bi.bootpath[MIN(sizeof(bi.bootpath), len)] = '\0';
+		bi.bootpath[MIN(sizeof(bi.bootpath) - 1, len)] = '\0';
 
 		bootinfo_add((struct btinfo_common *)&bi, BTINFO_BOOTPATH,
 		    sizeof(struct btinfo_bootpath));
@@ -544,6 +540,8 @@ setup_console(struct multiboot_info *mi)
 		    sizeof(bi.devname));
 
 	if (found) {
+		bool valid;
+
 		if (strncmp(bi.devname, "com", sizeof(bi.devname)) == 0) {
 			char tmp[10];
 
@@ -563,10 +561,16 @@ setup_console(struct multiboot_info *mi)
 					bi.addr = strtoul(tmp, NULL, 10);
 			} else
 				bi.addr = 0; /* Use default address. */
-		}
 
-		bootinfo_add((struct btinfo_common *)&bi, BTINFO_CONSOLE,
-		    sizeof(struct btinfo_console));
+			valid = true;
+		} else if (strncmp(bi.devname, "pc", sizeof(bi.devname)) == 0)
+			valid = true;
+		else
+			valid = false;
+
+		if (valid)
+			bootinfo_add((struct btinfo_common *)&bi,
+			    BTINFO_CONSOLE, sizeof(struct btinfo_console));
 	}
 }
 
@@ -589,7 +593,7 @@ setup_howto(struct multiboot_info *mi)
 	/* Skip kernel file name. */
 	while (*cl != '\0' && *cl != ' ')
 		cl++;
-	while (*cl != '\0' && *cl == ' ')
+	while (*cl == ' ')
 		cl++;
 
 	/* Check if there are flags and set 'howto' accordingly. */
@@ -681,7 +685,7 @@ setup_memory(struct multiboot_info *mi)
  * passed in by Multiboot; false otherwise.
  */
 bool
-multiboot_ksyms_init(void)
+multiboot_ksyms_addsyms_elf(void)
 {
 	struct multiboot_info *mi = &Multiboot_Info;
 	struct multiboot_symbols *ms = &Multiboot_Symbols;
@@ -700,7 +704,7 @@ multiboot_ksyms_init(void)
 		ehdr.e_version = 1;
 		ehdr.e_ehsize = sizeof(ehdr);
 
-		ksyms_init_explicit((void *)&ehdr,
+		ksyms_addsyms_explicit((void *)&ehdr,
 		    ms->s_symstart, ms->s_symsize,
 		    ms->s_strstart, ms->s_strsize);
 	}

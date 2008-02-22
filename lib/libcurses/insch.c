@@ -1,4 +1,4 @@
-/*	$NetBSD: insch.c,v 1.21 2007/05/28 15:01:56 blymn Exp $	*/
+/*	$NetBSD: insch.c,v 1.23 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)insch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: insch.c,v 1.21 2007/05/28 15:01:56 blymn Exp $");
+__RCSID("$NetBSD: insch.c,v 1.23 2017/01/06 13:53:18 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: insch.c,v 1.21 2007/05/28 15:01:56 blymn Exp $");
 int
 insch(chtype ch)
 {
+
 	return winsch(stdscr, ch);
 }
 
@@ -63,6 +64,7 @@ insch(chtype ch)
 int
 mvinsch(int y, int x, chtype ch)
 {
+
 	return mvwinsch(stdscr, y, x, ch);
 }
 
@@ -73,6 +75,7 @@ mvinsch(int y, int x, chtype ch)
 int
 mvwinsch(WINDOW *win, int y, int x, chtype ch)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -88,7 +91,6 @@ mvwinsch(WINDOW *win, int y, int x, chtype ch)
 int
 winsch(WINDOW *win, chtype ch)
 {
-
 	__LDATA	*end, *temp1, *temp2;
 	attr_t attr;
 
@@ -96,14 +98,14 @@ winsch(WINDOW *win, chtype ch)
 		attr = win->battr & __COLOR;
 	else
 		attr = 0;
-	end = &win->lines[win->cury]->line[win->curx];
-	temp1 = &win->lines[win->cury]->line[win->maxx - 1];
+	end = &win->alines[win->cury]->line[win->curx];
+	temp1 = &win->alines[win->cury]->line[win->maxx - 1];
 	temp2 = temp1 - 1;
 	while (temp1 > end) {
-		(void) memcpy(temp1, temp2, sizeof(__LDATA));
+		(void)memcpy(temp1, temp2, sizeof(__LDATA));
 		temp1--, temp2--;
 	}
-	temp1->ch = (wchar_t) ch & __CHARTEXT;
+	temp1->ch = (wchar_t)ch & __CHARTEXT;
 	if (temp1->ch == ' ')
 		temp1->ch = win->bch;
 	temp1->attr = (attr_t) ch & __ATTRIBUTES;
@@ -116,16 +118,16 @@ winsch(WINDOW *win, chtype ch)
 		return ERR;
 	SET_WCOL(*temp1, 1);
 #endif /* HAVE_WCHAR */
-	__touchline(win, (int) win->cury, (int) win->curx, (int) win->maxx - 1);
+	__touchline(win, (int)win->cury, (int)win->curx, (int)win->maxx - 1);
 	if (win->cury == LINES - 1 &&
-	    (win->lines[LINES - 1]->line[COLS - 1].ch != ' ' ||
-		win->lines[LINES - 1]->line[COLS - 1].attr != attr)) {
+	    (win->alines[LINES - 1]->line[COLS - 1].ch != ' ' ||
+		win->alines[LINES - 1]->line[COLS - 1].attr != attr)) {
 		if (win->flags & __SCROLLOK) {
 			wrefresh(win);
 			scroll(win);
 			win->cury--;
 		} else
-			return (ERR);
+			return ERR;
 	}
-	return (OK);
+	return OK;
 }

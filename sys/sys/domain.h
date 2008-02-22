@@ -1,4 +1,4 @@
-/*	$NetBSD: domain.h,v 1.27 2007/09/19 04:33:45 dyoung Exp $	*/
+/*	$NetBSD: domain.h,v 1.34 2018/01/10 02:50:26 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -39,6 +39,7 @@
  */
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+#include <net/route.h>
 
 /*
  * Forward structure declarations for function prototypes [sic].
@@ -47,7 +48,6 @@ struct	lwp;
 struct	mbuf;
 struct	ifnet;
 struct	ifqueue;
-struct  route;
 struct  sockaddr;
 
 LIST_HEAD(dom_rtlist, route);
@@ -58,30 +58,38 @@ struct	domain {
 	void	(*dom_init)		/* initialize domain data structures */
 			(void);
 	int	(*dom_externalize)	/* externalize access rights */
-			(struct mbuf *, struct lwp *);
+			(struct mbuf *, struct lwp *, int);
 	void	(*dom_dispose)		/* dispose of internalized rights */
 			(struct mbuf *);
 	const struct protosw *dom_protosw, *dom_protoswNPROTOSW;
 	int	(*dom_rtattach)		/* initialize routing table */
-			(void **, int);
+			(rtbl_t **, int);
 	int	dom_rtoffset;		/* an arg to rtattach, in bits */
 	int	dom_maxrtkey;		/* for routing layer */
+	void	(*dom_if_up)		/* ifnet brought up */
+			(struct ifnet *);
+	void	(*dom_if_down)		/* ifnet brought down */
+			(struct ifnet *);
 	void	*(*dom_ifattach)	/* attach af-dependent data on ifnet */
 			(struct ifnet *);
 	void	(*dom_ifdetach)		/* detach af-dependent data on ifnet */
 			(struct ifnet *, void *);
+	void	(*dom_if_link_state_change)
+			(struct ifnet *, int);
 	const void *(*dom_sockaddr_const_addr)(const struct sockaddr *,
 					       socklen_t *);
 	void	*(*dom_sockaddr_addr)(struct sockaddr *, socklen_t *);
 	int	(*dom_sockaddr_cmp)(const struct sockaddr *,
 	                            const struct sockaddr *);
+	struct sockaddr *(*dom_sockaddr_externalize)(struct sockaddr *,
+	                                             socklen_t,
+						     const struct sockaddr *);
 	const struct sockaddr *dom_sa_any;
 	struct ifqueue *dom_ifqueues[2]; /* ifqueue for domain */
 	STAILQ_ENTRY(domain) dom_link;
 	struct	mowner dom_mowner;
 	uint_fast8_t	dom_sa_cmpofs;
 	uint_fast8_t	dom_sa_cmplen;
-	struct dom_rtlist dom_rtcache;
 };
 
 STAILQ_HEAD(domainhead,domain);
@@ -94,7 +102,8 @@ STAILQ_HEAD(domainhead,domain);
 #define	DOMAIN_FOREACH(dom)	STAILQ_FOREACH(dom, &domains, dom_link)
 extern struct domainhead domains;
 void domain_attach(struct domain *);
-void domaininit(void);
+void domaininit(bool);
+void domaininit_post(void);
 #endif
 
 #endif /* !_SYS_DOMAIN_H_ */

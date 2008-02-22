@@ -1,4 +1,4 @@
-.\"	$NetBSD: isp.4,v 1.11 2004/05/11 22:42:47 wiz Exp $
+.\"	$NetBSD: isp.4,v 1.14 2018/01/13 23:43:46 wiz Exp $
 .\"
 .\" Copyright (c) 1998, 1999
 .\" 	Matthew Jacob, for NASA/Ames Research Center
@@ -26,7 +26,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd March 25, 1999
+.Dd June 24, 2009
 .Dt ISP 4
 .Os
 .Sh NAME
@@ -37,44 +37,36 @@
 .Cd "isp* at sbus? slot ? offset ?" Pq SBus
 .Cd scsibus* at isp?
 .Sh DESCRIPTION
-This driver provides access to
-.Tn SCSI
-or
-.Tn FibreChannel
-devices.
+This driver provides access to SCSI or FibreChannel devices.
 .Pp
 SCSI features include support for Ultra SCSI and wide mode transactions for
-.Tn SCSI ,
-and LVD (for the ISP1080 and ISP1280),
+SCSI, and LVD (for the ISP1080 and ISP1280),
 .Pp
 Fibre Channel support uses FCP SCSI profile for
-.Tn FibreChannel .
-and uses Class 3 connections only.
+FibreChannel and uses Class 3 connections only.
 Support is available for Public and Private loops.
 Command tagging is supported for all (in fact,
-.Tn FibreChannel
-requires tagging).
+FibreChannel requires tagging).
 .Sh CONFIGURATION
 An optional
-.Tn flags 0x80
+.Cd flags 0x80
 appended to the above
-.Tn isp*
+.Nm
 declarations will disable the download of driver firmware, which means you
 use whatever firmware is running on the card.
 If no firmware is running on the card,
 the driver cannot operate the card.
 .Pp
 An optional
-.Tn flags 0x40
+.Cd flags 0x40
 appended to the above
-.Tn isp*
+.Nm
 declarations (can be OR'd in with the other config flags option)
 will keep the driver from looking at device or bus NVRAM settings (this
 is in case NVRAM is just wrong and you have the card in a platform where
 it is inconvenient to change NVRAM settings on the card).
 .Sh HARDWARE
 Supported cards include:
-.Pp
 .Bl -tag -width xxxxxx -offset indent
 .It ISP1000
 SBus Fast Wide, Ultra Fast Wide cards, Single Ended or Differential cards.
@@ -110,6 +102,10 @@ Qlogic 2300 2-Gigabit Dual Channel Optical Fibre Channel PCI cards.
 Performance Technology ISP2100 variants.
 .It Antares P-0033
 Antares Microsystems ISP2100 variants.
+.It Qlogic 2400
+Qlogic 2400 4-Gigabit Optical Fibre Channel PCI cards.
+.It Qlogic 2500
+Qlogic 2500 8-Gigabit Optical Fibre Channel PCI cards.
 .El
 .Sh SEE ALSO
 .Xr cd 4 ,
@@ -120,7 +116,9 @@ Antares Microsystems ISP2100 variants.
 .Sh AUTHORS
 The
 .Nm
-driver was written by Matthew Jacob for NASA/Ames Research Center.
+driver was written by
+.An Matthew Jacob
+for NASA/Ames Research Center.
 .Sh BUGS
 The driver currently ignores some NVRAM settings.
 .Pp

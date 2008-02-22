@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakeup_low.S,v 1.4 2007/12/18 07:17:13 joerg Exp $	*/
+/*	$NetBSD: acpi_wakeup_low.S,v 1.8 2016/08/06 14:54:25 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@netbsd.org>
@@ -29,10 +29,11 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup_low.S,v 1.4 2007/12/18 07:17:13 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup_low.S,v 1.8 2016/08/06 14:54:25 maxv Exp $");
 
 #include "assym.h"
 #include <machine/segments.h>
+#include <machine/specialreg.h>
 
 	.text
 	.p2align 2, 0x90
@@ -51,15 +52,21 @@ acpi_md_sleep_exit:
 	movw	ACPI_SUSPEND_GS(%edx),%ax
 	movw	%ax,%gs
 
+	movl	$MSR_EFER,%ecx
+	movl	ACPI_SUSPEND_EFER(%edx),%eax
+	movl	%edx,%esi
+	movl	$0,%edx
+	wrmsr
+	movl	%esi,%edx
+
 	movl	ACPI_SUSPEND_CR2(%edx),%eax
 	movl	%eax,%cr2
-
 	movl	ACPI_SUSPEND_CR4(%edx),%eax
 	movl	%eax,%cr4
 	movl	ACPI_SUSPEND_CR3(%edx),%eax
 	movl	%eax,%cr3
 
-	jmp 1f
+	jmp	1f
 1:
 
 	lidt	ACPI_SUSPEND_IDT(%edx)
@@ -70,13 +77,13 @@ acpi_md_sleep_exit:
 	andl	$~0x0200,4(%eax,%ecx, 1)
 	ltr	%cx
 
-	movl	ACPI_SUSPEND_EBX(%edx),%ebx
-	movl	ACPI_SUSPEND_ESI(%edx),%esi
-	movl	ACPI_SUSPEND_EDI(%edx),%edi
-	movl	ACPI_SUSPEND_EBP(%edx),%ebp
-	movl	ACPI_SUSPEND_ESP(%edx),%esp
+	movl	ACPI_SUSPEND_REG+(0*4)(%edx),%ebx
+	movl	ACPI_SUSPEND_REG+(1*4)(%edx),%esi
+	movl	ACPI_SUSPEND_REG+(2*4)(%edx),%edi
+	movl	ACPI_SUSPEND_REG+(3*4)(%edx),%ebp
+	movl	ACPI_SUSPEND_REG+(4*4)(%edx),%esp
 
-	pushl	ACPI_SUSPEND_EFL(%edx)
+	pushl	ACPI_SUSPEND_REG+(5*4)(%edx)
 	popfl
 
 	xorl	%eax,%eax
@@ -91,11 +98,17 @@ acpi_md_sleep_prepare:
 	movw	%fs,ACPI_SUSPEND_FS(%edx)
 	movw	%gs,ACPI_SUSPEND_GS(%edx)
 
-	movl	%ebx,ACPI_SUSPEND_EBX(%edx)
-	movl	%esi,ACPI_SUSPEND_ESI(%edx)
-	movl	%edi,ACPI_SUSPEND_EDI(%edx)
-	movl	%ebp,ACPI_SUSPEND_EBP(%edx)
-	movl	%esp,ACPI_SUSPEND_ESP(%edx)
+	movl	%ebx,ACPI_SUSPEND_REG+(0*4)(%edx)
+	movl	%esi,ACPI_SUSPEND_REG+(1*4)(%edx)
+	movl	%edi,ACPI_SUSPEND_REG+(2*4)(%edx)
+	movl	%ebp,ACPI_SUSPEND_REG+(3*4)(%edx)
+	movl	%esp,ACPI_SUSPEND_REG+(4*4)(%edx)
+
+	movl	$MSR_EFER,%ecx
+	pushl	%edx
+	rdmsr	/* overwrites %edx */
+	popl	%edx
+	movl	%eax,ACPI_SUSPEND_EFER(%edx)
 
 	movl	%cr0,%eax
 	movl	%eax,ACPI_SUSPEND_CR0(%edx)
@@ -107,7 +120,7 @@ acpi_md_sleep_prepare:
 	movl	%eax,ACPI_SUSPEND_CR4(%edx)
 
 	pushfl
-	popl	ACPI_SUSPEND_EFL(%edx)
+	popl	ACPI_SUSPEND_REG+(5*4)(%edx)
 
 	sgdt	ACPI_SUSPEND_GDT(%edx)
 	sidt	ACPI_SUSPEND_IDT(%edx)

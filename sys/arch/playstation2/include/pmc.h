@@ -1,3 +1,3 @@
-/*	$NetBSD: pmc.h,v 1.1 2002/08/07 05:15:50 briggs Exp $	*/
+/*	$NetBSD: pmc.h,v 1.3 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/pmc.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: isa_machdep.h,v 1.8 2003/05/09 23:51:25 fvdl Exp $ */
+/* $NetBSD: isa_machdep.h,v 1.15 2016/10/18 22:04:33 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,13 +68,14 @@ struct alpha_isa_chipset {
 
 	struct isa_dma_state ic_dmastate;
 
-	void	(*ic_attach_hook)(struct device *, struct device *,
+	void	(*ic_attach_hook)(device_t, device_t,
 		    struct isabus_attach_args *);
 	const struct evcnt *(*ic_intr_evcnt)(void *, int);
 	void	*(*ic_intr_establish)(void *, int, int, int,
 		    int (*)(void *), void *);
 	void	(*ic_intr_disestablish)(void *, void *);
 	int	(*ic_intr_alloc)(void *, int, int, int *);
+	void	(*ic_detach_hook)(isa_chipset_tag_t, device_t);
 };
 
 
@@ -90,9 +84,13 @@ struct alpha_isa_chipset {
  */
 #define	isa_attach_hook(p, s, a)					\
     (*(a)->iba_ic->ic_attach_hook)((p), (s), (a))
+#define	isa_detach_hook(c, s)						\
+    (*(c)->ic_detach_hook)((c), (s))
 #define	isa_intr_evcnt(c, i)					\
     (*(c)->ic_intr_evcnt)((c)->ic_v, (i))
 #define	isa_intr_establish(c, i, t, l, f, a)				\
+    (*(c)->ic_intr_establish)((c)->ic_v, (i), (t), (l), (f), (a))
+#define	isa_intr_establish_xname(c, i, t, l, f, a, x)			\
     (*(c)->ic_intr_establish)((c)->ic_v, (i), (t), (l), (f), (a))
 #define	isa_intr_disestablish(c, h)					\
     (*(c)->ic_intr_disestablish)((c)->ic_v, (h))
@@ -101,6 +99,8 @@ struct alpha_isa_chipset {
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
+#define	isa_dmadestroy(ic)						\
+	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmacascade(ic, c)						\
 	_isa_dmacascade(&(ic)->ic_dmastate, (c))
 #define	isa_dmamaxsize(ic, c)						\
@@ -149,7 +149,7 @@ struct alpha_isa_chipset {
 /*
  * alpha-specific ISA functions.
  * NOT TO BE USED DIRECTLY BY MACHINE INDEPENDENT CODE.
- */ 
+ */
 int	isa_display_console(bus_space_tag_t, bus_space_tag_t);
 void	isabeep(int, int);
 

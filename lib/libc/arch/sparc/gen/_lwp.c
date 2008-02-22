@@ -1,4 +1,4 @@
-/*	$NetBSD: _lwp.c,v 1.4 2005/06/12 05:21:26 lukem Exp $	*/
+/*	$NetBSD: _lwp.c,v 1.7 2012/03/21 00:34:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _lwp.c,v 1.4 2005/06/12 05:21:26 lukem Exp $");
+__RCSID("$NetBSD: _lwp.c,v 1.7 2012/03/21 00:34:04 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -60,7 +53,7 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *), void *arg,
 	u->uc_stack.ss_size = stack_size;
 
 
-	sp = (ulong *)(stack_base + stack_size);
+	sp = (void *)(stack_base + stack_size);
 	sp = (ulong *)((ulong)sp & ~0x07);
 
 	/* Make room for the fake caller stack frame (CCFSZ, only in words) */
@@ -72,6 +65,7 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *), void *arg,
 	gr[_REG_O0] = (ulong)arg;
 	gr[_REG_O6] = (ulong)sp;
 	gr[_REG_O7] = (ulong)_lwp_exit - 8;
+	gr[_REG_G7] = (ulong)private;
 
 	/* XXX: uwe: why do we need this? */
 	/* create loopback in the window save area on the stack? */

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.4 2007/10/17 19:56:41 garbled Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.8 2014/02/28 05:31:38 matt Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,21 +32,17 @@
 #include <sys/types.h>
 #include <sys/proc.h>
 
-typedef	u_int32_t netbsd32_pointer_t;
+#define NETBSD32_POINTER_TYPE			uint32_t
+typedef struct { NETBSD32_POINTER_TYPE i32; }	netbsd32_pointer_t;
 
-/*
- * Convert a pointer in the 32-bit world to a valid 64-bit pointer.
- */
-#define	NETBSD32PTR64(p32)	((void *)(u_long)(u_int)(p32))
-
-/* ppc32 has 32bit aligned 64bit integers */
-#define NETBSD32_INT64_ALIGN __attribute__((__aligned__(4)))
+/* ppc32 has normally aligned 64bit integers */
+#define NETBSD32_INT64_ALIGN
 
 #include <compat/netbsd32/netbsd32.h>
 #include <powerpc/frame.h>
 
-/* from <arch/sparc/include/signal.h> */
-typedef u_int32_t netbsd32_sigcontextp_t;
+/* from <sparc/include/signal.h> */
+typedef uint32_t netbsd32_sigcontextp_t;
 
 struct netbsd32_sigcontext {
 	int		sc_onstack;	/* sigstack state to restore */
@@ -66,9 +60,7 @@ struct netbsd32_sigcontext13 {
 };
 
 struct exec_package;
-void netbsd32_setregs (struct lwp *, struct exec_package *, u_long);
-int netbsd32_sigreturn (struct lwp *, void *, register_t *);
-void netbsd32_sendsig (int sig, sigset_t *, u_long);
+void netbsd32_setregs (struct lwp *, struct exec_package *, vaddr_t);
 
 extern char netbsd32_esigcode[], netbsd32_sigcode[];
 
@@ -76,6 +68,6 @@ extern char netbsd32_esigcode[], netbsd32_sigcode[];
  * Need to plug into get sparc specific ioctl's.
  */
 #define	NETBSD32_MD_IOCTL	/* enable netbsd32_md_ioctl() */
-int netbsd32_md_ioctl(struct file *, netbsd32_u_long, void *, struct proc *);
+int netbsd32_md_ioctl(struct file *, netbsd32_u_long, void *, struct lwp *);
 
 #endif /* _MACHINE_NETBSD32_H_ */

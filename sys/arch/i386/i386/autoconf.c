@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.91 2008/01/23 20:02:16 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.105 2017/10/22 00:59:28 maya Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,23 +46,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.91 2008/01/23 20:02:16 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.105 2017/10/22 00:59:28 maya Exp $");
 
-#include "opt_compat_oldboot.h"
+#include "opt_intrdebug.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/device.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
 #include <machine/gdt.h>
+#include <machine/intr.h>
 #include <machine/pcb.h>
 #include <machine/cpufunc.h>
-#include <x86/x86/tsc.h>
+#include <x86/fpu.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -72,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.91 2008/01/23 20:02:16 joerg Exp $");
 #endif
 
 #if NLAPIC > 0
+#include <machine/i82489reg.h>
 #include <machine/i82489var.h>
 #endif
 
@@ -88,13 +90,7 @@ extern void platform_init(void);
 #include <dev/pci/pcivar.h>
 #include <i386/pci/pcibios.h>
 #endif
-
-#include "opt_kvm86.h"
-#ifdef KVM86
-#include <machine/kvm86.h>
-#endif
-
-#include "opt_viapadlock.h"
+#include <x86/efi.h>
 
 /*
  * Determine i/o configuration for a machine.
@@ -102,19 +98,19 @@ extern void platform_init(void);
 void
 cpu_configure(void)
 {
+	struct pcb *pcb;
 
 	startrtclock();
 
 #if NBIOS32 > 0
+	efi_init();
 	bios32_init();
 	platform_init();
+	/* identify hypervisor type from SMBIOS */
+	identify_hypervisor();
 #endif
 #ifdef PCIBIOS
 	pcibios_init();
-#endif
-
-#ifdef KVM86
-	kvm86_init();
 #endif
 
 	if (config_rootfound("mainbus", NULL) == NULL)
@@ -127,21 +123,17 @@ cpu_configure(void)
 #if NIOAPIC > 0
 	ioapic_enable();
 #endif
+	fpuinit(&cpu_info_primary);
 	/* resync cr0 after FPU configuration */
-	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
+	pcb = lwp_getpcb(&lwp0);
+	pcb->pcb_cr0 = rcr0() & ~CR0_TS;
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
 	cpu_init_idle_lwps();
 #endif
 
-	init_TSC_tc();
-
 	spl0();
 #if NLAPIC > 0
-	lapic_tpr = 0;
-#endif
-
-#if defined(VIA_PADLOCK)
-	via_padlock_attach();
+	lapic_write_tpri(0);
 #endif
 }

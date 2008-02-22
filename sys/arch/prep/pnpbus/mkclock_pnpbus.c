@@ -1,4 +1,4 @@
-/* $NetBSD: mkclock_pnpbus.c,v 1.3 2007/04/29 20:23:35 msaitoh Exp $ */
+/* $NetBSD: mkclock_pnpbus.c,v 1.6 2011/07/01 16:55:42 dyoung Exp $ */
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,14 +42,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mkclock_pnpbus.c,v 1.3 2007/04/29 20:23:35 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mkclock_pnpbus.c,v 1.6 2011/07/01 16:55:42 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/residual.h>
 #include <machine/chpidpnp.h>
 
@@ -65,12 +58,12 @@ __KERNEL_RCSID(0, "$NetBSD: mkclock_pnpbus.c,v 1.3 2007/04/29 20:23:35 msaitoh E
 
 extern int prep_clock_mk48txx;
 
-static int	mkclock_pnpbus_probe(struct device *, struct cfdata *, void *);
+static int	mkclock_pnpbus_probe(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(mkclock_pnpbus, 0, mkclock_pnpbus_probe, NULL, NULL, NULL);
+CFATTACH_DECL_NEW(mkclock_pnpbus, 0, mkclock_pnpbus_probe, NULL, NULL, NULL);
 
 static int
-mkclock_pnpbus_probe(struct device *parent, struct cfdata *match, void *aux)
+mkclock_pnpbus_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pnpbus_dev_attach_args *pna = aux;
 

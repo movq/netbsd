@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9xvar.h,v 1.49 2008/01/04 21:17:57 ad Exp $	*/
+/*	$NetBSD: ncr53c9xvar.h,v 1.56 2014/03/25 16:19:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
 #ifndef _DEV_IC_NCR53C9XVAR_H_
 #define _DEV_IC_NCR53C9XVAR_H_
 
-#include <sys/simplelock.h>
+#include <sys/mutex.h>
 
 /* Set this to 1 for normal debug, or 2 for per-target tracing. */
 /* #define NCR53C9X_DEBUG		1 */
@@ -123,10 +116,10 @@ struct ncr53c9x_ecb {
 		u_char	msg[3];			/* Selection Id msg and tags */
 		struct scsipi_generic cmd;	/* SCSI command block */
 	} cmd;
-	char	*daddr;		/* Saved data pointer */
+	uint8_t	*daddr;		/* Saved data pointer */
 	int	 clen;		/* Size of command in cmd.cmd */
 	int	 dleft;		/* Residue */
-	u_char 	 stat;		/* SCSI status byte */
+	u_char	 stat;		/* SCSI status byte */
 	u_char	 tag[2];	/* TAG bytes */
 	u_char	 pad[1];
 
@@ -137,9 +130,10 @@ struct ncr53c9x_ecb {
 #if NCR53C9X_DEBUG > 1
 #define ECB_TRACE(ecb, msg, a, b) do { \
 	const char *f = "[" msg "]"; \
-	int n = strlen((ecb)->trace); \
-	if (n < (sizeof((ecb)->trace)-100)) \
-		sprintf((ecb)->trace + n, f,  a, b); \
+	size_t n = strlen((ecb)->trace); \
+	if (n >= (sizeof((ecb)->trace)-100)) \
+		break; \
+	snprintf((ecb)->trace + n, sizeof((ecb)->trace) - n, f,  a, b); \
 } while(0)
 #else
 #define ECB_TRACE(ecb, msg, a, b)
@@ -161,9 +155,9 @@ struct ncr53c9x_linfo {
 	int64_t			lun;
 	LIST_ENTRY(ncr53c9x_linfo) link;
 	time_t			last_used;
-	unsigned char		used;	/* # slots in use */
-	unsigned char		avail;	/* where to start scanning */
-	unsigned char		busy;
+	uint8_t			used;	/* # slots in use */
+	uint8_t			avail;	/* where to start scanning */
+	uint8_t			busy;
 	struct ncr53c9x_ecb	*untagged;
 	struct ncr53c9x_ecb	*queued[256];
 };
@@ -174,7 +168,7 @@ struct ncr53c9x_tinfo {
 	int	touts;		/* # of timeouts */
 	int	perrs;		/* # of parity errors */
 	int	senses;		/* # of request sense commands sent */
-	u_char  flags;
+	uint8_t	flags;
 #define T_NEGOTIATE	0x02	/* (Re)Negotiate synchronous options */
 #define T_SYNCMODE	0x08	/* SYNC mode has been negotiated */
 #define T_SYNCHOFF	0x10	/* SYNC mode for is permanently off */
@@ -182,11 +176,11 @@ struct ncr53c9x_tinfo {
 #define T_TAG		0x40	/* Turn on TAG QUEUEs */
 #define T_WIDE		0x80	/* Negotiate wide options */
 #define T_WDTRSENT	0x04	/* WDTR message has been sent to */
-	u_char  period;		/* Period suggestion */
-	u_char  offset;		/* Offset suggestion */
-	u_char  cfg3;		/* per target config 3  */
-	u_char	nextag;		/* Next available tag */
-	u_char  width;		/* width suggesion */
+	uint8_t	period;		/* Period suggestion */
+	uint8_t	offset;		/* Offset suggestion */
+	uint8_t	cfg3;		/* per target config 3  */
+	uint8_t	nextag;		/* Next available tag */
+	uint8_t	width;		/* width suggesion */
 	LIST_HEAD(lun_list, ncr53c9x_linfo) luns;
 	struct ncr53c9x_linfo *lun[NCR_NLUN]; /* For speedy lookups */
 };
@@ -253,13 +247,13 @@ struct ncr53c9x_softc;
  */
 struct ncr53c9x_glue {
 	/* Mandatory entry points. */
-	u_char	(*gl_read_reg)(struct ncr53c9x_softc *, int);
-	void	(*gl_write_reg)(struct ncr53c9x_softc *, int, u_char);
+	uint8_t	(*gl_read_reg)(struct ncr53c9x_softc *, int);
+	void	(*gl_write_reg)(struct ncr53c9x_softc *, int, uint8_t);
 	int	(*gl_dma_isintr)(struct ncr53c9x_softc *);
 	void	(*gl_dma_reset)(struct ncr53c9x_softc *);
 	int	(*gl_dma_intr)(struct ncr53c9x_softc *);
 	int	(*gl_dma_setup)(struct ncr53c9x_softc *,
-		    void **, size_t *, int, size_t *);
+		    uint8_t **, size_t *, int, size_t *);
 	void	(*gl_dma_go)(struct ncr53c9x_softc *);
 	void	(*gl_dma_stop)(struct ncr53c9x_softc *);
 	int	(*gl_dma_isactive)(struct ncr53c9x_softc *);
@@ -269,12 +263,12 @@ struct ncr53c9x_glue {
 };
 
 struct ncr53c9x_softc {
-	struct device sc_dev;			/* us as a device */
+	device_t sc_dev;			/* us as a device */
 
 	struct evcnt sc_intrcnt;		/* intr count */
 	struct scsipi_adapter sc_adapter;	/* out scsipi adapter */
 	struct scsipi_channel sc_channel;	/* our scsipi channel */
-	struct device *sc_child;		/* attached scsibus, if any */
+	device_t sc_child;		/* attached scsibus, if any */
 	struct callout sc_watchdog;		/* periodic timer */
 
 	const struct ncr53c9x_glue *sc_glue;	/* glue to MD code */
@@ -282,21 +276,21 @@ struct ncr53c9x_softc {
 	int	sc_cfflags;			/* Copy of config flags */
 
 	/* register defaults */
-	u_char	sc_cfg1;			/* Config 1 */
-	u_char	sc_cfg2;			/* Config 2, not ESP100 */
-	u_char	sc_cfg3;			/* Config 3, ESP200,FAS */
-	u_char	sc_cfg3_fscsi;			/* Chip-specific FSCSI bit */
-	u_char	sc_cfg4;			/* Config 4, only ESP200 */
-	u_char	sc_cfg5;			/* Config 5, only ESP200 */
-	u_char	sc_ccf;				/* Clock Conversion */
-	u_char	sc_timeout;
+	uint8_t	sc_cfg1;			/* Config 1 */
+	uint8_t	sc_cfg2;			/* Config 2, not ESP100 */
+	uint8_t	sc_cfg3;			/* Config 3, ESP200,FAS */
+	uint8_t	sc_cfg3_fscsi;			/* Chip-specific FSCSI bit */
+	uint8_t	sc_cfg4;			/* Config 4, only ESP200 */
+	uint8_t	sc_cfg5;			/* Config 5, only ESP200 */
+	uint8_t	sc_ccf;				/* Clock Conversion */
+	uint8_t	sc_timeout;
 
 	/* register copies, see espreadregs() */
-	u_char	sc_espintr;
-	u_char	sc_espstat;
-	u_char	sc_espstep;
-	u_char  sc_espstat2;
-	u_char	sc_espfflags;
+	uint8_t	sc_espintr;
+	uint8_t	sc_espstat;
+	uint8_t	sc_espstep;
+	uint8_t  sc_espstat2;
+	uint8_t	sc_espfflags;
 
 	/* Lists of command blocks */
 	TAILQ_HEAD(ecb_list, ncr53c9x_ecb)
@@ -307,31 +301,31 @@ struct ncr53c9x_softc {
 	struct ncr53c9x_tinfo *sc_tinfo;
 
 	/* Data about the current nexus (updated for every cmd switch) */
-	void *	sc_dp;		/* Current data pointer */
+	uint8_t	*sc_dp;		/* Current data pointer */
 	ssize_t	sc_dleft;	/* Data left to transfer */
 
 	/* Adapter state */
 	int	sc_phase;	/* Copy of what bus phase we are in */
 	int	sc_prevphase;	/* Copy of what bus phase we were in */
-	u_char	sc_state;	/* State applicable to the adapter */
-	u_char	sc_flags;	/* See below */
-	u_char	sc_selid;
-	u_char	sc_lastcmd;
+	uint8_t	sc_state;	/* State applicable to the adapter */
+	uint8_t	sc_flags;	/* See below */
+	uint8_t	sc_selid;
+	uint8_t	sc_lastcmd;
 
 	/* Message stuff */
-	u_short sc_msgify;	/* IDENTIFY message associated with this nexus */
-	u_short	sc_msgout;	/* What message is on its way out? */
-	u_short	sc_msgpriq;	/* One or more messages to send (encoded) */
-	u_short	sc_msgoutq;	/* What messages have been sent so far? */
+	uint16_t sc_msgify;	/* IDENTIFY msg associated with this nexus */
+	uint16_t sc_msgout;	/* What message is on its way out? */
+	uint16_t sc_msgpriq;	/* One or more messages to send (encoded) */
+	uint16_t sc_msgoutq;	/* What messages have been sent so far? */
 
-	u_char	*sc_omess;	/* MSGOUT buffer */
-	void *	sc_omp;		/* Message pointer (for multibyte messages) */
+	uint8_t	*sc_omess;	/* MSGOUT buffer */
+	uint8_t	*sc_omp;	/* Message pointer (for multibyte messages) */
 	size_t	sc_omlen;
-	u_char	*sc_imess;	/* MSGIN buffer */
-	void *	sc_imp;		/* Message pointer (for multibyte messages) */
+	uint8_t	*sc_imess;	/* MSGIN buffer */
+	uint8_t	*sc_imp;	/* Message pointer (for multibyte messages) */
 	size_t	sc_imlen;
 
-	void *	sc_cmdp;	/* Command pointer (for DMAed commands) */
+	uint8_t	*sc_cmdp;	/* Command pointer (for DMAed commands) */
 	size_t	sc_cmdlen;	/* Size of command in transit */
 
 	/* Hardware attributes */
@@ -342,7 +336,7 @@ struct ncr53c9x_softc {
 	int sc_minsync;		/* Minimum sync period / 4 */
 	int sc_maxxfer;		/* Maximum transfer size */
 
-	struct simplelock sc_lock;/* driver mutex */
+	kmutex_t sc_lock;	/* driver mutex */
 };
 
 /* values for sc_state */
@@ -377,7 +371,7 @@ struct ncr53c9x_softc {
 #define SEND_PARITY_ERROR	0x0002
 #define SEND_INIT_DET_ERR	0x0004
 #define SEND_REJECT		0x0008
-#define SEND_IDENTIFY  		0x0010
+#define SEND_IDENTIFY		0x0010
 #define SEND_ABORT		0x0020
 #define SEND_WDTR		0x0040
 #define SEND_SDTR		0x0080
@@ -417,10 +411,10 @@ struct ncr53c9x_softc {
 #ifdef NCR53C9X_DEBUG
 #define	NCRCMD(sc, cmd) do {						\
 	if ((ncr53c9x_debug & NCR_SHOWCCMDS) != 0)			\
-		printf("<CMD:0x%x %d>", (unsigned)cmd, __LINE__);	\
+		printf("<CMD:0x%x %d>", (unsigned int)cmd, __LINE__);	\
 	sc->sc_lastcmd = cmd;						\
 	NCR_WRITE_REG(sc, NCR_CMD, cmd);				\
-} while (0)
+} while (/* CONSTCOND */ 0)
 #else
 #define	NCRCMD(sc, cmd)		NCR_WRITE_REG(sc, NCR_CMD, cmd)
 #endif
@@ -450,5 +444,6 @@ void	ncr53c9x_scsipi_request(struct scsipi_channel *chan,
 void	ncr53c9x_reset(struct ncr53c9x_softc *);
 int	ncr53c9x_intr(void *);
 void	ncr53c9x_init(struct ncr53c9x_softc *, int);
+void	ncr53c9x_abort(struct ncr53c9x_softc *, struct ncr53c9x_ecb *);
 
 #endif /* _DEV_IC_NCR53C9XVAR_H_ */

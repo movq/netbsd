@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.4 2003/05/09 23:51:26 fvdl Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.12 2016/10/18 22:04:33 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ARM32_ISA_MACHDEP_H_
-#define _ARM32_ISA_MACHDEP_H_
+#ifndef _ARM_ISA_MACHDEP_H_
+#define _ARM_ISA_MACHDEP_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/isa/isadmavar.h>
 
 /*
@@ -52,21 +45,25 @@ struct arm32_isa_chipset {
 
 typedef struct arm32_isa_chipset *isa_chipset_tag_t;
 
-struct device;			/* XXX */
 struct isabus_attach_args;	/* XXX */
 
 /*
  * Functions provided to machine-independent ISA code.
  */
-void	isa_attach_hook(struct device *, struct device *,
+void	isa_attach_hook(device_t, device_t,
 	    struct isabus_attach_args *);
+void	isa_detach_hook(isa_chipset_tag_t, device_t);
 const struct evcnt *isa_intr_evcnt(isa_chipset_tag_t ic, int irq);
 void	*isa_intr_establish(isa_chipset_tag_t ic, int irq, int type,
 	    int level, int (*ih_fun)(void *), void *ih_arg);
+void	*isa_intr_establish_xname(isa_chipset_tag_t ic, int irq, int type,
+	    int level, int (*ih_fun)(void *), void *ih_arg, const char *xname);
 void	isa_intr_disestablish(isa_chipset_tag_t ic, void *handler);
 
 #define	isa_dmainit(ic, bst, dmat, d)					\
 	_isa_dmainit(&(ic)->ic_dmastate, (bst), (dmat), (d))
+#define	isa_dmadestroy(ic)						\
+	_isa_dmadestroy(&(ic)->ic_dmastate)
 #define	isa_dmacascade(ic, c)						\
 	_isa_dmacascade(&(ic)->ic_dmastate, (c))
 #define	isa_dmamaxsize(ic, c)						\
@@ -119,42 +116,6 @@ void	isa_intr_disestablish(isa_chipset_tag_t ic, void *handler);
 
 extern struct arm32_bus_dma_tag isa_bus_dma_tag;
 
-/*
- * Cookie used by ISA DMA.  A pointer to one of these is stashed in
- * the DMA map.
- */
-struct arm32_isa_dma_cookie {
-	int	id_flags;		/* flags; see below */
-
-	/*
-	 * Information about the original buffer used during
-	 * DMA map syncs.  Note that origbuflen is only used
-	 * for ID_BUFTYPE_LINEAR.
-	 */
-	void	*id_origbuf;		/* pointer to orig buffer if
-					   bouncing */
-	bus_size_t id_origbuflen;	/* ...and size */
-	int	id_buftype;		/* type of buffer */
-
-	void	*id_bouncebuf;		/* pointer to the bounce buffer */
-	bus_size_t id_bouncebuflen;	/* ...and size */
-	int	id_nbouncesegs;		/* number of valid bounce segs */
-	bus_dma_segment_t id_bouncesegs[0]; /* array of bounce buffer
-					       physical memory segments */
-};
-
-/* id_flags */
-#define	ID_MIGHT_NEED_BOUNCE	0x01	/* map could need bounce buffers */
-#define	ID_HAS_BOUNCE		0x02	/* map currently has bounce buffers */
-#define	ID_IS_BOUNCING		0x04	/* map is bouncing current xfer */
-
-/* id_buftype */
-#define	ID_BUFTYPE_INVALID	0
-#define	ID_BUFTYPE_LINEAR	1
-#define	ID_BUFTYPE_MBUF		2
-#define	ID_BUFTYPE_UIO		3
-#define	ID_BUFTYPE_RAW		4
-
 /* bus space tags */
 extern struct bus_space isa_io_bs_tag;
 extern struct bus_space isa_mem_bs_tag;
@@ -184,4 +145,4 @@ void	isa_intr_init(void);
 void sysbeep(int, int);		/* beep with the system speaker */
 void isa_fillw(u_int val, void *addr, size_t len);
 
-#endif	/* _ARM32_ISA_MACHDEP_H_ XXX */
+#endif	/* _ARM_ISA_MACHDEP_H_ */

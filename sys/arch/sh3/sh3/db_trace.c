@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.21 2007/02/22 16:52:56 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.25 2013/11/09 02:23:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.21 2007/02/22 16:52:56 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.25 2013/11/09 02:23:57 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,14 +40,13 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.21 2007/02/22 16:52:56 thorpej Exp $"
 #include <ddb/db_sym.h>
 #include <ddb/db_variables.h>
 
-#ifdef TRACE_DEBUG
-# define DPRINTF printf
-#else
-# define DPRINTF while (/* CONSTCOND */ 0) printf
-#endif
+volatile int db_trace_debug = 0; /* settabble from ddb */
+#define DPRINTF if (__predict_false(db_trace_debug)) (*print)
+
 
 extern char start[], etext[];
-void db_nextframe(db_addr_t, db_addr_t *, db_addr_t *);
+static void db_nextframe(db_addr_t, db_addr_t *, db_addr_t *,
+			 void (*)(const char *, ...));
 
 const struct db_variable db_regs[] = {
 	{ "r0",   (long *)&ddb_regs.tf_r0,   FCN_NULL },
@@ -67,32 +66,97 @@ const struct db_variable db_regs[] = {
 	{ "r14",  (long *)&ddb_regs.tf_r14,  FCN_NULL },
 	{ "r15",  (long *)&ddb_regs.tf_r15,  FCN_NULL },
 	{ "pr",   (long *)&ddb_regs.tf_pr,   FCN_NULL },
-	{ "spc",  (long *)&ddb_regs.tf_spc,  FCN_NULL },
-	{ "ssr",  (long *)&ddb_regs.tf_ssr,  FCN_NULL },
+	{ "pc",   (long *)&ddb_regs.tf_spc,  FCN_NULL },
+	{ "sr",   (long *)&ddb_regs.tf_ssr,  FCN_NULL },
 	{ "mach", (long *)&ddb_regs.tf_mach, FCN_NULL },
 	{ "macl", (long *)&ddb_regs.tf_macl, FCN_NULL },
 };
 
-const struct db_variable * const db_eregs =
-	db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+const struct db_variable * const db_eregs = db_regs + __arraycount(db_regs);
+
 
 void
 db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
     const char *modif, void (*print)(const char *, ...))
 {
+	struct trapframe *tf;
 	db_addr_t callpc, frame, lastframe;
 	uint32_t vbr;
+	bool lwpid = false;
+	bool lwpaddr = false;
+	const char *cp;
+	char c;
 
 	__asm volatile("stc vbr, %0" : "=r"(vbr));
 
-	frame = ddb_regs.tf_r14;
-	callpc = ddb_regs.tf_spc;
+	cp = modif;
+	while ((c = *cp++) != 0) {
+		if (c == 'a')
+			lwpaddr = true;
+		else if (c == 't')
+			lwpid = true;
+	}
+
+	if (lwpaddr && lwpid) {
+		db_printf("only one of /a or /t can be specified\n");
+		return;
+	}
+	if ((lwpaddr || lwpid) && !have_addr) {
+		db_printf("%s required\n", lwpaddr ? "address" : "pid");
+		return;
+	}
+
+
+	if (!have_addr) {
+		tf = &ddb_regs;
+		frame = tf->tf_r14;
+		callpc = tf->tf_spc;
+		if (callpc == 0) {
+			(*print)("calling through null pointer?\n");
+			callpc = tf->tf_pr;
+		}
+	}
+	else if (lwpaddr || lwpid) {
+		struct proc *p;
+		struct lwp *l;
+		struct pcb *pcb;
+
+		if (lwpaddr) {
+			l = (struct lwp *)addr;
+			p = l->l_proc;
+			(*print)("trace: lwp addr %p pid %d ",
+				 (void *)addr, p->p_pid);
+		}
+		else {
+			pid_t pid = (pid_t)addr;
+			(*print)("trace: pid %d ", pid);
+			p = proc_find_raw(pid);
+			if (p == NULL) {
+				(*print)("not found\n");
+				return;
+			}
+			l = LIST_FIRST(&p->p_lwps);
+		}
+		KASSERT(l != NULL);
+		(*print)("lid %d ", l->l_lid);
+		pcb = lwp_getpcb(l);
+		tf = (struct trapframe *)pcb->pcb_sf.sf_r6_bank;
+		frame = pcb->pcb_sf.sf_r14;
+		callpc = pcb->pcb_sf.sf_pr;
+		(*print)("at %p\n", frame);
+	}
+	else {
+		/* XXX */
+		db_printf("trace by frame address is not supported\n");
+		return;
+	}
 
 	lastframe = 0;
 	while (count > 0 && frame != 0) {
 		/* Are we crossing a trap frame? */
 		if ((callpc & ~PAGE_MASK) == vbr) {
-			struct trapframe *tf = (void *)frame;
+			/* r14 in exception vectors points to trap frame */
+			tf = (void *)frame;
 
 			frame = tf->tf_r14;
 			callpc = tf->tf_spc;
@@ -102,50 +166,63 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 			db_printsym(callpc, DB_STGY_PROC, print);
 			(*print)("\n");
 
+			lastframe = 0;
+
 			/* XXX: don't venture into the userland yet */
 			if ((tf->tf_ssr & PSL_MD) == 0)
 				break;
 		} else {
+			db_addr_t oldfp;
 			const char *name;
 			db_expr_t offset;
 			db_sym_t sym;
 
 
-			DPRINTF("    (1)newpc 0x%lx, newfp 0x%lx\n",
+			DPRINTF("    (1) newpc 0x%lx, newfp 0x%lx\n",
 				callpc, frame);
 
 			sym = db_search_symbol(callpc, DB_STGY_ANY, &offset);
 			db_symbol_values(sym, &name, NULL);
 
 			if (lastframe == 0 && sym == 0) {
-				printf("symbol not found\n");
+				(*print)("symbol not found\n");
 				break;
 			}
 
-			db_nextframe(callpc - offset, &frame, &callpc);
-			DPRINTF("    (2)newpc 0x%lx, newfp 0x%lx\n",
+			oldfp = frame;
+
+			db_nextframe(callpc - offset, &frame, &callpc, print);
+			DPRINTF("    (2) newpc 0x%lx, newfp 0x%lx\n",
 				callpc, frame);
 
-			if (callpc == 0 && lastframe == 0)
-				callpc = (db_addr_t)ddb_regs.tf_pr;
-			DPRINTF("    (3)newpc 0x%lx, newfp 0x%lx\n",
-				callpc, frame);
+			/* leaf routine or interrupted early? */
+			if (lastframe == 0 && callpc == 0) {
+				callpc = tf->tf_pr; /* PR still in register */
+
+				/* asm routine w/out frame? */
+				if (frame == 0)
+					frame = oldfp;
+				DPRINTF("    (3) newpc 0x%lx, newfp 0x%lx\n",
+					callpc, frame);
+			}
 
 			(*print)("%s() at ", name ? name : "");
 			db_printsym(callpc, DB_STGY_PROC, print);
 			(*print)("\n");
+
+			lastframe = frame;
 		}
 
 		count--;
-		lastframe = frame;
 	}
 }
 
-void
+static void
 db_nextframe(
 	db_addr_t pc,		/* in: entry address of current function */
 	db_addr_t *fp,		/* in: current fp, out: parent fp */
-	db_addr_t *pr)		/* out: parent pr */
+	db_addr_t *pr,		/* out: parent pr */
+	void (*print)(const char *, ...))
 {
 	int *frame = (void *)*fp;
 	int i, inst;
@@ -160,6 +237,9 @@ db_nextframe(
 	for (i = 0; i < 30; i++) {
 		inst = db_get_value(pc, 2, false);
 		pc += 2;
+
+		if (inst == 0x000b) 	/* rts - asm routines w/out frame */
+			break;
 
 		if (inst == 0x6ef3)	/* mov r15,r14 -- end of prologue */
 			break;
@@ -182,7 +262,7 @@ db_nextframe(
 			int8_t n = inst & 0xff;
 
 			if (n >= 0) {
-				printf("add #n,r15  (n > 0)\n");
+				(*print)("add #n,r15  (n > 0)\n");
 				break;
 			}
 
@@ -208,10 +288,12 @@ db_nextframe(
 			}
 		}
 
-#ifdef TRACE_DEBUG
-		printf("unknown instruction in prologue\n");
-		db_disasm(pc - 2, 0);
-#endif
+		if (__predict_false(db_trace_debug > 1)) {
+			(*print)("    unknown insn at ");
+			db_printsym(pc - 2, DB_STGY_PROC, print);
+			(*print)(":\t");
+			db_disasm(pc - 2, 0); /* XXX: always uses db_printf */
+		}
 	}
 
  out:

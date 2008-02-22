@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.14 2018/04/14 19:58:20 scole Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,27 +34,65 @@
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/systm.h>
+#include <sys/cpu.h>
+
+#include <machine/frame.h>
+#include <machine/md_var.h>
+#include <machine/pcb.h>
 
 #include <uvm/uvm_extern.h>
+
+void lwp_trampoline(void);
 
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
+
+	/* XXX: Not yet. */
+	(void)l;
+	(void)proc;
+}
+
+void
+cpu_lwp_free2(struct lwp *l)
+{
+
+	(void)l;
 }
 
 /*
- * cpu_exit is called as the last action during exit.
- * We block interrupts and call switch_exit.  switch_exit switches
- * to proc0's PCB and stack, then jumps into the middle of cpu_switch,
- * as if it were switching from proc0.
+ * The cpu_switchto() function saves the context of the LWP which is
+ * currently running on the processor, and restores the context of the LWP
+ * specified by newlwp.  man cpu_switchto(9)
  */
-void
-cpu_exit(struct lwp *l)
+lwp_t *
+cpu_switchto(lwp_t *oldlwp, lwp_t *newlwp, bool returning)
 {
-	(void) splhigh();
-	/* NOTREACHED */
+	const struct lwp *l = curlwp;
+	struct pcb *oldpcb = oldlwp ? lwp_getpcb(oldlwp) : NULL;
+	struct pcb *newpcb = lwp_getpcb(newlwp);
+	struct cpu_info *ci = curcpu();
+	register uint64_t reg9 __asm("r9");
+
+	KASSERT(newlwp != NULL);
+	
+	ci->ci_curlwp = newlwp;
+	
+	/* required for lwp_startup, copy oldlwp into r9, "mov r9=in0" */
+	__asm __volatile("mov %0=%1" : "=r"(reg9) : "r"(oldlwp));
+	
+	/* XXX handle RAS eventually */
+	
+	if (oldlwp == NULL) {
+		restorectx(newpcb);
+	} else {
+		KASSERT(oldlwp == l);
+		swapctx(oldpcb, newpcb);
+	}
+	
+	return (oldlwp);
 }
 
 /*
@@ -69,7 +100,7 @@ cpu_exit(struct lwp *l)
  * Copy and update the pcb and trap frame, making the child ready to run.
  * 
  * Rig the child's kernel stack so that it will start out in
- * proc_trampoline() and call child_return() with p2 as an
+ * lwp_trampoline() and call child_return() with p2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
@@ -86,40 +117,64 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	return;
-}
+	struct pcb *pcb1, *pcb2;
+	struct trapframe *tf;
+	
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
 
-void
-cpu_setfunc(l, func, arg)
-	struct lwp *l;
-	void (*func) __P((void *));
-	void *arg;
-{
-	return;
-}
+	/* Copy pcb from lwp l1 to l2. */
+	if (l1 == curlwp) {
+		/* Sync the PCB before we copy it. */
+		if (savectx(pcb1) != 0)
+			panic("unexpected return from savectx");
+		/* ia64_highfp_save(td1); XXX */
+	} else {
+		KASSERT(l1 == &lwp0);
+	}
 
-/*
- * Finish a swapin operation.
- *
- * We need to cache the physical address of the PCB, so we can
- * swap context to it easily.
- */
-void
-cpu_swapin(struct lwp *l)
-{
-	return;
-}
+	/*
+	 * XXX this seems incomplete, each thread apparently needs its
+	 * own stack and bspstore, and to re-adjust the RSE "ndirty"
+	 * registers.  See
+	 * http://fxr.watson.org/fxr/source/ia64/ia64/vm_machdep.c?v=FREEBSD10#L262
+	 * Also should verify u-area usage is consistent, which may be
+	 * different than freebsd.
+	 */
+	*pcb2 = *pcb1;
 
-/*
- * cpu_swapout is called immediately before a process's 'struct user'
- * and kernel stack are unwired (which are in turn done immediately
- * before it's P_INMEM flag is cleared).  If the process is the
- * current owner of the floating point unit, the FP state has to be
- * saved, so that it goes out with the pcb, which is in the user area.
- */
-void
-cpu_swapout(struct lwp *l)
-{
+	l2->l_md.md_flags = l1->l_md.md_flags;
+	l2->l_md.md_tf = (struct trapframe *)(uvm_lwp_getuarea(l2) + USPACE) - 1;
+	l2->l_md.md_astpending = 0;
+
+        /*
+	 * Copy the trapframe.
+	 */
+	tf = l2->l_md.md_tf;
+	*tf = *l1->l_md.md_tf;
+
+        /*
+	 * If specified, give the child a different stack.
+	 */
+	if (stack != NULL)
+		tf->tf_special.sp = (unsigned long)stack + stacksize;
+
+	/* Set-up the return values as expected by the fork() libc stub. */
+	if (tf->tf_special.psr & IA64_PSR_IS) {
+		tf->tf_scratch.gr8 = 0;
+		tf->tf_scratch.gr10 = 1;
+	} else {
+		tf->tf_scratch.gr8 = 0;
+		tf->tf_scratch.gr9 = 1;
+		tf->tf_scratch.gr10 = 0;
+	}
+
+	tf->tf_scratch.gr2 = (unsigned long)FDESC_FUNC(func);
+	tf->tf_scratch.gr3 = (unsigned long)arg;
+	pcb2->pcb_special.sp = (unsigned long)tf - 16;
+	pcb2->pcb_special.rp = (unsigned long)FDESC_FUNC(lwp_trampoline);
+	pcb2->pcb_special.pfs = 0;
+
 	return;
 }
 
@@ -128,10 +183,11 @@ cpu_swapout(struct lwp *l)
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
-	return;
+printf("%s: not yet\n", __func__);
+	return 0;
 }
 
 /*
@@ -140,5 +196,6 @@ vmapbuf(struct buf *bp, vsize_t len)
 void
 vunmapbuf(struct buf *bp, vsize_t len)
 {
+printf("%s: not yet\n", __func__);
 	return;
 }

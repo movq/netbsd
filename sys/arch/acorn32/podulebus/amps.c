@@ -1,4 +1,4 @@
-/*	$NetBSD: amps.c,v 1.12 2006/07/13 22:56:00 gdamore Exp $	*/
+/*	$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.12 2006/07/13 22:56:00 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.20 2012/10/27 17:17:23 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.12 2006/07/13 22:56:00 gdamore Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -60,10 +52,10 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.12 2006/07/13 22:56:00 gdamore Exp $");
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
-#include <machine/bus.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/ampsreg.h>
 #include <dev/ic/comreg.h>
@@ -87,16 +79,16 @@ __KERNEL_RCSID(0, "$NetBSD: amps.c,v 1.12 2006/07/13 22:56:00 gdamore Exp $");
  */
 
 struct amps_softc {
-	struct device		sc_dev;			/* device node */
+	device_t		sc_dev;			/* device node */
 	podule_t 		*sc_podule;		/* Our podule info */
 	int 			sc_podule_number;	/* Our podule number */
 	bus_space_tag_t		sc_iot;			/* Bus tag */
 };
 
-int	amps_probe(struct device *, struct cfdata *, void *);
-void	amps_attach(struct device *, struct device *, void *);
+int	amps_probe(device_t, cfdata_t, void *);
+void	amps_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(amps, sizeof(struct amps_softc),
+CFATTACH_DECL_NEW(amps, sizeof(struct amps_softc),
     amps_probe, amps_attach, NULL, NULL);
 
 int	amps_print(void *, const char *);
@@ -121,9 +113,7 @@ struct amps_attach_args {
 /* Print function used during child config */
 
 int
-amps_print(aux, name)
-	void *aux;
-	const char *name;
+amps_print(void *aux, const char *name)
 {
 	struct amps_attach_args *aa = aux;
 
@@ -140,12 +130,9 @@ amps_print(aux, name)
  */
 
 int
-amps_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+amps_probe(device_t parent, cfdata_t cf, void *aux)
 {
-	struct podule_attach_args *pa = (void *)aux;
+	struct podule_attach_args *pa = aux;
 
 	return (pa->pa_product == PODULE_ATOMWIDE_SERIAL);
 }
@@ -158,12 +145,10 @@ amps_probe(parent, cf, aux)
  */
 
 void
-amps_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+amps_attach(device_t parent, device_t self, void *aux)
 {
-	struct amps_softc *sc = (void *)self;
-	struct podule_attach_args *pa = (void *)aux;
+	struct amps_softc *sc = device_private(self);
+	struct podule_attach_args *pa = aux;
 	struct amps_attach_args aa;
 
 	/* Note the podule number and validate */
@@ -171,6 +156,7 @@ amps_attach(parent, self, aux)
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
 
+	sc->sc_dev = self;
 	sc->sc_podule_number = pa->pa_podule_number;
 	sc->sc_podule = pa->pa_podule;
 	podules[sc->sc_podule_number].attached = 1;
@@ -179,7 +165,7 @@ amps_attach(parent, self, aux)
 
 	/* Install a clean up handler to make sure IRQ's are disabled */
 /*	if (shutdownhook_establish(amps_shutdown, (void *)sc) == NULL)
-		panic("%s: Cannot install shutdown handler", self->dv_xname);*/
+		panic("%s: Cannot install shutdown handler", device_xname(self));*/
 
 	/* Set the interrupt info for this podule */
 
@@ -208,8 +194,7 @@ amps_attach(parent, self, aux)
  */
 
 /*void
-amps_shutdown(arg)
-	void *arg;
+amps_shutdown(void *arg)
 {
 }*/
 
@@ -228,12 +213,12 @@ struct com_amps_softc {
 
 /* Prototypes for functions */
 
-static int  com_amps_probe   __P((struct device *, struct cfdata *, void *));
-static void com_amps_attach  __P((struct device *, struct device *, void *));
+static int  com_amps_probe   (device_t, cfdata_t , void *);
+static void com_amps_attach  (device_t, device_t, void *);
 
 /* device attach structure */
 
-CFATTACH_DECL(com_amps, sizeof(struct com_amps_softc),
+CFATTACH_DECL_NEW(com_amps, sizeof(struct com_amps_softc),
 	com_amps_probe, com_amps_attach, NULL, NULL);
 
 /*
@@ -244,10 +229,7 @@ CFATTACH_DECL(com_amps, sizeof(struct com_amps_softc),
  */
 
 int
-com_amps_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+com_amps_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -295,17 +277,16 @@ com_amps_probe(parent, cf, aux)
  */    
 
 void
-com_amps_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_amps_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_amps_softc *asc = (void *)self;
+	struct com_amps_softc *asc = device_private(self);
 	struct com_softc *sc = &asc->sc_com;
 	u_int iobase;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	struct amps_attach_args *aa = aux;
 
+	sc->sc_dev = self;
 	iot = aa->aa_iot;
 	iobase = aa->aa_base;
 
@@ -318,7 +299,7 @@ com_amps_attach(parent, self, aux)
 	com_attach_subr(sc);
 
 	evcnt_attach_dynamic(&asc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    self->dv_xname, "intr");
+	    device_xname(self), "intr");
 	asc->sc_ih = podulebus_irq_establish(aa->aa_irq, IPL_SERIAL, comintr,
 	    sc, &asc->sc_intrcnt);
 }

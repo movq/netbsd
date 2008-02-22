@@ -1,9 +1,9 @@
-/*	$NetBSD: cpu.c,v 1.15 2006/04/15 08:49:47 tsutsui Exp $	*/
+/*	$NetBSD: cpu.c,v 1.20 2015/06/24 06:19:52 matt Exp $	*/
 /*	$OpenBSD: cpu.c,v 1.8 1997/04/19 17:19:41 pefo Exp $ */
 
 /*
  * Copyright (c) 1997 Per Fogelstrom
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -34,30 +34,30 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.15 2006/04/15 08:49:47 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.20 2015/06/24 06:19:52 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
+#include <mips/locore.h>
+
 #include <machine/autoconf.h>
 
 #include "ioconf.h"
 
 /* Definition of the driver for autoconfig. */
-static int	cpumatch(struct device *, struct cfdata *, void *);
-static void	cpuattach(struct device *, struct device *, void *);
+static int	cpumatch(device_t, cfdata_t, void *);
+static void	cpuattach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpumatch, cpuattach, NULL, NULL);
 
 static int
-cpumatch(struct device *parent, struct cfdata *match, void *aux)
+cpumatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -69,14 +69,15 @@ cpumatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-cpuattach(struct device *parent, struct device *dev, void *aux)
+cpuattach(device_t parent, device_t self, void *aux)
 {
 
-	printf(": ");
+	struct cpu_info * const ci = curcpu();
 
-#if 1
-	cpu_identify();
-#else /* XXX - before do this, fix pmax, newsmips */
-	cpu_identify(dev);
-#endif
+	ci->ci_dev = self;
+	self->dv_private = ci;
+
+	aprint_normal(": ");
+
+	cpu_identify(self);
 }

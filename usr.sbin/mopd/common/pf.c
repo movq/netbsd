@@ -1,4 +1,4 @@
-/*	$NetBSD: pf.c,v 1.10 2004/12/01 23:15:08 christos Exp $	*/
+/*	$NetBSD: pf.c,v 1.13 2016/06/08 01:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -15,10 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
+ * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -33,9 +30,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: pf.c,v 1.10 2004/12/01 23:15:08 christos Exp $");
+__RCSID("$NetBSD: pf.c,v 1.13 2016/06/08 01:11:49 christos Exp $");
 #endif
 
 #include "os.h"
@@ -61,8 +58,7 @@ extern int promisc;
  */
 
 int
-pfTrans(interface)
-	char *interface;
+pfTrans(const char *interface)
 {
 	return TRANS_ETHER+TRANS_8023+TRANS_AND;
 }
@@ -72,10 +68,7 @@ pfTrans(interface)
  */
 
 int
-pfInit(interface, mode, protocol, typ)
-	char *interface;
-	u_short protocol;
-	int typ, mode;
+pfInit(const char *interface, int mode, u_short protocol, int typ)
 {
 	int	fd;
 	struct ifreq ifr;
@@ -153,9 +146,7 @@ pfInit(interface, mode, protocol, typ)
  */
 
 int
-pfAddMulti(s, interface, addr)
-	int s;
-	char *interface, *addr;
+pfAddMulti(int s, const char *interface, const char *addr)
 {
 	struct ifreq ifr;
 	int	fd;
@@ -188,9 +179,7 @@ pfAddMulti(s, interface, addr)
  */
 
 int
-pfDelMulti(s, interface, addr)
-	int s;
-	char *interface, *addr;
+pfDelMulti(int s, const char *interface, const char *addr)
 {
 	struct ifreq ifr;
 	int	fd;
@@ -223,9 +212,7 @@ pfDelMulti(s, interface, addr)
  */
 
 int
-pfRead(fd, buf, len)
-	int	fd, len;
-	u_char *buf;
+pfRead(int fd, u_char *buf, int len)
 {
 	return(read(fd, buf, len));
 }
@@ -235,24 +222,22 @@ pfRead(fd, buf, len)
  */
 
 int
-pfWrite(fd, buf, len, trans)
-	int fd, len, trans;
-	u_char *buf;
+pfWrite(int fd, const u_char *buf, int len, int trans)
 {
 	
 	struct iovec iov[2];
 	
 	switch (trans) {
 	case TRANS_8023:
-		iov[0].iov_base = (caddr_t)buf;
+		iov[0].iov_base = (caddr_t)__UNCONST(buf);
 		iov[0].iov_len = 22;
-		iov[1].iov_base = (caddr_t)buf+22;
+		iov[1].iov_base = (caddr_t)__UNCONST(buf+22);
 		iov[1].iov_len = len-22;
 		break;
 	default:
-		iov[0].iov_base = (caddr_t)buf;
+		iov[0].iov_base = (caddr_t)__UNCONST(buf);
 		iov[0].iov_len = 14;
-		iov[1].iov_base = (caddr_t)buf+14;
+		iov[1].iov_base = (caddr_t)__UNCONST(buf+14);
 		iov[1].iov_len = len-14;
 		break;
 	}

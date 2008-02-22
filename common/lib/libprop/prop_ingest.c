@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_ingest.c,v 1.2 2007/08/16 16:28:18 thorpej Exp $	*/
+/*	$NetBSD: prop_ingest.c,v 1.5 2014/09/05 05:19:24 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <prop/proplib.h>
 #include "prop_object_impl.h"
+#include <prop/proplib.h>
 
 struct _prop_ingest_context {
 	prop_ingest_error_t	pic_error;
@@ -51,7 +44,7 @@ struct _prop_ingest_context {
  *	Allocate and initialize an ingest context.
  */
 prop_ingest_context_t
-prop_ingest_context_alloc(void *private)
+prop_ingest_context_alloc(void *xprivate)
 {
 	prop_ingest_context_t ctx;
 
@@ -60,7 +53,7 @@ prop_ingest_context_alloc(void *private)
 		ctx->pic_error = PROP_INGEST_ERROR_NO_ERROR;
 		ctx->pic_type = PROP_TYPE_UNKNOWN;
 		ctx->pic_key = NULL;
-		ctx->pic_private = private;
+		ctx->pic_private = xprivate;
 	}
 	return (ctx);
 }

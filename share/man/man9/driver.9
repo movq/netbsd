@@ -1,4 +1,4 @@
-.\"     $NetBSD: driver.9,v 1.20 2007/10/14 10:10:04 plunky Exp $
+.\"     $NetBSD: driver.9,v 1.32 2017/11/17 07:42:29 wiz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 14, 2007
+.Dd April 30, 2017
 .Dt DRIVER 9
 .Os
 .Sh NAME
@@ -45,13 +38,13 @@
 .In sys/device.h
 .In sys/errno.h
 .Ft static int
-.Fn foo_match "struct device *parent" "struct cfdata *match" "void *aux"
+.Fn foo_match "device_t parent" "cfdata_t match" "void *aux"
 .Ft static void
-.Fn foo_attach "struct device *parent" "struct device *self" "void *aux"
+.Fn foo_attach "device_t parent" "device_t self" "void *aux"
 .Ft static int
-.Fn foo_detach "struct device *self" "int flags"
+.Fn foo_detach "device_t self" "int flags"
 .Ft static int
-.Fn foo_activate "struct device *self" "enum devact act"
+.Fn foo_activate "device_t self" "enum devact act"
 .Sh DESCRIPTION
 This page briefly describes the basic
 .Nx
@@ -69,9 +62,8 @@ statically inside the driver.
 For example, the interface to driver
 .Dq foo
 is defined with:
-.Pp
 .Bd -literal
-CFATTACH_DECL(foo, 			/* driver name */
+CFATTACH_DECL_NEW(foo, 			/* driver name */
 	sizeof(struct foo_softc),	/* size of instance data */
 	foo_match,			/* match/probe function */
 	foo_attach,			/* attach function */
@@ -102,10 +94,9 @@ For example, the
 structure for driver
 .Dq foo
 is defined with:
-.Pp
 .Bd -literal
 struct foo_softc {
-	struct device sc_dev;		/* generic device info */
+	device_t sc_dev;		/* generic device info */
 	/* device-specific state */
 };
 .Ed
@@ -113,7 +104,7 @@ struct foo_softc {
 The autoconfiguration framework mandates that the first member of the
 .Em softc
 structure must be the driver-independent
-.Em struct device .
+.Em device_t .
 Probably its most useful aspect to the driver is that it contains the
 device-instance name
 .Em dv_xname .
@@ -128,7 +119,6 @@ For example, the
 structure for driver
 .Dq foo
 is defined with:
-.Pp
 .Bd -literal
 const struct cdevsw foo_cdevsw {
 	int (*d_open)(dev_t, int, int, struct lwp *);
@@ -141,7 +131,7 @@ const struct cdevsw foo_cdevsw {
 	int (*d_poll)(dev_t, int, struct lwp *);
 	paddr_t (*d_mmap)(dev_t, off_t, int);
 	int (*d_kqfilter)(dev_t, struct knote *);
-	int d_type;
+	int d_flag;
 };
 .Ed
 .Pp
@@ -161,7 +151,6 @@ For example, the
 structure for driver
 .Dq foo
 is defined with:
-.Pp
 .Bd -literal
 const struct bdevsw foo_bdevsw {
 	int (*d_open)(dev_t, int, int, struct lwp *);
@@ -170,7 +159,7 @@ const struct bdevsw foo_bdevsw {
 	int (*d_ioctl)(dev_t, u_long, void *, int, struct lwp *);
 	int (*d_dump)(dev_t, daddr_t, void *, size_t);
 	int (*d_psize)(dev_t);
-	int d_type;
+	int d_flag;
 };
 .Ed
 .Pp
@@ -181,13 +170,9 @@ This convention is mandated by the autoconfiguration framework.
 .Pp
 During system bootstrap, the autoconfiguration framework searches the
 system for devices.
-For each device driver, its match function is called
-.Po
-via its
+For each device driver, its match function is called (via its
 .Em cfattach
-structure
-.Pc
-to match the driver with a device instance.
+structure) to match the driver with a device instance.
 The match function is called with three arguments.
 This first argument
 .Fa parent
@@ -232,11 +217,9 @@ Generally, only a single driver exists for a device, so the match
 function returns 1 for a positive match.
 .Pp
 The autoconfiguration framework will call the attach function
-.Po
-via its
+(via its
 .Em cfattach
-structure
-.Pc
+structure)
 of the driver which returns the highest value from its match function.
 The attach function is called with three arguments.
 The attach function performs the necessary process to initialise the
@@ -247,9 +230,12 @@ is a pointer to the driver's parent device structure.
 The second argument
 .Fa self
 is a pointer to the driver's device structure.
-It is also a pointer to our
+The device's
 .Em softc
-structure since the device structure is its first member.
+structure can be obtained from it using the
+.Fn device_private
+function (see
+.Xr disk 9 ) .
 The third argument
 .Fa aux
 is a pointer to the attachment structure.
@@ -264,20 +250,15 @@ enabled.
 If interrupts are required during initialisation, then the attach
 function should make use of
 .Fn config_interrupts
-.Po
-see
-.Xr autoconf 9
-.Pc .
+(see
+.Xr autoconf 9 ) .
 .Pp
 Some devices can be removed from the system without requiring a system
 reboot.
 The autoconfiguration framework calls the driver's detach function
-.Po
-via its
+(via its
 .Em cfattach
-structure
-.Pc
-during device detachment.
+structure) during device detachment.
 If the device does not support detachment, then the driver does not
 have to provide a detach function.
 The detach function is used to relinquish resources allocated to the
@@ -289,13 +270,11 @@ It is the same structure as passed to the attach function.
 The second argument
 .Fa flags
 contains detachment flags.
-Valid values are DETACH_FORCE
-.Po
-force detachment; hardware gone
-.Pc and DETACH_QUIET
-.Po
-do not print a notice
-.Pc .
+Valid values are
+.Dv DETACH_FORCE
+(force detachment; hardware gone) and
+.Dv DETACH_QUIET
+(do not print a notice).
 .Pp
 The autoconfiguration framework may call the driver's activate function
 to notify the driver of a change in the resources that have been
@@ -309,17 +288,18 @@ It is the same argument as passed to the attach function.
 The second argument
 .Fa act
 describes the action.
-Valid actions are DVACT_ACTIVATE
-.Po
-activate the device
-.Pc and DVACT_DEACTIVATE
-.Po
-deactivate the device
-.Pc .
+Valid actions are
+.Dv DVACT_ACTIVATE
+(activate the device) and
+.Dv DVACT_DEACTIVATE
+(deactivate the device).
 If the action is not supported the activate function should return
-EOPNOTSUPP.
-The DVACT_DEACTIVATE call will only be made if the DVACT_ACTIVATE call
-was successful.
+.Er EOPNOTSUPP .
+The
+.Dv DVACT_DEACTIVATE
+call will only be made if the
+.Dv DVACT_ACTIVATE
+call was successful.
 The activate function is called in interrupt context.
 .Pp
 Most drivers will want to make use of interrupt facilities.
@@ -344,7 +324,7 @@ I guess it was mine, but I wasn't expecting it
 For a driver to be compiled into the kernel,
 .Xr config 1
 must be aware of its existence.
-This is done by including an entry in files.\*[Lt]bus\*[Gt] in the
+This is done by including an entry in files.<bus> in the
 directory containing the driver.
 For example, the driver
 .Dq foo
@@ -367,7 +347,7 @@ foo*	at bar?
 For device interfaces of a driver to be compiled into the kernel,
 .Xr config 1
 must be aware of its existence.
-This is done by including an entry in majors.\*[Lt]arch\*[Gt].
+This is done by including an entry in majors.<arch>.
 For example, the driver
 .Dq foo
 with character device interfaces, a character major device number
@@ -389,5 +369,5 @@ language see
 .Xr config 1 ,
 .Xr autoconf 9 ,
 .Xr config 9 ,
-.Xr powerhook_establish 9 ,
-.Xr shutdownhook_establish 9
+.Xr devsw 9 ,
+.Xr pmf 9

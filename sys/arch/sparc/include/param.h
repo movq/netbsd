@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.66 2006/08/28 13:43:35 yamt Exp $ */
+/*	$NetBSD: param.h,v 1.71 2017/02/13 09:46:30 skrll Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -57,21 +57,6 @@
 #endif					/* XXX */
 #endif					/* XXX */
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value for
- * the machine's strictest data type.  The result is u_int and must be
- * cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-#define	ALIGNBYTES		7
-#define	ALIGN(p)		(((u_int)(p) + ALIGNBYTES) & ~ALIGNBYTES)
-#define ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
-
 #define SUN4_PGSHIFT	13	/* for a sun4 machine */
 #define SUN4CM_PGSHIFT	12	/* for a sun4c or sun4m machine */
 
@@ -96,8 +81,6 @@ extern int nbpg, pgofset, pgshift;
 #define	KERNBASE	0xe8000000
 #endif
 #define KERNEND		0xfe000000	/* end of kernel virtual space */
-/* Arbitrarily only use 1/4 of the kernel address space for buffers. */
-#define VM_MAX_KERNEL_BUF	((KERNEND - KERNBASE)/4)
 #define PROM_LOADADDR	0x00004000	/* where the prom loads us */
 #define	KERNTEXTOFF	(KERNBASE+PROM_LOADADDR)/* start of kernel text */
 
@@ -125,24 +108,12 @@ extern int nbpg, pgofset, pgshift;
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	512		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	256		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((6 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((32 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((16 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
 
 #if defined(_KERNEL) || defined(_STANDALONE)
 #ifndef _LOCORE

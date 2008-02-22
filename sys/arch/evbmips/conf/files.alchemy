@@ -1,4 +1,4 @@
-#	$NetBSD: files.alchemy,v 1.9 2008/02/20 21:43:33 drochner Exp $
+#	$NetBSD: files.alchemy,v 1.12 2014/07/20 10:22:54 alnsn Exp $
 
 # Platform support - select just one, please
 defflag		opt_alchemy.h	ALCHEMY_GENERIC
@@ -26,7 +26,6 @@ file	arch/evbmips/evbmips/yamon.c
 
 file	arch/mips/mips/mips3_clock.c
 file	arch/mips/mips/mips3_clockintr.c
-file	arch/mips/mips/softintr.c
 
 # System bus
 device	mainbus { }
@@ -35,12 +34,15 @@ file	arch/evbmips/alchemy/mainbus.c		mainbus
 
 device	cpu
 attach	cpu at mainbus
-file	arch/evbmips/alchemy/cpu.c		cpu
+file	arch/evbmips/evbmips/cpu.c		cpu
 
 # Alchemy on-board devices
 device	obio { [addr=-1] }
 attach	obio at mainbus
 file	arch/evbmips/alchemy/obio.c		obio
+
+# Stack-less Just-In-Time compiler
+include	"external/bsd/sljit/conf/files.sljit"
 
 # Machine-independent SCSI drivers
 include "dev/scsipi/files.scsipi"

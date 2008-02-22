@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_pvt.h,v 1.14 2006/09/20 09:35:57 tsutsui Exp $	*/
+/*	$NetBSD: pmap_pvt.h,v 1.16 2013/09/06 17:43:19 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@ struct a_tmgr_struct {
  * short format table descriptors (a 'B' table), a pointer to the level
  * A table manager currently using it, the index of this B table
  * within that parent A table, and the number of wired and active entries
- * it currently contains. 
+ * it currently contains.
  */
 struct b_tmgr_struct {
 	a_tmgr_t	*bt_parent; /* Parent 'A' table manager         */
@@ -104,8 +97,8 @@ struct c_tmgr_struct {
 	vaddr_t		ct_va;      /* starting va that this table maps */
 };
 
-/* The Mach VM code requires that the pmap module be able to apply 
- * several different operations on all page descriptors that map to a 
+/* The Mach VM code requires that the pmap module be able to apply
+ * several different operations on all page descriptors that map to a
  * given physical address.  A few of these are:
  *  + invalidate all mappings to a page.
  *  + change the type of protection on all mappings to a page.
@@ -113,7 +106,7 @@ struct c_tmgr_struct {
  *  + determine if a physical page has been accessed (read from)
  *  + clear such information
  * The collection of structures and tables which we used to make this
- * possible is known as the 'Physical to Virtual' or 'PV' system.  
+ * possible is known as the 'Physical to Virtual' or 'PV' system.
  *
  * Every physical page of memory managed by the virtual memory system
  * will have a structure which describes whether or not it has been

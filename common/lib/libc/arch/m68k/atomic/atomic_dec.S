@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_dec.S,v 1.2 2007/11/29 17:09:32 ad Exp $	*/
+/*	$NetBSD: atomic_dec.S,v 1.6 2013/07/16 23:24:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,11 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_dec_32)
-	movl	%sp@(4), %a0
-	subql	#1, %a0@
+ENTRY(_atomic_dec_32)
+	movl	4(%sp), %a0
+	subql	#1, (%a0)
 	rts
+END(_atomic_dec_32)
 ATOMIC_OP_ALIAS(atomic_dec_32,_atomic_dec_32)
 ATOMIC_OP_ALIAS(atomic_dec_uint,_atomic_dec_32)
 STRONG_ALIAS(_atomic_dec_uint,_atomic_dec_32)
@@ -52,15 +46,16 @@ STRONG_ALIAS(_atomic_dec_ulong,_atomic_dec_32)
 ATOMIC_OP_ALIAS(atomic_dec_ptr,_atomic_dec_32)
 STRONG_ALIAS(_atomic_dec_ptr,_atomic_dec_32)
 
-ENTRY_NOPROFILE(_atomic_dec_32_nv)
-	movl	%sp@(4), %a0
-1:	movl	%a0@, %d0
+ENTRY(_atomic_dec_32_nv)
+	movl	4(%sp), %a0
+1:	movl	(%a0), %d0
 	movl	%d0, %d1
 	subql	#1, %d0
-	casl	%d1, %d0, %a0@
+	casl	%d1, %d0, (%a0)
 	bne	1b
 	movl	%d0, %a0	/* pointers return also in %a0 */
 	rts
+END(_atomic_dec_32_nv)
 ATOMIC_OP_ALIAS(atomic_dec_32_nv,_atomic_dec_32_nv)
 ATOMIC_OP_ALIAS(atomic_dec_uint_nv,_atomic_dec_32_nv)
 STRONG_ALIAS(_atomic_dec_uint_nv,_atomic_dec_32_nv)

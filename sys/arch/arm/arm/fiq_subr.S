@@ -1,4 +1,4 @@
-/*	$NetBSD: fiq_subr.S,v 1.3 2002/04/12 18:50:31 thorpej Exp $	*/
+/*	$NetBSD: fiq_subr.S,v 1.7 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -51,29 +51,25 @@
 #define	MODE_CHANGE_NOP	/* Data sheet says ARM3 doesn't need it */
 #endif
 
-#ifdef __PROG32
+#ifdef _ARM_ARCH_6
 #define	SWITCH_TO_FIQ_MODE						\
-	mrs	r2, cpsr_all					;	\
+	cps	#PSR_FIQ32_MODE
+#else
+#define	SWITCH_TO_FIQ_MODE						\
+	mrs	r2, cpsr					;	\
 	mov	r3, r2						;	\
 	bic	r2, r2, #(PSR_MODE)				;	\
 	orr	r2, r2, #(PSR_FIQ32_MODE)			;	\
 	msr	cpsr_all, r2
-#else
-#define	SWITCH_TO_FIQ_MODE					;	\
-	mov	r1, r15						;	\
-	bic	r2, r1, #(R15_MODE)				;	\
-	teqp	r2, #(R15_MODE_FIQ)				;	\
-	MODE_CHANGE_NOP
-#endif /* __PROG32 */
+#endif
 
-#ifdef __PROG32
+#ifdef _ARM_ARCH_6
+#define	BACK_TO_SVC_MODE						\
+	cps	#PSR_SVC32_MODE
+#else
 #define	BACK_TO_SVC_MODE						\
 	msr	cpsr_all, r3
-#else
-#define	BACK_TO_SVC_MODE					;	\
-	teqp	r1, #0						;	\
-	MODE_CHANGE_NOP
-#endif /* __PROG32 */
+#endif
 
 /*
  * fiq_getregs:
@@ -84,10 +80,16 @@
 ENTRY(fiq_getregs)
 	SWITCH_TO_FIQ_MODE
 
+#ifdef __thumb__
+	stmia	r0!, {r8-r12}
+	str	sp, [r0]
+#else
 	stmia	r0, {r8-r13}
+#endif
 
 	BACK_TO_SVC_MODE
-	mov	pc, lr
+	RET
+END(fiq_getregs)
 
 /*
  * fiq_setregs:
@@ -98,10 +100,16 @@ ENTRY(fiq_getregs)
 ENTRY(fiq_setregs)
 	SWITCH_TO_FIQ_MODE
 
+#ifdef __thumb__
+	ldmia	r0!, {r8-r12}
+	ldr	sp, [r0]
+#else
 	ldmia	r0, {r8-r13}
+#endif
 
 	BACK_TO_SVC_MODE
-	mov	pc, lr
+	RET
+END(fiq_setregs)
 
 /*
  * fiq_nullhandler:
@@ -113,3 +121,4 @@ ENTRY(fiq_setregs)
 _C_LABEL(fiq_nullhandler):
 	subs	pc, lr, #4
 _C_LABEL(fiq_nullhandler_end):
+	.size	_C_LABEL(fiq_nullhandler), . - _C_LABEL(fiq_nullhandler)

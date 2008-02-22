@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.27 2007/10/17 19:54:15 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.46 2016/12/22 14:47:57 cherry Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -36,6 +36,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -71,63 +72,26 @@
  *	@(#)machdep.c   8.3 (Berkeley) 1/12/94
  *	from: Utah Hdr: machdep.c 1.63 91/04/24
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)machdep.c   8.3 (Berkeley) 1/12/94
- *	from: Utah Hdr: machdep.c 1.63 91/04/24
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2007/10/17 19:54:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.46 2016/12/22 14:47:57 cherry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/mount.h>
-#include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/termios.h>
+#include <sys/buf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/kcore.h>
+#include <sys/kernel.h>
 #include <sys/ksyms.h>
+#include <sys/mount.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
+#include <sys/termios.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -135,14 +99,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2007/10/17 19:54:15 garbled Exp $")
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-#include <machine/db_machdep.h>
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+#include <mips/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/psl.h>
 #include <machine/yamon.h>
+
+#include <mips/locore.h>
+#include <mips/psl.h>
 
 #include <evbmips/malta/autoconf.h>
 #include <evbmips/malta/maltareg.h>
@@ -161,18 +126,8 @@ int	comcnrate = 38400;	/* XXX should be config option */
 
 struct malta_config malta_configuration;
 
-/* For sysctl_hw. */
-extern char cpu_model[];
-
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
-
 /* Maps for VM objects. */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
-
-int	physmem;		/* Total physical memory */
 
 int	netboot;		/* Are we netbooting? */
 
@@ -185,28 +140,20 @@ void	configure(void);
 void	mach_init(int, char **, yamon_env_var *, u_long);
 
 /*
- * safepri is a safe priority for sleep to set for a spin-wait during
- * autoconfiguration or after a panic.  Used as an argument to splx().
- */
-int	safepri = MIPS1_PSL_LOWIPL;
-
-extern struct user *proc0paddr;
-
-/*
  * Do all the stuff that locore normally does before calling main().
  */
 void
 mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 {
 	struct malta_config *mcp = &malta_configuration;
+	uint8_t * const brkres = (uint8_t *)MIPS_PHYS_TO_KSEG1(MALTA_BRKRES);
 	bus_space_handle_t sh;
-	void *kernend, *v;
-        u_long first, last;
-	char *cp;
-	int freqok, i, howto;
-	uint8_t *brkres = (uint8_t *)MIPS_PHYS_TO_KSEG1(MALTA_BRKRES);
+	void *kernend;
+	int freqok;
 
 	extern char edata[], end[];
+
+	CTASSERT((intptr_t)MIPS_PHYS_TO_KSEG1(MALTA_BRKRES) < 0);
 
 	*brkres = 0;	/* Disable BREAK==reset on console */
 
@@ -232,10 +179,9 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	 * first printf() after that is called).
 	 * Also clears the I+D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
-	/* set the VM page size */
-	uvm_setpagesize();
+	uvm_md_init();
 
 	physmem = btoc(memsize);
 
@@ -277,7 +223,7 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	mem_clusters[0].size = ctob(physmem);
 	mem_cluster_cnt = 1;
 
-	strcpy(cpu_model, "MIPS Malta Evaluation Board");
+	cpu_setmodel("MIPS Malta Evaluation Board");
 
 	/*
 	 * XXX: check argv[0] - do something if "gdb"???
@@ -287,8 +233,10 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	 * Look at arguments passed to us and compute boothowto.
 	 */
 	boothowto = RB_AUTOBOOT;
-	for (i = 1; i < argc; i++) {
-		for (cp = argv[i]; *cp; cp++) {
+#ifndef _LP64
+	for (int i = 1; i < argc; i++) {
+		for (char *cp = argv[i]; *cp; cp++) {
+			int howto;
 			/* Ignore superfluous '-', if there is one */
 			if (*cp == '-')
 				continue;
@@ -301,14 +249,13 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 				boothowto |= howto;
 		}
 	}
+#endif
 
 	/*
 	 * Load the rest of the available pages into the VM system.
 	 */
-	first = round_page(MIPS_KSEG0_TO_PHYS(kernend));
-	last = mem_clusters[0].start + mem_clusters[0].size;
-	uvm_page_physload(atop(first), atop(last), atop(first), atop(last),
-		VM_FREELIST_DEFAULT);
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t)kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -318,24 +265,23 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE); 
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
 	 */
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init(0, 0, 0);
-#endif
-
 #if defined(DDB)
 	if (boothowto & RB_KDB)
 		Debugger();
+#endif
+
+#if defined(MULTIPROCESSOR) && 0
+	/*
+	 * We can never be running on more than one processor but we can dream.
+	 */
+	mips_fixup_exceptions(mips_fixup_zero_relative, NULL);
 #endif
 }
 
@@ -353,58 +299,28 @@ consinit(void)
  * Allocate memory for variable-sized tables,
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-
 	/*
-	 * Good {morning,afternoon,evening,night}.
+	 * Do the common startup items.
 	 */
-	printf("%s%s", copyright, version);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
+	cpu_startup_common();
 
 	/*
 	 * Virtual memory is bootstrapped -- notify the bus spaces
 	 * that memory allocation is now safe.
 	 */
 	malta_configuration.mc_mallocsafe = 1;
-
-	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
-	/*
-	 * Allocate a submap for physio.
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    VM_PHYS_SIZE, 0, FALSE, NULL);
-
-	/*
-	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.)
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
 }
 
 int	waittime = -1;
 
 void
-cpu_reboot(howto, bootstr)
-	int howto;
-	char *bootstr;
+cpu_reboot(int howto, char *bootstr)
 {
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curproc)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -434,6 +350,8 @@ cpu_reboot(howto, bootstr)
 
 haltsys:
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");

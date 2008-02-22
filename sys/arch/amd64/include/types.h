@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.26 2008/02/21 16:31:13 ad Exp $	*/
+/*	$NetBSD: types.h,v 1.55 2018/03/16 12:19:35 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -31,8 +31,10 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_X86_64_TYPES_H_
+#define	_X86_64_TYPES_H_
+
+#ifdef __x86_64__
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
@@ -44,18 +46,29 @@ typedef struct label_t {
 } label_t;
 #endif
 
-/* NB: This should probably be if defined(_KERNEL) */
-#if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
+
+typedef int             pmc_evid_t; 
+typedef __uint64_t      pmc_ctr_t;
+typedef long int	register_t;
+typedef int		register32_t;
+#define	PRIxREGISTER	"lx"
+#define	PRIxREGISTER32	"x"
+
 #endif
 
-typedef long int		register_t;
-typedef int			register32_t;
-
-typedef	volatile unsigned char		__cpu_simple_lock_t;
+typedef long int		__register_t;
+typedef	unsigned char		__cpu_simple_lock_nv_t;
 
 /* __cpu_simple_lock_t used to be a full word. */
 #define	__CPU_SIMPLE_LOCK_PAD
@@ -66,17 +79,43 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 /* The amd64 does not have strict alignment requirements. */
 #define	__NO_STRICT_ALIGNMENT
 
-#define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_NEW_STYLE_BUS_H
 #define	__HAVE_CPU_COUNTER
+#define	__HAVE_CPU_DATA_FIRST
+#define __HAVE_CPU_BOOTCONF
 #define	__HAVE_MD_CPU_OFFLINE
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_ATOMIC64_OPS
+#define	__HAVE_MM_MD_KERNACC
 #define	__HAVE_ATOMIC_AS_MEMBAR
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_TLS_VARIANT_II
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_INTR_CONTROL
+#define	__HAVE_CPU_RNG
+#define	__HAVE_COMPAT_NETBSD32
 
 #ifdef _KERNEL_OPT
+#define	__HAVE_RAS
+
 #include "opt_xen.h"
-#define __HAVE_RAS
+#if defined(__x86_64__) && !defined(XEN)
+#define	__HAVE_PCPU_AREA 1
+#define	__HAVE_DIRECT_MAP 1
+#define	__HAVE_MM_MD_DIRECT_MAPPED_IO
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#if !defined(NO_PCI_MSI_MSIX)
+#define	__HAVE_PCI_MSI_MSIX
+#endif
+#endif
 #endif
 
-#endif	/* _MACHTYPES_H_ */
+#else	/*	!__x86_64__	*/
+
+#include <i386/types.h>
+
+#endif	/*	__x86_64__	*/
+
+#endif	/* _X86_64_TYPES_H_ */

@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.96 2008/02/09 02:37:21 mrg Exp $
+# $NetBSD: HACKS,v 1.187 2017/04/09 19:02:23 scole Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -26,6 +26,25 @@
 #  	  closing bracket.
 #
 # this is a comment.
+
+hack	gcc-5.3 optimizes memset+malloc -> calloc inside calloc
+mdate	4 May 2016
+who	christos
+file	external/gpl2/lib/libmalloc/lib/Makefile 1.3 -> 1.5
+descr
+	resulting in infinite recursion; we prevent this with
+	-fno-builtin-malloc
+kcah
+
+hack	turn off tree-vrp for parts of ufs_lookup.c
+mdate	28 April 2016
+who	mrg christos
+file	src/sys/ufs/ufs/ufs_lookup.c : 1.144
+pr	51094
+descr
+	with -ftree-vrp enabled in ufs_lookup.c sometimes bad dir
+	panicks are see.
+hcah
 
 hack	netstat ieee1394 address printing.
 mdate	14 Nov 2000
@@ -82,44 +101,6 @@ descr
 	fail with "makes integer from pointer without a cast".  This
 	is observed on e.g. the sun3 port.  Ideally the "types" for
 	symbols should be consistent across all ports.
-kcah
-
-hack	GCC2 isn't C99
-cdate	5 December 2003
-who	mrg
-file	gnu/dist/binutils/ld/ldlex.c: r1.2
-descr
-	ldlex.c is generated from ldlex.l and we get macro redefinition
-	errors from it if __STDC_VERSION__ is not C99 compliant.  This
-	hack forces NetBSD 1.6 and later systems to also include <stdint.h>
-	to get the relevant definitions.  This hack should be backed out
-	when all platforms have switched away from GCC2.
-kcah
-
-hack	gcc-strict-aliasing
-cdate	6 August 2004
-who	junyoung
-pr	26516
-file	src/usr.sbin/racoon/racoon/Makefile : 1.21
-descr
-	GCC issues a warning "dereferencing type-punned pointer will break
-	strict-aliasing rules" when compiling
-	crypto/dist/kame/racoon/crypto/openssl.c with -O[23s]. Note that this
-	is due to use of type casting in a non-standard way in the code and
-	not a compiler bug. Once a new release of KAME with a proper fix
-	applied is imported this should be backed out.
-kcah
-
-hack	gcc 3.3.3 wrong uninitialised variable
-mdate	12 May 2006
-who	he
-file	usr.bin/msgc/msg_sys.def : 1.33-1.34
-file	distrib/utils/sysinst/aout2elf.c : 1.11
-descr
-	Gcc 3.3.3 gets some -Wuninitialized warnings wrong.  This is
-	just one of many in the tree, marked with
-	/* XXX -Wuninitialized [arch] */
-	in the source.
 kcah
 
 hack	gcc4 wrong uninitialized variable
@@ -191,6 +172,7 @@ file	sys/ufs/lfs/lfs_vfsops.c	: 1.207 [also (char *)]
 file	usr.bin/ftp/ftp.c		: 1.140
 file	usr.bin/find/function.c		: 1.54
 file	usr.bin/mail/tty.c		: 1.20
+file	usr.bin/msgc/msg_sys.def	: 1.33-1.34
 file	usr.bin/nl/nl.c			: 1.7
 file	usr.bin/systat/keyboard.c	: 1.23
 file	usr.bin/usbhidctl/usbhid.c	: 1.29
@@ -271,7 +253,6 @@ file	usr.sbin/bootp/bootptest/Makefile : 1.2
 file	usr.sbin/chrtbl/Makefile	: 1.6
 file	usr.sbin/cron/Makefile		: 1.12
 file	usr.sbin/dhcp/Makefile.inc	: 1.20
-file	usr.sbin/dumplfs/Makefile	: 1.11
 file	usr.sbin/hprop/Makefile		: 1.13
 file	usr.sbin/installboot/Makefile	: 1.35
 file	usr.sbin/ipf/ipftest/Makefile	: 1.32
@@ -294,16 +275,138 @@ file	usr.sbin/pppd/pppd/Makefile	: 1.38
 file	usr.sbin/rarpd/Makefile		: 1.10
 file	usr.sbin/rbootd/Makefile	: 1.10
 file	usr.sbin/rpc.pcnfsd/Makefile	: 1.17
-file	usr.sbin/rtadvd/Makefile	: 1.9
 file	usr.sbin/tcpdump/Makefile	: 1.42
-file	usr.sbin/wiconfig/Makefile	: 1.3
 descr
 	GCC 4.1 warns on pointer sign comparision/assignments and lots of
 	code does not conform.  For now we use -Wno-pointer-sign and
 	-fno-strict-aliasing.
 kcah
 
+hack	disable ctf for gcc-4.8 build
+mdate	April 3 2014
+who	christos
+file	external/gpl3/gcc/usr.bin/Makefile.frontend	: 1.4
+file	external/gpl3/gcc/usr.bin/Makefile.backend	: 1.5
+descr
+	nbctfconvert -g -L VERSION -g fold-const.o
+	ERROR: fold-const.c: failed to get mapping for tid 79154 \
+		((null)) <13532>
+kcak
+
+hack	emacs aborting on exit (libgcc issue)
+mdate	7 November 2011
+who	christos
+file	external/gpl3/gcc/dist/gcc/unwind-dw2-fde.c : 1.2
+descr
+	GCC 4.5.3 now calls __unregister_frame_info_bases() on unloading/exit
+	to do just that. If the symbol requested is not found, then it aborts.
+	emacs 23.3 triggers this assertion. For now disable aborting, and
+	silently ignore.
+kcah
+
+hack	cross-building hack on Darwin
+mdate	20 July 2008
+who	agc
+file	src/distrib/common/Makefile.mdset	: 1.33
+descr
+	Darwin has problems with getopt() when used in mdsetimage -v,
+	due to the difference between BSD and libiberty() getopt
+	implementations, more fully described in
+	http://mail-index.netbsd.org/current-users/2008/06/27/msg003242.html
+	and the subsequent thread.  For just now, we just have an ugly
+	workaround not to call mdsetimage with the -v argument on Darwin
+kcah
+
+hack	avoid rebuilding asn1 libraries
+mdate	03 August 2008
+who	veego
+file	src/crypto/dist/heimdal/lib/asn1/gen.c	: 1.10
+file	src/lib/libasn1/Makefile	: 1.32
+file	src/lib/libhdb/Makefile	: 1.23
+file	src/lib/libgssapi/Makefile	: 1.20
+file	src/lib/libhx509/Makefile	: 1.3
+pr	9702 39185
+descr
+	asn1_compile does not check if generated header files do not have to
+	be rebuild.
+	Generate .hx files and copy it in the Makefiles if they changed.
+kcah
+
+hack	Disable fortification for /usr/bin/makeinfo
+cdata	24 Mar 2014
+who	tron
+file	src/external/gpl2/texinfo/bin/makeinfo/Makefile	: 1.1
+pr	N/A
+descr
+	If "makeinfo" is compiled with "-D_FORTIFY_SOURCE=2" using GCC 4.8.3
+	it fails to process certain texinfo files, e.g. "cl.texi"
+	included in the Emacs 24.3 distribution.
+kcah
+
+hack	Disable Stack Smash Protection for /usr/X11R7/bin/xauth
+cdata	05 Apr 2014
+who	tron
+file	src/external/mit/xorg/bin/xauth/Makefile	: 1.4
+pr	N/A
+descr
+	If "xauth" is compile with "USE_SSP" set to "yes" it fails
+	mysteriously with an error message like this:
+
+	/usr/X11R7/bin/xauth:  file /foo/bar/.Xauthority does not exist
+	/usr/X11R7/bin/xauth:  unable to link authority file /foo/bar/.Xauthority, use /foo/bar/.Xauthority
+
+	The compiler seems to get confused about the two filename variables
+	used in the link(2) system call.
+kcah
+
+hack	g++ 5.x barfs on volatile in constexpr initializers
+cdata	27 Aug 2015
+who	pooka
+file	src/lib/libpthread/pthread_types.h	: 1.17
+pr	lib/49989
+descr
+	Trying to use e.g. pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER
+	in C++ results in:
+		error: temporary of non-literal type '__pthread_mutex_st'
+		in a constant expression
+		constexpr mutex() _NOEXCEPT : __m_(PTHREAD_MUTEX_INITIALIZER) {}
+		[...]
+		include/pthread_types.h:101:8: note: '__pthread_mutex_st' is
+		not literal because:
+		struct __pthread_mutex_st {
+		^
+		include/pthread_types.h:103:17: note:   non-static data
+		member '__pthread_mutex_st::ptm_errorcheck' has volatile type
+		pthread_spin_t ptm_errorcheck;
+kcah
+
+hack	libm cabs{,f,l} and g++
+cdata	11 Jan 2016
+who	christos
+pr	lib/50646
+file	src/external/gpl3/gcc.old/dist/libstdc++-v3/include/std/complex : 1.2
+file	src/external/gpl3/gcc/dist/libstdc++-v3/include/std/complex : 1.2
+descr
+	Our cabs and cabsf have a different argument format on some architectures
+	and for that we have created in libm/compat_cabs{,f}.c. The standard
+	versions in libc are __c99_cabs{,f,l} and there are __RENAME()'s in
+	<complex.h>. G++ uses __builtin_cabs{,f,l} to implement those and they
+	translate by default to cabs{,f,l} which gets defined to cabs{,f} (the
+	wrong function) and an undefined cabsl. I've changed <complex> to use
+	the __c99_cabs{,f,l} directly. Using the __builtin_cabs{,f,l} in gcc is
+	still broken.
+kcah
+
 port	vax
+
+	hack	gcc4/vax ICE
+	cdate	
+	who	tsutsui
+	file	sys/arch/vax/conf/Makefile.vax
+	descr
+		GCC4 on vax gets ICE on compiling sys/ddb/db_command.c.
+		-fno-tree-ter prevents it so add it to COPTS.
+	kcah
 
 	hack	gcc4/vax compiler crash
 	cdate	Fri Jun 30 22:39:12 PDT 2006
@@ -312,99 +415,6 @@ port	vax
 	file	lib/i18n_module/UTF7/Makefile	: 1.2
 	descr
 		GCC4 on vax crashes.  -O0 stops it happening so far...
-	kcah
-
-	hack	gcc 2.95/vax doesn't like abort being used as function pointer
-	cdate	Tue Dec 13 05:54:50 GMT 2005
-	who	jmc
-	file	lib/libc/rpc/svc_vc.c 1.15
-	descr
-		Provide a local definition for abort which doesn't include
-		the noreturn attribute which trips up gcc 2.95 on vax.
-	kcah
-	
-	hack	gcc 2.95/vax doesn't have stdbool.h and gettext needs it
-	cdate	Mon May  9 12:16:22 CDT 2005
-	who	jmc
-	file	gnu/usr.bin/gettext/Makefile.inc.prog 1.5
-		gnu/usr.bin/gettext/libgrep/Makefile 1.3
-		gnu/usr.bin/gettext/libnlspr/Makefile 1.5
-		gnu/usr.bin/gettext/libnlsut/Makefile 1.3   
-	descr
-		The latest gettext assumes a C99 environment or at least
-		configure checks to work around this. As we don't use configure
-		provide a stdbool.h for vax builds locally in directories from
-		the template provided by the gettext code.
-	kcah
-	
-	hack	gcc 2.95/vax cannot handle __builtin_ffs()
-	cdate	Fri Aug 23 21:31:15 CEST 2002
-	who	ragge
-	file	sys/lib/libkern/libkern.h : 1.42
-	descr
-		__builtin_ffs() is ifdef'd away if __vax__. Matt Thomas has
-		added this feature to GCC 3 so it can be removed when switching.
-	kcah
-
-	hack	gcc-vax-libbz2
-	mdate	27 Jun 2002
-	who	thorpej
-	file	lib/libbz2/Makefile
-	descr
-		libbz2 is mis-compiled with optimization with GCC 2.95.3
-		on VAX.  -O0 works around this problem.
-	kcah
-
-	hack	vax Toolchain bug
-	cdate	28 Mar 2003
-	who	he
-	file	sys/arch/vax/vax/intvec.S : 1.5
-	descr
-		Workaround for PR toolchain/20924.  The assembler apparently
-		tries to range-check byte offsets when it doesn't have
-		sufficient information to make that decision.
-		Workaround uses `brw' instead of `brb' instruction.
-	kcah
-
-	hack	vax gcc 2.95.3 -Wuninitialized workarounds
-	cdate	6 Nov 2003
-	who	he
-	file	sys/dev/bi/if_ni.c : 1.22
-	file	sys/arch/vax/vax/ctu.c : 1.20
-	descr
-		Workaround for gcc 2.95.3 failing to detect that certain
-		variables will be initialized; so that this code compiles
-		with -Wuninitialized.  Should be reviewed and possibly
-		reverted when gcc 3.3.2 is ready for vax.
-	kcah
-
-	hack	vax gcc 2.95.3 structure initialization
-	cdat	13 May 2004
-	who	cl
-	file	sys/miscfs/kernfs/kernfs_vnops.c : 1.104
-	descr
-		Workaround for gcc 2.95.3 failing to initialize structures
-		and/or unions inside structures using nested designators.
-		Should be reverted when gcc >=3.3.3 is ready for vax.
-	kcah
-
-	hack	vax gcc 2.95.3 needs -I. to build nslexer.c
-	cdat	6 Jun 2004
-	who	mhitch
-	file	lib/libc/arch/vax/Makefile.inc : 1.6
-	descr
-		It appears necessary to add -I. to CPPFLAGS when building
-		nslesxer.c.  This may be caused by gcc 2.95.3 being used.
-		Should be reverted when a newer gcc is ready for vax.
-	kcah
-
-	hack	vax gcc 2.95.3 doesn't understand "-std=c99"
-	cdat	5 April 2005
-	who	tron
-	file	src/share/mk/bsd.sys.mk
-	descr
-		We cannot use "-std=c99" for compiler warning level 4 and above
-		because gcc 2.95.3 doesn't support that option.
 	kcah
 
 	hack	declare boolean_t in two IPF user-mode programs
@@ -421,6 +431,137 @@ port	vax
 		bollean_t being defined by <sys/types.h>.
 		Build failure and further details documented in
 		PR#32907.
+	kcah
+
+	hack	pcc 0.9.9 large string literals
+	cdat	8 July 2008
+	who	gmcgarry
+	file	sys/conf/param.c : 1.58
+	descr
+		Workaround for pcc 0.9.9 not handling large string literals
+		which causes kernels with 'options INCLUDE_CONFIG_FILE' to
+		fail compilation.
+		There is a proposal on the pcc mailing list to stuff config
+		file in ELF section.
+	kcah
+
+	hack	xorg warnings
+	cdat	30 July 2008, 3 June, 2013
+	who	mrg
+	file	external/mit/xorg/lib/libSM/Makefile : 1.2
+		external/mit/xorg/lib/libX11/Makefile.libx11 : 1.10
+		external/mit/xorg/lib/libXext/Makefile : 1.2
+		external/mit/xorg/lib/libXfont/Makefile : 1.2
+	descr
+		Disable several warnings or use -Wno-error across Xorg sources
+		while we get them working
+	kcah
+
+	hack	32 bit time leftovers
+	cdat	11 January 2009
+	who	christos
+	file	lib/libc/time/localtime.c : 1.41
+		lib/libc/time/zic.c : 1.23
+	descr
+		The timezone compiled files still contain 32 bit time_t
+		quantities. I did not want to version the files because
+		the ``parser'' is too ugly for words. What needs to be
+		done, is to rewrite the parser from scratch also to avoid
+		potential core-dumps from parsing invalid files.
+	kcah
+
+	hack	32 bit time leftovers
+	cdat	11 January 2009
+	who	christos
+	file	various
+	descr
+		Many filesystem on-disk formats have 32 bit times.
+	kcah
+
+	hack	gcc 4.5 fsdb miscompile
+	date	Sat Nov  9 11:03:02 EST 2013
+	who	christos
+	file	src/sbin/fsdb/Makefile : 1.36 (and earlier)
+	descr
+		src/sbin/fsdb/fsdb.c: In function 'findblk':
+		src/sbin/fsdb/fsdb.c:610:1: error: unrecognizable insn:
+		(insn 941 940 942 134 src/sbin/fsdb/fsdb.c:589 (set (reg:SI 604)
+		    (subreg:SI (mem/s/j:DI (plus:SI (mult:SI (reg:SI 602)
+                        (const_int 8 [0x8]))
+                    (reg/f:SI 601)) [0 curinode.99_378->dp2.di_ib S8 A32]) 4)) \
+			-1 (nil))
+		src/sbin/fsdb/fsdb.c:610:1: internal compiler error: in \
+		extract_insn, at recog.c:2103
+	kcah
+
+	hack	gcc 4.8 gcc miscompiles
+	date	Sat Nov  9 16:35:18 EST 2013
+	who	christos
+	file	distrib/utils/x_ping/Makefile
+	file	distrib/vax/miniroot/Makefile.inc
+	file	distrib/vax/ramdisk/Makefile
+	file	external/gpl3/gdb/lib/libdecnumber/Makefile
+	file	sbin/fsdb/Makefile
+	file	sbin/newfs_ext2fs/Makefile
+	file	sbin/ping/Makefile
+	file	usr.sbin/lmcconfig/Makefile
+	file	usr.sbin/mtrace/Makefile
+	descr
+		external/gpl3/gcc/dist/gcc/expmed.c:2781:1:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+		external/gpl3/gcc/dist/gcc/recog.c:770:1:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+		external/gpl3/gcc/dist/libdecnumber/decNumber.c:7214:3:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+		sbin/ping/ping.c:679:1:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+		sbin/newfs_ext2fs/mke2fs.c:681:1:
+		internal compiler error: in reload_combine_note_use,
+		at postreload.c:1561
+		external/gpl3/gdb/dist/libdecnumber/decNumber.c:7214:3:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+		usr.sbin/lmcconfig/lmcconfig.c:939:3:
+		internal compiler error: in reload_combine_note_use,
+		at postreload.c:1561
+		usr.sbin/mtrace/mtrace.c:1655:1:
+		internal compiler error: in change_address_1, at emit-rtl.c:2019
+	kcah
+
+	hack	gcc 5.4 cc1 miscompile
+	date	Tue Feb 14 07:19:57 JST 2017
+	who	rin
+	pr	port-vax/51967
+	file	external/gpl3/gcc/usr.bin/backend/Makefile : 1.35
+	descr
+		cc1 aborts due to SIGILL when compiling the sample code attached
+		to the PR. As a workaround, compile dse.c with -O0.
+	kcah
+
+	hack	libssh miscompile
+	cdate	Tue Feb 14 17:58:06 JST 2017
+	mdate	Tue Feb 14 18:57:39 JST 2017
+	who	rin
+	file	crypto/external/bsd/openssh/lib/Makefile : 1.20
+	descr
+		poly1305.c and umac.c are miscompiled, which results in login
+		failure to/from external hosts via ssh.
+	kcah
+
+	hack	mandoc miscompile
+	date	Tue Feb 14 18:03:05 JST 2017
+	who	rin
+	file	external/bsd/mdocml/lib/libmandoc/Makefile : 1.8
+	descr
+		mandoc(1) receives SIGILL in in_line_argn() from mdoc_macro.c.
+	kcah
+
+	hack	libX11 miscompile
+	date	Thu Feb 16 10:00:22 JST 2017
+	who	rin
+	file	src/external/mit/xorg/lib/libX11/Makefile.libx11 : 1.18
+	descr
+		lcWrap.c is miscompiled, which results in input failure via XIM.
+		Besides, some clients, e.g., pkgsrc/x11/kterm, receive SIGSEGV.
 	kcah
 
 port	arm
@@ -443,108 +584,105 @@ port	arm
 		really should be enough, but turns out not to be.
 	kcah
 
-	hack	gcc 3.3.2/arm sys/kern/uipc_socket.c
-	cdate	Tue Oct 28 18:02:16 GMT 2003
-	who	skrll
-	pr	23044
-	file	sys/arch/arm/conf/Makefile.arm : 1.19
-	descr
-		Performing a build.sh tools on a CATS with NFS mounted 
-		obj and src directories results in "panic: receive 1"
-		The hack is to compile sys/kern/uipc_socket.c with
-		-fno-strict-aliasing
+	hack	gcc-4.5 arm CNAME hostname lookup failure on
+		certain DNS environment (probably -ftree-ter problem)
+	cdate	Sat Dec 24 04:59:00 UTC 2011
+	mdate	
+	who	tsutsui
+	file	lib/libc/net/Makefile.inc 1.79
+	descr	Hostname lookup against CNAMEs by some commands fails
+		on certain DNS environments if lib/libc/net/gethnamaddr.c
+		(ping(8) etc) and lib/libc/net/getaddrinfo.c (ftp(1) etc)
+		are compiled with -O2, even though nslookup(1) against
+		the same CNAME returns proper hostname.
+		They works properly if compiled with -O2 -fno-tree-ter.
+		Also -O2 fails but -O2 -fno-tree-ter works on the following
+		test case in gcc bugzilla:
+		http://gcc.gnu.org/bugzilla/show_bug.cgi?id=48863#c4
 	kcah
 
-
-port	pc532
-
-	hack	egcs-pc532-ip6_mroute
-	cdate	09 Jul 2002
-	who	simonb
-	file	sys/arch/pc532/conf/Makefile.pc532 : 1.70
-	file	sys/arch/pc532/conf/files.pc532 : 1.47
-	descr
-		egcs 1.1.2 gets an "internal error--insn does not satisfy its
-		constraints" error compiling ip6_mroute.c with -O2 or greater.
-		-O1 works around this problem.
+	hack	gcc-4.5 arm without -fno-tree-vrp generate broken code
+	cdate	Wed Nov 14 13:02:02 JST 2012
+	who	msaitoh
+	file	lib/libc/softfloat/Makefile.inc
+	pr	46953
+	regress	src/tests/lib/libm/t_cbrt
+	regress	src/tests/lib/libm/t_ceil
+	regress	src/tests/lib/libm/t_exp
+	regress	src/tests/lib/libm/t_log
+	regress	src/tests/lib/libm/t_scalbn
+	regress	src/tests/lib/libm/t_sinh
+	regress	src/tests/lib/libm/t_sqrt
+	descr	Gcc has a bug in tree optimization. For adddf3,
+		-INF + -INF returns 0 without -fno-tree-vrp.
+		Debugging with -fdump-tree-all shows that
+		softfloat.c.021t.cleanup_cfg is ok but softfloat.c.023t.ssa
+		is broken.
 	kcah
-
-	hack	gcc-pc532-duffs_device
-	cdate	Mon Oct 27 07:23:05 UTC 2003
-	who	simonb
-	file	sys/arch/pc532/conf/Makefile.pc532 : 1.71
-	file	sys/arch/pc532/conf/files.pc532 : 1.52
-	pr	GCC PR optimization/5230
-	descr
-		gcc incorrectly gives an "unreachable code at beginning of
-		switch statement" for a Duff's device construct in
-		arch/pc532/dev/ncr.c.  There is no way to disable just this
-		warning, so -Wno-error is turned on for this file.
-	kcah
-
-	hack	gcc332-cppmacro-ice
-	cdate	Sun Dec  7 12:48:33 UTC 2003
-	who	simonb
-	file	gnu/usr.bin/gcc3/libcpp/Makefile : 1.2
-	descr
-		gcc 3.3.2 gets an ICE when compiling cppmacro.c with -O2.
-		The hack is to use -O1 for this file.  Fixed in gcc
-		-current mainline, unable to work out where the fix is
-		right now.
-	kcah
-
 
 port	sh3
 
 	hack	gcc4-sh3-bz2
-	mdate	20 May 2006
-	who	mrg
+	cdate	Sun May 21 03:34:57 UTC 2006
+	mdate	Fri May 16 13:13:00 UTC 2008
+	who	mrg, tsutsui
 	file	lib/libbz2/Makefile	: 1.10
 	descr
 		The in-tree GCC 4.1-based compiler generated too-far
-		pc-relative addresses.  Hack is to build with -O0.
+		pc-relative addresses.  Hack is to build with
+		-fno-loop-optimize.
 	kcah
-
 
 port	m68000
 
 	hack	gcc4-m68000
 	cdate	Fri Feb  8 10:29:37 PST 2008
-	who	mrg
-	file	share/mk/sys.mk	: 1.94
+	mdate	Sun May  4 15:37:19 UTC 2008
+	who	mrg, tsutsui
 	file	rescue/Makefile	: 1.21
-	file	lib/libcurses/Makefile	: 1.54
+	file	sbin/dump_lfs/Makefile	: 1.9
+	file	sbin/fsck_ffs/Makefile	: 1.35
+	file	sbin/fsdb/Makefile	: 1.22
+	file	share/mk/sys.mk	: 1.96
+	file	usr.sbin/ndbootd/Makefile	: 1.5
 	descr
-		Many errors across the tree with optimisation.
-		This hack uses -O0 to avoid the problem.
+		Several internal compiler errors with gcc -O1
+		around 64bit integer arithmetic.
+		This hack uses -O1 and adds some -fno-tree-foo options
+		to avoid the problem.
+		This might be related with GCC Bugzilla Bug 32424.
 	kcah
 
+port	m68k,sh3,vax
 
-port	sparc64
-
-	hack	disable optimzations for uvm_bio.c on 32 bit kernels
-	cdate	Sun Mar 21 14:14:04 MET 2004
-	who	martin
-	file	sys/arch/sparc64/conf/Makefile.sparc64 : 1.53-1.54
-	file	sys/arch/sparc64/conf/files.sparc64 : 1.93
-	descr
-		The sparc compiler miscompiles uvm_bio.c when using
-		any optimization. This results in ubc_release panics.
-	kcah
-
-port	macppc
-
-	hack	remove inline from rotate_{left,right}
-	cdate	Tue Feb 22 13:43:25 EST 2005
+	hack	gcc-4.8.1
+	cdate	Wed Nov  6 20:41:35 EST 2013
 	who	christos
-	file	src/dist/bind/lib/dns/rbt.c
+	file	src/external/gpl3/gcc/libstdc++-v3/Makefile : 1.6
 	descr
-		The macppc gcc-3.3 compiler miscompiles rbt.c when these
-		functions are inlined. The error is:
-		.* named[368]: rbt.c:1584: INSIST(child != (void *)0) >failed
-		.* named[368]: exiting (due to assertion failure)
-		This is reportedly fixed in gcc-3.4
+		compile hashtable_c++0x.cc with -O2 instead of -Os to
+		produce missing instantiation of std::lower_bound expansion
+		for unsigned long.
 	kcah
+
+port	sparc
+
+	hack	avoid NULL pointer derefs in savefpstate IPIs and GCC 4.5.3
+	cdate	Sun Aug 14 19:26:48 PDT 2011
+	who	mrg
+	file	sys/arch/sparc64/sparc/cpu.c : 1.234
+	file	sys/arch/sparc64/sparc/cpuvar.h : 1.90
+	file	sys/arch/sparc64/sparc/genassym.cf : 1.67
+	file	sys/arch/sparc64/sparc/locore.s : 1.265
+	descr
+		Something is wrong with GCC 4.5.3 and the savefpstate IPI.
+		Post newlock2 there was a bug where a lock was reduced from
+		IPL_SCHED to IPL_VM (?) and occasionally savefpstate IPI
+		would crash due to NULL IPI.  This was fixed by re-using the
+		right IPL value.  However, GCC 4.5.3 build kernels have the
+		same problems.  For now, the hack is re-instated.
+	kcah
+
 
 port	mips
 
@@ -572,6 +710,18 @@ port	mips
 		macro.
 	kcah
 
+	hack	mips-mcount-assembler-warning
+	cdate	Tue Jul 29 14:16:52 UTC 2008
+	who	lukem
+	file	src/lib/libc/gmon/Makefile.inc : 1.8
+	descr
+		Workaround for PR port-mips/39192.
+		common/lib/libc/gmon/mcount.c generates a (fatal)
+		assembler warning on MIPS:
+			Warning: No .cprestore pseudo-op used in PIC code
+		Add COPTS.count.c+=-Wa,--no-warn to avoid -Wa,--fatal-warnings
+	kcah
+
 port	i386
 
 	hack	use volatile intermediate variable to enforce rounding
@@ -583,3 +733,217 @@ port	i386
 		gcc-4 does subsequent operations on "float" values within
 		the i387 FPU without rounding the intermediate results
 	kcah
+
+port	x86
+	hack	turn off optimization for biosdisk_ll.c because otherwise
+		we are pass the wrong arguments to biosdisk_read(). 
+		$ cd /usr/src/sys/arch/i386/floppies/bootflopp-com
+		$ qemu-system-i386 -nographic -fda boot-com1.fs -boot a
+	who	christos
+	file	src/sys/arch/i386/stand/lib/Makefile : 1.38
+	descr
+		Turning on DISK_DEBUG shows the problem. We should find
+		out which option is causing this.
+	hcah
+
+port	powerpc
+
+	hack	avoid using __builtin_return_address(0) because it fails in
+		Xorg's module loader
+	cdate	Sat Sep 27 03:52:05 UTC 2008
+	who	macallan
+	file	src/libexec/ld.elf_so/rtld.c : 1.121
+	descr
+		workaround for PR port-macppc/37812
+	kcah
+
+	hack	define TARGET_SECURE_PLT and HAVE_AS_TLS because when
+		building the native compiler via build.sh those don't defined
+		properly.
+	cdate	Sat Mar 12 08:00:00 UTC 2011
+	who	matt
+	file	src/gnu/dist/gcc4/gcc/config/rs6000/netbsd.h
+	descr
+		see above
+	kcah
+
+port	powerpc64
+
+	hack	include _errno.c in libposix so that __errno resolves. It
+		should resolve from libc's errno, but somehow it does not.
+		Linker bug?
+	cdate	Thu Oct 27 13:19:47 EDT 2011
+	who	christos
+	file	src/lib/libposix/Makefile: 1.15
+	file	src/lib/librt/Makefile: 1.14
+	descr
+		workaround for:
+		    libposix_pic.a(cerror.pico)(.text+0x14): unresolvable \
+		    R_PPC64_REL24 relocation against symbol `.__errno'
+	kcah
+
+	hack	rename data() function in mdocml to avoid redefined error.
+		Compiler/Assembler bug?
+	cdate	Sat Oct 29 11:16:01 EDT 2011
+	who	christos
+	file	src/external/bsd/mdocml/tbl_data.c: 1.2
+	descr
+		workaround for:
+		    {standard input}: Assembler messages:
+		    {standard input}:105: Error: symbol `.data' is already \
+		    defined
+	kcah
+
+port	emips
+
+	hack	Add nop between ctc1 and mtc0 to avoid assembler internal
+		error
+	cdate	Sat Oct 29 16:57:34 EDT 2011
+	who	christos
+	file	src/sys/arch/mips/mips/mips_fpu.c: 1.7
+	descr
+		workaround for:
+		    {standard input}: Assembler messages:
+		    {standard input}:730: Internal error!
+		    Assertion failure in append_insn at /usr/src/external/gpl3/\
+		    binutils/dist/gas/config/tc-mips.c line 2910.
+	kcah
+
+port	ia64
+
+	hack	libc hesiod.c file does not compile with -O2 (internal
+		compiler error in gcc 4.5.3)
+	cdate	Thu Dec 27 08:05:43 CET 2012
+	who	martin
+	file	src/lib/libc/net/Makefile.inc: 1.82
+	descr
+		workaround for:
+		{standard input}: Assembler messages:
+		{standard input}:1507: Warning: Use of 'mov' may violate WAW dependency 'GR%, % in 1 - 127' (impliedf), specific resource number is 15
+		{standard input}:1506: Warning: This is the location of the conflicting usage
+		{standard input}: Error: 2 warnings, treating warnings as errors
+	kcah
+
+	hack	libelf libelf_extended.c compiler error in gcc 4.5.3
+	cdate	Thu Dec 27 09:05:51 CET 2012
+	who	martin
+	file	src/external/bsd/libelf/lib/Makefile: 1.3
+	descr
+		workaround for:
+		{standard input}: Assembler messages:
+		{standard input}:87: Warning: Use of 'adds' may violate RAW dependency 'GR%, % in 1 - 127' (impliedf), specific resource number is 33
+		{standard input}:87: Warning: Only the first path encountering the conflict is reported
+		{standard input}:85: Warning: This is the location of the conflicting usage
+	kcah
+
+	hack	compiler error with gcc 4.5.x
+	cdate	Thu Dec 27 15:15:25 CET 2012
+	who	martin
+	file	src/crypto/external/bsd/netpgp/lib/verify/Makefile: 1.5
+	descr
+		workaround for:
+		{standard input}: Assembler messages:
+		{standard input}:22979: Warning: Use of 'mov' may violate WAW dependency 'GR%, % in 1 - 127' (impliedf), specific resource number is 8
+		{standard input}:22978: Warning: This is the location of the conflicting usage
+	kcah
+
+	hack	libgcc unwind dummy function
+	cdate	Fri Apr 17 14:31:03 CEST 2015
+	who	martin
+	file	src/external/gpl3/gcc/dist/libgcc/config/ia64/unwind-ia64.c: 1.4
+	descr
+		Add an empty _Unwind_FindTableEntry() implementation.
+		In the end we will use our libc stuff, and this should
+		go away again.
+	kcah
+
+port	x68k
+
+	hack	compiler error with gcc 4.5.x
+	cdate	Fri May 24 13:23:01 EDT 2013
+	who	christos
+	file	src/external/gpl3/gcc/usr.bin/bakend/Makefile: 1.17
+		xsrc/external/mit/xorg/lib/libGLU/Makefile: 1.11
+	descr
+		workaround for:
+		internal compiler error: in cselib_record_set, at cselib.c:1999
+	kcah
+
+hack	fallback to /usr/bin/clang-cpp in rpcgen
+cdate	Wed Jun  5 15:49:27 CEST 2013
+who	joerg
+file	src/usr.bin/rpcgen/rpc_main.c
+descr
+	It is undecided which compiler owns /usr/bin/cpp and whether it should
+	exist in a MKGCC=no world. To allow rpcgen to work out-of-the-box,
+	if either gcc or clang is installed, use /usr/bin/clang-cpp as fallback.
+	This applies only if RPCGEN_CPP is not set and /usr/bin/cpp is not executable.
+kcah
+
+port	hppa
+
+	hack	compiler error with gcc 4.5.x
+	cdate	Tue Jul 23 07:42:28 BST 2013
+	who	skrll
+	file	src/sys/lib/libkern/Makefile.libkern: 1.26
+	descr
+		workaround for unanalysed codegen bug affecting md5c.c.
+	kcah
+
+	hack	gdb vs _rtld_debug_state problem
+	cdate	Thu Mar  5 09:49:53 UTC 2015
+	who	skrll
+	file	src/libexec/ld.elf_so/rtld.c: 1.175
+	descr
+		workaround for problem where gdb misses the breakpoint on
+		_rtld_debug_state when the function is only the
+		bv,n %r0(%rp) instruction - the nullify seems to
+		confuse something
+	kcah
+
+port	mips64*
+hack	compiler crashes on mips64* with optimization enabled
+cdate	Tue May 13 18:46:48 UTC 2014
+who	macallan
+file	src/external/lgpl3/gmp/lib/libgmp/arch/mips64eb/Makefile.inc: 1.6
+	src/external/lgpl3/gmp/lib/libgmp/arch/mips64eb/config.h: 1.5
+	src/external/lgpl3/gmp/lib/libgmp/arch/mips64el/Makefile.inc: 1.6
+	src/external/lgpl3/gmp/lib/libgmp/arch/mips64el/config.h: 1.5
+descr	workaround for n32 gcc doing unaligned 64bit accesses when optimizing
+pr	48696
+kcah
+
+port	vax
+hack	compile boot with -O1
+cdate	Sat May 24 09:40:58 CEST 2014
+who	martin
+file	src/sys/arch/vax/boot/boot/Makefile: 1.41
+descr	/boot does not work when compiled with -O2 and gcc 4.8
+kcah
+
+port	arm
+hack	avoid using labels in a 12-bit constant.
+who	matt
+file	crypto/external/bsd/openssl/lib/libcrypto/arch/arm/aes-armv4.S: 1.2
+descr	workaround for clang misassembling an instruction
+kcah
+
+port	sparc64
+hack	during profiling with -m32 (and ASLR) labels are not generated
+	consistently
+who	christos
+file	/cvsroot/src/crypto/external/bsd/heimdal/lib/libasn1/Makefile: 1.4
+desc 	asn1_krb5_asn1.po does not produce the same results during successive
+	compilation runs; it is bimodal. Turning optimization to -O0 fixes
+	the issue
+kcah
+
+port	ia64
+hack	ski emulator crashes
+who	scole
+file	/cvsroot/src/sys/external/bsd/acpica/dist/tables/tbxfload.c: 1.6
+desc
+	ski emulator crashes during acpi detection.  Added a check for
+	uninitialized index.  Submitted a request for change with upstream
+	mailing list, but never got a response
+kcah

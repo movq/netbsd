@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_dir.h,v 1.15 2007/12/25 18:33:49 perry Exp $	*/
+/*	$NetBSD: ext2fs_dir.h,v 1.22 2016/08/07 01:47:11 kre Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -48,11 +48,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -72,13 +67,16 @@
 #ifndef _UFS_EXT2FS_EXT2FS_DIR_H_
 #define	_UFS_EXT2FS_EXT2FS_DIR_H_
 
+#include <sys/dirent.h>
+#include <ufs/ext2fs/ext2fs_dinode.h>
+
 /*
  * Theoretically, directories can be more than 2Gb in length, however, in
  * practice this seems unlikely. So, we define the type doff_t as a 32-bit
  * quantity to keep down the cost of doing lookup on a 32-bit machine.
  */
 #define	doff_t			int32_t
-#define	EXT2FS_MAXDIRSIZE	(0x7fffffff)
+#define	EXT2FS_MAXDIRSIZE	INT32_MAX
 
 /*
  * A directory consists of some number of blocks of e2fs_bsize bytes.
@@ -110,14 +108,28 @@
 #define	EXT2FS_MAXNAMLEN	255
 
 struct	ext2fs_direct {
-	u_int32_t e2d_ino;		/* inode number of entry */
-	u_int16_t e2d_reclen;		/* length of this record */
-	u_int8_t e2d_namlen;		/* length of string in d_name */
-	u_int8_t e2d_type;		/* file type */
+	uint32_t e2d_ino;		/* inode number of entry */
+	uint16_t e2d_reclen;		/* length of this record */
+	uint8_t e2d_namlen;		/* length of string in d_name */
+	uint8_t e2d_type;		/* file type */
 	char e2d_name[EXT2FS_MAXNAMLEN];/* name with length<=EXT2FS_MAXNAMLEN */
 };
 
-/* Ext2 directory file types (not the same as FFS. Sigh. */
+enum ext2fs_slotstatus {
+	NONE,
+	COMPACT,
+	FOUND
+};
+
+struct ext2fs_searchslot {
+	enum ext2fs_slotstatus slotstatus;
+	doff_t slotoffset;		/* offset of area with free space */
+	int slotsize;			/* size of area at slotoffset */
+	int slotfreespace;		/* amount of space free in slot */
+	int slotneeded;			/* sizeof the entry we are seeking */
+};
+
+/* Ext2 directory file types (not the same as FFS. Sigh.) */
 #define EXT2_FT_UNKNOWN         0
 #define EXT2_FT_REG_FILE        1
 #define EXT2_FT_DIR             2
@@ -131,11 +143,12 @@ struct	ext2fs_direct {
 
 #define E2IFTODT(mode)    (((mode) & 0170000) >> 12)
 
-static __inline u_int8_t inot2ext2dt(u_int16_t) __unused;
-static __inline u_int8_t
-inot2ext2dt(u_int16_t type)
+static __inline uint8_t inot2ext2dt(uint16_t) __unused;
+static __inline uint8_t
+inot2ext2dt(uint16_t type)
 {
-	switch(type) {
+
+	switch (type) {
 	case E2IFTODT(EXT2_IFIFO):
 		return EXT2_FT_FIFO;
 	case E2IFTODT(EXT2_IFCHR):
@@ -155,6 +168,30 @@ inot2ext2dt(u_int16_t type)
 	}
 }
 
+static __inline uint8_t ext2dt2dt(uint8_t) __unused;
+static __inline uint8_t
+ext2dt2dt(uint8_t type)
+{
+	switch (type) {
+	case EXT2_FT_REG_FILE:
+		return DT_FIFO;
+	case EXT2_FT_DIR:
+		return DT_DIR;
+	case EXT2_FT_CHRDEV:
+		return DT_CHR;
+	case EXT2_FT_BLKDEV:
+		return DT_BLK;
+	case EXT2_FT_FIFO:
+		return DT_FIFO;
+	case EXT2_FT_SOCK:
+		return DT_SOCK;
+	case EXT2_FT_SYMLINK:
+		return DT_LNK;
+	default:
+		return DT_UNKNOWN;
+	}
+}
+
 /*
  * The EXT2FS_DIRSIZ macro gives the minimum record length which will hold
  * the directory entryfor a name len "len" (without the terminating null byte).
@@ -162,23 +199,33 @@ inot2ext2dt(u_int16_t type)
  * without the d_name field, plus enough space for the name without a
  * terminating null byte, rounded up to a 4 byte boundary.
  */
-#define EXT2FS_DIRSIZ(len)	(( 8 + len + 3) & ~3)
+#define EXT2FS_DIRSIZ(len)	roundup2(8 + len, 4)
 
 /*
  * Template for manipulating directories.  Should use struct direct's,
  * but the name field is EXT2FS_MAXNAMLEN - 1, and this just won't do.
  */
 struct ext2fs_dirtemplate {
-	u_int32_t	dot_ino;
+	uint32_t	dot_ino;
 	int16_t		dot_reclen;
-	u_int8_t	dot_namlen;
-	u_int8_t	dot_type;
+	uint8_t		dot_namlen;
+	uint8_t		dot_type;
 	char		dot_name[4];	/* must be multiple of 4 */
-	u_int32_t	dotdot_ino;
+	uint32_t	dotdot_ino;
 	int16_t		dotdot_reclen;
-	u_int8_t	dotdot_namlen;
-	u_int8_t	dotdot_type;
+	uint8_t		dotdot_namlen;
+	uint8_t		dotdot_type;
 	char		dotdot_name[4];	/* ditto */
 };
+
+/*
+ * EXT2_DIR_PAD defines the directory entries boundaries
+ *
+ * NOTE: It must be a multiple of 4
+ */
+#define	EXT2_DIR_PAD	4
+#define	EXT2_DIR_ROUND	(EXT2_DIR_PAD - 1)
+#define	EXT2_DIR_REC_LEN(namelen) \
+    (((namelen) + 8 + EXT2_DIR_ROUND) & ~EXT2_DIR_ROUND)
 
 #endif /* !_UFS_EXT2FS_EXT2FS_DIR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: svhlabel.c,v 1.4 2007/06/30 02:05:27 rumble Exp $	*/
+/*	$NetBSD: svhlabel.c,v 1.7 2013/02/07 10:44:45 apb Exp $	*/
 
 /*
  * Copyright (C) 2007 Stephen M. Rumble.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: svhlabel.c,v 1.4 2007/06/30 02:05:27 rumble Exp $");
+__RCSID("$NetBSD: svhlabel.c,v 1.7 2013/02/07 10:44:45 apb Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -59,8 +59,7 @@ __RCSID("$NetBSD: svhlabel.c,v 1.4 2007/06/30 02:05:27 rumble Exp $");
 #include "dkcksum.h"
 #include "extern.h"
 
-int		main(int, char **);
-static void	usage(void);
+__dead static void	usage(void);
 static void	getlabel(int);
 static void	setlabel(int, int);
 static int	getparts(int, int);
@@ -68,6 +67,7 @@ static int	is_efs(int, uint32_t);
 static struct sgi_boot_block *convert_sgi_boot_block(unsigned char *);
 
 struct disklabel label;
+static int	rawpart;
 
 static void
 getlabel(int sd)
@@ -81,8 +81,8 @@ getlabel(int sd)
 	 * Some ports seem to not set the number of partitions
 	 * correctly, albeit they seem to set the raw partition ok!
 	 */
-	if (label.d_npartitions <= getrawpartition())
-		label.d_npartitions = getrawpartition() + 1;
+	if (label.d_npartitions <= rawpart)
+		label.d_npartitions = rawpart + 1;
 }
 
 static void
@@ -153,7 +153,7 @@ getparts(int sd, int verbose)
 			break;
 
 		case SGI_PTYPE_VOLUME:
-			if (label.d_secperunit != vh->partitions[i].blocks)
+			if (label.d_secperunit != (uint32_t)vh->partitions[i].blocks)
 				changed++;
 			label.d_secperunit = vh->partitions[i].blocks; 
 			continue;
@@ -165,7 +165,7 @@ getparts(int sd, int verbose)
 		if (j >= label.d_npartitions)
 			break;
 
-		if (j == getrawpartition()) {
+		if (j == rawpart) {
 			if (++j >= label.d_npartitions)
 				break;
 		}
@@ -187,7 +187,7 @@ getparts(int sd, int verbose)
 	label.d_secpercyl = 1;
 	label.d_ncylinders = label.d_secperunit;
 
-	i = getrawpartition();
+	i = rawpart;
 	if (label.d_partitions[i].p_fstype != FS_UNUSED ||
 	    label.d_partitions[i].p_offset != 0 ||
 	    label.d_partitions[i].p_size != label.d_secperunit) {
@@ -322,6 +322,10 @@ main(int argc, char **argv)
 	argv += optind;
 	if (argc != 1)
 		usage();
+
+	rawpart = getrawpartition();
+	if (rawpart < 0)
+		err(EXIT_FAILURE, "getrawpartition");
 
 	if ((sd = opendisk(argv[0], write_it ? O_RDWR : O_RDONLY, name,
 	    (size_t)MAXPATHLEN, 1)) < 0) {

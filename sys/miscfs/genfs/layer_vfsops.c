@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_vfsops.c,v 1.29 2008/01/28 14:31:18 dholland Exp $	*/
+/*	$NetBSD: layer_vfsops.c,v 1.51 2017/06/04 08:02:26 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -32,6 +32,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 /*
  * Copyright (c) 1992, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -69,107 +70,107 @@
  */
 
 /*
- * generic layer vfs ops.
+ * Generic layer VFS operations.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_vfsops.c,v 1.29 2008/01/28 14:31:18 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_vfsops.c,v 1.51 2017/06/04 08:02:26 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
-#include <sys/time.h>
-#include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
+#include <miscfs/specfs/specdev.h>
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/layer.h>
 #include <miscfs/genfs/layer_extern.h>
 
+SYSCTL_SETUP_PROTO(sysctl_vfs_layerfs_setup);
+
+MODULE(MODULE_CLASS_MISC, layerfs, NULL);
+
+static int
+layerfs_modcmd(modcmd_t cmd, void *arg)
+{
+#ifdef _MODULE
+	static struct sysctllog *layerfs_clog = NULL;
+#endif
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		sysctl_vfs_layerfs_setup(&layerfs_clog);
+#endif
+		return 0;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		sysctl_teardown(&layerfs_clog);
+#endif
+		return 0;
+	default:
+		return ENOTTY;
+	}
+	return 0;
+}
+
 /*
- * VFS start.  Nothing needed here - the start routine
- * on the underlying filesystem will have been called
- * when that filesystem was mounted.
+ * VFS start.  Nothing needed here - the start routine on the underlying
+ * filesystem will have been called when that filesystem was mounted.
  */
 int
 layerfs_start(struct mount *mp, int flags)
 {
 
 #ifdef notyet
-	return VFS_START(MOUNTTOLAYERMOUNT(mp)->layerm_vfs, flags);
+	return VFS_START(mp->mnt_lower, flags);
 #else
 	return 0;
 #endif
 }
 
 int
-layerfs_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+layerfs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *vp;
 
-#ifdef LAYERFS_DIAGNOSTIC
-	if (layerfs_debug)
-		printf("layerfs_root(mp = %p, vp = %p->%p)\n", mp,
-		    MOUNTTOLAYERMOUNT(mp)->layerm_rootvp,
-		    LAYERVPTOLOWERVP(MOUNTTOLAYERMOUNT(mp)->layerm_rootvp));
-#endif
-
-	/*
-	 * Return locked reference to root.
-	 */
 	vp = MOUNTTOLAYERMOUNT(mp)->layerm_rootvp;
 	if (vp == NULL) {
 		*vpp = NULL;
-		return (EINVAL);
+		return EINVAL;
 	}
-	VREF(vp);
+	/*
+	 * Return root vnode with locked and with a reference held.
+	 */
+	vref(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
 	return 0;
 }
 
 int
-layerfs_quotactl(mp, cmd, uid, arg)
-	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	void *arg;
+layerfs_quotactl(struct mount *mp, struct quotactl_args *args)
 {
 
-	return VFS_QUOTACTL(MOUNTTOLAYERMOUNT(mp)->layerm_vfs, cmd, uid, arg);
+	return VFS_QUOTACTL(mp->mnt_lower, args);
 }
 
 int
-layerfs_statvfs(mp, sbp)
-	struct mount *mp;
-	struct statvfs *sbp;
+layerfs_statvfs(struct mount *mp, struct statvfs *sbp)
 {
-	int error;
 	struct statvfs *sbuf;
+	int error;
 
-	sbuf = kmem_alloc(sizeof(*sbuf), KM_SLEEP);
-	if (sbuf == NULL)
-		return ENOMEM;
-
-#ifdef LAYERFS_DIAGNOSTIC
-	if (layerfs_debug)
-		printf("layerfs_statvfs(mp = %p, vp = %p->%p)\n", mp,
-		    MOUNTTOLAYERMOUNT(mp)->layerm_rootvp,
-		    LAYERVPTOLOWERVP(MOUNTTOLAYERMOUNT(mp)->layerm_rootvp));
-#endif
-
-	(void)memset(sbuf, 0, sizeof(*sbuf));
-
-	error = VFS_STATVFS(MOUNTTOLAYERMOUNT(mp)->layerm_vfs, sbuf);
- 	if (error)
+	sbuf = kmem_zalloc(sizeof(*sbuf), KM_SLEEP);
+	error = VFS_STATVFS(mp->mnt_lower, sbuf);
+	if (error) {
 		goto done;
-
-	/* now copy across the "interesting" information and fake the rest */
+	}
+	/* Copy across the relevant data and fake the rest. */
 	sbp->f_flag = sbuf->f_flag;
 	sbp->f_bsize = sbuf->f_bsize;
 	sbp->f_frsize = sbuf->f_frsize;
@@ -197,62 +198,102 @@ layerfs_sync(struct mount *mp, int waitfor,
 	/*
 	 * XXX - Assumes no data cached at layer.
 	 */
-	return (0);
+	return 0;
 }
 
 int
-layerfs_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+layerfs_loadvnode(struct mount *mp, struct vnode *vp,
+    const void *key, size_t key_len, const void **new_key)
 {
-	int error;
-	struct vnode *vp;
+	struct layer_mount *lmp = MOUNTTOLAYERMOUNT(mp);
+	struct vnode *lowervp;
+	struct layer_node *xp;
 
-	if ((error = VFS_VGET(MOUNTTOLAYERMOUNT(mp)->layerm_vfs,
-	    ino, &vp))) {
+	KASSERT(key_len == sizeof(struct vnode *));
+	memcpy(&lowervp, key, key_len);
+
+	xp = kmem_alloc(lmp->layerm_size, KM_SLEEP);
+
+	/* Share the interlock with the lower node. */
+	mutex_obj_hold(lowervp->v_interlock);
+	uvm_obj_setlock(&vp->v_uobj, lowervp->v_interlock);
+
+	vp->v_tag = lmp->layerm_tag;
+	vp->v_type = lowervp->v_type;
+	vp->v_op = lmp->layerm_vnodeop_p;
+	if (vp->v_type == VBLK || vp->v_type == VCHR)
+		spec_node_init(vp, lowervp->v_rdev);
+	vp->v_data = xp;
+	xp->layer_vnode = vp;
+	xp->layer_lowervp = lowervp;
+	xp->layer_flags = 0;
+	uvm_vnp_setsize(vp, 0);
+
+	/*  Add a reference to the lower node. */
+	vref(lowervp);
+	*new_key = &xp->layer_lowervp;
+	return 0;
+}
+
+int
+layerfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
+{
+	struct vnode *vp;
+	int error;
+
+	error = VFS_VGET(mp->mnt_lower, ino, &vp);
+	if (error) {
 		*vpp = NULL;
-		return (error);
+		return error;
 	}
-	if ((error = layer_node_create(mp, vp, vpp))) {
+	VOP_UNLOCK(vp);
+	error = layer_node_create(mp, vp, vpp);
+	if (error) {
+		vrele(vp);
+		*vpp = NULL;
+		return error;
+	}
+	error = vn_lock(*vpp, LK_EXCLUSIVE);
+	if (error) {
+		vrele(*vpp);
+		*vpp = NULL;
+		return error;
+	}
+	return 0;
+}
+
+int
+layerfs_fhtovp(struct mount *mp, struct fid *fidp, struct vnode **vpp)
+{
+	struct vnode *vp;
+	int error;
+
+	error = VFS_FHTOVP(mp->mnt_lower, fidp, &vp);
+	if (error) {
+		*vpp = NULL;
+		return error;
+	}
+	VOP_UNLOCK(vp);
+	error = layer_node_create(mp, vp, vpp);
+	if (error) {
 		vput(vp);
 		*vpp = NULL;
 		return (error);
 	}
-
-	return (0);
-}
-
-int
-layerfs_fhtovp(mp, fidp, vpp)
-	struct mount *mp;
-	struct fid *fidp;
-	struct vnode **vpp;
-{
-	int error;
-	struct vnode *vp;
-
-	if ((error = VFS_FHTOVP(MOUNTTOLAYERMOUNT(mp)->layerm_vfs,
-	    fidp, &vp)))
-		return (error);
-
-	if ((error = layer_node_create(mp, vp, vpp))) {
-		vput(vp);
+	error = vn_lock(*vpp, LK_EXCLUSIVE);
+	if (error) {
+		vrele(*vpp);
 		*vpp = NULL;
-		return (error);
+		return error;
 	}
-
-	return (0);
+	return 0;
 }
 
 int
-layerfs_vptofh(vp, fhp, fh_size)
-	struct vnode *vp;
-	struct fid *fhp;
-	size_t *fh_size;
+layerfs_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
 {
 
-	return (VFS_VPTOFH(LAYERVPTOLOWERVP(vp), fhp, fh_size));
+	return VFS_VPTOFH(LAYERVPTOLOWERVP(vp), fhp, fh_size);
 }
 
 /*
@@ -272,28 +313,48 @@ int
 layerfs_snapshot(struct mount *mp, struct vnode *vp,
     struct timespec *ts)
 {
-	return (EOPNOTSUPP);
+
+	return EOPNOTSUPP;
+}
+
+/*
+ * layerfs_suspendctl - suspend a layered file system
+ *
+ * Here we should suspend the lower file system(s) too.  At present
+ * this will deadlock as we don't know which to suspend first.
+ *
+ * This routine serves as a central resource for this behavior; all
+ * layered file systems don't need to worry about the above. Also, if
+ * things get fixed, all layers get the benefit.
+ */
+int
+layerfs_suspendctl(struct mount *mp, int cmd)
+{
+
+	return genfs_suspendctl(mp, cmd);
 }
 
 SYSCTL_SETUP(sysctl_vfs_layerfs_setup, "sysctl vfs.layerfs subtree setup")
 {
 	const struct sysctlnode *layerfs_node = NULL;
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, &layerfs_node,
+#ifdef _MODULE
+		       0,
+#else
 		       CTLFLAG_PERMANENT,
+#endif
 		       CTLTYPE_NODE, "layerfs",
 		       SYSCTL_DESCR("Generic layered file system"),
 		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_CREATE);
+		       CTL_VFS, CTL_CREATE, CTL_EOL);
 
 #ifdef LAYERFS_DIAGNOSTIC
 	sysctl_createv(clog, 0, &layerfs_node, NULL,
-	               CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+#ifndef _MODULE
+	               CTLFLAG_PERMANENT |
+#endif
+		       CTLFLAG_READWRITE,
 	               CTLTYPE_INT,
 	               "debug",
 	               SYSCTL_DESCR("Verbose debugging messages"),
@@ -311,11 +372,13 @@ SYSCTL_SETUP(sysctl_vfs_layerfs_setup, "sysctl vfs.layerfs subtree setup")
 int
 layerfs_renamelock_enter(struct mount *mp)
 {
-	return VFS_RENAMELOCK_ENTER(MOUNTTOLAYERMOUNT(mp)->layerm_vfs);
+
+	return VFS_RENAMELOCK_ENTER(mp->mnt_lower);
 }
 
 void
 layerfs_renamelock_exit(struct mount *mp)
 {
-	VFS_RENAMELOCK_EXIT(MOUNTTOLAYERMOUNT(mp)->layerm_vfs);
+
+	VFS_RENAMELOCK_EXIT(mp->mnt_lower);
 }

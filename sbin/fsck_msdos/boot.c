@@ -1,4 +1,3 @@
-/*	$NetBSD: boot.c,v 1.13 2007/03/19 18:30:40 gdt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1997 Wolfgang Solfrank
@@ -12,13 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,11 +27,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: boot.c,v 1.13 2007/03/19 18:30:40 gdt Exp $");
+__RCSID("$NetBSD: boot.c,v 1.21 2018/02/08 09:05:17 dholland Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -55,7 +49,7 @@ readboot(int dosfs, struct bootblock *boot)
 	int ret = FSOK;
 	int i;
 	
-	if (read(dosfs, block, sizeof block) < sizeof block) {
+	if ((size_t)read(dosfs, block, sizeof block) != sizeof block) {
 		perr("could not read boot block");
 		return FSFATAL;
 	}
@@ -71,8 +65,16 @@ readboot(int dosfs, struct bootblock *boot)
 	/* decode bios parameter block */
 	boot->BytesPerSec = block[11] + (block[12] << 8);
 	boot->SecPerClust = block[13];
+	if (boot->SecPerClust == 0 || popcount(boot->SecPerClust) != 1) {
+ 		pfatal("Invalid cluster size: %u\n", boot->SecPerClust);
+		return FSFATAL;
+	}
 	boot->ResSectors = block[14] + (block[15] << 8);
 	boot->FATs = block[16];
+	if (boot->FATs == 0) {
+		pfatal("Invalid number of FATs: %u\n", boot->FATs);
+		return FSFATAL;
+	}
 	boot->RootDirEnts = block[17] + (block[18] << 8);
 	boot->Sectors = block[19] + (block[20] << 8);
 	boot->Media = block[21];
@@ -178,12 +180,15 @@ readboot(int dosfs, struct bootblock *boot)
 		}
 		/* Check backup FSInfo?					XXX */
 	}
+	if (boot->FATsecs == 0) {
+		pfatal("Invalid number of FAT sectors: %u\n", boot->FATsecs);
+		return FSFATAL;
+	}
 
-	boot->ClusterOffset = (boot->RootDirEnts * 32 + boot->BytesPerSec - 1)
+	boot->FirstCluster = (boot->RootDirEnts * 32 + boot->BytesPerSec - 1)
 	    / boot->BytesPerSec
 	    + boot->ResSectors
-	    + boot->FATs * boot->FATsecs
-	    - CLUST_FIRST * boot->SecPerClust;
+	    + boot->FATs * boot->FATsecs;
 
 	if (boot->BytesPerSec % DOSBOOTBLOCKSIZE != 0) {
 		pfatal("Invalid sector size: %u", boot->BytesPerSec);
@@ -198,7 +203,15 @@ readboot(int dosfs, struct bootblock *boot)
 		boot->NumSectors = boot->Sectors;
 	} else
 		boot->NumSectors = boot->HugeSectors;
-	boot->NumClusters = (boot->NumSectors - boot->ClusterOffset) / boot->SecPerClust;
+
+	if (boot->FirstCluster + boot->SecPerClust > boot->NumSectors) {
+		pfatal("Cluster offset too large (%u clusters)\n",
+		    boot->FirstCluster);
+		return FSFATAL;
+	}
+
+	boot->NumClusters = (boot->NumSectors - boot->FirstCluster) / boot->SecPerClust
+			    + CLUST_FIRST;
 
 	if (boot->flags&FAT32)
 		boot->ClustMask = CLUST32_MASK;
@@ -224,7 +237,7 @@ readboot(int dosfs, struct bootblock *boot)
 		break;
 	}
 
-	if (boot->NumFatEntries < boot->NumClusters) {
+	if (boot->NumFatEntries < boot->NumClusters - CLUST_FIRST) {
 		pfatal("FAT size too small, %u entries won't fit into %u sectors\n",
 		       boot->NumClusters, boot->FATsecs);
 		return FSFATAL;
@@ -270,7 +283,7 @@ writefsinfo(int dosfs, struct bootblock *boot)
 	 * support for FAT32) doesn't maintain the FSINFO block
 	 * correctly, it has to be fixed pretty often.
 	 *
-	 * Therefor, we handle the FSINFO block only informally,
+	 * Therefore, we handle the FSINFO block only informally,
 	 * fixing it if necessary, but otherwise ignoring the
 	 * fact that it was incorrect.
 	 */

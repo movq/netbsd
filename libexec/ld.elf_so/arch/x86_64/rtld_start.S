@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.6 2003/02/28 22:37:35 mycroft Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.9 2011/12/11 22:07:26 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,11 +40,14 @@
 	.text
 	.align	16
 	.globl	.rtld_start
+	.hidden	.rtld_start
 	.type	.rtld_start,@function
 .rtld_start:
 	subq	$16,%rsp		# make room of obj_main and exit proc
 	movq	%rsp,%r12		# stack pointer arg to _rtld
 	pushq	%rbx			# save ps_strings
+
+	andq	$~15,%rsp		# align rsp, to be restored from r12
 
 	leaq	_GLOBAL_OFFSET_TABLE_(%rip),%rax
 	leaq	_DYNAMIC(%rip),%rdi	# &_DYNAMIC
@@ -52,12 +55,13 @@
 	subq	(%rax),%rbx		# relocbase
 
 	movq	%rbx,%rsi
-	call	_rtld_relocate_nonplt_self@PLT
+	call	_rtld_relocate_nonplt_self
 
 	movq	%r12,%rdi
 	movq	%rbx,%rsi
-	call	_rtld@PLT		# _rtld(sp, relocbase)
+	call	_rtld			# _rtld(sp, relocbase)
 
+	leaq	-8(%r12),%rsp		# restore saved rsp, including %rbx
 	popq	%rbx			# %rbx = ps_strings
 	popq	%rdx			# %rdx = cleanup
 	popq	%rcx			# %rcx = obj_main
@@ -65,8 +69,12 @@
 
 	.align	4
 	.globl	_rtld_bind_start
+	.hidden	_rtld_bind_start
 	.type	_rtld_bind_start,@function
 _rtld_bind_start:	# (obj, reloff)
+	# This function is called with a misaligned stack from the PLT
+	# due to the additional argument pushed.
+	# At this point %rsp % 16 == 8.
 	pushfq				# save caller-saved registers
 	pushq	%rax
 	pushq	%rcx
@@ -81,7 +89,7 @@ _rtld_bind_start:	# (obj, reloff)
 	movq	80(%rsp),%rdi
 	movq	88(%rsp),%rsi
 
-	call	_rtld_bind@PLT		# call the binder
+	call	_rtld_bind		# call the binder
 	movq	%rax,88(%rsp)		# store function in obj
 
 	popq	%r11

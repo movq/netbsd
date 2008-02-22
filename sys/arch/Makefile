@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.37 2008/01/09 11:26:15 simonb Exp $
+#	$NetBSD: Makefile,v 1.47 2018/04/01 04:35:03 ryo Exp $
 
 # For now, we install the machine and arch includes, and symlink 'machine'
 # to the location of the machine includes (usually).
@@ -7,7 +7,6 @@
 
 .include <bsd.own.mk>
 
-SUBDIR=	${MACHINE}
 ARCHSUBDIR= ${MACHINE_CPU}
 
 .if ${ARCHSUBDIR} == "mips64"
@@ -17,10 +16,19 @@ ARCHSUBDIR= mips
 ARCHSUBDIR= powerpc
 .endif
 
+.if ${MACHINE_CPU} == "arm"
+SUBDIR= acorn32 cats epoc32 evbarm hpcarm iyonix netwinder shark zaurus
+.else
+SUBDIR=	${MACHINE}
+.endif
+
 .if ${MACHINE} != ${ARCHSUBDIR}
 .if exists(${ARCHSUBDIR})
 SUBDIR+= ${ARCHSUBDIR}
 .endif
+.endif
+.if ${MACHINE_CPU} == "aarch64"
+SUBDIR+= arm
 .endif
 .if ${MACHINE} == sparc
 SUBDIR+= sparc64
@@ -35,17 +43,17 @@ SUBDIR+= sun68k
 SUBDIR+= xen
 .endif
 
-#SUBDIR=acorn26 acorn32 algor alpha amiga amigappc arm arc atari \
+#SUBDIR=aarch64 acorn32 algor alpha amiga amigappc arm arc atari \
 #	bebox \
 #	cats cesfic cobalt \
 #	dreamcast \
-#	evbarm evbmips evbppc evbsh3 ews4800mips\
+#	emips epoc32 evbarm evbmips evbppc evbsh3 ews4800mips\
 #	hp300 hpc hpcarm hpcmips hpcsh \
 #	i386 iyonix \
 #	luna68k \
 #	m68k mac68k macppc mips mipsco mmeye mvme68k \
 #	netwinder news68k newsmips next68k \
-#	ofppc \
+#	ofppc or1k \
 #	playstation2 pmax powerpc prep \
 #	sandpoint sbmips sgimips sh3 shark sparc sparc64 sun2 sun3 sun68k \
 #	rs6000 \
@@ -53,9 +61,12 @@ SUBDIR+= xen
 #	x68k x86_64 xen \
 #	zaurus
 
+.if ${MACHINE_CPU} == aarch64 || ${MACHINE_CPU} == "arm"
+INCSYMLINKS= ${MACHINE_CPU} /usr/include/machine
+.else
 INCSYMLINKS= ${MACHINE} /usr/include/machine
+.endif
 
-INCSYMLINKS+= machine/float.h /usr/include/float.h \
-	machine/stdarg.h /usr/include/stdarg.h
+INCSYMLINKS+= machine/float.h /usr/include/float.h
 
 .include <bsd.kinc.mk>

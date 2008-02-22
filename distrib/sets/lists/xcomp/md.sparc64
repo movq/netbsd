@@ -1,7 +1,6 @@
-#	$NetBSD: md.sparc64,v 1.2 2004/03/08 07:14:47 rtr Exp $
-./usr/X11R6/include/X11/extensions/dpms.h
-./usr/X11R6/include/X11/extensions/dpmsstr.h
-./usr/X11R6/include/X11/extensions/xf86misc.h
-./usr/X11R6/include/X11/extensions/xf86mscstr.h
-./usr/X11R6/include/X11/extensions/xf86vmode.h
-./usr/X11R6/include/X11/extensions/xf86vmstr.h
+#	$NetBSD: md.sparc64,v 1.14 2016/08/19 22:37:03 mrg Exp $
+./usr/X11R7/include/X11/extensions/xf86dga.h		-unknown-	xorg
+./usr/X11R7/include/X11/extensions/xf86dga1.h		-unknown-	xorg
+./usr/X11R7/include/X11/extensions/xf86dga1str.h	-unknown-	xorg
+./usr/X11R7/include/X11/extensions/xf86dgastr.h		-unknown-	xorg
+./usr/X11R7/lib/libXxf86dga.a				-unknown-	xorg

@@ -1,4 +1,4 @@
-/* $NetBSD: sigwait.c,v 1.1 2003/02/15 21:11:49 jdolecek Exp $ */
+/* $NetBSD: sigwait.c,v 1.5 2012/03/20 16:26:12 matt Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sigwait.c,v 1.1 2003/02/15 21:11:49 jdolecek Exp $");
+__RCSID("$NetBSD: sigwait.c,v 1.5 2012/03/20 16:26:12 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -46,12 +39,13 @@ __RCSID("$NetBSD: sigwait.c,v 1.1 2003/02/15 21:11:49 jdolecek Exp $");
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 
 #ifdef __weak_alias
 __weak_alias(sigwait,_sigwait)
 #endif
 
-int	_sigwait __P((const sigset_t * __restrict, int * __restrict));
+int	_sigwait(const sigset_t * __restrict, int * __restrict);
 
 /*
  * This is wrapper around sigtimedwait(2), providing sigwait()
@@ -60,12 +54,14 @@ int	_sigwait __P((const sigset_t * __restrict, int * __restrict));
 int
 _sigwait(const sigset_t * __restrict set, int * __restrict signum)
 {
-	siginfo_t si;
-	int error;
+	int saved_errno, new_errno, sig;
 	
-	error = sigtimedwait(set, &si, NULL);
-	if (!error)
-		*signum = si.si_signo;
-
-	return (error);
+	saved_errno = errno;
+	sig = __sigtimedwait(set, NULL, NULL);
+	new_errno = errno;
+	errno = saved_errno;
+	if (sig < 0)
+		return (new_errno);
+	*signum = sig;
+	return (0);
 }

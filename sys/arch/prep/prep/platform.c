@@ -1,4 +1,4 @@
-/*	$NetBSD: platform.c,v 1.23 2007/10/17 19:56:54 garbled Exp $	*/
+/*	$NetBSD: platform.c,v 1.28 2014/04/03 23:49:47 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,21 +30,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: platform.c,v 1.23 2007/10/17 19:56:54 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: platform.c,v 1.28 2014/04/03 23:49:47 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <sys/intr.h>
 #include <sys/inttypes.h>
+
+#include <powerpc/pio.h>
+#include <powerpc/psl.h>
 
 #include <dev/pci/pcivar.h>
 
-#include <machine/intr.h>
 #include <machine/platform.h>
-#include <machine/residual.h>
-#include <powerpc/pio.h>
-
 #include <machine/pcipnp.h>
+#include <machine/residual.h>
 
 u_int32_t prep_pci_baseaddr = 0x80000cf8;
 u_int32_t prep_pci_basedata = 0x80000cfc;
@@ -89,14 +83,14 @@ find_platform_quirk(const char *model)
 
 /* XXX This should be conditional on finding L2 in residual */
 void
-cpu_setup_prep_generic(struct device *dev)
+cpu_setup_prep_generic(device_t dev)
 {
-	u_int8_t l2ctrl, cpuinf;
+	u_int8_t l2ctrl;
 
 	/* system control register */
 	l2ctrl = inb(PREP_BUS_SPACE_IO + 0x81c);
 	/* device status register */
-	cpuinf = inb(PREP_BUS_SPACE_IO + 0x80c);
+	(void)inb(PREP_BUS_SPACE_IO + 0x80c);
 
 	/* Enable L2 cache */
 	outb(PREP_BUS_SPACE_IO + 0x81c, l2ctrl | 0xc0);
@@ -228,7 +222,7 @@ static int
 create_intr_map(void *v, prop_dictionary_t dict)
 {
 	prop_dictionary_t sub;
-	int item, size, i, j, bus, numslots;
+	int item, size, i, j, numslots;
 	int tag = *(unsigned char *)v;
 	unsigned char *q = v;
 	PCIInfoPack *pi = v;
@@ -244,7 +238,6 @@ create_intr_map(void *v, prop_dictionary_t dict)
 		return size;
 
 	numslots = (le16dec(&pi->count0)-21)/sizeof(IntrMap);
-	bus = pi->busnum;
 
 	for (i = 0; i < numslots; i++) {
 		int lines[MAX_PCI_INTRS] = { 0, 0, 0, 0 };
@@ -272,11 +265,11 @@ create_intr_map(void *v, prop_dictionary_t dict)
 			else
 				intr_num = prop_number_create_integer(
 				    (line & 0x7fff) + offset);
-			sprintf(key, "pin-%c", 'A' + j);
+			snprintf(key, sizeof(key), "pin-%c", 'A' + j);
 			prop_dictionary_set(sub, key, intr_num);
 			prop_object_release(intr_num);
 		}
-		sprintf(key, "devfunc-%d", dev);
+		snprintf(key, sizeof(key), "devfunc-%d", dev);
 		prop_dictionary_set(dict, key, sub);
 		prop_object_release(sub);
 	}

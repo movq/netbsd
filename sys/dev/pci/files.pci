@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.302 2008/02/09 12:25:43 ober Exp $
+#	$NetBSD: files.pci,v 1.397 2018/06/06 18:10:35 jakllsch Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -21,10 +21,15 @@ file	dev/pci/pci.c			pci			needs-flag
 file	dev/pci/pci_map.c		pci
 file	dev/pci/pci_quirks.c		pci
 file	dev/pci/pci_subr.c		pci
+file	dev/pci/pci_stub.c		pci
 file	dev/pci/pci_usrreq.c		pci
 file	dev/pci/pciconf.c		pci & pci_netbsd_configure
 
 file	dev/pci/pcibusprint.c		pcibus
+
+file	dev/pci/pci_verbose.c		pci & pciverbose
+
+file	dev/pci/wsdisplay_pci.c		wsdisplay & pci
 
 # Cypress 82c693 hyperCache(tm) Stand-Alone PCI Peripheral Controller
 # with USB.  This is a combo chip:
@@ -73,7 +78,7 @@ attach	ld at amr with ld_amr
 file	dev/pci/ld_amr.c		ld_amr
 
 # Areca SATA RAID Controllers
-device	arcmsr: scsi
+device	arcmsr: scsi, sysmon_envsys
 attach	arcmsr at pci
 file	dev/pci/arcmsr.c		arcmsr
 
@@ -101,6 +106,11 @@ file	dev/pci/icp_pci.c		icp_pci
 # Adaptec FSA RAID controllers
 attach	aac at pci with aac_pci
 file	dev/pci/aac_pci.c		aac_pci
+
+# IBM ServeRAID RAID controllers
+device  ips: scsi
+attach  ips at pci
+file    dev/pci/ips.c                   ips
 
 # DPT EATA SCSI controllers
 attach	dpt at pci with dpt_pci
@@ -146,6 +156,11 @@ file	dev/pci/mfi_pci.c		mfi_pci
 # device declaration in sys/conf/files
 attach	mpt at pci with mpt_pci
 file	dev/pci/mpt_pci.c		mpt_pci
+
+# LSI Logic Fusion-MPT Message Passing Interface 2.0
+device	mpii: scsi
+attach	mpii at pci
+file	dev/pci/mpii.c			mpii
 
 # Ethernet driver for DC21040-based boards
 device	de: ether, ifnet, arp
@@ -272,6 +287,11 @@ attach	jmide at pci
 attach	ahcisata at jmide_hl with jmahci
 file	dev/pci/jmide.c			jmide | jmahci needs-flag
 
+# National Semiconductor IDE controllers
+device	nside: ata, ata_dma, ata_udma, pciide_common, wdc_common
+attach	nside at pci
+file	dev/pci/nside.c			nside
+
 # Opti IDE controllers
 device	optiide: ata, ata_dma, pciide_common, wdc_common
 attach	optiide at pci
@@ -297,6 +317,11 @@ device	rccide: ata, ata_dma, ata_udma, pciide_common, wdc_common
 attach	rccide at pci
 file	dev/pci/rccide.c		rccide
 
+# RDC IDE controllers
+device	rdcide: ata, ata_dma, ata_udma, pciide_common, wdc_common
+attach	rdcide at pci
+file	dev/pci/rdcide.c		rdcide
+
 # ServerWorks SATA controllers
 device	svwsata: ata, ata_dma, ata_udma, pciide_common, wdc_common, sata
 attach	svwsata at pci
@@ -306,6 +331,11 @@ file	dev/pci/svwsata.c		svwsata
 device	satalink: ata, ata_dma, ata_udma, pciide_common, wdc_common, sata
 attach	satalink at pci
 file	dev/pci/satalink.c		satalink
+
+# Intel SCH IDE controllers
+device	schide: ata, ata_dma, ata_udma, pciide_common, wdc_common
+attach	schide at pci
+file	dev/pci/schide.c		schide
 
 # SiS IDE controllers
 device	siside: ata, ata_dma, ata_udma, pciide_common, wdc_common
@@ -337,6 +367,11 @@ device	ixpide: ata, ata_dma, ata_udma, pciide_common, wdc_common
 attach	ixpide at pci
 file	dev/pci/ixpide.c	ixpide
 
+# Toshiba PICCOLO IDE controllers
+device	toshide: ata, ata_dma, pciide_common, wdc_common
+attach	toshide at pci
+file	dev/pci/toshide.c	toshide
+
 # PCI-PCI bridge chips
 device	ppb: pcibus
 attach	ppb at pci
@@ -362,6 +397,16 @@ file	dev/pci/if_hme_pci.c		hme_pci
 # Sun GEM-network
 attach	gem at pci with gem_pci
 file	dev/pci/if_gem_pci.c		gem_pci
+
+# Sun Cassini-network
+device	cas: arp, ether, ifnet, mii
+attach	cas at pci
+file	dev/pci/if_cas.c		cas
+
+# JMicron JMC2[56]0 ethernet controllers
+device	jme: ether, ifnet, arp, mii
+attach	jme at pci
+file	dev/pci/if_jme.c		jme
 
 # NE2000-compatible PCI Ethernet cards
 defparam opt_ipkdb.h	IPKDB_NE_PCISLOT
@@ -391,7 +436,7 @@ attach	esh at pci with esh_pci
 file	dev/pci/if_esh_pci.c		esh_pci
 
 # generic PCI VGA
-defflag	opt_vga.h	VGA_POST
+defflag	opt_vga.h	VGA_POST:	X86EMU
 attach	vga at pci with vga_pci
 file	dev/pci/vga_pci.c		vga_pci			needs-flag
 
@@ -403,6 +448,10 @@ file	dev/pci/tga_conf.c		tga
 file	dev/ic/bt485.c			tga
 file	dev/ic/bt463.c			tga
 file	dev/ic/ibm561.c			tga
+
+# HP Visualize
+attach	sti at pci with sti_pci
+file	dev/pci/sti_pci.c		sti_pci			needs-flag
 
 # Integraphics Systems IGA168x and CyberPro framebuffers (linear non-VGA mode)
 # device declaration in sys/conf/files
@@ -475,6 +524,11 @@ device	azalia: audiobus, auconv, mulaw, ac97, aurateconv
 attach	azalia at pci
 file	dev/pci/azalia.c		azalia
 file	dev/pci/azalia_codec.c		azalia
+
+# AMD Geode CS5536 Companion Audio
+device	gcscaudio: audiobus, auconv, mulaw, ac97, aurateconv
+attach	gcscaudio at pci
+file	dev/pci/gcscaudio.c		gcscaudio
 
 # NeoMagic 256 AC'97 Audio
 device	neo: audiobus, auconv, mulaw, ac97
@@ -555,20 +609,19 @@ device	puc { port = -1 }
 attach	puc at pci
 file	dev/pci/puc.c			puc
 file	dev/pci/pucdata.c		puc
+defflag opt_puc.h	PUC_CNAUTO
+defparam opt_puc.h	PUC_CNBUS
 
 attach	com at puc with com_puc
-file	dev/pci/com_puc.c		com_puc
+file	dev/pci/com_puc.c		com_puc needs-flag
 file	dev/pci/cyber.c			com_puc
+file	dev/pci/puccn.c			com_puc
 
 attach	lpt at puc with lpt_puc
 file	dev/pci/lpt_puc.c		lpt_puc & !ppbus
 
 attach	atppc at puc with atppc_puc
 file	dev/pci/atppc_puc.c		atppc_puc
-
-# Console device support for puc drivers
-defflag	opt_puccn.h	PUCCN
-file	dev/pci/puccn.c			puccn
 
 # UHCI USB controller
 attach	uhci at pci with uhci_pci
@@ -583,6 +636,11 @@ attach	ehci at pci with ehci_pci
 file	dev/pci/ehci_pci.c		ehci_pci
 
 file	dev/pci/usb_pci.c		ehci_pci | ehci_cardbus
+
+# xHCI USB controller
+attach	xhci at pci with xhci_pci
+file	dev/pci/xhci_pci.c		xhci_pci
+defflag	opt_xhci_pci.h			XHCI_DISABLE_MSI
 
 # OHCI IEEE 1394 controller
 attach	fwohci at pci with fwohci_pci
@@ -612,10 +670,39 @@ device	stge: ether, ifnet, arp, mii, mii_bitbang
 attach	stge at pci
 file	dev/pci/if_stge.c		stge
 
+# Intel i82598 & i82599 10-Gigabit Ethernet
+device	ixg: ether, ifnet, arp
+attach	ixg at pci
+file	dev/pci/ixgbe/ixgbe.c		ixg | ixv
+file	dev/pci/ixgbe/ix_txrx.c		ixg | ixv
+file	dev/pci/ixgbe/ixgbe_netbsd.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_82598.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_82599.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_x540.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_x550.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_api.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_common.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_mbx.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_osdep.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_phy.c	ixg | ixv
+file	dev/pci/ixgbe/ixgbe_vf.c	ixg | ixv
+file	dev/pci/ixgbe/if_bypass.c	ixg | ixv
+file	dev/pci/ixgbe/if_fdir.c		ixg | ixv
+
+# This appears to be the driver for virtual instances of i82599.
+device	ixv: ether, ifnet, arp
+attach	ixv at pci
+file	dev/pci/ixgbe/ixv.c		ixv
+
 # Intel i8254x Gigabit Ethernet
 device	wm: ether, ifnet, arp, mii, mii_bitbang
 attach	wm at pci
 file	dev/pci/if_wm.c			wm
+defflag	opt_if_wm.h	WM_EVENT_COUNTERS
+defparam opt_if_wm.h	WM_RX_PROCESS_LIMIT_DEFAULT
+			WM_RX_INTR_PROCESS_LIMIT_DEFAULT
+			WM_DISABLE_MSI
+			WM_DISABLE_MSIX
 
 # Broadcom 570x Gigabit Ethernet
 device	bge: ether, ifnet, arp, mii, mii_bitbang
@@ -710,9 +797,18 @@ file	dev/pci/if_atw_pci.c		atw_pci
 attach	rtw at pci with rtw_pci
 file	dev/pci/if_rtw_pci.c		rtw_pci
 
+# Realtek RTL8188CE Mini-PCIe
+device	rtwn: ifnet, arp, wlan, firmload
+attach	rtwn at pci
+file	dev/pci/if_rtwn.c		rtwn
+
 # Ralink RT2500/RT2600 PCI/Mini-PCI
 attach	ral at pci with ral_pci
 file	dev/pci/if_ral_pci.c		ral_pci
+
+# Marvel Libertas Open
+attach  malo at pci with malo_pci
+file    dev/pci/if_malo_pci.c       malo_pci
 
 # Intersil Prism2.5 Mini-PCI
 attach	wi at pci with wi_pci
@@ -762,12 +858,12 @@ file	dev/pci/joy_pci.c		joy_pci
 
 # ATI Mach64 framebuffer console driver
 defflag	opt_machfb.h	MACHFB_DEBUG
-device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode, edid, drm
+device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode, edid, drm, glyphcache
 attach	machfb at pci
 file	dev/pci/machfb.c		machfb
 
 # 3Dfx Voodoo3 framebuffer console driver
-device	voodoofb: wsemuldisplaydev, rasops8, vcons, videomode
+device	voodoofb: wsemuldisplaydev, rasops8, vcons, videomode, drm, i2cbus, i2c_bitbang, ddc_read_edid, edid
 attach	voodoofb at pci
 file	dev/pci/voodoofb.c		voodoofb
 
@@ -778,38 +874,40 @@ file	dev/pci/unichromefb.c		unichromefb needs-flag
 
 # ATI Radeon framebuffer console driver
 # (Note: to enable the BIOS parser, add options RADEON_BIOS_INIT to the config)
-device	radeonfb: wsemuldisplaydev, videomode, rasops32, vcons, splash, iic, i2c_bitbang, ddc_read_edid, edid, drm
+device	radeonfb: wsemuldisplaydev, videomode, rasops8, rasops32, vcons, splash, i2cbus, i2c_bitbang, ddc_read_edid, edid, drm, glyphcache
 attach	radeonfb at pci
 file	dev/pci/radeonfb.c	radeonfb
 file	dev/pci/radeonfb_i2c.c	radeonfb
 file	dev/pci/radeonfb_bios.c	radeonfb
 defflag opt_radeonfb.h	RADEONFB_DEBUG
+defflag opt_radeonfb.h	RADEONFB_BIOS_INIT
+defflag opt_radeonfb.h	RADEONFB_BIOS_DEBUG
+defflag opt_radeonfb.h	RADEONFB_MMAP_BARS
+defflag opt_radeonfb.h	RADEONFB_DEPTH_32
+defflag opt_radeonfb.h	RADEONFB_ALWAYS_ACCEL_PUTCHAR
 
 # Chelsio Terminator 3 (T3) 10 gigabit ethernet
 device	cxgbc { }
 attach	cxgbc at pci
 device	cxgb: ether, ifnet, arp
 attach	cxgb at cxgbc
-file	dev/pci/cxgb_main.c		cxgbc | cxgb
-file	dev/pci/cxgb_mc5.c		cxgbc | cxgb
-file	dev/pci/cxgb_vsc8211.c		cxgbc | cxgb
-file	dev/pci/cxgb_ael1002.c		cxgbc | cxgb
-file	dev/pci/cxgb_mv88e1xxx.c	cxgbc | cxgb
-file	dev/pci/cxgb_vsc7323.c		cxgbc | cxgb
-file	dev/pci/cxgb_xgmac.c		cxgbc | cxgb
-file	dev/pci/cxgb_t3_hw.c		cxgbc | cxgb
-file	dev/pci/cxgb_sge.c		cxgbc | cxgb
-file	dev/pci/cxgb_lro.c		cxgbc | cxgb
-# file	dev/pci/cxgb_offload.c		cxgbc | cxgb
-file	dev/pci/cxgb_l2t.c		cxgbc | cxgb
-file	dev/pci/cxgb_osdep.c		cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_main.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_mc5.c		cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_vsc8211.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_ael1002.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_mv88e1xxx.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_vsc7323.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_xgmac.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_t3_hw.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_sge.c		cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_lro.c		cxgbc | cxgb
+# file	dev/pci/cxgb/cxgb_offload.c	cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_l2t.c		cxgbc | cxgb
+file	dev/pci/cxgb/cxgb_osdep.c	cxgbc | cxgb
 
 # Chips & Technologies 65550 framebuffer console driver
-device	chipsfb: wsemuldisplaydev, rasops8, vcons, videomode
-attach	chipsfb at pci
-file	dev/pci/chipsfb.c		chipsfb
-defflag	opt_chipsfb.h	CHIPSFB_DEBUG
-defflag	opt_chipsfb.h	CHIPSFB_WAIT
+attach	chipsfb at pci with chipsfb_pci
+file	dev/pci/chipsfb.c		chipsfb_pci
 
 # 3Com 3c990
 device	txp: ether, ifnet, arp
@@ -863,6 +961,11 @@ device	iwn: ifnet, arp, wlan, firmload
 attach	iwn at pci
 file	dev/pci/if_iwn.c		iwn
 
+# Intel Centrino 7260
+device	iwm: ifnet, arp, wlan, firmload
+attach	iwm at pci
+file	dev/pci/if_iwm.c		iwm
+
 # Workbit NinjaSCSI-32 controllers
 # device declaration in sys/conf/files
 attach	njs at pci with njs_pci
@@ -882,6 +985,10 @@ file	dev/pci/if_vge.c		vge
 attach	ath at pci with ath_pci
 file	dev/pci/if_ath_pci.c		ath_pci
 
+# Atheros AR9k (802.11 a/g/n)
+attach	athn at pci with athn_pci
+file	dev/pci/if_athn_pci.c		athn_pci
+
 # NVIDIA nForce Ethernet
 device  nfe: ether, ifnet, arp, mii, mii_phy
 attach  nfe at pci
@@ -899,13 +1006,12 @@ device	msk: ether, ifnet, arp, mii
 attach	msk at mskc
 file	dev/pci/if_msk.c		mskc | msk
 
-#
-# Direct Rendering Manager
-#
-include "dev/pci/drm/files.pcidrm"
+# SD Host Controller
+attach	sdhc at pci with sdhc_pci
+file	dev/pci/sdhc_pci.c		sdhc_pci
 
 # generic framebuffer console driver, PCI frontend
-attach genfb at pci with genfb_pci
+attach genfb at pci with genfb_pci : splash
 file	dev/pci/genfb_pci.c	genfb_pci
 
 # NVIDIA nForce2/3/4 SMBus controller
@@ -921,8 +1027,173 @@ attach	ichsmb at pci
 file	dev/pci/ichsmb.c		ichsmb
 
 # ATI Rage 128 framebuffer console driver
-device	r128fb: wsemuldisplaydev, rasops8, vcons, videomode, iic, i2c_bitbang
+device	r128fb: wsemuldisplaydev, rasops8, rasops32, vcons, videomode, i2cbus, i2c_bitbang, glyphcache
 attach	r128fb at pci
 file	dev/pci/r128fb.c		r128fb
 defflag	opt_r128fb.h	R128FB_DEBUG
 defflag	opt_r128fb.h	R128FB_WAIT
+
+# Attansic/Atheros L1 Gigabit-Ethernet
+device	age: ether, ifnet, arp, mii, mii_phy
+attach	age at pci
+file	dev/pci/if_age.c		age
+
+# Attansic/Atheros L1C/L2C Gigabit Ethernet
+device	alc: ether, ifnet, arp, mii, mii_phy
+attach	alc at pci
+file	dev/pci/if_alc.c		alc
+
+# Attanisc/Atheros L1E Gigabit Ethernet
+device	ale: ether, ifnet, arp, mii, mii_phy
+attach	ale at pci
+file	dev/pci/if_ale.c		ale
+
+# Atheros/Attansic L2 Fast-Ethernet
+device	lii: ether, ifnet, arp, mii
+attach	lii at pci
+file	dev/pci/if_lii.c		lii
+
+# Silicon Image SteelVine SATA-II controllers
+attach	siisata at pci with siisata_pci
+file	dev/pci/siisata_pci.c		siisata_pci
+
+# Acer Labs M7101 power management controller
+device	alipm: i2cbus
+attach	alipm at pci
+file	dev/pci/alipm.c				alipm
+
+#
+# NetOctave NSP2000
+#
+include "dev/pci/n8/files.n8"
+
+#
+# Broadcom AirForce / Apple Airport Extreme
+#
+attach	bwi at pci with bwi_pci
+file	dev/pci/if_bwi_pci.c		bwi_pci
+
+# Broadcom FullMAC USB wireless adapter
+attach	bwfm at pci with bwfm_pci: firmload
+file	dev/pci/if_bwfm_pci.c		bwfm_pci
+
+# Marvell Serial-ATA Host Controller
+attach	mvsata at pci with mvsata_pci
+file	dev/pci/mvsata_pci.c		mvsata_pci
+
+include "dev/pci/voyager/files.voyager"
+# Silicon Motion SM502 / Voyager GX
+device	voyager: i2c_bitbang, voyagerbus, i2cbus
+attach	voyager at pci
+file	dev/pci/voyager.c		voyager
+defflag	opt_voyager.h	VOYAGER_DEBUG
+
+# High Definition Audio
+attach	hdaudio at pci with hdaudio_pci
+file	dev/pci/hdaudio_pci.c		hdaudio_pci
+
+# Permedia 2 / Sun PGX32 / Raptor
+device	pm2fb: wsemuldisplaydev, rasops8, rasops32, vcons, videomode, i2cbus, i2c_bitbang, ddc_read_edid, edid, glyphcache
+attach	pm2fb at pci
+file	dev/pci/pm2fb.c		pm2fb
+defflag	opt_pm2fb.h	PM2FB_DEBUG
+
+# Permedia 3 / Oxygen VX1 / Proformance 3  
+device  pm3fb: wsemuldisplaydev, rasops8, vcons, videomode, i2cbus, i2c_bitbang, ddc_read_edid, edid
+attach  pm3fb at pci
+file	dev/pci/pm3fb.c		pm3fb
+
+# 3Dlabs Wildcat / Sun XVR-500, 1200, Expert3D etc.
+device		wcfb: wsemuldisplaydev, rasops8, vcons
+attach		wcfb at pci
+file		dev/pci/wcfb.c	wcfb
+defflag		opt_wcfb.h	WCFB_DEBUG
+
+# Domex 536, 5380-compatible SCSI HBA
+attach	nca at pci with nca_pci
+file	dev/pci/nca_pci.c	nca_pci
+
+# Agere ET1310/1301 Ethernet
+device	et: ether, ifnet, arp, mii, mii_phy
+attach	et at pci
+file	dev/pci/if_et.c			et
+
+# RDC Semiconductor R6040 10/100 Ethernet
+device	vte: ether, ifnet, arp, mii, mii_phy
+attach	vte at pci
+file	dev/pci/if_vte.c		vte
+
+# Conexant CX23880-series DTV interface
+device	cxdtv: dtvbus, i2c_bitbang, i2cbus, i2cexec, tvpll, nxt2k, lg3303
+attach	cxdtv at pci
+file	dev/pci/cxdtv.c		cxdtv
+file	dev/pci/cxdtv_boards.c	cxdtv
+
+# Conexant CX23885-series DTV interface
+device	coram: dtvbus, i2cbus, i2cexec, mt2131, cx24227
+attach	coram at pci
+file	dev/pci/coram.c		coram
+
+# QUANCOM Electronic GmbH PWDOG1
+device	pwdog: sysmon_envsys
+attach	pwdog at pci
+file	dev/pci/pwdog.c		pwdog
+
+# IBM 4810 BSP cash drawer port
+device	ibmcd: gpiobus
+attach	ibmcd at pci
+file	dev/pci/ibmcd.c		ibmcd
+
+# SIS 315 Pro frame buffer
+device  sisfb: wsemuldisplaydev, rasops8, rasops15, rasops16, rasops32, vcons
+attach  sisfb at pci
+file    dev/pci/sisfb.c		sisfb	needs-flag
+
+attach	virtio at pci with virtio_pci
+file	dev/pci/virtio_pci.c	virtio_pci
+
+# Silicon Motion SM712(LynxEM+) frame buffer
+device	lynxfb: wsemuldisplaydev, rasops16
+attach	lynxfb at pci
+file	dev/pci/lynxfb.c	lynxfb needs-flag
+
+include "dev/pci/igma/files.igma"
+# Intel GMA
+device	igma: igmabus, i2cbus, i2c_bitbang, ddc_read_edid, edid
+attach	igma at pci
+file	dev/pci/igma.c		igma
+
+# 3Dfx Voodoo Graphics
+defflag	opt_tdvfb.h		TDVFB_CONSOLE
+device	tdvfb: wsemuldisplaydev, rasops16, rasops32, vcons, videomode
+attach	tdvfb at pci
+file	dev/pci/tdvfb.c		tdvfb	
+
+# nvidia geforce framebuffer console driver
+device	gffb: wsemuldisplaydev, rasops8, vcons, videomode, i2cbus, i2c_bitbang, glyphcache
+attach	gffb at pci
+file	dev/pci/gffb.c		gffb
+defflag	opt_gffb.h	GFFB_DEBUG
+
+# Realtek RTS5209/RTS5229 Card Reader driver
+attach	rtsx at pci with rtsx_pci
+file	dev/pci/rtsx_pci.c	rtsx_pci
+
+# NVM Express Controller
+attach	nvme at pci with nvme_pci
+file	dev/pci/nvme_pci.c	nvme_pci
+
+# PCI graphics devices with DRM/KMS
+include "external/bsd/drm2/pci/files.drmkms_pci"
+
+# Intel S1200,C2000 (non-pch) SMBus controller
+device	ismt: i2cbus
+attach	ismt at pci
+file	dev/pci/ismt.c		ismt
+
+# Amazon Elastic Network Adapter (ENA) family
+device	ena: ether, ifnet, arp
+attach	ena at pci
+file	dev/pci/if_ena.c			ena
+file	external/bsd/ena-com/ena_com.c		ena
+file	external/bsd/ena-com/ena_eth_com.c	ena

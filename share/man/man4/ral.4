@@ -1,4 +1,4 @@
-.\" $NetBSD: ral.4,v 1.5 2006/09/17 00:57:01 wiz Exp $
+.\" $NetBSD: ral.4,v 1.12 2017/07/03 21:30:58 wiz Exp $
 .\" $OpenBSD: ral.4,v 1.53 2006/05/06 17:26:25 jmc Exp $
 .\"
 .\" Copyright (c) 2005, 2006
@@ -16,9 +16,9 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd June 7, 2006
-.Os
+.Dd December 13, 2009
 .Dt RAL 4
+.Os
 .Sh NAME
 .Nm ral
 .Nd Ralink Technology IEEE 802.11a/b/g wireless network driver
@@ -267,6 +267,7 @@ Eusso UGL2454-VPR.
 Fiberline WL-400P.
 Foxconn WLL-3350.
 Gigabyte GN-WPKG.
+Hama WLAN PCI Card 54 Mbps.
 Hawking HWP54GR.
 Hercules HWGPCI-54.
 iNexQ CR054g-009 (R03).
@@ -305,7 +306,7 @@ ASUS WL-107G.
 Atlantis Land A02-PCM-W54.
 Belkin F5D7010 v2.
 Canyon CN-WF513.
-CC\*[Am]C WL-2102.
+CC&C WL-2102.
 CNet CWC-854.
 Conceptronic C54RC.
 Corega CG-WLCB54GL.
@@ -440,22 +441,23 @@ This should not happen.
 .Xr hostapd 8 ,
 .Xr ifconfig 8
 .Pp
-Ralink Technology:
-.Pa http://www.ralinktech.com
+.Lk http://www.ralinktech.com "Ralink Technology"
 .Sh HISTORY
 The
 .Nm
 driver first appeared in
-.Ox 3.7 and in
+.Ox 3.7
+and in
 .Nx 3.0 .
 Support for the RT2501 and RT2600 chipsets was added in
-.Ox 3.9 and in
+.Ox 3.9
+and in
 .Nx 4.0 .
 .Sh AUTHORS
 The
 .Nm
 driver was written by
-.An Damien Bergamini Aq damien@openbsd.org .
+.An Damien Bergamini Aq Mt damien@openbsd.org .
 .Sh CAVEATS
 Some PCI
 .Nm

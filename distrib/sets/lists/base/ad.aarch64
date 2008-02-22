@@ -1,0 +1,19 @@
+# $NetBSD: ad.aarch64,v 1.26 2018/04/01 04:35:02 ryo Exp $
+./libexec/ld.elf_so-eabi			base-compat-shlib	compat,pic
+./libexec/ld.elf_so-eabihf			base-compat-shlib	compat,pic
+./libexec/ld.elf_so-oabi			base-sysutil-bin	compat,pic
+./usr/lib/eabi/libarm.so.0			base-compat-shlib	compat,pic
+./usr/lib/eabi/libarm.so.0.0			base-compat-shlib	compat,pic
+./usr/lib/eabi/libc_vfp.so.0			base-compat-shlib	compat,pic
+./usr/lib/eabi/libc_vfp.so.0.0			base-compat-shlib	compat,pic
+./usr/lib/eabihf/libarm.so.0			base-compat-shlib	compat,pic
+./usr/lib/eabihf/libarm.so.0.0			base-compat-shlib	compat,pic
+./usr/lib/oabi/libarm.so.0			base-compat-shlib	compat,pic
+./usr/lib/oabi/libarm.so.0.0			base-compat-shlib	compat,pic
+./usr/lib/oabi/libc_vfp.so.0			base-compat-shlib	compat,pic
+./usr/lib/oabi/libc_vfp.so.0.0			base-compat-shlib	compat,pic
+./usr/libexec/ld.elf_so-eabi			base-compat-shlib	compat,pic
+./usr/libexec/ld.elf_so-eabihf			base-compat-shlib	compat,pic
+./usr/libexec/ld.elf_so-oabi			base-sysutil-bin	compat,pic
+./usr/sbin/ofctl				base-sysutil-bin
+./usr/sbin/tpctl				base-sysutil-bin

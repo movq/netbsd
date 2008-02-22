@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.51 2007/12/03 15:33:51 ad Exp $	*/
+/*	$NetBSD: adb.c,v 1.56 2014/10/18 08:33:25 snj Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.51 2007/12/03 15:33:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.56 2014/10/18 08:33:25 snj Exp $");
 
 #include "opt_adb.h"
 
@@ -57,10 +52,10 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.51 2007/12/03 15:33:51 ad Exp $");
 /*
  * Function declarations.
  */
-static int	adbmatch(struct device *, struct cfdata *, void *);
-static void	adbattach(struct device *, struct device *, void *);
+static int	adbmatch(device_t, cfdata_t, void *);
+static void	adbattach(device_t, device_t, void *);
 static int	adbprint(void *, const char *);
-void		adb_config_interrupts(struct device *);
+void		adb_config_interrupts(device_t);
 
 extern void	adb_jadbproc(void);
 
@@ -79,24 +74,24 @@ extern char	*adbHardwareDescr[];
 /*
  * Driver definition.
  */
-CFATTACH_DECL(adb, sizeof(struct device),
+CFATTACH_DECL_NEW(adb, 0,
     adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(struct device *parent, struct cfdata *cf, void *aux)
+adbmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	static int adb_matched = 0;
+	static bool adb_matched;
 
 	/* Allow only one instance. */
 	if (adb_matched)
 		return (0);
 
-	adb_matched = 1;
+	adb_matched = true;
 	return (1);
 }
 
 static void
-adbattach(struct device *parent, struct device *self, void *aux)
+adbattach(device_t parent, device_t self, void *aux)
 {
 
 	adb_softintr_cookie = softint_establish(SOFTINT_SERIAL,
@@ -110,14 +105,14 @@ adbattach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-adb_config_interrupts(struct device *self)
+adb_config_interrupts(device_t self)
 {
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
 	int totaladbs;
 	int adbindex, adbaddr;
 
-	printf("%s", self->dv_xname);
+	printf("%s", device_xname(self));
 	adb_polling = 1;
 
 #ifdef MRG_ADB
@@ -265,45 +260,55 @@ adbprint(void *args, const char *name)
  * returning.
  *
  * NOTE: The user specified compRout is ignored, since this routine specifies
- * it's own to adb_op, which is why you really called this in the first place
+ * its own to adb_op, which is why you really called this in the first place
  * anyway.
  */
 int
 adb_op_sync(Ptr buffer, Ptr compRout, Ptr data, short command)
 {
-	int tmout;
 	int result;
 	volatile int flag = 0;
 
 	result = ADBOp(buffer, (void *)adb_op_comprout, __UNVOLATILE(&flag), 
 	    command);	/* send command */
 	if (result == 0) {		/* send ok? */
-		/*
-		 * Total time to wait is calculated as follows:
-		 *  - Tlt (stop to start time): 260 usec
-		 *  - start bit: 100 usec
-		 *  - up to 8 data bytes: 64 * 100 usec = 6400 usec
-		 *  - stop bit (with SRQ): 140 usec
-		 * Total: 6900 usec
-		 *
-		 * This is the total time allowed by the specification.  Any
-		 * device that doesn't conform to this will fail to operate
-		 * properly on some Apple systems.  In spite of this we
-		 * double the time to wait; some Cuda-based apparently
-		 * queues some commands and allows the main CPU to continue
-		 * processing (radical concept, eh?).  To be safe, allow
-		 * time for two complete ADB transactions to occur.
-		 */
-		for (tmout = 13800; !flag && tmout >= 10; tmout -= 10)
-			delay(10);
-		if (!flag && tmout > 0)
-			delay(tmout);
-
+		adb_spin(&flag);
 		if (!flag)
 			result = -2;
 	}
 
 	return result;
+}
+
+/*
+ * adb_spin
+ *
+ * Implements a spin-wait with timeout to be used for synchronous
+ * operations on the ADB bus.
+ *
+ * Total time to wait is calculated as follows:
+ *  - Tlt (stop to start time): 260 usec
+ *  - start bit: 100 usec
+ *  - up to 8 data bytes: 64 * 100 usec = 6400 usec
+ *  - stop bit (with SRQ): 140 usec
+ * Total: 6900 usec
+ *
+ * This is the total time allowed by the specification.  Any device that
+ * doesn't conform to this will fail to operate properly on some Apple
+ * systems.  In spite of this we double the time to wait; Cuda-based
+ * systems apparently queue commands and allow the main CPU to continue
+ * processing (how radical!).  To be safe, allow time for two complete
+ * ADB transactions to occur.
+ */
+void
+adb_spin(volatile int *fp)
+{
+	int tmout;
+
+	for (tmout = 13800; *fp == 0 && tmout >= 10; tmout -= 10)
+		delay(10);
+	if (*fp == 0 && tmout > 0)
+		delay(tmout);
 }
 
 

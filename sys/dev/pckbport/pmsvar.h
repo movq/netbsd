@@ -1,4 +1,4 @@
-/*	$NetBSD: pmsvar.h,v 1.5 2007/07/09 21:01:19 ad Exp $	*/
+/*	$NetBSD: pmsvar.h,v 1.12 2017/08/13 08:49:27 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -28,12 +28,18 @@
 #ifndef _DEV_PCKBCPORT_PMSVAR_H_
 #define _DEV_PCKBCPORT_PMSVAR_H_
 
+#include <dev/pckbport/synapticsvar.h>
+#include <dev/pckbport/elantechvar.h>
+#include <dev/pckbport/alpsvar.h>
+
 enum pms_type {
 	PMS_UNKNOWN,
 	PMS_STANDARD,
 	PMS_SCROLL3,
 	PMS_SCROLL5,
-	PMS_SYNAPTICS
+	PMS_SYNAPTICS,
+	PMS_ELANTECH,
+	PMS_ALPS
 };
 
 struct pms_protocol {
@@ -43,30 +49,37 @@ struct pms_protocol {
 };
 
 struct pms_softc {		/* driver status information */
-	struct device sc_dev;
+	device_t sc_dev;
 
 	pckbport_tag_t sc_kbctag;
-	int sc_kbcslot;
+	pckbport_slot_t sc_kbcslot;
 
 	int sc_enabled;		/* input enabled? */
-#ifndef PMS_DISABLE_POWERHOOK
-	void *sc_powerhook;	/* cookie from power hook */
-	int sc_suspended;	/* suspended? */
-#endif /* !PMS_DISABLE_POWERHOOK */
 	int inputstate;		/* number of bytes received for this packet */
 	u_int buttons;		/* mouse button status */
 	enum pms_type protocol;
 	unsigned char packet[6];
 	struct timeval last, current;
 
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 	struct lwp *sc_event_thread;
 
-#ifdef PMS_SYNAPTICS_TOUCHPAD
+#if defined(PMS_SYNAPTICS_TOUCHPAD) || defined(PMS_ELANTECH_TOUCHPAD) \
+	 || defined(PMS_ALPS_TOUCHPAD)
 	union {
+#ifdef PMS_SYNAPTICS_TOUCHPAD
 		struct synaptics_softc synaptics;
+#endif
+#ifdef PMS_ELANTECH_TOUCHPAD
+		struct elantech_softc elantech;
+#endif
+#ifdef PMS_ALPS_TOUCHPAD
+		struct alps_softc alps;
+#endif
 	} u;
 #endif
 };
 
-#endif
+int pms_sliced_command(pckbport_tag_t, pckbport_slot_t, u_char);
+
+#endif /* _DEV_PCKBCPORT_PMSVAR_H_ */

@@ -1,4 +1,4 @@
-/* $NetBSD: wsemulvar.h,v 1.13 2006/10/09 11:03:43 peter Exp $ */
+/* $NetBSD: wsemulvar.h,v 1.16 2017/05/19 19:22:33 macallan Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -30,7 +30,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-struct device;
 struct wsdisplay_emulops;
 
 enum wsemul_resetops {
@@ -53,6 +52,7 @@ struct wsemul_ops {
 	void	(*getmsgattrs)(void *, struct wsdisplay_msgattrs *);
 	void	(*setmsgattrs)(void *, const struct wsscreen_descr *,
 		               const struct wsdisplay_msgattrs *);
+	void	(*resize)(void *, const struct wsscreen_descr *);
 };
 
 #if defined(_KERNEL_OPT)
@@ -70,6 +70,9 @@ extern const struct wsemul_ops wsemul_vt100_ops;
 #endif
 
 const struct wsemul_ops *wsemul_pick(const char *);
+void wsemul_drop(const struct wsemul_ops *);
+int wsemul_add(const struct wsemul_ops *);
+int wsemul_remove(const struct wsemul_ops *);
 
 /*
  * Callbacks from the emulation code to the display interface driver.

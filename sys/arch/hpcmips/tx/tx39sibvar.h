@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39sibvar.h,v 1.3 2001/06/14 11:09:56 uch Exp $ */
+/*	$NetBSD: tx39sibvar.h,v 1.5 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,10 +36,10 @@ struct txsib_attach_args {
 	int sa_slot; /* subframe 0 or subframe 1 */
 };
 
-void	tx39sib_enable1(struct device *);
-void	tx39sib_enable2(struct device *);
-void	tx39sib_disable(struct device *);
-int	tx39sib_clock(struct device *);
+void	tx39sib_enable1(device_t);
+void	tx39sib_enable2(device_t);
+void	tx39sib_disable(device_t);
+int	tx39sib_clock(device_t);
 
 /* subframe0 access sync method */
 void		txsibsf0_reg_write(tx_chipset_tag_t, int, u_int16_t);

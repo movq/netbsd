@@ -1,4 +1,4 @@
-/*	$NetBSD: getch.c,v 1.50 2007/12/08 18:38:11 jdc Exp $	*/
+/*	$NetBSD: getch.c,v 1.65 2017/01/31 09:17:53 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: getch.c,v 1.50 2007/12/08 18:38:11 jdc Exp $");
+__RCSID("$NetBSD: getch.c,v 1.65 2017/01/31 09:17:53 roy Exp $");
 #endif
 #endif					/* not lint */
 
@@ -49,161 +49,159 @@ __RCSID("$NetBSD: getch.c,v 1.50 2007/12/08 18:38:11 jdc Exp $");
 short	state;		/* state of the inkey function */
 
 static const struct tcdata tc[] = {
-	{"!1", KEY_SSAVE},
-	{"!2", KEY_SSUSPEND},
-	{"!3", KEY_SUNDO},
-	{"#1", KEY_SHELP},
-	{"#2", KEY_SHOME},
-	{"#3", KEY_SIC},
-	{"#4", KEY_SLEFT},
-	{"%0", KEY_REDO},
-	{"%1", KEY_HELP},
-	{"%2", KEY_MARK},
-	{"%3", KEY_MESSAGE},
-	{"%4", KEY_MOVE},
-	{"%5", KEY_NEXT},
-	{"%6", KEY_OPEN},
-	{"%7", KEY_OPTIONS},
-	{"%8", KEY_PREVIOUS},
-	{"%9", KEY_PRINT},
-	{"%a", KEY_SMESSAGE},
-	{"%b", KEY_SMOVE},
-	{"%c", KEY_SNEXT},
-	{"%d", KEY_SOPTIONS},
-	{"%e", KEY_SPREVIOUS},
-	{"%f", KEY_SPRINT},
-	{"%g", KEY_SREDO},
-	{"%h", KEY_SREPLACE},
-	{"%i", KEY_SRIGHT},
-	{"%j", KEY_SRSUME},
-	{"&0", KEY_SCANCEL},
-	{"&1", KEY_REFERENCE},
-	{"&2", KEY_REFRESH},
-	{"&3", KEY_REPLACE},
-	{"&4", KEY_RESTART},
-	{"&5", KEY_RESUME},
-	{"&6", KEY_SAVE},
-	{"&7", KEY_SUSPEND},
-	{"&8", KEY_UNDO},
-	{"&9", KEY_SBEG},
-	{"*0", KEY_SFIND},
-	{"*1", KEY_SCOMMAND},
-	{"*2", KEY_SCOPY},
-	{"*3", KEY_SCREATE},
-	{"*4", KEY_SDC},
-	{"*5", KEY_SDL},
-	{"*6", KEY_SELECT},
-	{"*7", KEY_SEND},
-	{"*8", KEY_SEOL},
-	{"*9", KEY_SEXIT},
-	{"@0", KEY_FIND},
-	{"@1", KEY_BEG},
-	{"@2", KEY_CANCEL},
-	{"@3", KEY_CLOSE},
-	{"@4", KEY_COMMAND},
-	{"@5", KEY_COPY},
-	{"@6", KEY_CREATE},
-	{"@7", KEY_END},
-	{"@8", KEY_ENTER},
-	{"@9", KEY_EXIT},
-	{"F1", KEY_F(11)},
-	{"F2", KEY_F(12)},
-	{"F3", KEY_F(13)},
-	{"F4", KEY_F(14)},
-	{"F5", KEY_F(15)},
-	{"F6", KEY_F(16)},
-	{"F7", KEY_F(17)},
-	{"F8", KEY_F(18)},
-	{"F9", KEY_F(19)},
-	{"FA", KEY_F(20)},
-	{"FB", KEY_F(21)},
-	{"FC", KEY_F(22)},
-	{"FD", KEY_F(23)},
-	{"FE", KEY_F(24)},
-	{"FF", KEY_F(25)},
-	{"FG", KEY_F(26)},
-	{"FH", KEY_F(27)},
-	{"FI", KEY_F(28)},
-	{"FJ", KEY_F(29)},
-	{"FK", KEY_F(30)},
-	{"FL", KEY_F(31)},
-	{"FM", KEY_F(32)},
-	{"FN", KEY_F(33)},
-	{"FO", KEY_F(34)},
-	{"FP", KEY_F(35)},
-	{"FQ", KEY_F(36)},
-	{"FR", KEY_F(37)},
-	{"FS", KEY_F(38)},
-	{"FT", KEY_F(39)},
-	{"FU", KEY_F(40)},
-	{"FV", KEY_F(41)},
-	{"FW", KEY_F(42)},
-	{"FX", KEY_F(43)},
-	{"FY", KEY_F(44)},
-	{"FZ", KEY_F(45)},
-	{"Fa", KEY_F(46)},
-	{"Fb", KEY_F(47)},
-	{"Fc", KEY_F(48)},
-	{"Fd", KEY_F(49)},
-	{"Fe", KEY_F(50)},
-	{"Ff", KEY_F(51)},
-	{"Fg", KEY_F(52)},
-	{"Fh", KEY_F(53)},
-	{"Fi", KEY_F(54)},
-	{"Fj", KEY_F(55)},
-	{"Fk", KEY_F(56)},
-	{"Fl", KEY_F(57)},
-	{"Fm", KEY_F(58)},
-	{"Fn", KEY_F(59)},
-	{"Fo", KEY_F(60)},
-	{"Fp", KEY_F(61)},
-	{"Fq", KEY_F(62)},
-	{"Fr", KEY_F(63)},
-	{"K1", KEY_A1},
-	{"K2", KEY_B2},
-	{"K3", KEY_A3},
-	{"K4", KEY_C1},
-	{"K5", KEY_C3},
-	{"Km", KEY_MOUSE},
-	{"k0", KEY_F0},
-	{"k1", KEY_F(1)},
-	{"k2", KEY_F(2)},
-	{"k3", KEY_F(3)},
-	{"k4", KEY_F(4)},
-	{"k5", KEY_F(5)},
-	{"k6", KEY_F(6)},
-	{"k7", KEY_F(7)},
-	{"k8", KEY_F(8)},
-	{"k9", KEY_F(9)},
-	{"k;", KEY_F(10)},
-	{"kA", KEY_IL},
-	{"ka", KEY_CATAB},
-	{"kB", KEY_BTAB},
-	{"kb", KEY_BACKSPACE},
-	{"kC", KEY_CLEAR},
-	{"kD", KEY_DC},
-	{"kd", KEY_DOWN},
-	{"kE", KEY_EOL},
-	{"kF", KEY_SF},
-	{"kH", KEY_LL},
-	{"kh", KEY_HOME},
-	{"kI", KEY_IC},
-	{"kL", KEY_DL},
-	{"kl", KEY_LEFT},
-	{"kM", KEY_EIC},
-	{"kN", KEY_NPAGE},
-	{"kP", KEY_PPAGE},
-	{"kR", KEY_SR},
-	{"kr", KEY_RIGHT},
-	{"kS", KEY_EOS},
-	{"kT", KEY_STAB},
-	{"kt", KEY_CTAB},
-	{"ku", KEY_UP}
+	{TICODE_kSAV, KEY_SSAVE},
+	{TICODE_kSPD, KEY_SSUSPEND},
+	{TICODE_kUND, KEY_SUNDO},
+	{TICODE_kHLP, KEY_SHELP},
+	{TICODE_kHOM, KEY_SHOME},
+	{TICODE_kIC, KEY_SIC},
+	{TICODE_kLFT, KEY_SLEFT},
+	{TICODE_krdo, KEY_REDO},
+	{TICODE_khlp, KEY_HELP},
+	{TICODE_kmrk, KEY_MARK},
+	{TICODE_kmsg, KEY_MESSAGE},
+	{TICODE_kmov, KEY_MOVE},
+	{TICODE_knxt, KEY_NEXT},
+	{TICODE_kopn, KEY_OPEN},
+	{TICODE_kopt, KEY_OPTIONS},
+	{TICODE_kprv, KEY_PREVIOUS},
+	{TICODE_kprt, KEY_PRINT},
+	{TICODE_kMSG, KEY_SMESSAGE},
+	{TICODE_kMOV, KEY_SMOVE},
+	{TICODE_kNXT, KEY_SNEXT},
+	{TICODE_kOPT, KEY_SOPTIONS},
+	{TICODE_kPRV, KEY_SPREVIOUS},
+	{TICODE_kPRT, KEY_SPRINT},
+	{TICODE_kRDO, KEY_SREDO},
+	{TICODE_kRPL, KEY_SREPLACE},
+	{TICODE_kRIT, KEY_SRIGHT},
+	{TICODE_kRES, KEY_SRSUME},
+	{TICODE_kCAN, KEY_SCANCEL},
+	{TICODE_kref, KEY_REFERENCE},
+	{TICODE_krfr, KEY_REFRESH},
+	{TICODE_krpl, KEY_REPLACE},
+	{TICODE_krst, KEY_RESTART},
+	{TICODE_kres, KEY_RESUME},
+	{TICODE_ksav, KEY_SAVE},
+	{TICODE_kspd, KEY_SUSPEND},
+	{TICODE_kund, KEY_UNDO},
+	{TICODE_kBEG, KEY_SBEG},
+	{TICODE_kFND, KEY_SFIND},
+	{TICODE_kCMD, KEY_SCOMMAND},
+	{TICODE_kCPY, KEY_SCOPY},
+	{TICODE_kCRT, KEY_SCREATE},
+	{TICODE_kDC, KEY_SDC},
+	{TICODE_kDL, KEY_SDL},
+	{TICODE_kslt, KEY_SELECT},
+	{TICODE_kEND, KEY_SEND},
+	{TICODE_kEOL, KEY_SEOL},
+	{TICODE_kEXT, KEY_SEXIT},
+	{TICODE_kfnd, KEY_FIND},
+	{TICODE_kbeg, KEY_BEG},
+	{TICODE_kcan, KEY_CANCEL},
+	{TICODE_kclo, KEY_CLOSE},
+	{TICODE_kcmd, KEY_COMMAND},
+	{TICODE_kcpy, KEY_COPY},
+	{TICODE_kcrt, KEY_CREATE},
+	{TICODE_kend, KEY_END},
+	{TICODE_kent, KEY_ENTER},
+	{TICODE_kext, KEY_EXIT},
+	{TICODE_kf11, KEY_F(11)},
+	{TICODE_kf12, KEY_F(12)},
+	{TICODE_kf13, KEY_F(13)},
+	{TICODE_kf14, KEY_F(14)},
+	{TICODE_kf15, KEY_F(15)},
+	{TICODE_kf16, KEY_F(16)},
+	{TICODE_kf17, KEY_F(17)},
+	{TICODE_kf18, KEY_F(18)},
+	{TICODE_kf19, KEY_F(19)},
+	{TICODE_kf20, KEY_F(20)},
+	{TICODE_kf21, KEY_F(21)},
+	{TICODE_kf22, KEY_F(22)},
+	{TICODE_kf23, KEY_F(23)},
+	{TICODE_kf24, KEY_F(24)},
+	{TICODE_kf25, KEY_F(25)},
+	{TICODE_kf26, KEY_F(26)},
+	{TICODE_kf27, KEY_F(27)},
+	{TICODE_kf28, KEY_F(28)},
+	{TICODE_kf29, KEY_F(29)},
+	{TICODE_kf30, KEY_F(30)},
+	{TICODE_kf31, KEY_F(31)},
+	{TICODE_kf32, KEY_F(32)},
+	{TICODE_kf33, KEY_F(33)},
+	{TICODE_kf34, KEY_F(34)},
+	{TICODE_kf35, KEY_F(35)},
+	{TICODE_kf36, KEY_F(36)},
+	{TICODE_kf37, KEY_F(37)},
+	{TICODE_kf38, KEY_F(38)},
+	{TICODE_kf39, KEY_F(39)},
+	{TICODE_kf40, KEY_F(40)},
+	{TICODE_kf41, KEY_F(41)},
+	{TICODE_kf42, KEY_F(42)},
+	{TICODE_kf43, KEY_F(43)},
+	{TICODE_kf44, KEY_F(44)},
+	{TICODE_kf45, KEY_F(45)},
+	{TICODE_kf46, KEY_F(46)},
+	{TICODE_kf47, KEY_F(47)},
+	{TICODE_kf48, KEY_F(48)},
+	{TICODE_kf49, KEY_F(49)},
+	{TICODE_kf50, KEY_F(50)},
+	{TICODE_kf51, KEY_F(51)},
+	{TICODE_kf52, KEY_F(52)},
+	{TICODE_kf53, KEY_F(53)},
+	{TICODE_kf54, KEY_F(54)},
+	{TICODE_kf55, KEY_F(55)},
+	{TICODE_kf56, KEY_F(56)},
+	{TICODE_kf57, KEY_F(57)},
+	{TICODE_kf58, KEY_F(58)},
+	{TICODE_kf59, KEY_F(59)},
+	{TICODE_kf60, KEY_F(60)},
+	{TICODE_kf61, KEY_F(61)},
+	{TICODE_kf62, KEY_F(62)},
+	{TICODE_kf63, KEY_F(63)},
+	{TICODE_ka1, KEY_A1},
+	{TICODE_kb2, KEY_B2},
+	{TICODE_ka3, KEY_A3},
+	{TICODE_kc1, KEY_C1},
+	{TICODE_kc3, KEY_C3},
+	{TICODE_kmous, KEY_MOUSE},
+	{TICODE_kf0, KEY_F0},
+	{TICODE_kf1, KEY_F(1)},
+	{TICODE_kf2, KEY_F(2)},
+	{TICODE_kf3, KEY_F(3)},
+	{TICODE_kf4, KEY_F(4)},
+	{TICODE_kf5, KEY_F(5)},
+	{TICODE_kf6, KEY_F(6)},
+	{TICODE_kf7, KEY_F(7)},
+	{TICODE_kf8, KEY_F(8)},
+	{TICODE_kf9, KEY_F(9)},
+	{TICODE_kf10, KEY_F(10)},
+	{TICODE_kil1, KEY_IL},
+	{TICODE_ktbc, KEY_CATAB},
+	{TICODE_kcbt, KEY_BTAB},
+	{TICODE_kbs, KEY_BACKSPACE},
+	{TICODE_kclr, KEY_CLEAR},
+	{TICODE_kdch1, KEY_DC},
+	{TICODE_kcud1, KEY_DOWN},
+	{TICODE_kel, KEY_EOL},
+	{TICODE_kind, KEY_SF},
+	{TICODE_kll, KEY_LL},
+	{TICODE_khome, KEY_HOME},
+	{TICODE_kich1, KEY_IC},
+	{TICODE_kdl1, KEY_DL},
+	{TICODE_kcub1, KEY_LEFT},
+	{TICODE_krmir, KEY_EIC},
+	{TICODE_knp, KEY_NPAGE},
+	{TICODE_kpp, KEY_PPAGE},
+	{TICODE_kri, KEY_SR},
+	{TICODE_kcuf1, KEY_RIGHT},
+	{TICODE_ked, KEY_EOS},
+	{TICODE_khts, KEY_STAB},
+	{TICODE_kctab, KEY_CTAB},
+	{TICODE_kcuu1, KEY_UP}
 };
 /* Number of TC entries .... */
 static const int num_tcs = (sizeof(tc) / sizeof(struct tcdata));
-
-int	ESCDELAY = 300;		/* Delay in ms between keys for esc seq's */
 
 /* Key buffer */
 #define INBUF_SZ 16		/* size of key buffer - must be larger than
@@ -216,7 +214,8 @@ static void add_key_sequence(SCREEN *screen, char *sequence, int key_type);
 static key_entry_t *add_new_key(keymap_t *current, char ch, int key_type,
         int symbol);
 static void delete_key_sequence(keymap_t *current, int key_type);
-static void do_keyok(keymap_t *current, int key_type, bool flag, int *retval);
+static void do_keyok(keymap_t *current, int key_type, bool set, bool flag,
+	int *retval);
 static keymap_t *new_keymap(void); /* create a new keymap */
 static key_entry_t *new_key(void); /* create a new key entry */
 static wchar_t		inkey(int to, int delay);
@@ -266,10 +265,10 @@ add_new_key(keymap_t *current, char chr, int key_type, int symbol)
 	    "Adding character %s of type %d, symbol 0x%x\n",
 	    unctrl(chr), key_type, symbol);
 #endif
-	if (current->mapping[(unsigned char) chr] < 0) {
-		if (current->mapping[(unsigned char) chr] == MAPPING_UNUSED) {
+	if (current->mapping[(unsigned char)chr] < 0) {
+		if (current->mapping[(unsigned char)chr] == MAPPING_UNUSED) {
 			  /* first time for this char */
-			current->mapping[(unsigned char) chr] =
+			current->mapping[(unsigned char)chr] =
 				current->count;	/* map new entry */
 			ki = current->count;
 
@@ -331,7 +330,7 @@ add_new_key(keymap_t *current, char chr, int key_type, int symbol)
 #ifdef DEBUG
 		__CTRACE(__CTRACE_MISC, "Keymap already known\n");
 #endif
-		the_key = current->key[current->mapping[(unsigned char) chr]];
+		the_key = current->key[current->mapping[(unsigned char)chr]];
 	}
 
         return the_key;
@@ -341,7 +340,7 @@ add_new_key(keymap_t *current, char chr, int key_type, int symbol)
  * Delete the given key symbol from the key mappings for the screen.
  *
  */
-void
+static void
 delete_key_sequence(keymap_t *current, int key_type)
 {
 	key_entry_t *key;
@@ -365,14 +364,11 @@ delete_key_sequence(keymap_t *current, int key_type)
 				_cursesi_free_keymap(key->value.next);
 		} else if ((key->type == KEYMAP_LEAF)
 			   && (key->value.symbol == key_type)) {
-			  /*
-			   * delete the mapping by negating the current
-			   * index - this "holds" the position in the
-			   * allocation just in case we later re-add
-			   * the key for that mapping.
-			   */
-			current->mapping[i] = - current->mapping[i];
-			current->count--;
+#ifdef DEBUG
+		__CTRACE(__CTRACE_INPUT, "delete_key_sequence: found keysym %d, deleting\n",
+		    key_type);
+#endif
+			key->enable = FALSE;
 		}
 	}
 }
@@ -381,7 +377,7 @@ delete_key_sequence(keymap_t *current, int key_type)
  * Add the sequence of characters given in sequence as the key mapping
  * for the given key symbol.
  */
-void
+static void
 add_key_sequence(SCREEN *screen, char *sequence, int key_type)
 {
 	key_entry_t *tmp_key;
@@ -394,12 +390,12 @@ add_key_sequence(SCREEN *screen, char *sequence, int key_type)
 #endif /* DEBUG */
 	current = screen->base_keymap;	/* always start with
 					 * base keymap. */
-	length = (int) strlen(sequence);
+	length = (int)strlen(sequence);
 
 	/*
 	 * OK - we really should never get a zero length string here, either
-	 * the termcap entry is there and it has a value or we are not called
-	 * at all.  Unfortunately, if someone assigns a termcap string to the
+	 * the terminfo entry is there and it has a value or we are not called
+	 * at all.  Unfortunately, if someone assigns a terminfo string to the
 	 * ^@ value we get passed a null string which messes up our length.
 	 * So, if we get a null string then just insert a leaf value in
 	 * the 0th char position of the root keymap.  Note that we are
@@ -442,8 +438,9 @@ void
 __init_getch(SCREEN *screen)
 {
 	char entry[1024], *p;
+	const char *s;
 	int     i;
-	size_t limit;
+	size_t limit, l;
 #ifdef DEBUG
 	int k, length;
 #endif
@@ -457,25 +454,30 @@ __init_getch(SCREEN *screen)
 	/* key input buffer pointers */
 	start = end = working = 0;
 
-	/* now do the termcap snarfing ... */
+	/* now do the terminfo snarfing ... */
 
 	for (i = 0; i < num_tcs; i++) {
 		p = entry;
 		limit = 1023;
-		if (t_getstr(screen->cursesi_genbuf, tc[i].name,
-			     &p, &limit) != (char *) NULL) {
+		s = screen->term->strs[tc[i].code];
+		if (s == NULL)
+			continue;
+		l = strlen(s) + 1;
+		if (limit < l)
+			continue;
+		strlcpy(p, s, limit);
+		p += l;
+		limit -= l;
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INIT,
-			    "Processing termcap entry %s, sequence ",
-			    tc[i].name);
+			    "Processing terminfo entry %d, sequence ",
+			    tc[i].code);
 			length = (int) strlen(entry);
 			for (k = 0; k <= length -1; k++)
 				__CTRACE(__CTRACE_INIT, "%s", unctrl(entry[k]));
 			__CTRACE(__CTRACE_INIT, "\n");
 #endif
-			add_key_sequence(screen, entry, tc[i].symbol);
-		}
-
+		add_key_sequence(screen, entry, tc[i].symbol);
 	}
 }
 
@@ -519,8 +521,8 @@ new_key(void)
 	key_entry_t *new_one;
 	int i;
 
-	if ((new_one = malloc(KEYMAP_ALLOC_CHUNK * sizeof(key_entry_t)))
-	    == NULL) {
+	new_one = malloc(KEYMAP_ALLOC_CHUNK * sizeof(key_entry_t));
+	if (new_one == NULL) {
 		perror("inkey: Cannot allocate new key entry chunk");
 		exit(2);
 	}
@@ -539,7 +541,7 @@ new_key(void)
  *
  */
 
-wchar_t
+static wchar_t
 inkey(int to, int delay)
 {
 	wchar_t		 k;
@@ -557,7 +559,7 @@ reread:
 		if (state == INKEY_NORM) {
 			if (delay && __timeout(delay) == ERR)
 				return ERR;
-			c = getchar();
+			c = fgetc(infd);
 			if (c == EOF) {
 				clearerr(infd);
 				return ERR;
@@ -566,7 +568,7 @@ reread:
 			if (delay && (__notimeout() == ERR))
 				return ERR;
 
-			k = (wchar_t) c;
+			k = (wchar_t)c;
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INPUT,
 			    "inkey (state normal) got '%s'\n", unctrl(k));
@@ -599,8 +601,8 @@ reread:
 					return ERR;
 			}
 
-			c = getchar();
-			if (c == -1 || ferror(infd)) {
+			c = fgetc(infd);
+			if (ferror(infd)) {
 				clearerr(infd);
 				return ERR;
 			}
@@ -608,13 +610,12 @@ reread:
 			if ((to || delay) && (__notimeout() == ERR))
 					return ERR;
 
-			k = (wchar_t) c;
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INPUT,
 			    "inkey (state assembling) got '%s'\n", unctrl(k));
 #endif
-			if (feof(infd)) {	/* inter-char timeout,
-						 * start backing out */
+			if (feof(infd) || c == -1) {	/* inter-char timeout,
+							 * start backing out */
 				clearerr(infd);
 				if (start == end)
 					/* no chars in the buffer, restart */
@@ -623,6 +624,7 @@ reread:
 				k = inbuf[start];
 				state = INKEY_TIMEOUT;
 			} else {
+				k = (wchar_t) c;
 				inbuf[working] = k;
 				INC_POINTER(working);
 				end = working;
@@ -730,7 +732,9 @@ keyok(int key_type, bool flag)
 {
 	int result = ERR;
 
-	do_keyok(_cursesi_screen->base_keymap, key_type, flag, &result);
+	if (_cursesi_screen != NULL)
+		do_keyok(_cursesi_screen->base_keymap, key_type,
+		    true, flag, &result);
 	return result;
 }
 
@@ -739,8 +743,8 @@ keyok(int key_type, bool flag)
  *       Does the actual work for keyok, we need to recurse through the
  * keymaps finding the passed key symbol.
  */
-void
-do_keyok(keymap_t *current, int key_type, bool flag, int *retval)
+static void
+do_keyok(keymap_t *current, int key_type, bool set, bool flag, int *retval)
 {
 	key_entry_t *key;
 	int i;
@@ -756,10 +760,11 @@ do_keyok(keymap_t *current, int key_type, bool flag, int *retval)
 		key = current->key[current->mapping[i]];
 
 		if (key->type == KEYMAP_MULTI)
-			do_keyok(key->value.next, key_type, flag, retval);
+			do_keyok(key->value.next, key_type, set, flag, retval);
 		else if ((key->type == KEYMAP_LEAF)
 			 && (key->value.symbol == key_type)) {
-			key->enable = flag;
+			if (set)
+				key->enable = flag;
 			*retval = OK; /* we found at least one instance, ok */
 		}
 	}
@@ -774,12 +779,16 @@ int
 define_key(char *sequence, int symbol)
 {
 
-	if (symbol <= 0)
+	if (symbol <= 0 || _cursesi_screen == NULL)
 		return ERR;
 
-	if (sequence == NULL)
+	if (sequence == NULL) {
+#ifdef DEBUG
+		__CTRACE(__CTRACE_INPUT, "define_key: deleting keysym %d\n",
+		    symbol);
+#endif
 		delete_key_sequence(_cursesi_screen->base_keymap, symbol);
-	else
+	} else
 		add_key_sequence(_cursesi_screen, sequence, symbol);
 
 	return OK;
@@ -796,20 +805,28 @@ wgetch(WINDOW *win)
 	int c;
 	FILE *infd = _cursesi_screen->infd;
 
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "wgetch: win(%p)\n", win);
+#endif
+	if (win == NULL)
+		return ERR;
 	if (!(win->flags & __SCROLLOK) && (win->flags & __FULLWIN)
 	    && win->curx == win->maxx - 1 && win->cury == win->maxy - 1
 	    && __echoit)
-		return (ERR);
+		return ERR;
 
 	if (is_wintouched(win))
 		wrefresh(win);
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "wgetch: __echoit = %d, "
-	    "__rawmode = %d, __nl = %d, flags = %#.4x\n",
-	    __echoit, __rawmode, _cursesi_screen->nl, win->flags);
+	    "__rawmode = %d, __nl = %d, flags = %#.4x, delay = %d\n",
+	    __echoit, __rawmode, _cursesi_screen->nl, win->flags, win->delay);
 #endif
 	if (_cursesi_screen->resized) {
 		_cursesi_screen->resized = 0;
+#ifdef DEBUG
+		__CTRACE(__CTRACE_INPUT, "wgetch returning KEY_RESIZE\n");
+#endif
 		return KEY_RESIZE;
 	}
 	if (_cursesi_screen->unget_pos) {
@@ -838,10 +855,8 @@ wgetch(WINDOW *win)
 			inp = inkey (win->flags & __NOTIMEOUT ? 0 : 1, 0);
 			break;
 		case 0:
-			if (__nodelay() == ERR) {
-				__restore_termios();
+			if (__nodelay() == ERR)
 				return ERR;
-			}
 			inp = inkey(0, 0);
 			break;
 		default:
@@ -852,26 +867,20 @@ wgetch(WINDOW *win)
 		switch (win->delay)
 		{
 		case -1:
-			if (__delay() == ERR) {
-				__restore_termios();
+			if (__delay() == ERR)
 				return ERR;
-			}
 			break;
 		case 0:
-			if (__nodelay() == ERR) {
-				__restore_termios();
+			if (__nodelay() == ERR)
 				return ERR;
-			}
 			break;
 		default:
-			if (__timeout(win->delay) == ERR) {
-				__restore_termios();
+			if (__timeout(win->delay) == ERR)
 				return ERR;
-			}
 			break;
 		}
 
-		c = getchar();
+		c = fgetc(infd);
 		if (feof(infd)) {
 			clearerr(infd);
 			__restore_termios();
@@ -896,15 +905,13 @@ wgetch(WINDOW *win)
 		__CTRACE(__CTRACE_INPUT, "wgetch got '%s'\n", unctrl(inp));
 #endif
 	if (win->delay > -1) {
-		if (__delay() == ERR) {
-			__restore_termios();
+		if (__delay() == ERR)
 			return ERR;
-		}
 	}
 
 	__restore_termios();
 
-	if (__echoit)
+	if ((__echoit) && (inp < KEY_MIN))
 		waddch(win, (chtype) inp);
 
 	if (weset)
@@ -923,7 +930,7 @@ wgetch(WINDOW *win)
 int
 ungetch(int c)
 {
-	return __unget((wint_t) c);
+	return __unget((wint_t)c);
 }
 
 /*
@@ -939,6 +946,8 @@ __unget(wint_t c)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "__unget(%x)\n", c);
 #endif
+	if (_cursesi_screen == NULL)
+		return ERR;
 	if (_cursesi_screen->unget_pos >= _cursesi_screen->unget_len) {
 		len = _cursesi_screen->unget_len + 32;
 		if ((p = realloc(_cursesi_screen->unget_list,
@@ -961,5 +970,31 @@ __unget(wint_t c)
 	}
 	_cursesi_screen->unget_list[_cursesi_screen->unget_pos] = c;
 	_cursesi_screen->unget_pos++;
+	return OK;
+}
+
+int
+has_key(int key_type)
+{
+	int result = ERR;
+
+	if (_cursesi_screen != NULL)
+		do_keyok(_cursesi_screen->base_keymap, key_type,
+		    false, false, &result);
+	return result;
+}
+
+/*
+ * set_escdelay --
+ *   Sets the escape delay for the current screen.
+ */
+int
+set_escdelay(int escdelay)
+{
+
+	if (_cursesi_screen == NULL)
+		return ERR;
+	_cursesi_screen->ESCDELAY = escdelay;
+	ESCDELAY = escdelay;
 	return OK;
 }

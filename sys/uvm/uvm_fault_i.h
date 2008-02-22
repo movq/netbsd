@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_fault_i.h,v 1.24 2008/01/02 11:49:16 ad Exp $	*/
+/*	$NetBSD: uvm_fault_i.h,v 1.31 2018/05/08 19:33:57 christos Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,6 +33,8 @@
 /*
  * uvm_fault_i.h: fault inline functions
  */
+void uvmfault_update_stats(struct uvm_faultinfo *);
+
 
 /*
  * uvmfault_unlockmaps: unlock the maps
@@ -57,6 +52,9 @@ uvmfault_unlockmaps(struct uvm_faultinfo *ufi, bool write_locked)
 		return;
 	}
 
+#ifndef __HAVE_NO_PMAP_STATS
+	uvmfault_update_stats(ufi);
+#endif
 	if (write_locked) {
 		vm_map_unlock(ufi->map);
 	} else {
@@ -72,13 +70,11 @@ uvmfault_unlockmaps(struct uvm_faultinfo *ufi, bool write_locked)
 
 static __inline void
 uvmfault_unlockall(struct uvm_faultinfo *ufi, struct vm_amap *amap,
-    struct uvm_object *uobj, struct vm_anon *anon)
+    struct uvm_object *uobj)
 {
 
-	if (anon)
-		mutex_exit(&anon->an_lock);
 	if (uobj)
-		mutex_exit(&uobj->vmobjlock);
+		mutex_exit(uobj->vmobjlock);
 	if (amap)
 		amap_unlock(amap);
 	uvmfault_unlockmaps(ufi, false);
@@ -116,16 +112,7 @@ uvmfault_lookup(struct uvm_faultinfo *ufi, bool write_lock)
 	 * only be two levels so we won't loop very long.
 	 */
 
-	/*CONSTCOND*/
-	while (1) {
-		/*
-		 * Make sure this is not an "interrupt safe" map.
-		 * Such maps are never supposed to be involved in
-		 * a fault.
-		 */
-		if (ufi->map->flags & VM_MAP_INTRSAFE)
-			return (false);
-
+	for (;;) {
 		/*
 		 * lock map
 		 */
@@ -139,7 +126,7 @@ uvmfault_lookup(struct uvm_faultinfo *ufi, bool write_lock)
 		 * lookup
 		 */
 		if (!uvm_map_lookup_entry(ufi->map, ufi->orig_rvaddr,
-								&ufi->entry)) {
+		    &ufi->entry)) {
 			uvmfault_unlockmaps(ufi, write_lock);
 			return(false);
 		}

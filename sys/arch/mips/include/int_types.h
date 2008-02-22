@@ -1,4 +1,4 @@
-/*	$NetBSD: int_types.h,v 1.10 2005/12/24 20:07:19 perry Exp $	*/
+/*	$NetBSD: int_types.h,v 1.12 2014/08/13 22:56:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,6 +37,9 @@
 #ifndef	_MIPS_INT_TYPES_H_
 #define	_MIPS_INT_TYPES_H_
 
+#ifdef __UINTPTR_TYPE__
+#include <sys/common_int_types.h>
+#else
 #include <sys/cdefs.h>
 
 /*
@@ -68,12 +71,14 @@ typedef	unsigned long long int __uint64_t;
 
 /* 7.18.1.4 Integer types capable of holding object pointers */
 
-#ifdef _LP64
+#ifndef __mips_o32
 typedef long int	       __intptr_t;
 typedef unsigned long int     __uintptr_t;
 #else
 typedef	int		       __intptr_t;
 typedef	unsigned int	      __uintptr_t;
 #endif
+
+#endif /* !__UINTPTR_TYPE__ */
 
 #endif	/* !_MIPS_INT_TYPES_H_ */

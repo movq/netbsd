@@ -1,4 +1,4 @@
-/*	$NetBSD: lockstat.c,v 1.13 2008/01/04 21:17:48 ad Exp $	*/
+/*	$NetBSD: lockstat.c,v 1.25 2017/06/01 02:45:09 chs Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.13 2008/01/04 21:17:48 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.25 2017/06/01 02:45:09 chs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -57,12 +50,15 @@ __KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.13 2008/01/04 21:17:48 ad Exp $");
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
 #include <sys/syslog.h>
 #include <sys/atomic.h>
 
 #include <dev/lockstat.h>
 
 #include <machine/lock.h>
+
+#include "ioconf.h"
 
 #ifndef __HAVE_CPU_COUNTER
 #error CPU counters not available
@@ -76,7 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.13 2008/01/04 21:17:48 ad Exp $");
 
 #define	LOCKSTAT_MINBUFS	1000
 #define	LOCKSTAT_DEFBUFS	10000
-#define	LOCKSTAT_MAXBUFS	50000
+#define	LOCKSTAT_MAXBUFS	1000000
 
 #define	LOCKSTAT_HASH_SIZE	128
 #define	LOCKSTAT_HASH_MASK	(LOCKSTAT_HASH_SIZE - 1)
@@ -91,7 +87,6 @@ typedef struct lscpu {
 
 typedef struct lslist lslist_t;
 
-void	lockstatattach(int);
 void	lockstat_start(lsenable_t *);
 int	lockstat_alloc(lsenable_t *);
 void	lockstat_init_tables(lsenable_t *);
@@ -104,6 +99,7 @@ dev_type_read(lockstat_read);
 dev_type_ioctl(lockstat_ioctl);
 
 volatile u_int	lockstat_enabled;
+volatile u_int	lockstat_dev_enabled;
 uintptr_t	lockstat_csstart;
 uintptr_t	lockstat_csend;
 uintptr_t	lockstat_csmask;
@@ -117,9 +113,34 @@ size_t		lockstat_sizeb;
 int		lockstat_busy;
 struct timespec	lockstat_stime;
 
+#ifdef KDTRACE_HOOKS
+volatile u_int lockstat_dtrace_enabled;
+CTASSERT(LB_NEVENT <= 3);
+CTASSERT(LB_NLOCK <= (7 << LB_LOCK_SHIFT));
+void
+lockstat_probe_stub(uint32_t id, uintptr_t lock, uintptr_t callsite,
+    uintptr_t flags, uintptr_t count, uintptr_t cycles)
+{
+}
+
+uint32_t	lockstat_probemap[LS_NPROBES];
+void		(*lockstat_probe_func)(uint32_t, uintptr_t, uintptr_t,
+		    uintptr_t, uintptr_t, uintptr_t) = &lockstat_probe_stub;
+#endif
+
 const struct cdevsw lockstat_cdevsw = {
-	lockstat_open, lockstat_close, lockstat_read, nowrite, lockstat_ioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER | D_MPSAFE
+	.d_open = lockstat_open,
+	.d_close = lockstat_close,
+	.d_read = lockstat_read,
+	.d_write = nowrite,
+	.d_ioctl = lockstat_ioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER | D_MPSAFE
 };
 
 /*
@@ -147,7 +168,8 @@ lockstat_init_tables(lsenable_t *le)
 	lscpu_t *lc;
 	lsbuf_t *lb;
 
-	KASSERT(!lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(!lockstat_dev_enabled);
 
 	for (CPU_INFO_FOREACH(cii, ci)) {
 		if (ci->ci_lockstat != NULL) {
@@ -192,7 +214,8 @@ void
 lockstat_start(lsenable_t *le)
 {
 
-	KASSERT(!lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(!lockstat_dev_enabled);
 
 	lockstat_init_tables(le);
 
@@ -213,8 +236,8 @@ lockstat_start(lsenable_t *le)
 	lockstat_lockend = le->le_lockend;
 	membar_sync();
 	getnanotime(&lockstat_stime);
-	lockstat_enabled = le->le_mask;
-	membar_producer();
+	lockstat_dev_enabled = le->le_mask;
+	LOCKSTAT_ENABLED_UPDATE();
 }
 
 /*
@@ -228,15 +251,17 @@ lockstat_stop(lsdisable_t *ld)
 	u_int cpuno, overflow;
 	struct timespec ts;
 	int error;
+	lwp_t *l;
 
-	KASSERT(lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(lockstat_dev_enabled);
 
 	/*
 	 * Set enabled false, force a write barrier, and wait for other CPUs
 	 * to exit lockstat_event().
 	 */
-	lockstat_enabled = 0;
-	membar_producer();
+	lockstat_dev_enabled = 0;
+	LOCKSTAT_ENABLED_UPDATE();
 	getnanotime(&ts);
 	tsleep(&lockstat_stop, PPAUSE, "lockstat", mstohz(10));
 
@@ -256,6 +281,15 @@ lockstat_stop(lsdisable_t *ld)
 
 	lockstat_init_tables(NULL);
 
+	/* Run through all LWPs and clear the slate for the next run. */
+	mutex_enter(proc_lock);
+	LIST_FOREACH(l, &alllwp, l_list) {
+		l->l_pfailaddr = 0;
+		l->l_pfailtime = 0;
+		l->l_pfaillock = 0;
+	}
+	mutex_exit(proc_lock);
+
 	if (ld == NULL)
 		return error;
 
@@ -267,7 +301,7 @@ lockstat_stop(lsdisable_t *ld)
 
 	cpuno = 0;
 	for (CPU_INFO_FOREACH(cii, ci)) {
-		if (cpuno > sizeof(ld->ld_freq) / sizeof(ld->ld_freq[0])) {
+		if (cpuno >= sizeof(ld->ld_freq) / sizeof(ld->ld_freq[0])) {
 			log(LOG_WARNING, "lockstat: too many CPUs\n");
 			break;
 		}
@@ -286,16 +320,16 @@ lockstat_alloc(lsenable_t *le)
 	lsbuf_t *lb;
 	size_t sz;
 
-	KASSERT(!lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(!lockstat_dev_enabled);
 	lockstat_free();
 
 	sz = sizeof(*lb) * le->le_nbufs;
 
 	lb = kmem_zalloc(sz, KM_SLEEP);
-	if (lb == NULL)
-		return (ENOMEM);
 
-	KASSERT(!lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(!lockstat_dev_enabled);
 	KASSERT(lockstat_baseb == NULL);
 	lockstat_sizeb = sz;
 	lockstat_baseb = lb;
@@ -310,7 +344,8 @@ void
 lockstat_free(void)
 {
 
-	KASSERT(!lockstat_enabled);
+	/* coverity[assert_side_effect] */
+	KASSERT(!lockstat_dev_enabled);
 
 	if (lockstat_baseb != NULL) {
 		kmem_free(lockstat_baseb, lockstat_sizeb);
@@ -331,7 +366,15 @@ lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
 	u_int event;
 	int s;
 
-	if ((flags & lockstat_enabled) != flags || count == 0)
+#ifdef KDTRACE_HOOKS
+	uint32_t id;
+	CTASSERT((LS_NPROBES & (LS_NPROBES - 1)) == 0);
+	if ((id = lockstat_probemap[LS_COMPRESS(flags)]) != 0)
+		(*lockstat_probe_func)(id, lock, callsite, flags, count,
+		    cycles);
+#endif
+
+	if ((flags & lockstat_dev_enabled) != flags || count == 0)
 		return;
 	if (lock < lockstat_lockstart || lock > lockstat_lockend)
 		return;
@@ -439,7 +482,7 @@ lockstat_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 			error = ENODEV;
 			break;
 		}
-		if (lockstat_enabled) {
+		if (lockstat_dev_enabled) {
 			error = EBUSY;
 			break;
 		}
@@ -475,7 +518,7 @@ lockstat_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		break;
 
 	case IOC_LOCKSTAT_DISABLE:
-		if (!lockstat_enabled)
+		if (!lockstat_dev_enabled)
 			error = EINVAL;
 		else
 			error = lockstat_stop((lsdisable_t *)data);
@@ -496,7 +539,7 @@ int
 lockstat_read(dev_t dev, struct uio *uio, int flag)
 {
 
-	if (curlwp != lockstat_lwp || lockstat_enabled)
+	if (curlwp != lockstat_lwp || lockstat_dev_enabled)
 		return EBUSY;
 	return uiomove(lockstat_baseb, lockstat_sizeb, uio);
 }

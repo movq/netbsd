@@ -1,4 +1,4 @@
-/*	$NetBSD: atoi.c,v 1.11 2003/08/07 16:43:38 agc Exp $	*/
+/*	$NetBSD: atoi.c,v 1.15 2018/06/13 09:38:32 eadler Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)atoi.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: atoi.c,v 1.11 2003/08/07 16:43:38 agc Exp $");
+__RCSID("$NetBSD: atoi.c,v 1.15 2018/06/13 09:38:32 eadler Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -42,10 +42,9 @@ __RCSID("$NetBSD: atoi.c,v 1.11 2003/08/07 16:43:38 agc Exp $");
 #include <stdlib.h>
 
 int
-atoi(str)
-	const char *str;
+atoi(const char *str)
 {
 	_DIAGASSERT(str != NULL);
 
-	return((int)strtol(str, (char **)NULL, 10));
+	return((int)strtol(str, NULL, 10));
 }

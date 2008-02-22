@@ -1,4 +1,4 @@
-#	$NetBSD: files.pxa2x0,v 1.15 2007/12/03 15:33:19 ad Exp $
+#	$NetBSD: files.pxa2x0,v 1.20 2018/03/09 17:14:57 christos Exp $
 #
 # Configuration info for Intel PXA2[751]0 CPU support
 #
@@ -21,7 +21,7 @@ file arch/arm/xscale/pxa2x0_intr.c		pxaintc needs-flag
 defflag  opt_pxa2x0_gpio.h		PXAGPIO_HAS_GPION_INTRS
 
 # GPIO controller
-device	pxagpio
+device	pxagpio: gpiobus
 attach	pxagpio at pxaip
 file arch/arm/xscale/pxa2x0_gpio.c		pxagpio needs-flag
 
@@ -29,7 +29,7 @@ file arch/arm/xscale/pxa2x0_gpio.c		pxagpio needs-flag
 attach com at pxaip with pxauart
 file arch/arm/xscale/pxa2x0_com.c		pxauart
 file arch/arm/xscale/pxa2x0_a4x_space.c		pxauart | obio
-file arch/arm/xscale/pxa2x0_a4x_io.S		pxauart | obio
+file arch/arm/arm/bus_space_a4x.S		pxauart | obio
 defflag	opt_com.h			FFUARTCONSOLE STUARTCONSOLE
 					BTUARTCONSOLE HWUARTCONSOLE
 
@@ -42,6 +42,7 @@ file	arch/arm/sa11x0/sa11x0_ost.c		saost needs-flag
 # LCD controller
 device lcd: wsemuldisplaydev, rasops16, rasops8, rasops4, rasops_rotation
 file arch/arm/xscale/pxa2x0_lcd.c		lcd needs-flag
+defflag	opt_pxa2x0_lcd.h		PXA2X0_LCD_WRITETHROUGH
 
 # XXX this is a hack to use dev/pcmcia without fdc.c
 device	fdc
@@ -77,11 +78,11 @@ device	pxapcic: pcmciabus
 file	arch/arm/xscale/pxa2x0_pcic.c		pxapcic
 
 # Inter-Integrated Circuit controller
-device	pxaiic {}
+device	pxaiic
 file	arch/arm/xscale/pxa2x0_i2c.c		pxaiic
 
 # Inter-IC Sound controller
-device	pxaiis {}
+device	pxaiis
 file	arch/arm/xscale/pxa2x0_i2s.c		pxaiis
 
 # PXA2x0 real time clock
@@ -90,5 +91,5 @@ attach	pxartc at pxaip
 file	arch/arm/xscale/pxa2x0_rtc.c		pxartc
 
 # MMC controller
-#device	pxamci: sdmmcbus
-#file	arch/arm/xscale/pxa2x0_mci.c		pxamci
+device	pxamci: sdmmcbus
+file	arch/arm/xscale/pxa2x0_mci.c		pxamci

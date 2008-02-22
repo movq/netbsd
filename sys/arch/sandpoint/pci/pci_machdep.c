@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.15 2007/11/19 14:36:14 nisimura Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.37 2017/06/01 02:45:07 chs Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,22 +43,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2007/11/19 14:36:14 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2017/06/01 02:45:07 chs Exp $");
+
+#include "opt_pci.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 #include <sys/extent.h>
+#include <sys/kmem.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 
-#include <uvm/uvm.h>
-
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/pio.h>
 
@@ -85,25 +86,27 @@ struct powerpc_bus_dma_tag pci_bus_dma_tag = {
 	_bus_dmamem_mmap,
 };
 
-#define	EPIC_DEBUGIRQ
+/*#define EPIC_DEBUGIRQ*/
 
 static int brdtype;
 #define BRD_SANDPOINTX2		2
 #define BRD_SANDPOINTX3		3
 #define BRD_ENCOREPP1		10
 #define BRD_KUROBOX		100
-#define BRD_QNAPTS101		101
+#define BRD_QNAPTS		101
 #define BRD_SYNOLOGY		102
+#define BRD_STORCENTER		103
+#define BRD_DLINKDSM		104
+#define BRD_NH230NAS		105
 #define BRD_UNKNOWN		-1
 
 #define	PCI_CONFIG_ENABLE	0x80000000UL
 
 void
-pci_attach_hook(struct device *parent, struct device *self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 	pcitag_t tag;
-	pcireg_t dev11, dev22, dev15;
+	pcireg_t dev11, dev22, dev15, dev13, dev16;
 
 	tag = pci_make_tag(pba->pba_pc, pba->pba_bus, 11, 0);
 	dev11 = pci_conf_read(pba->pba_pc, tag, PCI_CLASS_REG);
@@ -132,16 +135,37 @@ pci_attach_hook(struct device *parent, struct device *self,
 	}
 	tag = pci_make_tag(pba->pba_pc, pba->pba_bus, 15, 0);
 	dev15 = pci_conf_read(pba->pba_pc, tag, PCI_ID_REG);
-	if (PCI_VENDOR(dev15) == PCI_VENDOR_INTEL) {
-		/* Intel GbE at dev 15 */
-		brdtype = BRD_QNAPTS101;
-		return;
-	}
 	if (PCI_VENDOR(dev15) == PCI_VENDOR_MARVELL) {
 		/* Marvell GbE at dev 15 */
 		brdtype = BRD_SYNOLOGY;
 		return;
 	}
+	tag = pci_make_tag(pba->pba_pc, pba->pba_bus, 13, 0);
+	dev13 = pci_conf_read(pba->pba_pc, tag, PCI_ID_REG);
+	if (PCI_VENDOR(dev13) == PCI_VENDOR_VIATECH) {
+		/* VIA 6410 PCIIDE at dev 13 */
+		brdtype = BRD_STORCENTER;
+		return;
+	}
+	tag = pci_make_tag(pba->pba_pc, pba->pba_bus, 16, 0);
+	dev16 = pci_conf_read(pba->pba_pc, tag, PCI_ID_REG);
+	if (PCI_VENDOR(dev16) == PCI_VENDOR_ACARD) {
+		/* ACARD ATP865 at dev 16 */
+		brdtype = BRD_DLINKDSM;
+		return;
+	}
+	if (PCI_VENDOR(dev16) == PCI_VENDOR_ITE
+	    || PCI_VENDOR(dev16) == PCI_VENDOR_CMDTECH) {
+		brdtype = BRD_NH230NAS;
+		return;
+	}
+	if (PCI_VENDOR(dev15) == PCI_VENDOR_INTEL
+	    || PCI_VENDOR(dev15) == PCI_VENDOR_REALTEK) {
+		/* Intel or Realtek GbE at dev 15 */
+		brdtype = BRD_QNAPTS;
+		return;
+	}
+
 	brdtype = BRD_UNKNOWN;
 }
 
@@ -190,6 +214,9 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
 	pcireg_t data;
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
+
 	out32rb(SANDPOINT_PCI_CONFIG_ADDR, tag | reg);
 	data = in32rb(SANDPOINT_PCI_CONFIG_DATA);
 	out32rb(SANDPOINT_PCI_CONFIG_ADDR, 0);
@@ -200,13 +227,16 @@ void
 pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return;
+
 	out32rb(SANDPOINT_PCI_CONFIG_ADDR, tag | reg);
 	out32rb(SANDPOINT_PCI_CONFIG_DATA, data);
 	out32rb(SANDPOINT_PCI_CONFIG_ADDR, 0);
 }
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int	pin = pa->pa_intrpin;
 	int	line = pa->pa_intrline;
@@ -239,7 +269,7 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		goto bad;
 	}
 #ifdef EPIC_DEBUGIRQ
-printf("line %d, pin %c", line, pin + '@');
+	printf("line %d, pin %c", line, pin + '@');
 #endif
 	switch (brdtype) {
 	/* Sandpoint has 4 PCI slots in a weird order.
@@ -316,24 +346,45 @@ printf("line %d, pin %c", line, pin + '@');
 		*ihp = 2;
 		break;
 	case BRD_KUROBOX:
-		/* map line 11,12,13,14 to EPIC IRQ0,1,4,3 */
+		/* map line 11,12,13,14 to EPIC IRQ 0,1,4,3 */
 		*ihp = (line == 13) ? 4 : line - 11;
 		break;
-	case BRD_QNAPTS101:
-		/* map line 12-15 to EPIC IRQ0-3 */
-		*ihp = line - 12;
+	case BRD_QNAPTS:
+		/* map line 13-16 to EPIC IRQ0-3 */
+		*ihp = line - 13;
 		break;
 	case BRD_SYNOLOGY:
-		/* map line 12,13-15 to EPIC IRQ4,0-2 */
+		/* map line 12,13-15 to EPIC IRQ 4,0-2 */
 		*ihp = (line == 12) ? 4 : line - 13;
 		break;
+	case BRD_DLINKDSM:
+		/* map line 13,14A,14B,14C,15,16 to EPIC IRQ 0,1,1,2,3,4 */
+		*ihp = (line < 15) ? line - 13 : line - 12;
+		if (line == 14 && pin == 3)
+			*ihp += 1;	/* USB pin C (EHCI) uses next IRQ */
+		break;
+	case BRD_NH230NAS:
+		/* map line 13,14,15,16 to EPIC IRQ0,3,1,2 */
+		*ihp =  (line == 16) ? 2 :
+			(line == 15) ? 1 :
+			(line == 14) ? 3 : 0;
+		break;
+	case BRD_STORCENTER:
+		/* map line 13,14A,14B,14C,15 to EPIC IRQ 1,2,3,4,0 */
+		*ihp =	(line == 15) ? 0 :
+			(line == 13) ? 1 : 1 + pin;
+		break;
 	default:
-		/* map line 12-15 to EPIC IRQ0-3 */
+		/* simply map line 12-15 to EPIC IRQ0-3 */
 		*ihp = line - 12;
+#if defined(DIAGNOSTIC) || defined(DEBUG)
+		printf("pci_intr_map: line %d, pin %c for unknown board"
+		    " mapped to irq %d\n", line, pin + '@', *ihp);
+#endif
 		break;
 	}
 #ifdef EPIC_DEBUGIRQ
-printf(" = EPIC %d\n", *ihp);
+	printf(" = EPIC %d\n", *ihp);
 #endif
 	return 0;
   bad:
@@ -342,44 +393,81 @@ printf(" = EPIC %d\n", *ihp);
 }
 
 const char *
-pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih, char *buf,
+    size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
 	if (ih < 0 || ih >= OPENPIC_ICU)
 		panic("pci_intr_string: bogus handle 0x%x", ih);
 
-	sprintf(irqstr, "irq %d", ih + I8259_ICU);
-	return (irqstr);
+	snprintf(buf, len, "irq %d", ih + I8259_ICU);
+	return buf;
 	
 }
 
 const struct evcnt *
-pci_intr_evcnt(void *v, pci_intr_handle_t ih)
+pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
 
 	/* XXX for now, no evcnt parent reported */
 	return NULL;
 }
 
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
+}
+
 void *
-pci_intr_establish(void *v, pci_intr_handle_t ih, int level,
+pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
     int (*func)(void *), void *arg)
 {
+
+	return pci_intr_establish_xname(pc, ih, level, func, arg, NULL);
+}
+
+void *
+pci_intr_establish_xname(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
+    int (*func)(void *), void *arg, const char *xname)
+{
+	int type;
+
+	if (brdtype == BRD_STORCENTER && ih == 1) {
+		/*
+		 * XXX This is a workaround for the VT6410 IDE controller!
+		 * Apparently its interrupt cannot be disabled and remains
+		 * asserted during the whole device probing procedure,
+		 * causing an interrupt storm.
+		 * Using an edge-trigger fixes that and triggers the
+		 * interrupt only once during probing.
+		 */
+		type = IST_EDGE;
+	} else
+		type = IST_LEVEL;
+
 	/*
 	 * ih is the value assigned in pci_intr_map(), above.
 	 * It's the EPIC IRQ #.
 	 */
-	return intr_establish(ih + I8259_ICU, IST_LEVEL, level, func, arg);
+	return intr_establish_xname(ih + I8259_ICU, type, level, func, arg,
+	    xname);
 }
 
 void
-pci_intr_disestablish(void *v, void *cookie)
+pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
 {
 
 	intr_disestablish(cookie);
 }
 
+#if defined(PCI_NETBSD_CONFIGURE)
 void
 pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev,
     int pin, int swiz, int *iline)
@@ -406,4 +494,87 @@ pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev,
 		 */
 		*iline = 13 + ((swiz + dev + 3) & 3);
 	}
+}
+#endif
+
+pci_intr_type_t
+pci_intr_type(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+{
+
+	return PCI_INTR_TYPE_INTX;
+}
+
+int
+pci_intr_alloc(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int *counts, pci_intr_type_t max_type)
+{
+
+	if (counts != NULL && counts[PCI_INTR_TYPE_INTX] == 0)
+		return EINVAL;
+
+	return pci_intx_alloc(pa, ihps);
+}
+
+void
+pci_intr_release(pci_chipset_tag_t pc, pci_intr_handle_t *pih, int count)
+{
+
+	kmem_free(pih, sizeof(*pih));
+}
+
+int
+pci_intx_alloc(const struct pci_attach_args *pa, pci_intr_handle_t **ihpp)
+{
+	pci_intr_handle_t *ihp;
+
+	ihp = kmem_alloc(sizeof(*ihp), KM_SLEEP);
+	if (pci_intr_map(pa, ihp)) {
+		kmem_free(ihp, sizeof(*ihp));
+		return EINVAL;
+	}
+
+	*ihpp = ihp;
+	return 0;
+}
+
+/* experimental MSI support */
+int
+pci_msi_alloc(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int *count)
+{
+
+	return EOPNOTSUPP;
+}
+
+int
+pci_msi_alloc_exact(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int count)
+{
+
+	return EOPNOTSUPP;
+}
+
+/* experimental MSI-X support */
+int
+pci_msix_alloc(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int *count)
+{
+
+	return EOPNOTSUPP;
+}
+
+int
+pci_msix_alloc_exact(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int count)
+{
+
+	return EOPNOTSUPP;
+}
+
+int
+pci_msix_alloc_map(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    u_int *table_indexes, int count)
+{
+
+	return EOPNOTSUPP;
 }

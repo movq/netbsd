@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_isa.c,v 1.20 2007/10/19 12:00:14 ad Exp $	*/
+/*	$NetBSD: aic_isa.c,v 1.26 2009/11/23 02:13:46 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic_isa.c,v 1.20 2007/10/19 12:00:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic_isa.c,v 1.26 2009/11/23 02:13:46 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: aic_isa.c,v 1.20 2007/10/19 12:00:14 ad Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <sys/bus.h>
@@ -76,7 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: aic_isa.c,v 1.20 2007/10/19 12:00:14 ad Exp $");
 #include <dev/ic/aic6360reg.h>
 #include <dev/ic/aic6360var.h>
 
-int	aic_isa_probe(struct device *, struct cfdata *, void *);
+static int	aic_isa_probe(device_t, cfdata_t, void *);
+static void	aic_isa_attach(device_t, device_t, void *);
 
 struct aic_isa_softc {
 	struct	aic_softc sc_aic;	/* real "aic" softc */
@@ -85,7 +85,7 @@ struct aic_isa_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-CFATTACH_DECL(aic_isa, sizeof(struct aic_isa_softc),
+CFATTACH_DECL_NEW(aic_isa, sizeof(struct aic_isa_softc),
     aic_isa_probe, aic_isa_attach, NULL, NULL);
 
 
@@ -98,8 +98,7 @@ CFATTACH_DECL(aic_isa, sizeof(struct aic_isa_softc),
  * returns non-zero value if a controller is found.
  */
 int
-aic_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+aic_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -142,34 +141,35 @@ aic_isa_probe(struct device *parent, struct cfdata *match,
 }
 
 void
-aic_isa_attach(struct device *parent, struct device *self, void *aux)
+aic_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct aic_isa_softc *isc = (void *)self;
+	struct aic_isa_softc *isc = device_private(self);
 	struct aic_softc *sc = &isc->sc_aic;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	isa_chipset_tag_t ic = ia->ia_ic;
 
+	sc->sc_dev = self;
+
 	printf("\n");
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, AIC_ISA_IOSIZE, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		return;
 	}
 
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	if (!aic_find(iot, ioh)) {
-		printf("%s: aic_find failed", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "aic_find failed\n");
 		return;
 	}
 
 	isc->sc_ih = isa_intr_establish(ic, ia->ia_irq[0].ir_irq, IST_EDGE,
 	    IPL_BIO, aicintr, sc);
 	if (isc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt\n");
 		return;
 	}
 

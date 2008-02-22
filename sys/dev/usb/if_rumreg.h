@@ -1,4 +1,5 @@
-/*	$OpenBSD: if_rumreg.h,v 1.13 2006/11/13 20:06:38 damien Exp $	*/
+/*	$NetBSD: if_rumreg.h,v 1.5 2016/04/23 10:15:31 skrll Exp $	 */
+/*	$OpenBSD: if_rumreg.h,v 1.14 2009/08/10 18:04:56 damien Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Damien Bergamini <damien.bergamini@free.fr>
@@ -17,8 +18,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define RT2573_TX_DESC_SIZE	(sizeof (struct rum_tx_desc))
-#define RT2573_RX_DESC_SIZE	(sizeof (struct rum_rx_desc))
+#define RT2573_TX_DESC_SIZE	(sizeof(struct rum_tx_desc))
+#define RT2573_RX_DESC_SIZE	(sizeof(struct rum_rx_desc))
 
 #define RT2573_CONFIG_NO	1
 #define RT2573_IFACE_INDEX	0
@@ -39,6 +40,9 @@
 #define RT2573_CWMAX_CSR	0x0408
 #define RT2573_MCU_CODE_BASE	0x0800
 #define RT2573_HW_BEACON_BASE0	0x2400
+#define RT2573_HW_BEACON_BASE1	0x2500
+#define RT2573_HW_BEACON_BASE2	0x2600
+#define RT2573_HW_BEACON_BASE3	0x2700
 #define RT2573_MAC_CSR0		0x3000
 #define RT2573_MAC_CSR1		0x3004
 #define RT2573_MAC_CSR2		0x3008
@@ -236,28 +240,32 @@ struct rum_rx_desc {
  * Default values for MAC registers; values taken from the reference driver.
  */
 #define RT2573_DEF_MAC				\
-	{ RT2573_TXRX_CSR0,  0x025fb032 },	\
-	{ RT2573_TXRX_CSR1,  0x9eaa9eaf },	\
-	{ RT2573_TXRX_CSR2,  0x8a8b8c8d },	\
-	{ RT2573_TXRX_CSR3,  0x00858687 },	\
-	{ RT2573_TXRX_CSR7,  0x2e31353b },	\
-	{ RT2573_TXRX_CSR8,  0x2a2a2a2c },	\
-	{ RT2573_TXRX_CSR15, 0x0000000f },	\
-	{ RT2573_MAC_CSR6,   0x00000fff },	\
-	{ RT2573_MAC_CSR8,   0x016c030a },	\
-	{ RT2573_MAC_CSR10,  0x00000718 },	\
-	{ RT2573_MAC_CSR12,  0x00000004 },	\
-	{ RT2573_MAC_CSR13,  0x00007f00 },	\
-	{ RT2573_SEC_CSR0,   0x00000000 },	\
-	{ RT2573_SEC_CSR1,   0x00000000 },	\
-	{ RT2573_SEC_CSR5,   0x00000000 },	\
-	{ RT2573_PHY_CSR1,   0x000023b0 },	\
-	{ RT2573_PHY_CSR5,   0x00040a06 },	\
-	{ RT2573_PHY_CSR6,   0x00080606 },	\
-	{ RT2573_PHY_CSR7,   0x00000408 },	\
-	{ RT2573_AIFSN_CSR,  0x00002273 },	\
-	{ RT2573_CWMIN_CSR,  0x00002344 },	\
-	{ RT2573_CWMAX_CSR,  0x000034aa }
+	{ RT2573_TXRX_CSR0,       0x025fb032 },	\
+	{ RT2573_TXRX_CSR1,       0x9eaa9eaf },	\
+	{ RT2573_TXRX_CSR2,       0x8a8b8c8d },	\
+	{ RT2573_TXRX_CSR3,       0x00858687 },	\
+	{ RT2573_TXRX_CSR7,       0x2e31353b },	\
+	{ RT2573_TXRX_CSR8,       0x2a2a2a2c },	\
+	{ RT2573_TXRX_CSR15,      0x0000000f },	\
+	{ RT2573_MAC_CSR6,        0x00000fff },	\
+	{ RT2573_MAC_CSR8,        0x016c030a },	\
+	{ RT2573_MAC_CSR10,       0x00000718 },	\
+	{ RT2573_MAC_CSR12,       0x00000004 },	\
+	{ RT2573_MAC_CSR13,       0x00007f00 },	\
+	{ RT2573_SEC_CSR0,        0x00000000 },	\
+	{ RT2573_SEC_CSR1,        0x00000000 },	\
+	{ RT2573_SEC_CSR5,        0x00000000 },	\
+	{ RT2573_PHY_CSR1,        0x000023b0 },	\
+	{ RT2573_PHY_CSR5,        0x00040a06 },	\
+	{ RT2573_PHY_CSR6,        0x00080606 },	\
+	{ RT2573_PHY_CSR7,        0x00000408 },	\
+	{ RT2573_AIFSN_CSR,       0x00002273 },	\
+	{ RT2573_CWMIN_CSR,       0x00002344 },	\
+	{ RT2573_CWMAX_CSR,       0x000034aa },	\
+	{ RT2573_HW_BEACON_BASE0, 0x00000000 },	\
+	{ RT2573_HW_BEACON_BASE1, 0x00000000 },	\
+	{ RT2573_HW_BEACON_BASE2, 0x00000000 },	\
+	{ RT2573_HW_BEACON_BASE3, 0x00000000 }
 
 /*
  * Default values for BBP registers; values taken from the reference driver.

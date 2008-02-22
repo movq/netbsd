@@ -1,7 +1,6 @@
-/*	$NetBSD: statd.c,v 1.28 2007/12/15 19:44:56 perry Exp $	*/
+/*	$NetBSD: statd.c,v 1.32 2018/01/23 21:06:26 sevan Exp $	*/
 
 /*
- * Copyright (c) 1997 Christos Zoulas. All rights reserved.
  * Copyright (c) 1995
  *	A.R. Gordon (andrew.gordon@net-tel.co.uk).  All rights reserved.
  *
@@ -37,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: statd.c,v 1.28 2007/12/15 19:44:56 perry Exp $");
+__RCSID("$NetBSD: statd.c,v 1.32 2018/01/23 21:06:26 sevan Exp $");
 #endif
 
 /* main() function for status monitor daemon.  Some of the code in this	*/
@@ -80,22 +79,18 @@ static DBT undefkey = {
 
 
 /* statd.c */
-static int walk_one __P((int (*fun )__P ((DBT *, HostInfo *, void *)), DBT *, DBT *, void *));
-static int walk_db __P((int (*fun )__P ((DBT *, HostInfo *, void *)), void *));
-static int reset_host __P((DBT *, HostInfo *, void *));
-static int check_work __P((DBT *, HostInfo *, void *));
-static int unmon_host __P((DBT *, HostInfo *, void *));
-static int notify_one __P((DBT *, HostInfo *, void *));
-static void init_file __P((char *));
-static int notify_one_host __P((char *));
-static void die __P((int)) __dead;
-
-int main __P((int, char **));
+static int walk_one(int (*fun )(DBT *, HostInfo *, void *), DBT *, DBT *, void *);
+static int walk_db(int (*fun )(DBT *, HostInfo *, void *), void *);
+static int reset_host(DBT *, HostInfo *, void *);
+static int check_work(DBT *, HostInfo *, void *);
+static int unmon_host(DBT *, HostInfo *, void *);
+static int notify_one(DBT *, HostInfo *, void *);
+static void init_file(const char *);
+static int notify_one_host(const char *);
+static void die(int) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char *argv[])
 {
 	int ch;
 	struct sigaction nsa;
@@ -119,11 +114,11 @@ main(argc, argv)
 	rpc_control(RPC_SVC_CONNMAXREC_SET, &maxrec);
 
 	if (!svc_create(sm_prog_1, SM_PROG, SM_VERS, "udp")) {
-		errx(1, "cannot create udp service.");
+		errx(EXIT_FAILURE, "cannot create udp service.");
 		/* NOTREACHED */
 	}
 	if (!svc_create(sm_prog_1, SM_PROG, SM_VERS, "tcp")) {
-		errx(1, "cannot create udp service.");
+		errx(EXIT_FAILURE, "cannot create udp service.");
 		/* NOTREACHED */
 	}
 
@@ -182,8 +177,7 @@ main(argc, argv)
  *		children to exit when they have done their work.
  */
 void 
-notify_handler(sig)
-	int sig;
+notify_handler(int sig)
 {
 	time_t now;
 
@@ -242,9 +236,7 @@ bad:
  *
  */
 void
-change_host(hostnamep, hp)
-	char *hostnamep;
-	HostInfo *hp;
+change_host(char *hostnamep, HostInfo *hp)
 {
 	DBT key, data;
 	char *ptr;
@@ -283,9 +275,7 @@ change_host(hostnamep, hp)
  *
  */
 HostInfo *
-find_host(hostname, hp)
-	char *hostname;
-	HostInfo *hp;
+find_host(char *hostname, HostInfo *hp)
 {
 	DBT key, data;
 	char *ptr;
@@ -321,10 +311,7 @@ bad:
  * Notes:	
  */
 static int
-walk_one(fun, key, data, ptr)
-	int (*fun) __P((DBT *, HostInfo *, void *));
-	DBT *key, *data;
-	void *ptr;
+walk_one(int (*fun)(DBT *, HostInfo *, void *), DBT *key, DBT *data, void *ptr)
 {
 	HostInfo h;
 	if (key->size == undefkey.size &&
@@ -345,9 +332,7 @@ walk_one(fun, key, data, ptr)
  * Notes:	
  */
 static int
-walk_db(fun, ptr)
-	int (*fun) __P((DBT *, HostInfo *, void *));
-	void *ptr;
+walk_db(int (*fun)(DBT *, HostInfo *, void *), void *ptr)
 {
 	DBT key, data;
 
@@ -401,10 +386,7 @@ bad:
  *		notify them before the second crash occurred.
  */
 static int
-reset_host(key, hi, ptr)
-	DBT *key;
-	HostInfo *hi;
-	void *ptr;
+reset_host(DBT *key, HostInfo *hi, void *ptr)
 {
 
 	if (hi->monList) {
@@ -423,10 +405,7 @@ reset_host(key, hi, ptr)
  * Notes:	
  */
 static int
-check_work(key, hi, ptr)
-	DBT *key;
-	HostInfo *hi;
-	void *ptr;
+check_work(DBT *key, HostInfo *hi, void *ptr)
 {
 	return hi->notifyReqd ? -1 : 0;
 }
@@ -438,10 +417,7 @@ check_work(key, hi, ptr)
  * Notes:	
  */
 static int
-unmon_host(key, hi, ptr)
-	DBT *key;
-	HostInfo *hi;
-	void *ptr;
+unmon_host(DBT *key, HostInfo *hi, void *ptr)
 {
 	char *name = key->data;
 
@@ -457,10 +433,7 @@ unmon_host(key, hi, ptr)
  * Notes:	
  */
 static int
-notify_one(key, hi, ptr)
-	DBT *key;
-	HostInfo *hi;
-	void *ptr;
+notify_one(DBT *key, HostInfo *hi, void *ptr)
 {
 	time_t now = *(time_t *) ptr;
 	char *name = key->data;
@@ -517,15 +490,14 @@ notify_one(key, hi, ptr)
  *		the state number to the next even value.
  */
 static void 
-init_file(filename)
-	char *filename;
+init_file(const char *filename)
 {
 	DBT data;
 
 	db = dbopen(filename, O_RDWR|O_CREAT|O_NDELAY|O_EXLOCK, 0644, DB_HASH, 
 	    NULL);
 	if (db == NULL)
-		err(1, "Cannot open `%s'", filename);
+		err(EXIT_FAILURE, "Cannot open `%s'", filename);
 
 	switch ((*db->get)(db, &undefkey, &data, 0)) {
 	case 1:
@@ -535,11 +507,11 @@ init_file(filename)
 		return;
 
 	case -1:
-		err(1, "error accessing database (%m)");
+		err(EXIT_FAILURE, "error accessing database (%s)", strerror(errno));
 	case 0:
 		/* Existing database */
 		if (data.size != sizeof(status_info))
-			errx(1, "database corrupted %lu != %lu",
+			errx(EXIT_FAILURE, "database corrupted %lu != %lu",
 			    (u_long)data.size, (u_long)sizeof(status_info));
 		memcpy(&status_info, data.data, data.size);
 		break;
@@ -585,8 +557,7 @@ unmon_hosts()
 }
 
 static int 
-notify_one_host(hostname)
-	char *hostname;
+notify_one_host(const char *hostname)
 {
 	struct timeval timeout = {20, 0};	/* 20 secs timeout */
 	CLIENT *cli;
@@ -622,8 +593,7 @@ notify_one_host(hostname)
 
 
 static void
-die(n)
-	int n;
+die(int n)
 {
 	(*db->close)(db);
 	exit(n);

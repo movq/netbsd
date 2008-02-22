@@ -1,4 +1,4 @@
-.\"	$NetBSD: pmap.9,v 1.35 2007/12/25 17:03:37 jmcneill Exp $
+.\"	$NetBSD: pmap.9,v 1.44 2012/02/16 12:10:10 yamt Exp $
 .\"
 .\" Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 25, 2007
+.Dd February 16, 2012
 .Dt PMAP 9
 .Os
 .Sh NAME
@@ -67,7 +60,7 @@
 .Fn "pmap_growkernel" "vaddr_t maxkvaddr"
 .Ft int
 .Fn "pmap_enter" "pmap_t pmap" "vaddr_t va" "paddr_t pa" "vm_prot_t prot" \
-    "int flags"
+    "u_int flags"
 .Ft void
 .Fn "pmap_remove" "pmap_t pmap" "vaddr_t sva" "vaddr_t eva"
 .Ft void
@@ -79,14 +72,12 @@
 .Ft bool
 .Fn "pmap_extract" "pmap_t pmap" "vaddr_t va" "paddr_t *pap"
 .Ft void
-.Fn "pmap_kenter_pa" "vaddr_t va" "paddr_t pa" "vm_prot_t prot"
+.Fn "pmap_kenter_pa" "vaddr_t va" "paddr_t pa" "vm_prot_t prot" "u_int flags"
 .Ft void
 .Fn "pmap_kremove" "vaddr_t va" "vsize_t size"
 .Ft void
 .Fn "pmap_copy" "pmap_t dst_map" "pmap_t src_map" "vaddr_t dst_addr" \
    "vsize_t len" "vaddr_t src_addr"
-.Ft void
-.Fn "pmap_collect" "pmap_t pmap"
 .Ft void
 .Fn "pmap_update" "pmap_t pmap"
 .Ft void
@@ -162,7 +153,7 @@ module may use whatever optimizations it has available to reduce
 the expense of virtual-to-physical mapping synchronization.
 .Ss HEADER FILES AND DATA STRUCTURES
 Machine-dependent code must provide the header file
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 This file contains the definition of the
 .Dv pmap
 structure:
@@ -180,7 +171,7 @@ implementation uses.
 Note that all prototypes for
 .Nm
 interface functions are provided by the header file
-.Aq Pa uvm/uvm_pmap.h .
+.In uvm/uvm_pmap.h .
 It is possible to override this behavior by defining the
 C pre-processor macro
 .Dv PMAP_EXCLUDE_DECLS .
@@ -192,7 +183,7 @@ module, for example.
 If the
 .Dv PMAP_EXCLUDE_DECLS
 macro is defined,
-.Aq Pa machine/pmap.h
+.In machine/pmap.h
 .Em must
 provide function prototypes in a block like so:
 .Bd -literal -offset indent
@@ -204,7 +195,7 @@ __END_DECLS
 .Ed
 .Pp
 The header file
-.Aq Pa uvm/uvm_pmap.h
+.In uvm/uvm_pmap.h
 defines a structure for tracking
 .Nm
 statistics (see below).
@@ -386,11 +377,10 @@ It is called by
 to initialize any data structures that the module needs to
 manage physical maps.
 .It pmap_t Fn "pmap_kernel" "void"
-Return a pointer to the
-.Dv pmap
-structure that maps the kernel virtual address space.
-.Pp
-Note that this function may be provided as a C pre-processor macro.
+A machine independent macro which expands to
+.Va kernel_pmap_ptr .
+This variable must be exported by the platform's pmap module and it
+must point to the kernel pmap.
 .It void Fn "pmap_virtual_space" "vaddr_t *vstartp" "vaddr_t *vendp"
 The
 .Fn pmap_virtual_space
@@ -450,7 +440,7 @@ statistic for
 .Pp
 Note that this function may be provided as a C pre-processor macro.
 .It int Fn "pmap_enter" "pmap_t pmap" "vaddr_t va" "paddr_t pa" \
-    "vm_prot_t prot" "int flags"
+    "vm_prot_t prot" "u_int flags"
 Create a mapping in physical map
 .Fa pmap
 for the physical address
@@ -495,6 +485,24 @@ call is unable to create the mapping, perhaps due to insufficient
 resources, the
 .Nm
 module must panic.
+.It PMAP_NOCACHE
+The mapping being created is
+.Em not
+cached.
+Write accesses have a write-through policy.
+No speculative memory accesses.
+.It PMAP_WRITE_COMBINE
+The mapping being created is
+.Em not
+cached.
+Writes are combined and done in one burst.
+Speculative read accesses may be allowed.
+.It PMAP_WRITE_BACK
+All accesses to the created mapping are cached.
+On reads, cachelines become shared or exclusive if allocated on cache miss.
+On writes, cachelines become modified on a cache miss.
+.It PMAP_NOCACHE_OVR
+Same as PMAP_NOCACHE but mapping is overrideable (e.g. on x86 by MTRRs).
 .El
 .Pp
 The access type provided in the
@@ -612,16 +620,49 @@ into
 if the
 .Fa pap
 argument is non-NULL.
-.It void Fn "pmap_kenter_pa" "vaddr_t va" "paddr_t pa" "vm_prot_t prot"
+.It void Fn "pmap_kenter_pa" "vaddr_t va" "paddr_t pa" "vm_prot_t prot" \
+    "u_int flags"
 Enter an
 .Dq unmanaged
 mapping for physical address
 .Fa pa
 at virtual address
 .Fa va
-with protection
-.Fa prot
-into the kernel physical map.
+with protection specified by bits in
+.Fa prot :
+.Bl -tag -width "VM_PROT_EXECUTE  " -offset indent
+.It VM_PROT_READ
+The mapping must allow reading.
+.It VM_PROT_WRITE
+The mapping must allow writing.
+.It VM_PROT_EXECUTE
+The page mapped contains instructions that will be executed by the
+processor.
+.El
+.Pp
+Information provided by
+.Fa flags :
+.Bl -tag -width "PMAP_NOCACHE  " -offset indent
+.It PMAP_NOCACHE
+The mapping being created is
+.Em not
+cached.
+Write accesses have a write-through policy.
+No speculative memory accesses.
+.It PMAP_WRITE_COMBINE
+The mapping being created is
+.Em not
+cached.
+Writes are combined and done in one burst.
+Speculative read accesses may be allowed.
+.It PMAP_WRITE_BACK
+All accesses to the created mapping are cached.
+On reads, cachelines become shared or exclusive if allocated on cache miss.
+On writes, cachelines become modified on a cache miss.
+.It PMAP_NOCACHE_OVR
+Same as PMAP_NOCACHE but mapping is overrideable (e.g. on x86 by MTRRs).
+.El
+.Pp
 Mappings of this type are always
 .Dq wired ,
 and are unaffected by routines that alter the protection of pages
@@ -685,29 +726,6 @@ is merely advisory (it is used in the
 path to
 .Dq pre-fault
 the child's address space).
-.It void Fn "pmap_collect" "pmap_t pmap"
-This function is called just before a process is swapped out to
-allow the
-.Nm
-module to release resources used to map the process's address space.
-The implementation may choose to remove physical mappings in order
-to free for example page tables back to the system.
-Note, however, that wired mappings must
-.Em not
-be removed when
-.Fn pmap_collect
-is called.
-.Pp
-Note that while this function is required to be provided by a
-.Nm
-implementation, it is not actually required to do anything.
-.Fn pmap_collect
-is merely advisory.
-It is recommended, however, that
-.Fn pmap_collect
-be fully implemented by a
-.Nm
-implementation.
 .It void Fn "pmap_update" "pmap_t pmap"
 This function is used to inform the
 .Nm
@@ -730,7 +748,7 @@ implementation does not delay virtual-to-physical mapping updates,
 .Fn pmap_update
 has no operation.
 In this case, the call may be deleted using a C pre-processor macro in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .It void Fn "pmap_activate" "struct lwp *l"
 Activate the physical map used by the process behind lwp
 .Fa l .
@@ -945,7 +963,7 @@ The
 function is enabled by defining the C pre-processor macro
 .Dv PMAP_STEAL_MEMORY
 in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .It vaddr_t Fn "pmap_growkernel" "vaddr_t maxkvaddr"
 Management of the kernel virtual address space is complicated by the
 fact that it is not always safe to wait for resources with which to
@@ -981,7 +999,7 @@ The
 function is enabled by defining the C pre-processor macro
 .Dv PMAP_GROWKERNEL
 in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .It void Fn "pmap_fork" "pmap_t src_map" "pmap_t dst_map"
 Some
 .Nm
@@ -1010,7 +1028,7 @@ The
 function is enabled by defining the C pre-processor macro
 .Dv PMAP_FORK
 in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .It vaddr_t Fn "PMAP_MAP_POOLPAGE" "paddr_t pa"
 This function is used by the
 .Xr pool 9
@@ -1029,7 +1047,7 @@ It must always succeed.
 The use of
 .Fn PMAP_MAP_POOLPAGE
 is enabled by defining it as a C pre-processor macro in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 If
 .Fn PMAP_MAP_POOLPAGE
 is defined,
@@ -1055,7 +1073,7 @@ provided kernel-accessible address.
 The use of
 .Fn PMAP_UNMAP_POOLPAGE
 is enabled by defining it as a C pre-processor macro in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 If
 .Fn PMAP_UNMAP_POOLPAGE
 is defined,
@@ -1081,14 +1099,14 @@ will be advanced.
 .Fa hint
 is an object offset which will be mapped into the resulting virtual address, and
 .Fa sz
-is size of the object.
+is size of the region being mapped in bytes.
 .Fa td
 indicates if the machine dependent pmap uses the topdown VM.
 .Pp
 The use of
 .Fn PMAP_PREFER
 is enabled by defining it as a C pre-processor macro in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .Pp
 .It void Fn "pmap_procwr" "struct proc *p" "vaddr_t va" "vsize_t size"
 Synchronize CPU instruction caches of the specified range.
@@ -1102,7 +1120,7 @@ The use of
 is enabled by defining a C pre-processor macro
 .Dv PMAP_NEED_PROCWR
 in
-.Aq Pa machine/pmap.h .
+.In machine/pmap.h .
 .El
 .Sh SEE ALSO
 .Xr uvm 9

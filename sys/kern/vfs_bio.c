@@ -1,11 +1,11 @@
-/*	$NetBSD: vfs_bio.c,v 1.189 2008/02/20 17:13:29 matt Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.276 2017/10/28 00:37:11 pgoyette Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran.
+ * by Andrew Doran, and by Wasabi Systems, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -107,17 +100,36 @@
  */
 
 /*
+ * The buffer cache subsystem.
+ *
  * Some references:
  *	Bach: The Design of the UNIX Operating System (Prentice Hall, 1986)
  *	Leffler, et al.: The Design and Implementation of the 4.3BSD
  *		UNIX Operating System (Addison Welley, 1989)
+ *
+ * Locking
+ *
+ * There are three locks:
+ * - bufcache_lock: protects global buffer cache state.
+ * - BC_BUSY: a long term per-buffer lock.
+ * - buf_t::b_objlock: lock on completion (biowait vs biodone).
+ *
+ * For buffers associated with vnodes (a most common case) b_objlock points
+ * to the vnode_t::v_interlock.  Otherwise, it points to generic buffer_lock.
+ *
+ * Lock order:
+ *	bufcache_lock ->
+ *		buf_t::b_objlock
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.189 2008/02/20 17:13:29 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.276 2017/10/28 00:37:11 pgoyette Exp $");
 
-#include "fs_ffs.h"
+#ifdef _KERNEL_OPT
 #include "opt_bufcache.h"
+#include "opt_dtrace.h"
+#include "opt_biohist.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,15 +138,19 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.189 2008/02/20 17:13:29 matt Exp $");
 #include <sys/buf.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
-#include <sys/malloc.h>
 #include <sys/resourcevar.h>
 #include <sys/sysctl.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/fstrans.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
+#include <sys/wapbl.h>
+#include <sys/bitops.h>
+#include <sys/cprng.h>
+#include <sys/sdt.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm.h>	/* extern struct uvm uvm */
 
 #include <miscfs/specfs/specdev.h>
 
@@ -150,36 +166,63 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.189 2008/02/20 17:13:29 matt Exp $");
 # define BUFCACHE 15
 #endif
 
-u_int	nbuf;			/* XXX - for softdep_lockedbufs */
+u_int	nbuf;			/* desired number of buffer headers */
 u_int	bufpages = BUFPAGES;	/* optional hardwired count */
 u_int	bufcache = BUFCACHE;	/* max % of RAM to use for buffer cache */
 
-/* Function prototypes */
-struct bqueue;
+/*
+ * Definitions for the buffer free lists.
+ */
+#define	BQUEUES		3		/* number of free buffer queues */
 
+#define	BQ_LOCKED	0		/* super-blocks &c */
+#define	BQ_LRU		1		/* lru, useful buffers */
+#define	BQ_AGE		2		/* rubbish */
+
+struct bqueue {
+	TAILQ_HEAD(, buf) bq_queue;
+	uint64_t bq_bytes;
+	buf_t *bq_marker;
+};
+static struct bqueue bufqueues[BQUEUES];
+
+/* Function prototypes */
 static void buf_setwm(void);
 static int buf_trim(void);
 static void *bufpool_page_alloc(struct pool *, int);
 static void bufpool_page_free(struct pool *, void *);
-static buf_t *bio_doread(struct vnode *, daddr_t, int,
-    kauth_cred_t, int);
+static buf_t *bio_doread(struct vnode *, daddr_t, int, int);
 static buf_t *getnewbuf(int, int, int);
 static int buf_lotsfree(void);
 static int buf_canrelease(void);
 static u_long buf_mempoolidx(u_long);
 static u_long buf_roundsize(u_long);
-static void *buf_malloc(size_t);
+static void *buf_alloc(size_t);
 static void buf_mrelease(void *, size_t);
 static void binsheadfree(buf_t *, struct bqueue *);
 static void binstailfree(buf_t *, struct bqueue *);
-int count_lock_queue(void); /* XXX */
 #ifdef DEBUG
-static int checkfreelist(buf_t *, struct bqueue *);
+static int checkfreelist(buf_t *, struct bqueue *, int);
 #endif
 static void biointr(void *);
 static void biodone2(buf_t *);
 static void bref(buf_t *);
 static void brele(buf_t *);
+static void sysctl_kern_buf_setup(void);
+static void sysctl_vm_buf_setup(void);
+
+/* Initialization for biohist */
+
+#include <sys/biohist.h>
+
+BIOHIST_DEFINE(biohist);
+
+void
+biohist_init(void)
+{
+
+	BIOHIST_INIT(biohist, BIOHIST_SIZE);
+}
 
 /*
  * Definitions for the buffer hash lists.
@@ -188,8 +231,6 @@ static void brele(buf_t *);
 	(&bufhashtbl[(((long)(dvp) >> 8) + (int)(lbn)) & bufhash])
 LIST_HEAD(bufhashhdr, buf) *bufhashtbl, invalhash;
 u_long	bufhash;
-struct bqueue bufqueues[BQUEUES];
-const struct bio_ops *bioopsp;	/* I/O operation notification */
 
 static kcondvar_t needbuffer_cv;
 
@@ -206,26 +247,14 @@ static void *biodone_sih;
 static pool_cache_t buf_cache;
 static pool_cache_t bufio_cache;
 
-/* XXX - somewhat gross.. */
-#if MAXBSIZE == 0x2000
-#define NMEMPOOLS 5
-#elif MAXBSIZE == 0x4000
-#define NMEMPOOLS 6
-#elif MAXBSIZE == 0x8000
-#define NMEMPOOLS 7
-#else
-#define NMEMPOOLS 8
-#endif
-
-#define MEMPOOL_INDEX_OFFSET 9	/* smallest pool is 512 bytes */
-#if (1 << (NMEMPOOLS + MEMPOOL_INDEX_OFFSET - 1)) != MAXBSIZE
-#error update vfs_bio buffer memory parameters
-#endif
+#define MEMPOOL_INDEX_OFFSET (ilog2(DEV_BSIZE))	/* smallest pool is 512 bytes */
+#define NMEMPOOLS (ilog2(MAXBSIZE) - MEMPOOL_INDEX_OFFSET + 1)
+__CTASSERT((1 << (NMEMPOOLS + MEMPOOL_INDEX_OFFSET - 1)) == MAXBSIZE);
 
 /* Buffer memory pools */
 static struct pool bmempools[NMEMPOOLS];
 
-struct vm_map *buf_map;
+static struct vm_map *buf_map;
 
 /*
  * Buffer memory pool allocator.
@@ -236,7 +265,7 @@ bufpool_page_alloc(struct pool *pp, int flags)
 
 	return (void *)uvm_km_alloc(buf_map,
 	    MAXBSIZE, MAXBSIZE,
-	    ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK)
+	    ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT|UVM_KMF_TRYLOCK)
 	    | UVM_KMF_WIRED);
 }
 
@@ -292,7 +321,7 @@ buf_setwm(void)
 #ifdef DEBUG
 int debug_verify_freelist = 0;
 static int
-checkfreelist(buf_t *bp, struct bqueue *dp)
+checkfreelist(buf_t *bp, struct bqueue *dp, int ison)
 {
 	buf_t *b;
 
@@ -301,10 +330,10 @@ checkfreelist(buf_t *bp, struct bqueue *dp)
 
 	TAILQ_FOREACH(b, &dp->bq_queue, b_freelist) {
 		if (b == bp)
-			return 1;
+			return ison ? 1 : 0;
 	}
 
-	return 0;
+	return ison ? 0 : 1;
 }
 #endif
 
@@ -316,6 +345,7 @@ static void
 binsheadfree(buf_t *bp, struct bqueue *dp)
 {
 
+	KASSERT(mutex_owned(&bufcache_lock));
 	KASSERT(bp->b_freelistindex == -1);
 	TAILQ_INSERT_HEAD(&dp->bq_queue, bp, b_freelist);
 	dp->bq_bytes += bp->b_bufsize;
@@ -326,7 +356,9 @@ static void
 binstailfree(buf_t *bp, struct bqueue *dp)
 {
 
-	KASSERT(bp->b_freelistindex == -1);
+	KASSERT(mutex_owned(&bufcache_lock));
+	KASSERTMSG(bp->b_freelistindex == -1, "double free of buffer? "
+	    "bp=%p, b_freelistindex=%d\n", bp, bp->b_freelistindex);
 	TAILQ_INSERT_TAIL(&dp->bq_queue, bp, b_freelist);
 	dp->bq_bytes += bp->b_bufsize;
 	bp->b_freelistindex = dp - bufqueues;
@@ -342,7 +374,7 @@ bremfree(buf_t *bp)
 
 	KASSERT(bqidx != -1);
 	dp = &bufqueues[bqidx];
-	KDASSERT(checkfreelist(bp, dp));
+	KDASSERT(checkfreelist(bp, dp, 1));
 	KASSERT(dp->bq_bytes >= bp->b_bufsize);
 	TAILQ_REMOVE(&dp->bq_queue, bp, b_freelist);
 	dp->bq_bytes -= bp->b_bufsize;
@@ -388,10 +420,15 @@ brele(buf_t *bp)
 	}
 }
 
+/*
+ * note that for some ports this is used by pmap bootstrap code to
+ * determine kva size.
+ */
 u_long
 buf_memcalc(void)
 {
 	u_long n;
+	vsize_t mapsz = 0;
 
 	/*
 	 * Determine the upper bound of memory to use for buffers.
@@ -413,7 +450,11 @@ buf_memcalc(void)
 			printf("forcing bufcache %d -> 95", bufcache);
 			bufcache = 95;
 		}
-		n = physmem / 100 * bufcache;
+		if (buf_map != NULL)
+			mapsz = vm_map_max(buf_map) - vm_map_min(buf_map);
+		n = calc_cache_size(mapsz, bufcache,
+		    (buf_map != kernel_map) ? 100 : BUFCACHE_VA_MAXPCT)
+		    / PAGE_SIZE;
 	}
 
 	n <<= PAGE_SHIFT;
@@ -433,15 +474,11 @@ bufinit(void)
 	int use_std;
 	u_int i;
 
+	biodone_vfs = biodone;
+
 	mutex_init(&bufcache_lock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&buffer_lock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&needbuffer_cv, "needbuf");
-
-	/*
-	 * Initialize buffer cache memory parameters.
-	 */
-	bufmem = 0;
-	buf_setwm();
 
 	if (bufmem_valimit != 0) {
 		vaddr_t minaddr = 0, maxaddr;
@@ -451,6 +488,12 @@ bufinit(void)
 			panic("bufinit: cannot allocate submap");
 	} else
 		buf_map = kernel_map;
+
+	/*
+	 * Initialize buffer cache memory parameters.
+	 */
+	bufmem = 0;
+	buf_setwm();
 
 	/* On "small" machines use small pool page sizes where possible */
 	use_std = (physmem < atop(16*1024*1024));
@@ -468,16 +511,17 @@ bufinit(void)
 	bufio_cache = pool_cache_init(sizeof(buf_t), 0, 0, 0,
 	    "biopl", NULL, IPL_BIO, NULL, NULL, NULL);
 
-	bufmempool_allocator.pa_backingmap = buf_map;
 	for (i = 0; i < NMEMPOOLS; i++) {
 		struct pool_allocator *pa;
 		struct pool *pp = &bmempools[i];
 		u_int size = 1 << (i + MEMPOOL_INDEX_OFFSET);
-		char *name = malloc(8, M_TEMP, M_WAITOK);
-		if (__predict_true(size >= 1024))
-			(void)snprintf(name, 8, "buf%dk", size / 1024);
+		char *name = kmem_alloc(8, KM_SLEEP); /* XXX: never freed */
+		if (__predict_false(size >= 1048576))
+			(void)snprintf(name, 8, "buf%um", size / 1048576);
+		else if (__predict_true(size >= 1024))
+			(void)snprintf(name, 8, "buf%uk", size / 1024);
 		else
-			(void)snprintf(name, 8, "buf%db", size);
+			(void)snprintf(name, 8, "buf%ub", size);
 		pa = (size <= PAGE_SIZE && use_std)
 			? &pool_allocator_nointr
 			: &bufmempool_allocator;
@@ -500,7 +544,10 @@ bufinit(void)
 	 * For now, use an empirical 3K per buffer.
 	 */
 	nbuf = (bufmem_hiwater / 1024) / 3;
-	bufhashtbl = hashinit(nbuf, HASH_LIST, M_CACHE, M_WAITOK, &bufhash);
+	bufhashtbl = hashinit(nbuf, HASH_LIST, true, &bufhash);
+
+	sysctl_kern_buf_setup();
+	sysctl_vm_buf_setup();
 }
 
 void
@@ -516,11 +563,7 @@ bufinit2(void)
 static int
 buf_lotsfree(void)
 {
-	int try, thresh;
-
-	/* Always allocate if doing copy on write */
-	if (curlwp->l_pflag & LP_UFSCOW)
-		return 1;
+	u_long guess;
 
 	/* Always allocate if less than the low water mark. */
 	if (bufmem < bufmem_lowater)
@@ -536,16 +579,14 @@ buf_lotsfree(void)
 
 	/*
 	 * The probabily of getting a new allocation is inversely
-	 * proportional to the current size of the cache, using
-	 * a granularity of 16 steps.
+	 * proportional  to the current size of the cache above
+	 * the low water mark.  Divide the total first to avoid overflows
+	 * in the product.
 	 */
-	try = random() & 0x0000000fL;
+	guess = cprng_fast32() % 16;
 
-	/* Don't use "16 * bufmem" here to avoid a 32-bit overflow. */
-	thresh = (bufmem - bufmem_lowater) /
-	    ((bufmem_hiwater - bufmem_lowater) / 16);
-
-	if (try >= thresh)
+	if ((bufmem_hiwater - bufmem_lowater) / 16 * guess >=
+	    (bufmem - bufmem_lowater))
 		return 1;
 
 	/* Otherwise don't allocate. */
@@ -607,7 +648,7 @@ buf_roundsize(u_long size)
 }
 
 static void *
-buf_malloc(size_t size)
+buf_alloc(size_t size)
 {
 	u_int n = buf_mempoolidx(size);
 	void *addr;
@@ -648,19 +689,20 @@ buf_mrelease(void *addr, size_t size)
  * bread()/breadn() helper.
  */
 static buf_t *
-bio_doread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
-    int async)
+bio_doread(struct vnode *vp, daddr_t blkno, int size, int async)
 {
 	buf_t *bp;
 	struct mount *mp;
 
 	bp = getblk(vp, blkno, size, 0, 0);
 
-#ifdef DIAGNOSTIC
+	/*
+	 * getblk() may return NULL if we are the pagedaemon.
+	 */
 	if (bp == NULL) {
-		panic("bio_doread: no such buf");
+		KASSERT(curlwp == uvm.pagedaemon_lwp);
+		return NULL;
 	}
-#endif
 
 	/*
 	 * If buffer does not have data valid, start a read.
@@ -677,12 +719,12 @@ bio_doread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
 		VOP_STRATEGY(vp, bp);
 
 		/* Pay for the read. */
-		curproc->p_stats->p_ru.ru_inblock++;
+		curlwp->l_ru.ru_inblock++;
 	} else if (async)
 		brelse(bp, 0);
 
 	if (vp->v_type == VBLK)
-		mp = vp->v_specmountpoint;
+		mp = spec_node_getmountedfs(vp);
 	else
 		mp = vp->v_mount;
 
@@ -706,16 +748,28 @@ bio_doread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
  * This algorithm described in Bach (p.54).
  */
 int
-bread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
-    buf_t **bpp)
+bread(struct vnode *vp, daddr_t blkno, int size, int flags, buf_t **bpp)
 {
 	buf_t *bp;
+	int error;
+
+	BIOHIST_FUNC(__func__); BIOHIST_CALLED(biohist);
 
 	/* Get buffer for block. */
-	bp = *bpp = bio_doread(vp, blkno, size, cred, 0);
+	bp = *bpp = bio_doread(vp, blkno, size, 0);
+	if (bp == NULL)
+		return ENOMEM;
 
 	/* Wait for the read to complete, and return result. */
-	return (biowait(bp));
+	error = biowait(bp);
+	if (error == 0 && (flags & B_MODIFY) != 0)
+		error = fscow_run(bp, true);
+	if (error) {
+		brelse(bp, 0);
+		*bpp = NULL;
+	}
+
+	return error;
 }
 
 /*
@@ -724,12 +778,16 @@ bread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
  */
 int
 breadn(struct vnode *vp, daddr_t blkno, int size, daddr_t *rablks,
-    int *rasizes, int nrablks, kauth_cred_t cred, buf_t **bpp)
+    int *rasizes, int nrablks, int flags, buf_t **bpp)
 {
 	buf_t *bp;
-	int i;
+	int error, i;
 
-	bp = *bpp = bio_doread(vp, blkno, size, cred, 0);
+	BIOHIST_FUNC(__func__); BIOHIST_CALLED(biohist);
+
+	bp = *bpp = bio_doread(vp, blkno, size, 0);
+	if (bp == NULL)
+		return ENOMEM;
 
 	/*
 	 * For each of the read-ahead blocks, start a read, if necessary.
@@ -742,26 +800,21 @@ breadn(struct vnode *vp, daddr_t blkno, int size, daddr_t *rablks,
 
 		/* Get a buffer for the read-ahead block */
 		mutex_exit(&bufcache_lock);
-		(void) bio_doread(vp, rablks[i], rasizes[i], cred, B_ASYNC);
+		(void) bio_doread(vp, rablks[i], rasizes[i], B_ASYNC);
 		mutex_enter(&bufcache_lock);
 	}
 	mutex_exit(&bufcache_lock);
 
 	/* Otherwise, we had to start a read for it; wait until it's valid. */
-	return (biowait(bp));
-}
+	error = biowait(bp);
+	if (error == 0 && (flags & B_MODIFY) != 0)
+		error = fscow_run(bp, true);
+	if (error) {
+		brelse(bp, 0);
+		*bpp = NULL;
+	}
 
-/*
- * Read with single-block read-ahead.  Defined in Bach (p.55), but
- * implemented as a call to breadn().
- * XXX for compatibility with old file systems.
- */
-int
-breada(struct vnode *vp, daddr_t blkno, int size, daddr_t rablkno,
-    int rabsize, kauth_cred_t cred, buf_t **bpp)
-{
-
-	return (breadn(vp, blkno, size, &rablkno, &rabsize, 1, cred, bpp));
+	return error;
 }
 
 /*
@@ -774,17 +827,36 @@ bwrite(buf_t *bp)
 	struct vnode *vp;
 	struct mount *mp;
 
+	BIOHIST_FUNC(__func__); BIOHIST_CALLARGS(biohist, "bp=%#jx",
+	    (uintptr_t)bp, 0, 0, 0);
+
 	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
+	KASSERT(!cv_has_waiters(&bp->b_done));
 
 	vp = bp->b_vp;
+
+	/*
+	 * dholland 20160728 AFAICT vp==NULL must be impossible as it
+	 * will crash upon reaching VOP_STRATEGY below... see further
+	 * analysis on tech-kern.
+	 */
+	KASSERTMSG(vp != NULL, "bwrite given buffer with null vnode");
+
 	if (vp != NULL) {
-		KASSERT(bp->b_objlock == &vp->v_interlock);
+		KASSERT(bp->b_objlock == vp->v_interlock);
 		if (vp->v_type == VBLK)
-			mp = vp->v_specmountpoint;
+			mp = spec_node_getmountedfs(vp);
 		else
 			mp = vp->v_mount;
 	} else {
 		mp = NULL;
+	}
+
+	if (mp && mp->mnt_wapbl) {
+		if (bp->b_iodone != mp->mnt_wapbl_op->wo_wapbl_biodone) {
+			bdwrite(bp);
+			return 0;
+		}
 	}
 
 	/*
@@ -826,7 +898,7 @@ bwrite(buf_t *bp)
 		reassignbuf(bp, bp->b_vp);
 		mutex_exit(&bufcache_lock);
 	} else {
-		curproc->p_stats->p_ru.ru_oublock++;
+		curlwp->l_ru.ru_oublock++;
 		mutex_enter(bp->b_objlock);
 		CLR(bp->b_oflags, BO_DONE | BO_DELWRI);
 	}
@@ -880,12 +952,26 @@ void
 bdwrite(buf_t *bp)
 {
 
+	BIOHIST_FUNC(__func__); BIOHIST_CALLARGS(biohist, "bp=%#jx",
+	    (uintptr_t)bp, 0, 0, 0);
+
+	KASSERT(bp->b_vp == NULL || bp->b_vp->v_tag != VT_UFS ||
+	    bp->b_vp->v_type == VBLK || ISSET(bp->b_flags, B_COWDONE));
 	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
+	KASSERT(!cv_has_waiters(&bp->b_done));
 
 	/* If this is a tape block, write the block now. */
 	if (bdev_type(bp->b_dev) == D_TAPE) {
 		bawrite(bp);
 		return;
+	}
+
+	if (wapbl_vphaswapbl(bp->b_vp)) {
+		struct mount *mp = wapbl_vptomp(bp->b_vp);
+
+		if (bp->b_iodone != mp->mnt_wapbl_op->wo_wapbl_biodone) {
+			WAPBL_ADD_BUF(mp, bp);
+		}
 	}
 
 	/*
@@ -894,13 +980,13 @@ bdwrite(buf_t *bp)
 	 *	(2) Charge for the write,
 	 *	(3) Make sure it's on its vnode's correct block list.
 	 */
-	KASSERT(bp->b_vp == NULL || bp->b_objlock == &bp->b_vp->v_interlock);
+	KASSERT(bp->b_vp == NULL || bp->b_objlock == bp->b_vp->v_interlock);
 
 	if (!ISSET(bp->b_oflags, BO_DELWRI)) {
 		mutex_enter(&bufcache_lock);
 		mutex_enter(bp->b_objlock);
 		SET(bp->b_oflags, BO_DELWRI);
-		curproc->p_stats->p_ru.ru_oublock++;
+		curlwp->l_ru.ru_oublock++;
 		reassignbuf(bp, bp->b_vp);
 		mutex_exit(&bufcache_lock);
 	} else {
@@ -921,35 +1007,11 @@ bawrite(buf_t *bp)
 {
 
 	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
+	KASSERT(bp->b_vp != NULL);
 
 	SET(bp->b_flags, B_ASYNC);
-	VOP_BWRITE(bp);
+	VOP_BWRITE(bp->b_vp, bp);
 }
-
-/*
- * Same as first half of bdwrite, mark buffer dirty, but do not release it.
- * Call with the buffer interlock held.
- *
- * Note: called only from biodone() through ffs softdep's io_complete()
- */
-void
-bdirty(buf_t *bp)
-{
-
-	KASSERT(mutex_owned(&bufcache_lock));
-	KASSERT(bp->b_objlock == &bp->b_vp->v_interlock);
-	KASSERT(mutex_owned(bp->b_objlock));
-	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
-
-	CLR(bp->b_cflags, BC_AGE);
-
-	if (!ISSET(bp->b_oflags, BO_DELWRI)) {
-		SET(bp->b_oflags, BO_DELWRI);
-		curproc->p_stats->p_ru.ru_oublock++;
-		reassignbuf(bp, bp->b_vp);
-	}
-}
-
 
 /*
  * Release a buffer on to the free lists.
@@ -961,7 +1023,10 @@ brelsel(buf_t *bp, int set)
 	struct bqueue *bufq;
 	struct vnode *vp;
 
+	KASSERT(bp != NULL);
 	KASSERT(mutex_owned(&bufcache_lock));
+	KASSERT(!cv_has_waiters(&bp->b_done));
+	KASSERT(bp->b_refcnt > 0);
 
 	SET(bp->b_cflags, set);
 
@@ -971,10 +1036,16 @@ brelsel(buf_t *bp, int set)
 	/* Wake up any processes waiting for any buffer to become free. */
 	cv_signal(&needbuffer_cv);
 
-	/* Wake up any proceeses waiting for _this_ buffer to become */
-	if (ISSET(bp->b_cflags, BC_WANTED) != 0) {
+	/* Wake up any proceeses waiting for _this_ buffer to become free */
+	if (ISSET(bp->b_cflags, BC_WANTED))
 		CLR(bp->b_cflags, BC_WANTED|BC_AGE);
-		cv_broadcast(&bp->b_busy);
+
+	/* If it's clean clear the copy-on-write flag. */
+	if (ISSET(bp->b_flags, B_COWDONE)) {
+		mutex_enter(bp->b_objlock);
+		if (!ISSET(bp->b_oflags, BO_DELWRI))
+			CLR(bp->b_flags, B_COWDONE);
+		mutex_exit(bp->b_objlock);
 	}
 
 	/*
@@ -999,32 +1070,39 @@ brelsel(buf_t *bp, int set)
 		CLR(bp->b_cflags, BC_VFLUSH);
 		if (!ISSET(bp->b_cflags, BC_INVAL|BC_AGE) &&
 		    !ISSET(bp->b_flags, B_LOCKED) && bp->b_error == 0) {
-			KDASSERT(checkfreelist(bp, &bufqueues[BQ_LRU]));
+			KDASSERT(checkfreelist(bp, &bufqueues[BQ_LRU], 1));
 			goto already_queued;
 		} else {
 			bremfree(bp);
 		}
 	}
 
-	KDASSERT(checkfreelist(bp, &bufqueues[BQ_AGE]));
-	KDASSERT(checkfreelist(bp, &bufqueues[BQ_LRU]));
-	KDASSERT(checkfreelist(bp, &bufqueues[BQ_LOCKED]));
+	KDASSERT(checkfreelist(bp, &bufqueues[BQ_AGE], 0));
+	KDASSERT(checkfreelist(bp, &bufqueues[BQ_LRU], 0));
+	KDASSERT(checkfreelist(bp, &bufqueues[BQ_LOCKED], 0));
 
 	if ((bp->b_bufsize <= 0) || ISSET(bp->b_cflags, BC_INVAL)) {
 		/*
 		 * If it's invalid or empty, dissociate it from its vnode
 		 * and put on the head of the appropriate queue.
 		 */
-		if (bioopsp != NULL)
-			(*bioopsp->io_deallocate)(bp);
+		if (ISSET(bp->b_flags, B_LOCKED)) {
+			if (wapbl_vphaswapbl(vp = bp->b_vp)) {
+				struct mount *mp = wapbl_vptomp(vp);
+
+				KASSERT(bp->b_iodone
+				    != mp->mnt_wapbl_op->wo_wapbl_biodone);
+				WAPBL_REMOVE_BUF(mp, bp);
+			}
+		}
 
 		mutex_enter(bp->b_objlock);
 		CLR(bp->b_oflags, BO_DONE|BO_DELWRI);
 		if ((vp = bp->b_vp) != NULL) {
-			KASSERT(bp->b_objlock == &vp->v_interlock);
+			KASSERT(bp->b_objlock == vp->v_interlock);
 			reassignbuf(bp, bp->b_vp);
 			brelvp(bp);
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 		} else {
 			KASSERT(bp->b_objlock == &buffer_lock);
 			mutex_exit(bp->b_objlock);
@@ -1054,14 +1132,7 @@ brelsel(buf_t *bp, int set)
 			bufq = &bufqueues[BQ_LRU];
 		} else {
 			/* stale but valid data */
-			int has_deps;
-
-			if (bioopsp != NULL)
-				has_deps = (*bioopsp->io_countdeps)(bp, 0);
-			else
-				has_deps = 0;
-			bufq = has_deps ? &bufqueues[BQ_LRU] :
-			    &bufqueues[BQ_AGE];
+			bufq = &bufqueues[BQ_AGE];
 		}
 		binstailfree(bp, bufq);
 	}
@@ -1069,6 +1140,7 @@ already_queued:
 	/* Unlock the buffer. */
 	CLR(bp->b_cflags, BC_AGE|BC_BUSY|BC_NOCACHE);
 	CLR(bp->b_flags, B_ASYNC);
+	cv_broadcast(&bp->b_busy);
 
 	if (bp->b_bufsize <= 0)
 		brele(bp);
@@ -1101,7 +1173,7 @@ incore(struct vnode *vp, daddr_t blkno)
 	LIST_FOREACH(bp, BUFHASH(vp, blkno), b_hash) {
 		if (bp->b_lblkno == blkno && bp->b_vp == vp &&
 		    !ISSET(bp->b_cflags, BC_INVAL)) {
-		    	KASSERT(bp->b_objlock == &vp->v_interlock);
+		    	KASSERT(bp->b_objlock == vp->v_interlock);
 		    	return (bp);
 		}
 	}
@@ -1134,6 +1206,7 @@ getblk(struct vnode *vp, daddr_t blkno, int size, int slpflag, int slptimeo)
 			mutex_exit(&bufcache_lock);
 			return (NULL);
 		}
+		KASSERT(!cv_has_waiters(&bp->b_done));
 #ifdef DIAGNOSTIC
 		if (ISSET(bp->b_oflags, BO_DONE|BO_DELWRI) &&
 		    bp->b_bcount < size && vp->v_type != VBLK)
@@ -1153,9 +1226,9 @@ getblk(struct vnode *vp, daddr_t blkno, int size, int slpflag, int slptimeo)
 
 		LIST_INSERT_HEAD(BUFHASH(vp, blkno), bp, b_hash);
 		bp->b_blkno = bp->b_lblkno = bp->b_rawblkno = blkno;
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		bgetvp(vp, bp);
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		preserve = 0;
 	}
 	mutex_exit(&bufcache_lock);
@@ -1170,8 +1243,8 @@ getblk(struct vnode *vp, daddr_t blkno, int size, int slpflag, int slptimeo)
 		if (allocbuf(bp, size, preserve)) {
 			mutex_enter(&bufcache_lock);
 			LIST_REMOVE(bp, b_hash);
+			brelsel(bp, BC_INVAL);
 			mutex_exit(&bufcache_lock);
-			brelse(bp, BC_INVAL);
 			return NULL;
 		}
 	}
@@ -1186,7 +1259,7 @@ buf_t *
 geteblk(int size)
 {
 	buf_t *bp;
-	int error;
+	int error __diagused;
 
 	mutex_enter(&bufcache_lock);
 	while ((bp = getnewbuf(0, 0, 0)) == NULL)
@@ -1212,25 +1285,34 @@ geteblk(int size)
 int
 allocbuf(buf_t *bp, int size, int preserve)
 {
-	vsize_t oldsize, desired_size;
 	void *addr;
+	vsize_t oldsize, desired_size;
+	int oldcount;
 	int delta;
 
 	desired_size = buf_roundsize(size);
 	if (desired_size > MAXBSIZE)
 		printf("allocbuf: buffer larger than MAXBSIZE requested");
 
+	oldcount = bp->b_bcount;
+
 	bp->b_bcount = size;
 
 	oldsize = bp->b_bufsize;
-	if (oldsize == desired_size)
-		return 0;
+	if (oldsize == desired_size) {
+		/*
+		 * Do not short cut the WAPBL resize, as the buffer length
+		 * could still have changed and this would corrupt the
+		 * tracking of the transaction length.
+		 */
+		goto out;
+	}
 
 	/*
 	 * If we want a buffer of a different size, re-allocate the
 	 * buffer's memory; copy old content only if needed.
 	 */
-	addr = buf_malloc(desired_size);
+	addr = buf_alloc(desired_size);
 	if (addr == NULL)
 		return ENOMEM;
 	if (preserve)
@@ -1262,6 +1344,11 @@ allocbuf(buf_t *bp, int size, int preserve)
 		}
 	}
 	mutex_exit(&bufcache_lock);
+
+ out:
+	if (wapbl_vphaswapbl(bp->b_vp))
+		WAPBL_RESIZE_BUF(wapbl_vptomp(bp->b_vp), bp, oldsize, oldcount);
+
 	return 0;
 }
 
@@ -1291,10 +1378,7 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 		if (bp != NULL) {
 			memset((char *)bp, 0, sizeof(*bp));
 			buf_init(bp);
-			bp->b_dev = NODEV;
-			bp->b_vnbufs.le_next = NOLIST;
-			bp->b_cflags = BC_BUSY;
-			bp->b_refcnt = 1;
+			SET(bp->b_cflags, BC_BUSY);	/* mark buffer busy */
 			mutex_enter(&bufcache_lock);
 #if defined(DIAGNOSTIC)
 			bp->b_freelistindex = -1;
@@ -1304,9 +1388,14 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 		mutex_enter(&bufcache_lock);
 	}
 
+	KASSERT(mutex_owned(&bufcache_lock));
 	if ((bp = TAILQ_FIRST(&bufqueues[BQ_AGE].bq_queue)) != NULL ||
 	    (bp = TAILQ_FIRST(&bufqueues[BQ_LRU].bq_queue)) != NULL) {
+	    	KASSERT(!ISSET(bp->b_cflags, BC_BUSY) || ISSET(bp->b_cflags, BC_VFLUSH));
 		bremfree(bp);
+
+		/* Buffer is no longer on free lists. */
+		SET(bp->b_cflags, BC_BUSY);
 	} else {
 		/*
 		 * XXX: !from_bufq should be removed.
@@ -1339,8 +1428,9 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 		goto start;
 	}
 
-	/* Buffer is no longer on free lists. */
-	SET(bp->b_cflags, BC_BUSY);
+	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
+	KASSERT(bp->b_refcnt > 0);
+    	KASSERT(!cv_has_waiters(&bp->b_done));
 
 	/*
 	 * If buffer was a delayed write, start it and return NULL
@@ -1359,8 +1449,6 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 	}
 
 	vp = bp->b_vp;
-	if (bioopsp != NULL)
-		(*bioopsp->io_deallocate)(bp);
 
 	/* clear out various other fields */
 	bp->b_cflags = BC_BUSY;
@@ -1379,9 +1467,9 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 
 	/* Disassociate us from our vnode, if we had one... */
 	if (vp != NULL) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		brelvp(bp);
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 	}
 
 	return (bp);
@@ -1396,7 +1484,7 @@ static int
 buf_trim(void)
 {
 	buf_t *bp;
-	long size = 0;
+	long size;
 
 	KASSERT(mutex_owned(&bufcache_lock));
 
@@ -1433,6 +1521,11 @@ buf_drain(int n)
 	return size;
 }
 
+SDT_PROVIDER_DEFINE(io);
+
+SDT_PROBE_DEFINE1(io, kernel, , wait__start, "struct buf *"/*bp*/);
+SDT_PROBE_DEFINE1(io, kernel, , wait__done, "struct buf *"/*bp*/);
+
 /*
  * Wait for operations on the buffer to complete.
  * When they do, extract and return the I/O's error value.
@@ -1441,10 +1534,28 @@ int
 biowait(buf_t *bp)
 {
 
+	BIOHIST_FUNC(__func__);
+
+	KASSERT(ISSET(bp->b_cflags, BC_BUSY));
+	KASSERT(bp->b_refcnt > 0);
+
+	SDT_PROBE1(io, kernel, , wait__start, bp);
+
 	mutex_enter(bp->b_objlock);
-	while (!ISSET(bp->b_oflags, BO_DONE | BO_DELWRI))
+
+	BIOHIST_CALLARGS(biohist, "bp=%#jx, oflags=0x%jx, ret_addr=%#jx",
+	    (uintptr_t)bp, bp->b_oflags, 
+	    (uintptr_t)__builtin_return_address(0), 0);
+
+	while (!ISSET(bp->b_oflags, BO_DONE | BO_DELWRI)) {
+		BIOHIST_LOG(biohist, "waiting bp=%#jx", (uintptr_t)bp, 0, 0, 0);
 		cv_wait(&bp->b_done, bp->b_objlock);
+	}
 	mutex_exit(bp->b_objlock);
+
+	SDT_PROBE1(io, kernel, , wait__done, bp);
+
+	BIOHIST_LOG(biohist, "return %jd", bp->b_error, 0, 0, 0);
 
 	return bp->b_error;
 }
@@ -1461,14 +1572,16 @@ biowait(buf_t *bp)
  *	process, invokes a procedure specified in the buffer structure" ]
  *
  * In real life, the pagedaemon (or other system processes) wants
- * to do async stuff to, and doesn't want the buffer brelse()'d.
+ * to do async stuff too, and doesn't want the buffer brelse()'d.
  * (for swap pager, that puts swap buffers on the free lists (!!!),
- * for the vn device, that puts malloc'd buffers on the free lists!)
+ * for the vn device, that puts allocated buffers on the free lists!)
  */
 void
 biodone(buf_t *bp)
 {
 	int s;
+
+	BIOHIST_FUNC(__func__);
 
 	KASSERT(!ISSET(bp->b_oflags, BO_DONE));
 
@@ -1476,6 +1589,9 @@ biodone(buf_t *bp)
 		/* From interrupt mode: defer to a soft interrupt. */
 		s = splvm();
 		TAILQ_INSERT_TAIL(&curcpu()->ci_data.cpu_biodone, bp, b_actq);
+
+		BIOHIST_CALLARGS(biohist, "bp=%#jx, softint scheduled",
+		    (uintptr_t)bp, 0, 0, 0);
 		softint_schedule(biodone_sih);
 		splx(s);
 	} else {
@@ -1484,13 +1600,17 @@ biodone(buf_t *bp)
 	}
 }
 
+SDT_PROBE_DEFINE1(io, kernel, , done, "struct buf *"/*bp*/);
+
 static void
 biodone2(buf_t *bp)
 {
 	void (*callout)(buf_t *);
 
-	if (bioopsp != NULL)
-		(*bioopsp->io_complete)(bp);
+	SDT_PROBE1(io, kernel, ,done, bp);
+
+	BIOHIST_FUNC(__func__);
+	BIOHIST_CALLARGS(biohist, "bp=%#jx", (uintptr_t)bp, 0, 0, 0);
 
 	mutex_enter(bp->b_objlock);
 	/* Note that the transfer is done. */
@@ -1505,7 +1625,11 @@ biodone2(buf_t *bp)
 		vwakeup(bp);
 
 	if ((callout = bp->b_iodone) != NULL) {
+		BIOHIST_LOG(biohist, "callout %#jx", (uintptr_t)callout,
+		    0, 0, 0);
+
 		/* Note callout done, then call out. */
+		KASSERT(!cv_has_waiters(&bp->b_done));
 		KERNEL_LOCK(1, NULL);		/* XXXSMP */
 		bp->b_iodone = NULL;
 		mutex_exit(bp->b_objlock);
@@ -1513,10 +1637,13 @@ biodone2(buf_t *bp)
 		KERNEL_UNLOCK_ONE(NULL);	/* XXXSMP */
 	} else if (ISSET(bp->b_flags, B_ASYNC)) {
 		/* If async, release. */
+		BIOHIST_LOG(biohist, "async", 0, 0, 0, 0);
+		KASSERT(!cv_has_waiters(&bp->b_done));
 		mutex_exit(bp->b_objlock);
 		brelse(bp, 0);
 	} else {
 		/* Otherwise just wake up waiters in biowait(). */
+		BIOHIST_LOG(biohist, "wake-up", 0, 0, 0, 0);
 		cv_broadcast(&bp->b_done);
 		mutex_exit(bp->b_objlock);
 	}
@@ -1529,34 +1656,24 @@ biointr(void *cookie)
 	buf_t *bp;
 	int s;
 
+	BIOHIST_FUNC(__func__); BIOHIST_CALLED(biohist);
+
 	ci = curcpu();
 
+	s = splvm();
 	while (!TAILQ_EMPTY(&ci->ci_data.cpu_biodone)) {
 		KASSERT(curcpu() == ci);
 
-		s = splvm();
 		bp = TAILQ_FIRST(&ci->ci_data.cpu_biodone);
 		TAILQ_REMOVE(&ci->ci_data.cpu_biodone, bp, b_actq);
 		splx(s);
 
+		BIOHIST_LOG(biohist, "bp=%#jx", (uintptr_t)bp, 0, 0, 0);
 		biodone2(bp);
+
+		s = splvm();
 	}
-}
-
-/*
- * Return a count of buffers on the "locked" queue.
- */
-int
-count_lock_queue(void)
-{
-	buf_t *bp;
-	int n = 0;
-
-	mutex_enter(&bufcache_lock);
-	TAILQ_FOREACH(bp, &bufqueues[BQ_LOCKED].bq_queue, b_freelist)
-		n++;
-	mutex_exit(&bufcache_lock);
-	return (n);
+	splx(s);
 }
 
 /*
@@ -1567,9 +1684,10 @@ int
 buf_syncwait(void)
 {
 	buf_t *bp;
-	int iter, nbusy, nbusy_prev = 0, dcount, ihash;
+	int iter, nbusy, nbusy_prev = 0, ihash;
 
-	dcount = 10000;
+	BIOHIST_FUNC(__func__); BIOHIST_CALLED(biohist);
+
 	for (iter = 0; iter < 20;) {
 		mutex_enter(&bufcache_lock);
 		nbusy = 0;
@@ -1577,25 +1695,6 @@ buf_syncwait(void)
 		    LIST_FOREACH(bp, &bufhashtbl[ihash], b_hash) {
 			if ((bp->b_cflags & (BC_BUSY|BC_INVAL)) == BC_BUSY)
 				nbusy += ((bp->b_flags & B_READ) == 0);
-			/*
-			 * With soft updates, some buffers that are
-			 * written will be remarked as dirty until other
-			 * buffers are written.
-			 */
-			if (bp->b_vp && bp->b_vp->v_mount
-			    && (bp->b_vp->v_mount->mnt_flag & MNT_SOFTDEP)
-			    && (bp->b_oflags & BO_DELWRI)) {
-				bremfree(bp);
-				bp->b_cflags |= BC_BUSY;
-				nbusy++;
-				mutex_exit(&bufcache_lock);
-				bawrite(bp);
-				if (dcount-- <= 0) {
-					printf("softdep ");
-					goto fail;
-				}
-				mutex_enter(&bufcache_lock);
-			}
 		    }
 		}
 		mutex_exit(&bufcache_lock);
@@ -1605,8 +1704,7 @@ buf_syncwait(void)
 		if (nbusy_prev == 0)
 			nbusy_prev = nbusy;
 		printf("%d ", nbusy);
-		tsleep(&nbusy, PRIBIO, "bflush",
-		    (iter == 0) ? 1 : hz / 25 * iter);
+		kpause("bflush", false, MAX(1, hz / 25 * iter), NULL);
 		if (nbusy >= nbusy_prev) /* we didn't flush anything */
 			iter++;
 		else
@@ -1614,7 +1712,6 @@ buf_syncwait(void)
 	}
 
 	if (nbusy) {
-fail:;
 #if defined(DEBUG) || defined(DEBUG_HALT_BUSY)
 		printf("giving up\nPrinting vnodes for busy buffers\n");
 		for (ihash = 0; ihash < bufhash+1; ihash++) {
@@ -1718,16 +1815,15 @@ sysctl_dobuf(SYSCTLFN_ARGS)
 						break;
 					}
 					mutex_exit(&bufcache_lock);
+					sysctl_relock();
 					goto retry;
 				}
 				dp += elem_size;
 				len -= elem_size;
 			}
-			if (elem_count > 0) {
-				needed += elem_size;
-				if (elem_count != INT_MAX)
-					elem_count--;
-			}
+			needed += elem_size;
+			if (elem_count > 0 && elem_count != INT_MAX)
+				elem_count--;
 		}
 		if (error != 0)
 			break;
@@ -1745,39 +1841,47 @@ sysctl_dobuf(SYSCTLFN_ARGS)
 static int
 sysctl_bufvm_update(SYSCTLFN_ARGS)
 {
-	int t, error, rv;
+	int error, rv;
 	struct sysctlnode node;
+	unsigned int temp_bufcache;
+	unsigned long temp_water;
 
+	/* Take a copy of the supplied node and its data */
 	node = *rnode;
-	node.sysctl_data = &t;
-	t = *(int *)rnode->sysctl_data;
+	if (node.sysctl_data == &bufcache) {
+	    node.sysctl_data = &temp_bufcache;
+	    temp_bufcache = *(unsigned int *)rnode->sysctl_data;
+	} else {
+	    node.sysctl_data = &temp_water;
+	    temp_water = *(unsigned long *)rnode->sysctl_data;
+	}
+
+	/* Update the copy */
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)
 		return (error);
 
-	if (t < 0)
-		return EINVAL;
 	if (rnode->sysctl_data == &bufcache) {
-		if (t > 100)
+		if (temp_bufcache > 100)
 			return (EINVAL);
-		bufcache = t;
+		bufcache = temp_bufcache;
 		buf_setwm();
 	} else if (rnode->sysctl_data == &bufmem_lowater) {
-		if (bufmem_hiwater - t < 16)
+		if (bufmem_hiwater - temp_water < 16)
 			return (EINVAL);
-		bufmem_lowater = t;
+		bufmem_lowater = temp_water;
 	} else if (rnode->sysctl_data == &bufmem_hiwater) {
-		if (t - bufmem_lowater < 16)
+		if (temp_water - bufmem_lowater < 16)
 			return (EINVAL);
-		bufmem_hiwater = t;
+		bufmem_hiwater = temp_water;
 	} else
 		return (EINVAL);
 
 	/* Drain until below new high water mark */
 	sysctl_unlock();
 	mutex_enter(&bufcache_lock);
-	while ((t = bufmem - bufmem_hiwater) >= 0) {
-		rv = buf_drain(t / (2 * 1024));
+	while (bufmem > bufmem_hiwater) {
+		rv = buf_drain((bufmem - bufmem_hiwater) / (2 * 1024));
 		if (rv <= 0)
 			break;
 	}
@@ -1787,15 +1891,13 @@ sysctl_bufvm_update(SYSCTLFN_ARGS)
 	return 0;
 }
 
-SYSCTL_SETUP(sysctl_kern_buf_setup, "sysctl kern.buf subtree setup")
+static struct sysctllog *vfsbio_sysctllog;
+
+static void
+sysctl_kern_buf_setup(void)
 {
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "kern", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_KERN, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "buf",
 		       SYSCTL_DESCR("Kernel buffer cache information"),
@@ -1803,39 +1905,34 @@ SYSCTL_SETUP(sysctl_kern_buf_setup, "sysctl kern.buf subtree setup")
 		       CTL_KERN, KERN_BUF, CTL_EOL);
 }
 
-SYSCTL_SETUP(sysctl_vm_buf_setup, "sysctl vm.buf* subtree setup")
+static void
+sysctl_vm_buf_setup(void)
 {
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vm", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VM, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "bufcache",
 		       SYSCTL_DESCR("Percentage of physical memory to use for "
 				    "buffer cache"),
 		       sysctl_bufvm_update, 0, &bufcache, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-		       CTLTYPE_INT, "bufmem",
+		       CTLTYPE_LONG, "bufmem",
 		       SYSCTL_DESCR("Amount of kernel memory used by buffer "
 				    "cache"),
 		       NULL, 0, &bufmem, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_lowater",
+		       CTLTYPE_LONG, "bufmem_lowater",
 		       SYSCTL_DESCR("Minimum amount of kernel memory to "
 				    "reserve for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_lowater, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_hiwater",
+		       CTLTYPE_LONG, "bufmem_hiwater",
 		       SYSCTL_DESCR("Maximum amount of kernel memory to use "
 				    "for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_hiwater, 0,
@@ -1854,19 +1951,18 @@ vfs_bufstats(void)
 	int i, j, count;
 	buf_t *bp;
 	struct bqueue *dp;
-	int counts[(MAXBSIZE / PAGE_SIZE) + 1];
+	int counts[MAXBSIZE / MIN_PAGE_SIZE + 1];
 	static const char *bname[BQUEUES] = { "LOCKED", "LRU", "AGE" };
 
 	for (dp = bufqueues, i = 0; dp < &bufqueues[BQUEUES]; dp++, i++) {
 		count = 0;
-		for (j = 0; j <= MAXBSIZE/PAGE_SIZE; j++)
-			counts[j] = 0;
+		memset(counts, 0, sizeof(counts));
 		TAILQ_FOREACH(bp, &dp->bq_queue, b_freelist) {
-			counts[bp->b_bufsize/PAGE_SIZE]++;
+			counts[bp->b_bufsize / PAGE_SIZE]++;
 			count++;
 		}
 		printf("%s: total-%d", bname[i], count);
-		for (j = 0; j <= MAXBSIZE/PAGE_SIZE; j++)
+		for (j = 0; j <= MAXBSIZE / PAGE_SIZE; j++)
 			if (counts[j] != 0)
 				printf(", %d-%d", j * PAGE_SIZE, counts[j]);
 		printf("\n");
@@ -1887,11 +1983,12 @@ getiobuf(struct vnode *vp, bool waitok)
 
 	buf_init(bp);
 
-	if ((bp->b_vp = vp) == NULL)
-		bp->b_objlock = &buffer_lock;
-	else
-		bp->b_objlock = &vp->v_interlock;
-	
+	if ((bp->b_vp = vp) != NULL) {
+		bp->b_objlock = vp->v_interlock;
+	} else {
+		KASSERT(bp->b_objlock == &buffer_lock);
+	}
+
 	return bp;
 }
 
@@ -1917,7 +2014,7 @@ nestiobuf_iodone(buf_t *bp)
 	KASSERT(bp->b_bcount <= bp->b_bufsize);
 	KASSERT(mbp != bp);
 
-	error = 0;
+	error = bp->b_error;
 	if (bp->b_error == 0 &&
 	    (bp->b_bcount < bp->b_bufsize || bp->b_resid > 0)) {
 		/*
@@ -1937,7 +2034,7 @@ nestiobuf_iodone(buf_t *bp)
  * nestiobuf_setup: setup a "nested" buffer.
  *
  * => 'mbp' is a "master" buffer which is being divided into sub pieces.
- * => 'bp' should be a buffer allocated by getiobuf or getiobuf_nowait.
+ * => 'bp' should be a buffer allocated by getiobuf.
  * => 'offset' is a byte offset in the master buffer.
  * => 'size' is a size in bytes of this nested buffer.
  */
@@ -1945,24 +2042,25 @@ nestiobuf_iodone(buf_t *bp)
 void
 nestiobuf_setup(buf_t *mbp, buf_t *bp, int offset, size_t size)
 {
-	const int b_read = mbp->b_flags & B_READ;
+	const int b_pass = mbp->b_flags & (B_READ|B_MEDIA_FLAGS);
 	struct vnode *vp = mbp->b_vp;
 
 	KASSERT(mbp->b_bcount >= offset + size);
 	bp->b_vp = vp;
+	bp->b_dev = mbp->b_dev;
 	bp->b_objlock = mbp->b_objlock;
 	bp->b_cflags = BC_BUSY;
-	bp->b_flags = B_ASYNC | b_read;
+	bp->b_flags = B_ASYNC | b_pass;
 	bp->b_iodone = nestiobuf_iodone;
 	bp->b_data = (char *)mbp->b_data + offset;
 	bp->b_resid = bp->b_bcount = size;
 	bp->b_bufsize = bp->b_bcount;
 	bp->b_private = mbp;
 	BIO_COPYPRIO(bp, mbp);
-	if (!b_read && vp != NULL) {
-		mutex_enter(&vp->v_interlock);
+	if (BUF_ISWRITE(bp) && vp != NULL) {
+		mutex_enter(vp->v_interlock);
 		vp->v_numoutput++;
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 	}
 }
 
@@ -1983,8 +2081,11 @@ nestiobuf_done(buf_t *mbp, int donebytes, int error)
 	mutex_enter(mbp->b_objlock);
 	KASSERT(mbp->b_resid >= donebytes);
 	mbp->b_resid -= donebytes;
-	mbp->b_error = error;
+	if (error)
+		mbp->b_error = error;
 	if (mbp->b_resid == 0) {
+		if (mbp->b_error)
+			mbp->b_resid = mbp->b_bcount;
 		mutex_exit(mbp->b_objlock);
 		biodone(mbp);
 	} else
@@ -1995,7 +2096,6 @@ void
 buf_init(buf_t *bp)
 {
 
-	LIST_INIT(&bp->b_dep);
 	cv_init(&bp->b_busy, "biolock");
 	cv_init(&bp->b_done, "biowait");
 	bp->b_dev = NODEV;
@@ -2005,6 +2105,9 @@ buf_init(buf_t *bp)
 	bp->b_oflags = 0;
 	bp->b_objlock = &buffer_lock;
 	bp->b_iodone = NULL;
+	bp->b_refcnt = 1;
+	bp->b_dev = NODEV;
+	bp->b_vnbufs.le_next = NOLIST;
 	BIO_SETPRIO(bp, BPRIO_DEFAULT);
 }
 
@@ -2047,4 +2150,15 @@ bbusy(buf_t *bp, bool intr, int timo, kmutex_t *interlock)
 	bp->b_cflags |= BC_BUSY;
 
 	return 0;
+}
+
+/*
+ * Nothing outside this file should really need to know about nbuf,
+ * but a few things still want to read it, so give them a way to do that.
+ */
+int
+buf_nbuf(void)
+{
+
+	return nbuf;
 }

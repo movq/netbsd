@@ -1,6 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.2 2001/10/19 05:47:40 shin Exp $	*/
-
-#include <mips/vmparam.h>
+/*	$NetBSD: vmparam.h,v 1.5 2014/03/31 11:41:01 martin Exp $	*/
 
 /*
  * PlayStation 2 has one physical memory segment.
@@ -11,3 +9,6 @@
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0
+
+#include <mips/vmparam.h>
+

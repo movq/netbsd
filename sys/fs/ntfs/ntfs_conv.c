@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_conv.c,v 1.8 2008/01/29 18:21:10 pooka Exp $	*/
+/*	$NetBSD: ntfs_conv.c,v 1.10 2015/02/20 17:08:13 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,29 +31,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_conv.c,v 1.8 2008/01/29 18:21:10 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_conv.c,v 1.10 2015/02/20 17:08:13 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
-#include <sys/proc.h>
 #include <sys/kernel.h>
-#include <sys/vnode.h>
 #include <sys/mount.h>
-#include <sys/buf.h>
-#include <sys/file.h>
 #include <sys/malloc.h>
-#include <sys/lock.h>
-
-#include <miscfs/specfs/specdev.h>
 
 #include <fs/ntfs/ntfs.h>
-#include <fs/ntfs/ntfsmount.h>
 #include <fs/ntfs/ntfs_inode.h>
-#include <fs/ntfs/ntfs_vfsops.h>
 #include <fs/ntfs/ntfs_subr.h>
-#include <fs/ntfs/ntfs_compr.h>
-#include <fs/ntfs/ntfs_ihash.h>
 
 /* UTF-8 encoding stuff */
 #include <fs/unicode.h>

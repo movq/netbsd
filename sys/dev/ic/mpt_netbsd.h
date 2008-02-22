@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.h,v 1.8 2007/11/20 14:33:58 ad Exp $	*/
+/*	$NetBSD: mpt_netbsd.h,v 1.12 2018/01/30 19:13:08 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -87,8 +87,6 @@
 #include <sys/queue.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <sys/bus.h>
 #include <sys/intr.h>
 
@@ -162,7 +160,7 @@ typedef struct req_entry {
 } request_t;
 
 typedef struct mpt_softc {
-	struct device	sc_dev;		/* base device glue */
+	device_t	sc_dev;		/* base device glue */
 
 	/* Locking context */
 	int		mpt_splsaved;
@@ -195,8 +193,6 @@ typedef struct mpt_softc {
 			fCONFIG_PAGE_SCSI_DEVICE_1	_dev_page1[16];
 			uint16_t			_tag_enable;
 			uint16_t			_disc_enable;
-			uint16_t			_update_params0;
-			uint16_t			_update_params1;
 			uint16_t			_report_xfer_mode;
 		} spi;
 #define	mpt_port_page0		cfg.spi._port_page0
@@ -206,8 +202,6 @@ typedef struct mpt_softc {
 #define	mpt_dev_page1		cfg.spi._dev_page1
 #define	mpt_tag_enable		cfg.spi._tag_enable
 #define	mpt_disc_enable		cfg.spi._disc_enable
-#define	mpt_update_params0	cfg.spi._update_params0
-#define	mpt_update_params1	cfg.spi._update_params1
 #define	mpt_report_xfer_mode	cfg.spi._report_xfer_mode
 
 		struct mpt_fc_cfg {
@@ -232,9 +226,11 @@ typedef struct mpt_softc {
 	/* SCSIPI and software management */
 	request_t		*request_pool;
 	SLIST_HEAD(req_queue, req_entry) request_free_list;
+	request_t      *mngt_req;
 
 	struct scsipi_adapter	sc_adapter;
 	struct scsipi_channel	sc_channel;
+	device_t       sc_scsibus_dv; /*So we can rescan in case of errors*/
 
 	uint32_t		sequence;	/* sequence number */
 	uint32_t		timeouts;	/* timeout count */

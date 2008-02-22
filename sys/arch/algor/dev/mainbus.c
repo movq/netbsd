@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.19 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.19 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.26 2012/01/27 18:52:47 para Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
@@ -46,15 +39,15 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.19 2005/12/11 12:16:08 christos Exp $"
 #include "opt_pci.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/extent.h>
+#include <sys/malloc.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
+#include <algor/autoconf.h>
 
 #include <mips/cache.h>
 
@@ -70,14 +63,14 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.19 2005/12/11 12:16:08 christos Exp $"
 #include "locators.h"
 #include "pci.h"
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
-int	mainbus_submatch(struct device *, struct cfdata *,
+int	mainbus_submatch(device_t, cfdata_t,
 			 const int *, void *);
 
 /* There can be only one. */
@@ -132,7 +125,7 @@ struct mainbusdev mainbusdevs[] = {
 #endif /* ALGOR_P6032 */
 
 int
-mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (mainbus_found)
@@ -142,7 +135,7 @@ mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args ma;
 	struct mainbusdev *md;
@@ -166,9 +159,9 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	 * Reserve the bottom 64K of the I/O space for ISA devices.
 	 */
 	ioext  = extent_create("pciio",  0x00010000, 0x000effff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x07ffffff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pc = &p4032_configuration.ac_pc;
 #elif defined(ALGOR_P5064)
@@ -178,9 +171,9 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	 * a bug in the ISA bridge.
 	 */
 	ioext  = extent_create("pciio",  0x00080000, 0x00ffffff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x07ffffff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pc = &p5064_configuration.ac_pc;
 #if defined(PCI_NETBSD_ENABLE_IDE)
@@ -191,9 +184,9 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	 * Reserve the bottom 64K of the I/O space for ISA devices.
 	 */
 	ioext  = extent_create("pciio",  0x00010000, 0x000effff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", 0x01000000, 0x0affffff,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pc = &p6032_configuration.ac_pc;
 #if defined(PCI_NETBSD_ENABLE_IDE)
@@ -201,7 +194,7 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 #endif
 #endif /* ALGOR_P4032 || ALGOR_P5064 || ALGOR_P6032 */
 
-	pci_configure_bus(pc, ioext, memext, NULL, 0, mips_dcache_align);
+	pci_configure_bus(pc, ioext, memext, NULL, 0, mips_cache_info.mci_dcache_align);
 	extent_destroy(ioext);
 	extent_destroy(memext);
 
@@ -248,13 +241,13 @@ mainbus_print(void *aux, const char *pnp)
 	if (pnp)
 		aprint_normal("%s at %s", ma->ma_name, pnp);
 	if (ma->ma_addr != (bus_addr_t) -1)
-		aprint_normal(" addr 0x%lx", ma->ma_addr);
+		aprint_normal(" addr %#" PRIxBUSADDR, ma->ma_addr);
 
 	return (UNCONF);
 }
 
 int
-mainbus_submatch(struct device *parent, struct cfdata *cf,
+mainbus_submatch(device_t parent, cfdata_t cf,
 		 const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;

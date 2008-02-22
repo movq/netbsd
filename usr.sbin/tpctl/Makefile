@@ -1,7 +1,11 @@
-#	$NetBSD: Makefile,v 1.4 2007/07/29 14:37:25 nonaka Exp $
+#	$NetBSD: Makefile,v 1.6 2018/04/01 04:35:06 ryo Exp $
 
-.if ${MACHINE} == "hpcarm" || ${MACHINE} == "hpcmips" || ${MACHINE} == "hpcsh" \
-	|| ${MACHINE} == "zaurus"
+.include <bsd.own.mk>
+
+.if ${MACHINE_CPU} == "aarch64" || \
+    ${MACHINE_CPU} == "arm" || \
+    ${MACHINE} == "hpcmips" || \
+    ${MACHINE} == "hpcsh"
 PROG=	tpctl
 SRCS=	main.c fb.c tp.c data.c
 .endif

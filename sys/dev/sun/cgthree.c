@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthree.c,v 1.14 2007/10/19 12:01:19 ad Exp $ */
+/*	$NetBSD: cgthree.c,v 1.33 2016/11/09 19:54:25 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.14 2007/10/19 12:01:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.33 2016/11/09 19:54:25 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,20 +61,38 @@ __KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.14 2007/10/19 12:01:19 ad Exp $");
 #include <dev/sun/cgthreereg.h>
 #include <dev/sun/cgthreevar.h>
 
-static void	cgthreeunblank(struct device *);
+#if NWSDISPLAY > 0
+#include <dev/wscons/wsconsio.h>
+#include <dev/wsfont/wsfont.h>
+#include <dev/rasops/rasops.h>
+
+#include "opt_wsemul.h"
+#endif
+
+#include "ioconf.h"
+
+static void	cgthreeunblank(device_t);
 static void	cgthreeloadcmap(struct cgthree_softc *, int, int);
 static void	cgthree_set_video(struct cgthree_softc *, int);
 static int	cgthree_get_video(struct cgthree_softc *);
-
-extern struct cfdriver cgthree_cd;
 
 dev_type_open(cgthreeopen);
 dev_type_ioctl(cgthreeioctl);
 dev_type_mmap(cgthreemmap);
 
 const struct cdevsw cgthree_cdevsw = {
-	cgthreeopen, nullclose, noread, nowrite, cgthreeioctl,
-	nostop, notty, nopoll, cgthreemmap, nokqfilter
+	.d_open = cgthreeopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = cgthreeioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = cgthreemmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 /* frame buffer generic driver */
@@ -104,15 +115,57 @@ struct cg3_videoctrl {
 	}
 };
 
+static void cg3_setup_palette(struct cgthree_softc *);
+
+struct wsscreen_descr cgthree_defaultscreen = {
+	"std",
+	0, 0,	/* will be filled in -- XXX shouldn't, it's global */
+	NULL,		/* textops */
+	8, 16,	/* font width/height */
+	WSSCREEN_WSCOLORS,	/* capabilities */
+	NULL	/* modecookie */
+};
+
+static int 	cgthree_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+static paddr_t	cgthree_mmap(void *, void *, off_t, int);
+static void	cgthree_init_screen(void *, struct vcons_screen *, int, long *);
+
+int	cgthree_putcmap(struct cgthree_softc *, struct wsdisplay_cmap *);
+int	cgthree_getcmap(struct cgthree_softc *, struct wsdisplay_cmap *);
+
+struct wsdisplay_accessops cgthree_accessops = {
+	cgthree_ioctl,
+	cgthree_mmap,
+	NULL,	/* alloc_screen */
+	NULL,	/* free_screen */
+	NULL,	/* show_screen */
+	NULL, 	/* load_font */
+	NULL,	/* pollc */
+	NULL	/* scroll */
+};
+
+const struct wsscreen_descr *_cgthree_scrlist[] = {
+	&cgthree_defaultscreen
+};
+
+struct wsscreen_list cgthree_screenlist = {
+	sizeof(_cgthree_scrlist) / sizeof(struct wsscreen_descr *),
+	_cgthree_scrlist
+};
+
+
+extern const u_char rasops_cmap[768];
+
+static struct vcons_screen cg3_console_screen;
 
 void
-cgthreeattach(sc, name, isconsole)
-	struct cgthree_softc *sc;
-	const char *name;
-	int isconsole;
+cgthreeattach(struct cgthree_softc *sc, const char *name, int isconsole)
 {
 	int i;
 	struct fbdevice *fb = &sc->sc_fb;
+	struct wsemuldisplaydev_attach_args aa;
+	struct rasops_info *ri = &cg3_console_screen.scr_ri;
+	unsigned long defattr;
 	volatile struct fbcontrol *fbc = sc->sc_fbc;
 	volatile struct bt_regs *bt = &fbc->fbc_dac;
 
@@ -141,48 +194,75 @@ cgthreeattach(sc, name, isconsole)
 		}
 	}
 
-	/* Initialize the default color map. */
-	bt_initcmap(&sc->sc_cmap, 256);
-	cgthreeloadcmap(sc, 0, 256);
-
 	/* make sure we are not blanked */
 	cgthree_set_video(sc, 1);
 	BT_INIT(bt, 0);
 
 	if (isconsole) {
 		printf(" (console)\n");
-#ifdef RASTERCONSOLE
-		fbrcons_init(fb);
-#endif
 	} else
 		printf("\n");
 
 	fb_attach(fb, isconsole);
+
+	sc->sc_width = fb->fb_type.fb_width;
+	sc->sc_stride = fb->fb_type.fb_width;
+	sc->sc_height = fb->fb_type.fb_height;
+
+	/* setup rasops and so on for wsdisplay */
+	sc->sc_mode = WSDISPLAYIO_MODE_EMUL;
+
+	vcons_init(&sc->vd, sc, &cgthree_defaultscreen, &cgthree_accessops);
+	sc->vd.init_screen = cgthree_init_screen;
+
+	if(isconsole) {
+		/* we mess with cg3_console_screen only once */
+		vcons_init_screen(&sc->vd, &cg3_console_screen, 1,
+		    &defattr);
+		memset(sc->sc_fb.fb_pixels, (defattr >> 16) & 0xff,
+		    sc->sc_stride * sc->sc_height);
+		cg3_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
+
+		cgthree_defaultscreen.textops = &ri->ri_ops;
+		cgthree_defaultscreen.capabilities = ri->ri_caps;
+		cgthree_defaultscreen.nrows = ri->ri_rows;
+		cgthree_defaultscreen.ncols = ri->ri_cols;
+		sc->vd.active = &cg3_console_screen;
+		wsdisplay_cnattach(&cgthree_defaultscreen, ri, 0, 0, defattr);
+		vcons_replay_msgbuf(&cg3_console_screen);
+	} else {
+		/* 
+		 * we're not the console so we just clear the screen and don't 
+		 * set up any sort of text display
+		 */
+	}
+
+	/* Initialize the default color map. */
+	cg3_setup_palette(sc);
+
+	aa.scrdata = &cgthree_screenlist;
+	aa.console = isconsole;
+	aa.accessops = &cgthree_accessops;
+	aa.accesscookie = &sc->vd;
+	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
 }
 
 
 int
-cgthreeopen(dev, flags, mode, l)
-	dev_t dev;
-	int flags, mode;
-	struct lwp *l;
+cgthreeopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = minor(dev);
 
-	if (unit >= cgthree_cd.cd_ndevs || cgthree_cd.cd_devs[unit] == NULL)
+	if (device_lookup(&cgthree_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
 }
 
 int
-cgthreeioctl(dev, cmd, data, flags, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flags;
-	struct lwp *l;
+cgthreeioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
-	struct cgthree_softc *sc = cgthree_cd.cd_devs[minor(dev)];
+	struct cgthree_softc *sc = device_lookup_private(&cgthree_cd,
+							 minor(dev));
 	struct fbgattr *fba;
 	int error;
 
@@ -237,17 +317,15 @@ cgthreeioctl(dev, cmd, data, flags, l)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-cgthreeunblank(dev)
-	struct device *dev;
+cgthreeunblank(device_t self)
 {
+	struct cgthree_softc *sc = device_private(self);
 
-	cgthree_set_video((struct cgthree_softc *)dev, 1);
+	cgthree_set_video(sc, 1);
 }
 
 static void
-cgthree_set_video(sc, enable)
-	struct cgthree_softc *sc;
-	int enable;
+cgthree_set_video(struct cgthree_softc *sc, int enable)
 {
 
 	if (enable)
@@ -257,8 +335,7 @@ cgthree_set_video(sc, enable)
 }
 
 static int
-cgthree_get_video(sc)
-	struct cgthree_softc *sc;
+cgthree_get_video(struct cgthree_softc *sc)
 {
 
 	return ((sc->sc_fbc->fbc_ctrl & FBC_VENAB) != 0);
@@ -268,9 +345,7 @@ cgthree_get_video(sc)
  * Load a subset of the current (new) colormap into the Brooktree DAC.
  */
 static void
-cgthreeloadcmap(sc, start, ncolors)
-	struct cgthree_softc *sc;
-	int start, ncolors;
+cgthreeloadcmap(struct cgthree_softc *sc, int start, int ncolors)
 {
 	volatile struct bt_regs *bt;
 	u_int *ip;
@@ -299,12 +374,10 @@ cgthreeloadcmap(sc, start, ncolors)
  * mapped in flat mode without the cg4 emulation.
  */
 paddr_t
-cgthreemmap(dev, off, prot)
-	dev_t dev;
-	off_t off;
-	int prot;
+cgthreemmap(dev_t dev, off_t off, int prot)
 {
-	struct cgthree_softc *sc = cgthree_cd.cd_devs[minor(dev)];
+	struct cgthree_softc *sc = device_lookup_private(&cgthree_cd,
+							 minor(dev));
 
 #define START		(128*1024 + 128*1024)
 #define NOOVERLAY	(0x04000000)
@@ -326,4 +399,173 @@ cgthreemmap(dev, off, prot)
 	return (bus_space_mmap(sc->sc_bustag,
 		sc->sc_paddr, CG3REG_MEM + off,
 		prot, BUS_SPACE_MAP_LINEAR));
+}
+
+static void
+cg3_setup_palette(struct cgthree_softc *sc)
+{
+	int i, j;
+
+	j = 0;
+	for (i = 0; i < 256; i++) {
+		sc->sc_cmap.cm_map[i][0] = rasops_cmap[j];
+		j++;
+		sc->sc_cmap.cm_map[i][1] = rasops_cmap[j];
+		j++;
+		sc->sc_cmap.cm_map[i][2] = rasops_cmap[j];
+		j++;
+	}
+	cgthreeloadcmap(sc, 0, 256);
+}
+
+int
+cgthree_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
+	struct lwp *l)
+{
+	/* we'll probably need to add more stuff here */
+	struct vcons_data *vd = v;
+	struct cgthree_softc *sc = vd->cookie;
+	struct wsdisplay_fbinfo *wdf;
+	struct vcons_screen *ms = sc->vd.active;
+	struct rasops_info *ri = &ms->scr_ri;
+	switch (cmd) {
+		case WSDISPLAYIO_GTYPE:
+			*(u_int *)data = WSDISPLAY_TYPE_SUNTCX;
+			return 0;
+		case WSDISPLAYIO_GINFO:
+			wdf = (void *)data;
+			wdf->height = ri->ri_height;
+			wdf->width = ri->ri_width;
+			wdf->depth = 8;
+			wdf->cmsize = 256;
+			return 0;
+
+		case WSDISPLAYIO_GETCMAP:
+			return cgthree_getcmap(sc, 
+			    (struct wsdisplay_cmap *)data);
+		case WSDISPLAYIO_PUTCMAP:
+			return cgthree_putcmap(sc, 
+			    (struct wsdisplay_cmap *)data);
+
+		case WSDISPLAYIO_SMODE:
+			{
+				int new_mode = *(int*)data;
+				if (new_mode != sc->sc_mode)
+				{
+					sc->sc_mode = new_mode;
+					if(new_mode == WSDISPLAYIO_MODE_EMUL)
+					{
+						cg3_setup_palette(sc);
+						vcons_redraw_screen(ms);
+					}
+				}
+			}
+			return 0;
+		case WSDISPLAYIO_GET_FBINFO:
+			{
+				struct wsdisplayio_fbinfo *fbi = data;
+
+				return wsdisplayio_get_fbinfo(&ms->scr_ri, fbi);
+			}
+	}
+	return EPASSTHROUGH;
+}
+
+paddr_t
+cgthree_mmap(void *v, void *vs, off_t offset, int prot)
+{
+	struct vcons_data *vd = v;
+	struct cgthree_softc *sc = vd->cookie;
+
+	if (offset < 0) return -1;
+	if (offset >= sc->sc_fb.fb_type.fb_size)
+		return -1;
+
+	return bus_space_mmap(sc->sc_bustag,
+		sc->sc_paddr, CG3REG_MEM + offset,
+		prot, BUS_SPACE_MAP_LINEAR);
+}
+
+int
+cgthree_putcmap(struct cgthree_softc *sc, struct wsdisplay_cmap *cm)
+{
+	u_int index = cm->index;
+	u_int count = cm->count;
+	int error,i;
+	if (index >= 256 || count > 256 || index + count > 256)
+		return EINVAL;
+
+	for (i = 0; i < count; i++)
+	{
+		error = copyin(&cm->red[i],
+		    &sc->sc_cmap.cm_map[index + i][0], 1);
+		if (error)
+			return error;
+		error = copyin(&cm->green[i],
+		    &sc->sc_cmap.cm_map[index + i][1],
+		    1);
+		if (error)
+			return error;
+		error = copyin(&cm->blue[i],
+		    &sc->sc_cmap.cm_map[index + i][2], 1);
+		if (error)
+			return error;
+	}
+	cgthreeloadcmap(sc, index, count);
+
+	return 0;
+}
+
+int
+cgthree_getcmap(struct cgthree_softc *sc, struct wsdisplay_cmap *cm)
+{
+	u_int index = cm->index;
+	u_int count = cm->count;
+	int error,i;
+
+	if (index >= 256 || count > 256 || index + count > 256)
+		return EINVAL;
+
+	for (i = 0; i < count; i++)
+	{
+		error = copyout(&sc->sc_cmap.cm_map[index + i][0],
+		    &cm->red[i], 1);
+		if (error)
+			return error;
+		error = copyout(&sc->sc_cmap.cm_map[index + i][1],
+		    &cm->green[i], 1);
+		if (error)
+			return error;
+		error = copyout(&sc->sc_cmap.cm_map[index + i][2],
+		    &cm->blue[i], 1);
+		if (error)
+			return error;
+	}
+
+	return 0;
+}
+
+void
+cgthree_init_screen(void *cookie, struct vcons_screen *scr,
+    int existing, long *defattr)
+{
+	struct cgthree_softc *sc = cookie;
+	struct rasops_info *ri = &scr->scr_ri;
+
+	scr->scr_flags |= VCONS_DONT_READ;
+
+	ri->ri_depth = 8;
+	ri->ri_width = sc->sc_width;
+	ri->ri_height = sc->sc_height;
+	ri->ri_stride = sc->sc_stride;
+	ri->ri_flg = RI_CENTER;
+
+	ri->ri_bits = sc->sc_fb.fb_pixels;
+
+	rasops_init(ri, 0, 0);
+	ri->ri_caps = WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
+	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
+		    sc->sc_width / ri->ri_font->fontwidth);
+
+	ri->ri_hw = scr;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: amrvar.h,v 1.7 2007/07/09 21:00:52 ad Exp $	*/
+/*	$NetBSD: amrvar.h,v 1.10 2015/03/02 15:26:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,14 +46,14 @@ struct amr_logdrive {
 	u_int		al_size;
 	u_short		al_state;
 	u_short		al_properties;
-	struct device	*al_dv;
+	device_t	al_dv;
 };
 
 /*
  * Per-controller state.
  */
 struct amr_softc {
-	struct device		amr_dv;
+	device_t		amr_dv;
 	bus_space_tag_t		amr_iot;
 	bus_space_handle_t	amr_ioh;
 	bus_size_t		amr_ios;
@@ -88,6 +81,8 @@ struct amr_softc {
 
 	int	(*amr_get_work)(struct amr_softc *, struct amr_mailbox_resp *);
 	int	(*amr_submit)(struct amr_softc *sc, struct amr_ccb *);
+
+	kmutex_t		amr_mutex;
 
 	int			amr_numdrives;
 	struct amr_logdrive	amr_drive[AMR_MAX_UNITS];
@@ -127,8 +122,10 @@ struct amr_ccb {
 	bus_dmamap_t	ac_xfer_map;
 	void		(*ac_handler)(struct amr_ccb *);
 	void 		*ac_context;
-	struct device	*ac_dv;
+	device_t	ac_dv;
 	struct amr_mailbox_cmd	ac_cmd;
+	kmutex_t	ac_mutex;
+	kcondvar_t	ac_cv;
 };
 #define	AC_XFER_IN	0x01	/* Map describes inbound xfer */
 #define	AC_XFER_OUT	0x02	/* Map describes outbound xfer */

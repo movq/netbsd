@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.46 2008/02/20 22:33:18 drochner Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.52 2017/05/19 19:22:33 macallan Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -98,6 +98,9 @@ struct wsscreen_descr {
 #define WSSCREEN_HILIT		4	/* can highlight (however) */
 #define WSSCREEN_BLINK		8	/* can blink */
 #define WSSCREEN_UNDERLINE	16	/* can underline */
+#define WSSCREEN_RESIZE		32	/* can resize */
+#define WSSCREEN_FREE		64	/* free() this struct when deleting
+					 * internal only, do not set */
 	void *modecookie;
 };
 
@@ -149,13 +152,6 @@ struct wsemuldisplaydev_attach_args {
 	void	*accesscookie;				/* access cookie */
 };
 
-#include "locators.h"
-
-#define	wsemuldisplaydevcf_console	cf_loc[WSEMULDISPLAYDEVCF_CONSOLE]	/* spec'd as console? */
-#define	WSEMULDISPLAYDEVCF_CONSOLE_UNK	(WSEMULDISPLAYDEVCF_CONSOLE_DEFAULT)
-#define	wsemuldisplaydevcf_kbdmux	cf_loc[WSEMULDISPLAYDEVCF_KBDMUX]
-#define	wsdisplaydevcf_kbdmux		cf_loc[WSDISPLAYDEVCF_KBDMUX]
-
 struct wscons_syncops {
 	int (*detach)(void *, int, void (*)(void *, int, int), void *);
 	int (*attach)(void *, int, void (*)(void *, int, int), void *);
@@ -170,6 +166,7 @@ void	wsdisplay_cnattach(const struct wsscreen_descr *, void *, int, int,
             long);
 void	wsdisplay_preattach(const struct wsscreen_descr *, void *, int, int,
             long);
+void	wsdisplay_cndetach(void);
 
 int	wsdisplaydevprint(void *, const char *);
 int	wsemuldisplaydevprint(void *, const char *);
@@ -211,6 +208,13 @@ int wsdisplay_stat_ioctl(struct wsdisplay_softc *, u_long, void *,
 int wsdisplay_cfg_ioctl(struct wsdisplay_softc *, u_long, void *,
 			int, struct lwp *);
 
+struct wsdisplayio_edid_info;
+int wsdisplayio_get_edid(device_t, struct wsdisplayio_edid_info *);
+
+struct wsdisplayio_fbinfo;
+struct rasops_info;
+int wsdisplayio_get_fbinfo(struct rasops_info *, struct wsdisplayio_fbinfo *);
+
 #ifdef WSDISPLAY_SCROLLSUPPORT
 void wsdisplay_scroll(void *, int);
 #endif
@@ -220,7 +224,7 @@ void wsdisplay_scroll(void *, int);
 #define WSDISPLAY_SCROLL_RESET		(1 << 2)
 #define WSDISPLAY_SCROLL_LOW		(1 << 3)
 
-int wsdisplay_stat_inject(struct device *, u_int, int);
+int wsdisplay_stat_inject(device_t, u_int, int);
 
 /*
  * for general use

@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_euctw.c,v 1.10 2005/10/29 18:02:04 tshiozak Exp $	*/
+/*	$NetBSD: citrus_euctw.c,v 1.12 2013/05/28 16:57:56 joerg Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,
@@ -56,7 +56,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_euctw.c,v 1.10 2005/10/29 18:02:04 tshiozak Exp $");
+__RCSID("$NetBSD: citrus_euctw.c,v 1.12 2013/05/28 16:57:56 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -65,7 +65,6 @@ __RCSID("$NetBSD: citrus_euctw.c,v 1.10 2005/10/29 18:02:04 tshiozak Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 #include <limits.h>
@@ -99,8 +98,10 @@ typedef struct {
 		_EUCTWState	s_mbrtowc;
 		_EUCTWState	s_mbtowc;
 		_EUCTWState	s_mbsrtowcs;
+		_EUCTWState	s_mbsnrtowcs;
 		_EUCTWState	s_wcrtomb;
 		_EUCTWState	s_wcsrtombs;
+		_EUCTWState	s_wcsnrtombs;
 		_EUCTWState	s_wctomb;
 	} states;
 } _EUCTWCTypeInfo;

@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.24 2007/10/17 19:57:28 garbled Exp $	*/
+/*	$NetBSD: consinit.c,v 1.28 2015/03/02 14:17:06 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 1999 Eduardo E. Horvath
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.24 2007/10/17 19:57:28 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.28 2015/03/02 14:17:06 nakayama Exp $");
 
 #include "opt_ddb.h"
 #include "pcons.h"
@@ -80,13 +80,6 @@ struct consdev consdev_prom = {
 	.cn_putc = prom_cnputc,
 	.cn_pollc = prom_cnpollc,
 };
-
-/*
- * The console table pointer is statically initialized
- * to point to the PROM (output only) table, so that
- * early calls to printf will work.
- */
-struct consdev *cn_tab = &consdev_prom;
 
 void
 prom_cnprobe(struct consdev *cd)
@@ -174,29 +167,26 @@ int prom_stdout_node;
  * the PROM "input source" and "output sink".
  */
 void
-consinit()
+consinit(void)
 {
-	int chosen;
 	char buffer[128];
 	const char *consname = "unknown";
 
-	DBPRINT(("consinit()\r\n"));
+	DBPRINT(("consinit()\n"));
 
 	if (cn_tab != &consdev_prom)
 		return;
 
-	chosen = prom_finddevice("/chosen");
-
 	if ((prom_stdin_node = prom_instance_to_package(prom_stdin())) == 0) {
 		printf("WARNING: no PROM stdin\n");
 	}
-	DBPRINT(("stdin node = %x\r\n", prom_stdin_node));
+	DBPRINT(("stdin node = %x\n", prom_stdin_node));
 
 	if ((prom_stdout_node = prom_instance_to_package(prom_stdout())) == 0)
 		printf("WARNING: no PROM stdout\n");
-	DBPRINT(("stdout package = %x\r\n", prom_stdout_node));
+	DBPRINT(("stdout package = %x\n", prom_stdout_node));
 
-	DBPRINT(("buffer @ %p\r\n", buffer));
+	DBPRINT(("buffer @ %p\n", buffer));
 
 	if (prom_stdin_node != 0 &&
 	    (prom_getproplen(prom_stdin_node, "keyboard") >= 0)) {
@@ -217,6 +207,9 @@ consinit()
 		consname = buffer;
 	}
 	DBPRINT(("console is %s\n", consname));
+#ifndef DEBUG
+	(void)consname;
+#endif
 
 	/* Initialize PROM console */
 	(*cn_tab->cn_probe)(cn_tab);

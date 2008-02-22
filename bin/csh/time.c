@@ -1,4 +1,4 @@
-/* $NetBSD: time.c,v 1.16 2007/02/24 21:29:13 matt Exp $ */
+/* $NetBSD: time.c,v 1.21 2017/07/15 14:35:55 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)time.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: time.c,v 1.16 2007/02/24 21:29:13 matt Exp $");
+__RCSID("$NetBSD: time.c,v 1.21 2017/07/15 14:35:55 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -44,13 +44,13 @@ __RCSID("$NetBSD: time.c,v 1.16 2007/02/24 21:29:13 matt Exp $");
 #include "csh.h"
 #include "extern.h"
 #endif
+#include <util.h>
 
 /*
  * C Shell - routines handling process timing and niceing
  */
 static void pdeltat(FILE *, struct timeval *, struct timeval *);
 static void pcsecs(FILE *, long);
-extern char *strpct(u_long, u_long, u_int);
 
 #ifndef NOT_CSH
 void
@@ -58,7 +58,7 @@ settimes(void)
 {
     struct rusage ruch;
 
-    (void)gettimeofday(&time0, NULL);
+    (void)clock_gettime(CLOCK_MONOTONIC, &time0);
     (void)getrusage(RUSAGE_SELF, &ru0);
     (void)getrusage(RUSAGE_CHILDREN, &ruch);
     ruadd(&ru0, &ruch);
@@ -73,12 +73,12 @@ void
 dotime(Char **v, struct command *t)
 {
     struct rusage ru1, ruch;
-    struct timeval timedol;
+    struct timespec timedol;
 
     (void)getrusage(RUSAGE_SELF, &ru1);
     (void)getrusage(RUSAGE_CHILDREN, &ruch);
     ruadd(&ru1, &ruch);
-    (void)gettimeofday(&timedol, NULL);
+    (void)clock_gettime(CLOCK_MONOTONIC, &timedol);
     prusage(cshout, &ru0, &ru1, &timedol, &time0);
 }
 
@@ -124,32 +124,37 @@ ruadd(struct rusage *ru, struct rusage *ru2)
     ru->ru_nvcsw += ru2->ru_nvcsw;
     ru->ru_nivcsw += ru2->ru_nivcsw;
 }
-#endif /* NOT_CSH */
 
 void
-prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timeval *e,
-        struct timeval *b)
+prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timespec *e,
+        struct timespec *b)
 {
-#ifndef NOT_CSH
     struct varent *vp;
-#endif
     const char *cp;
-    long i;
-    time_t t;
-    int ms;
 
-    cp = "%Uu %Ss %E %P %X+%Dk %I+%Oio %Fpf+%Ww";
-    ms = (e->tv_sec - b->tv_sec) * 100 + (e->tv_usec - b->tv_usec) / 10000;
-    t = (r1->ru_utime.tv_sec - r0->ru_utime.tv_sec) * 100 +
-        (r1->ru_utime.tv_usec - r0->ru_utime.tv_usec) / 10000 +
-        (r1->ru_stime.tv_sec - r0->ru_stime.tv_sec) * 100 +
-        (r1->ru_stime.tv_usec - r0->ru_stime.tv_usec) / 10000;
-#ifndef NOT_CSH
     vp = adrof(STRtime);
 
     if (vp && vp->vec[0] && vp->vec[1])
 	cp = short2str(vp->vec[1]);
+    else
+	cp = "%Uu %Ss %E %P %X+%Dk %I+%Oio %Fpf+%Ww";
+    prusage1(fp, cp, r0, r1, e, b);
+}
 #endif
+
+void
+prusage1(FILE *fp, const char *cp, struct rusage *r0, struct rusage *r1,
+    struct timespec *e, struct timespec *b)
+{
+    long i;
+    time_t t;
+    time_t ms;
+
+    ms = (e->tv_sec - b->tv_sec) * 100 + (e->tv_nsec - b->tv_nsec) / 10000000;
+    t = (r1->ru_utime.tv_sec - r0->ru_utime.tv_sec) * 100 +
+        (r1->ru_utime.tv_usec - r0->ru_utime.tv_usec) / 10000 +
+        (r1->ru_stime.tv_sec - r0->ru_stime.tv_sec) * 100 +
+        (r1->ru_stime.tv_usec - r0->ru_stime.tv_usec) / 10000;
 
     for (; *cp; cp++)
 	if (*cp != '%')
@@ -158,8 +163,8 @@ prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timeval *e,
 	    switch (*++cp) {
 	    case 'D':		/* (average) unshared data size */
 		(void)fprintf(fp, "%ld", t == 0 ? 0L :
-			(r1->ru_idrss + r1->ru_isrss -
-			 (r0->ru_idrss + r0->ru_isrss)) / t);
+			(long)((r1->ru_idrss + r1->ru_isrss -
+			 (r0->ru_idrss + r0->ru_isrss)) / t));
 		break;
 	    case 'E':		/* elapsed (wall-clock) time */
 		pcsecs(fp, (long) ms);
@@ -172,8 +177,8 @@ prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timeval *e,
 		break;
 	    case 'K':		/* (average) total data memory used  */
 		(void)fprintf(fp, "%ld", t == 0 ? 0L :
-			((r1->ru_ixrss + r1->ru_isrss + r1->ru_idrss) -
-			 (r0->ru_ixrss + r0->ru_idrss + r0->ru_isrss)) / t);
+			(long)(((r1->ru_ixrss + r1->ru_isrss + r1->ru_idrss) -
+			 (r0->ru_ixrss + r0->ru_idrss + r0->ru_isrss)) / t));
 		break;
 	    case 'M':		/* max. Resident Set Size */
 		(void)fprintf(fp, "%ld", r1->ru_maxrss / 2L);
@@ -186,7 +191,10 @@ prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timeval *e,
 		if (ms == 0) {
 			(void)fputs("0.0%", fp);
 		} else {
-			(void)fputs(strpct((ulong)t, (ulong)ms, 1), fp);
+			char pb[32];
+			(void)fputs(strpct(pb, sizeof(pb),
+			    (uintmax_t)t, (uintmax_t)ms, 1), fp);
+			(void)fputc('%', fp);
 		}
 		break;
 	    case 'R':		/* page reclaims */
@@ -204,7 +212,7 @@ prusage(FILE *fp, struct rusage *r0, struct rusage *r1, struct timeval *e,
 		break;
 	    case 'X':		/* (average) shared text size */
 		(void)fprintf(fp, "%ld", t == 0 ? 0L : 
-			       (r1->ru_ixrss - r0->ru_ixrss) / t);
+			       (long)((r1->ru_ixrss - r0->ru_ixrss) / t));
 		break;
 	    case 'c':		/* num. involuntary context switches */
 		(void)fprintf(fp, "%ld", r1->ru_nivcsw - r0->ru_nivcsw);
@@ -235,23 +243,23 @@ pdeltat(FILE *fp, struct timeval *t1, struct timeval *t0)
 	(long)(td.tv_usec / 100000));
 }
 
-#define  P2DIG(fp, i) (void)fprintf(fp, "%d%d", (i) / 10, (i) % 10)
+#define  P2DIG(fp, i) (void)fprintf(fp, "%ld%ld", (i) / 10, (i) % 10)
 
 #ifndef NOT_CSH
 void
 psecs(long l)
 {
-    int i;
+    long i;
 
     i = l / 3600;
     if (i) {
-	(void)fprintf(cshout, "%d:", i);
+	(void)fprintf(cshout, "%ld:", i);
 	i = l % 3600;
 	P2DIG(cshout, i / 60);
 	goto minsec;
     }
     i = l;
-    (void)fprintf(cshout, "%d", i / 60);
+    (void)fprintf(cshout, "%ld", i / 60);
 minsec:
     i %= 60;
     (void)fputc(':', cshout);
@@ -262,21 +270,21 @@ minsec:
 static void
 pcsecs(FILE *fp, long l)	/* PWP: print mm:ss.dd, l is in sec*100 */
 {
-    int i;
+    long i;
 
     i = l / 360000;
     if (i) {
-	(void)fprintf(fp, "%d:", i);
+	(void)fprintf(fp, "%ld:", i);
 	i = (l % 360000) / 100;
 	P2DIG(fp, i / 60);
 	goto minsec;
     }
     i = l / 100;
-    (void)fprintf(fp, "%d", i / 60);
+    (void)fprintf(fp, "%ld", i / 60);
 minsec:
     i %= 60;
     (void)fputc(':', fp);
     P2DIG(fp, i);
     (void)fputc('.', fp);
-    P2DIG(fp, (int) (l % 100));
+    P2DIG(fp, (l % 100));
 }

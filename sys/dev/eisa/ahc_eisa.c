@@ -1,4 +1,4 @@
-/*	$NetBSD: ahc_eisa.c,v 1.35 2008/02/18 06:17:27 dyoung Exp $	*/
+/*	$NetBSD: ahc_eisa.c,v 1.41 2016/07/11 11:31:50 msaitoh Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.35 2008/02/18 06:17:27 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.41 2016/07/11 11:31:50 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,21 +56,20 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_eisa.c,v 1.35 2008/02/18 06:17:27 dyoung Exp $")
 #include <dev/ic/aic77xxreg.h>
 #include <dev/ic/aic77xxvar.h>
 
-static int	ahc_eisa_match(struct device *, struct cfdata *, void *);
-static void	ahc_eisa_attach(struct device *, struct device *, void *);
+static int	ahc_eisa_match(device_t, cfdata_t, void *);
+static void	ahc_eisa_attach(device_t, device_t, void *);
 
 
-CFATTACH_DECL(ahc_eisa, sizeof(struct ahc_softc),
+CFATTACH_DECL_NEW(ahc_eisa, sizeof(struct ahc_softc),
     ahc_eisa_match, ahc_eisa_attach, NULL, NULL);
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note it's address (slot) and call
+ * If we find one, note its address (slot) and call
  * the actual probe routine to check it out.
  */
 static int
-ahc_eisa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ahc_eisa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct eisa_attach_args *ea = aux;
 	bus_space_tag_t iot = ea->ea_iot;
@@ -94,7 +93,7 @@ ahc_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
+ahc_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	struct ahc_softc *ahc = device_private(self);
 	struct eisa_attach_args *ea = aux;
@@ -111,14 +110,17 @@ ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
 #ifdef AHC_DEBUG
 	int i;
 #endif
+	char intrbuf[EISA_INTRSTR_LEN];
+
+	ahc->sc_dev = self;
 
 	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) +
 	    AHC_EISA_SLOT_OFFSET, AHC_EISA_IOSIZE, 0, &ioh)) {
-		printf("%s: could not map I/O addresses", ahc->sc_dev.dv_xname);
+		aprint_error_dev(ahc->sc_dev, "could not map I/O addresses");
 		return;
 	}
 	if ((irq = ahc_aic77xx_irq(iot, ioh)) < 0) {
-		printf("%s: ahc_aic77xx_irq failed!", ahc->sc_dev.dv_xname);
+		aprint_error_dev(ahc->sc_dev, "ahc_aic77xx_irq failed!");
 		goto free_io;
 	}
 
@@ -131,7 +133,7 @@ ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
 		goto free_io;
 	}
 
-	ahc_set_name(ahc, device_xname(&ahc->sc_dev));
+	ahc_set_name(ahc, device_xname(ahc->sc_dev));
 	ahc->parent_dmat = ea->ea_dmat;
 	ahc->chip = AHC_AIC7770|AHC_EISA;
 	ahc->features = AHC_AIC7770_FE;
@@ -150,8 +152,8 @@ ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
 		goto free_io;
 
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("%s: couldn't map interrupt (%d)\n",
-		    ahc->sc_dev.dv_xname, irq);
+		aprint_error_dev(ahc->sc_dev, "couldn't map interrupt (%d)\n",
+		    irq);
 		goto free_io;
 	}
 
@@ -164,19 +166,19 @@ ahc_eisa_attach(struct device *parent, struct device *self, void *aux)
 		intrtype = IST_LEVEL;
 		intrtypestr = "level sensitive";
 	}
-	intrstr = eisa_intr_string(ec, ih);
+	intrstr = eisa_intr_string(ec, ih, intrbuf, sizeof(intrbuf));
 	ahc->ih = eisa_intr_establish(ec, ih,
 	    intrtype, IPL_BIO, ahc_intr, ahc);
 	if (ahc->ih == NULL) {
-		printf("%s: couldn't establish %s interrupt",
-		    ahc->sc_dev.dv_xname, intrtypestr);
+		aprint_error_dev(ahc->sc_dev,
+		    "couldn't establish %s interrupt", intrtypestr);
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto free_io;
 	}
 	if (intrstr != NULL)
-		printf("%s: %s interrupting at %s\n", ahc->sc_dev.dv_xname,
+		aprint_normal_dev(ahc->sc_dev, "%s interrupting at %s\n",
 		       intrtypestr, intrstr);
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_sh3.c,v 1.12 2006/03/04 01:13:35 uwe Exp $	*/
+/*	$NetBSD: cache_sh3.c,v 1.16 2012/02/12 16:34:10 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_sh3.c,v 1.12 2006/03/04 01:13:35 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_sh3.c,v 1.16 2012/02/12 16:34:10 matt Exp $");
+
+#include "opt_cache.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +57,7 @@ static inline void cache_sh3_op_line_16_nway(int, vaddr_t, uint32_t);
 static inline void cache_sh3_op_8lines_16_nway(int, vaddr_t, uint32_t);
 
 void
-sh3_cache_config()
+sh3_cache_config(void)
 {
 	size_t cache_size;
 	uint32_t r;
@@ -82,6 +77,8 @@ sh3_cache_config()
 		cache_size = 8 * 1024;
 		break;
 	case CPU_PRODUCT_7709A:
+		/* FALLTHROUGH */
+	case CPU_PRODUCT_7706:
 		cache_size = 16 * 1024;
 		break;
 	}
@@ -188,7 +185,7 @@ cache_sh3_op_8lines_16_nway(int n, vaddr_t va, uint32_t bits)
 }
 
 void
-sh3_cache_wbinv_all()
+sh3_cache_wbinv_all(void)
 {
 	vaddr_t va;
 

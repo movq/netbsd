@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_bigkey.c,v 1.20 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: hash_bigkey.c,v 1.25 2015/11/18 18:22:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,13 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)hash_bigkey.c	8.3 (Berkeley) 5/31/94";
-#else
-__RCSID("$NetBSD: hash_bigkey.c,v 1.20 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: hash_bigkey.c,v 1.25 2015/11/18 18:22:42 christos Exp $");
 
 /*
  * PACKAGE: hash
@@ -91,29 +85,31 @@ static int collect_data(HTAB *, BUFHEAD *, int, int);
 int
 __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 {
-	u_int16_t *p;
-	int key_size, n, val_size;
-	u_int16_t space, move_bytes, off;
+	uint16_t *p, n;
+	size_t key_size, val_size;
+	uint16_t space, move_bytes, off;
 	char *cp, *key_data, *val_data;
 	size_t temp;
 
 	cp = bufp->page;		/* Character pointer of p. */
-	p = (u_int16_t *)(void *)cp;
+	p = (uint16_t *)(void *)cp;
 
 	key_data = (char *)key->data;
 	_DBFIT(key->size, int);
-	key_size = (int)key->size;
+	key_size = key->size;
 	val_data = (char *)val->data;
 	_DBFIT(val->size, int);
-	val_size = (int)val->size;
+	val_size = val->size;
 
 	/* First move the Key */
 	
 	temp = FREESPACE(p) - BIGOVERHEAD;
-	_DBFIT(temp, u_int16_t);
-	space = (u_int16_t)temp;
+	_DBFIT(temp, uint16_t);
+	space = (uint16_t)temp;
 	while (key_size) {
-		move_bytes = MIN(space, key_size);
+		size_t kspace = MIN(space, key_size);
+		_DBFIT(kspace, uint16_t);
+		move_bytes = (uint16_t)kspace;
 		off = OFFSET(p) - move_bytes;
 		memmove(cp + off, key_data, (size_t)move_bytes);
 		key_size -= move_bytes;
@@ -122,8 +118,8 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 		p[++n] = off;
 		p[0] = ++n;
 		temp = off - PAGE_META(n);
-		_DBFIT(temp, u_int16_t);
-		FREESPACE(p) = (u_int16_t)temp;
+		_DBFIT(temp, uint16_t);
+		FREESPACE(p) = (uint16_t)temp;
 		OFFSET(p) = off;
 		p[n] = PARTIAL_KEY;
 		bufp = __add_ovflpage(hashp, bufp);
@@ -133,7 +129,9 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 		if (!key_size) {
 			space = FREESPACE(p);
 			if (space) {
-				move_bytes = MIN(space, val_size);
+				size_t vspace = MIN(space, val_size);
+				_DBFIT(vspace, uint16_t);
+				move_bytes = (uint16_t)vspace;
 				/*
 				 * If the data would fit exactly in the
 				 * remaining space, we must overflow it to the
@@ -156,20 +154,22 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 				p[n - 2] = FULL_KEY;
 			}
 		}
-		p = (u_int16_t *)(void *)bufp->page;
+		p = (uint16_t *)(void *)bufp->page;
 		cp = bufp->page;
 		bufp->flags |= BUF_MOD;
 		temp = FREESPACE(p) - BIGOVERHEAD;
-		_DBFIT(temp, u_int16_t);
-		space = (u_int16_t)temp;
+		_DBFIT(temp, uint16_t);
+		space = (uint16_t)temp;
 	}
 
 	/* Now move the data */
 	temp = FREESPACE(p) - BIGOVERHEAD;
-	_DBFIT(temp, u_int16_t);
-	space = (u_int16_t)temp;
+	_DBFIT(temp, uint16_t);
+	space = (uint16_t)temp;
 	while (val_size) {
-		move_bytes = MIN(space, val_size);
+		size_t vspace = MIN(space, val_size);
+		_DBFIT(vspace, uint16_t);
+		move_bytes = (uint16_t)vspace;
 		/*
 		 * Here's the hack to make sure that if the data ends on the
 		 * same page as the key ends, FREESPACE is at least one.
@@ -184,8 +184,8 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 		p[++n] = off;
 		p[0] = ++n;
 		temp = off - PAGE_META(n);
-		_DBFIT(temp, u_int16_t);
-		FREESPACE(p) = (u_int16_t)temp;
+		_DBFIT(temp, uint16_t);
+		FREESPACE(p) = (uint16_t)temp;
 		OFFSET(p) = off;
 		if (val_size) {
 			p[n] = FULL_KEY;
@@ -193,13 +193,13 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 			if (!bufp)
 				return (-1);
 			cp = bufp->page;
-			p = (u_int16_t *)(void *)cp;
+			p = (uint16_t *)(void *)cp;
 		} else
 			p[n] = FULL_KEY_DATA;
 		bufp->flags |= BUF_MOD;
 		temp = FREESPACE(p) - BIGOVERHEAD;
-		_DBFIT(temp, u_int16_t);
-		space = (u_int16_t)temp;
+		_DBFIT(temp, uint16_t);
+		space = (uint16_t)temp;
 	}
 	return (0);
 }
@@ -219,13 +219,13 @@ int
 __big_delete(HTAB *hashp, BUFHEAD *bufp)
 {
 	BUFHEAD *last_bfp, *rbufp;
-	u_int16_t *bp, pageno;
+	uint16_t *bp, pageno;
 	int key_done, n;
 	size_t temp;
 
 	rbufp = bufp;
 	last_bfp = NULL;
-	bp = (u_int16_t *)(void *)bufp->page;
+	bp = (uint16_t *)(void *)bufp->page;
 	pageno = 0;
 	key_done = 0;
 
@@ -242,13 +242,13 @@ __big_delete(HTAB *hashp, BUFHEAD *bufp)
 			break;
 		pageno = bp[bp[0] - 1];
 		rbufp->flags |= BUF_MOD;
-		rbufp = __get_buf(hashp, (u_int32_t)pageno, rbufp, 0);
+		rbufp = __get_buf(hashp, (uint32_t)pageno, rbufp, 0);
 		if (last_bfp)
 			__free_ovflpage(hashp, last_bfp);
 		last_bfp = rbufp;
 		if (!rbufp)
 			return (-1);		/* Error. */
-		bp = (u_int16_t *)(void *)rbufp->page;
+		bp = (uint16_t *)(void *)rbufp->page;
 	}
 
 	/*
@@ -263,7 +263,7 @@ __big_delete(HTAB *hashp, BUFHEAD *bufp)
 	pageno = bp[n - 1];
 
 	/* Now, bp is the first page of the pair. */
-	bp = (u_int16_t *)(void *)bufp->page;
+	bp = (uint16_t *)(void *)bufp->page;
 	if (n > 2) {
 		/* There is an overflow page. */
 		bp[1] = pageno;
@@ -274,10 +274,10 @@ __big_delete(HTAB *hashp, BUFHEAD *bufp)
 		bufp->ovfl = NULL;
 	n -= 2;
 	bp[0] = n;
-	temp = hashp->BSIZE - PAGE_META(n);
-	_DBFIT(temp, u_int16_t);
-	FREESPACE(bp) = (u_int16_t)temp;
-	OFFSET(bp) = hashp->BSIZE;
+	temp = HASH_BSIZE(hashp) - PAGE_META(n);
+	_DBFIT(temp, uint16_t);
+	FREESPACE(bp) = (uint16_t)temp;
+	OFFSET(bp) = HASH_BSIZE(hashp);
 
 	bufp->flags |= BUF_MOD;
 	if (rbufp)
@@ -298,29 +298,29 @@ __big_delete(HTAB *hashp, BUFHEAD *bufp)
 int
 __find_bigpair(HTAB *hashp, BUFHEAD *bufp, int ndx, char *key, int size)
 {
-	u_int16_t *bp;
+	uint16_t *bp;
 	char *p;
 	int ksize;
-	u_int16_t bytes;
+	uint16_t bytes;
 	char *kkey;
 
-	bp = (u_int16_t *)(void *)bufp->page;
+	bp = (uint16_t *)(void *)bufp->page;
 	p = bufp->page;
 	ksize = size;
 	kkey = key;
 
-	for (bytes = hashp->BSIZE - bp[ndx];
+	for (bytes = HASH_BSIZE(hashp) - bp[ndx];
 	    bytes <= size && bp[ndx + 1] == PARTIAL_KEY;
-	    bytes = hashp->BSIZE - bp[ndx]) {
+	    bytes = HASH_BSIZE(hashp) - bp[ndx]) {
 		if (memcmp(p + bp[ndx], kkey, (size_t)bytes))
 			return (-2);
 		kkey += bytes;
 		ksize -= bytes;
-		bufp = __get_buf(hashp, (u_int32_t)bp[ndx + 2], bufp, 0);
+		bufp = __get_buf(hashp, (uint32_t)bp[ndx + 2], bufp, 0);
 		if (!bufp)
 			return (-3);
 		p = bufp->page;
-		bp = (u_int16_t *)(void *)p;
+		bp = (uint16_t *)(void *)p;
 		ndx = 1;
 	}
 
@@ -342,15 +342,15 @@ __find_bigpair(HTAB *hashp, BUFHEAD *bufp, int ndx, char *key, int size)
  * of the pair; 0 if there isn't any (i.e. big pair is the last key in the
  * bucket)
  */
-u_int16_t
+uint16_t
 __find_last_page(HTAB *hashp, BUFHEAD **bpp)
 {
 	BUFHEAD *bufp;
-	u_int16_t *bp, pageno;
+	uint16_t *bp, pageno;
 	int n;
 
 	bufp = *bpp;
-	bp = (u_int16_t *)(void *)bufp->page;
+	bp = (uint16_t *)(void *)bufp->page;
 	for (;;) {
 		n = bp[0];
 
@@ -364,10 +364,10 @@ __find_last_page(HTAB *hashp, BUFHEAD **bpp)
 			break;
 
 		pageno = bp[n - 1];
-		bufp = __get_buf(hashp, (u_int32_t)pageno, bufp, 0);
+		bufp = __get_buf(hashp, (uint32_t)pageno, bufp, 0);
 		if (!bufp)
 			return (0);	/* Need to indicate an error! */
-		bp = (u_int16_t *)(void *)bufp->page;
+		bp = (uint16_t *)(void *)bufp->page;
 	}
 
 	*bpp = bufp;
@@ -385,23 +385,23 @@ int
 __big_return(HTAB *hashp, BUFHEAD *bufp, int ndx, DBT *val, int set_current)
 {
 	BUFHEAD *save_p;
-	u_int16_t *bp, len, off, save_addr;
+	uint16_t *bp, len, off, save_addr;
 	char *tp;
 
-	bp = (u_int16_t *)(void *)bufp->page;
+	bp = (uint16_t *)(void *)bufp->page;
 	while (bp[ndx + 1] == PARTIAL_KEY) {
-		bufp = __get_buf(hashp, (u_int32_t)bp[bp[0] - 1], bufp, 0);
+		bufp = __get_buf(hashp, (uint32_t)bp[bp[0] - 1], bufp, 0);
 		if (!bufp)
 			return (-1);
-		bp = (u_int16_t *)(void *)bufp->page;
+		bp = (uint16_t *)(void *)bufp->page;
 		ndx = 1;
 	}
 
 	if (bp[ndx + 1] == FULL_KEY) {
-		bufp = __get_buf(hashp, (u_int32_t)bp[bp[0] - 1], bufp, 0);
+		bufp = __get_buf(hashp, (uint32_t)bp[bp[0] - 1], bufp, 0);
 		if (!bufp)
 			return (-1);
-		bp = (u_int16_t *)(void *)bufp->page;
+		bp = (uint16_t *)(void *)bufp->page;
 		save_p = bufp;
 		save_addr = save_p->addr;
 		off = bp[1];
@@ -419,16 +419,16 @@ __big_return(HTAB *hashp, BUFHEAD *bufp, int ndx, DBT *val, int set_current)
 			len = bp[1] - off;
 			save_p = bufp;
 			save_addr = bufp->addr;
-			bufp = __get_buf(hashp, (u_int32_t)bp[bp[0] - 1], bufp,
+			bufp = __get_buf(hashp, (uint32_t)bp[bp[0] - 1], bufp,
 			    0);
 			if (!bufp)
 				return (-1);
-			bp = (u_int16_t *)(void *)bufp->page;
+			bp = (uint16_t *)(void *)bufp->page;
 		} else {
 			/* The data is all on one page. */
 			tp = (char *)(void *)bp;
 			off = bp[bp[0]];
-			val->data = (u_char *)tp + off;
+			val->data = (uint8_t *)tp + off;
 			val->size = bp[1] - off;
 			if (set_current) {
 				if (bp[0] == 2) {	/* No more buckets in
@@ -438,11 +438,11 @@ __big_return(HTAB *hashp, BUFHEAD *bufp, int ndx, DBT *val, int set_current)
 					hashp->cndx = 1;
 				} else {
 					hashp->cpage = __get_buf(hashp,
-					    (u_int32_t)bp[bp[0] - 1], bufp, 0);
+					    (uint32_t)bp[bp[0] - 1], bufp, 0);
 					if (!hashp->cpage)
 						return (-1);
 					hashp->cndx = 1;
-					if (!((u_int16_t *)(void *)
+					if (!((uint16_t *)(void *)
 					    hashp->cpage->page)[0]) {
 						hashp->cbucket++;
 						hashp->cpage = NULL;
@@ -461,7 +461,7 @@ __big_return(HTAB *hashp, BUFHEAD *bufp, int ndx, DBT *val, int set_current)
 		return (-1);
 	}
 	memmove(hashp->tmp_buf, (save_p->page) + off, (size_t)len);
-	val->data = (u_char *)hashp->tmp_buf;
+	val->data = (uint8_t *)hashp->tmp_buf;
 	return (0);
 }
 /*
@@ -471,15 +471,15 @@ __big_return(HTAB *hashp, BUFHEAD *bufp, int ndx, DBT *val, int set_current)
 static int
 collect_data(HTAB *hashp, BUFHEAD *bufp, int len, int set)
 {
-	u_int16_t *bp;
+	uint16_t *bp;
 	char *p;
 	BUFHEAD *xbp;
-	u_int16_t save_addr;
+	uint16_t save_addr;
 	int mylen, totlen;
 
 	p = bufp->page;
-	bp = (u_int16_t *)(void *)p;
-	mylen = hashp->BSIZE - bp[1];
+	bp = (uint16_t *)(void *)p;
+	mylen = HASH_BSIZE(hashp) - bp[1];
 	save_addr = bufp->addr;
 
 	if (bp[2] == FULL_KEY_DATA) {		/* End of Data */
@@ -495,18 +495,18 @@ collect_data(HTAB *hashp, BUFHEAD *bufp, int len, int set)
 				hashp->cbucket++;
 			} else {
 				hashp->cpage =
-				    __get_buf(hashp, (u_int32_t)bp[bp[0] - 1],
+				    __get_buf(hashp, (uint32_t)bp[bp[0] - 1],
 				    bufp, 0);
 				if (!hashp->cpage)
 					return (-1);
-				else if (!((u_int16_t *)(void *)hashp->cpage->page)[0]) {
+				else if (!((uint16_t *)(void *)hashp->cpage->page)[0]) {
 					hashp->cbucket++;
 					hashp->cpage = NULL;
 				}
 			}
 		}
 	} else {
-		xbp = __get_buf(hashp, (u_int32_t)bp[bp[0] - 1], bufp, 0);
+		xbp = __get_buf(hashp, (uint32_t)bp[bp[0] - 1], bufp, 0);
 		if (!xbp || ((totlen =
 		    collect_data(hashp, xbp, len + mylen, set)) < 1))
 			return (-1);
@@ -528,7 +528,7 @@ __big_keydata(HTAB *hashp, BUFHEAD *bufp, DBT *key, DBT *val, int set)
 	key->size = collect_key(hashp, bufp, 0, val, set);
 	if (key->size == (size_t)-1)
 		return (-1);
-	key->data = (u_char *)hashp->tmp_key;
+	key->data = (uint8_t *)hashp->tmp_key;
 	return (0);
 }
 
@@ -542,11 +542,11 @@ collect_key(HTAB *hashp, BUFHEAD *bufp, int len, DBT *val, int set)
 	BUFHEAD *xbp;
 	char *p;
 	int mylen, totlen;
-	u_int16_t *bp, save_addr;
+	uint16_t *bp, save_addr;
 
 	p = bufp->page;
-	bp = (u_int16_t *)(void *)p;
-	mylen = hashp->BSIZE - bp[1];
+	bp = (uint16_t *)(void *)p;
+	mylen = HASH_BSIZE(hashp) - bp[1];
 
 	save_addr = bufp->addr;
 	totlen = len + mylen;
@@ -558,7 +558,7 @@ collect_key(HTAB *hashp, BUFHEAD *bufp, int len, DBT *val, int set)
 		if (__big_return(hashp, bufp, 1, val, set))
 			return (-1);
 	} else {
-		xbp = __get_buf(hashp, (u_int32_t)bp[bp[0] - 1], bufp, 0);
+		xbp = __get_buf(hashp, (uint32_t)bp[bp[0] - 1], bufp, 0);
 		if (!xbp || ((totlen =
 		    collect_key(hashp, xbp, totlen, val, set)) < 1))
 			return (-1);
@@ -584,16 +584,16 @@ __big_split(
 			/* Pointer to first page containing the big key/data */
 	BUFHEAD *big_keyp,
 	int addr,	/* Address of big_keyp */
-	u_int32_t   obucket,/* Old Bucket */
+	uint32_t   obucket,/* Old Bucket */
 	SPLIT_RETURN *ret
 )
 {
 	BUFHEAD *tmpp;
-	u_int16_t *tp;
+	uint16_t *tp;
 	BUFHEAD *bp;
 	DBT key, val;
-	u_int32_t change;
-	u_int16_t free_space, n, off;
+	uint32_t change;
+	uint16_t free_space, n, off;
 	size_t temp;
 
 	bp = big_keyp;
@@ -605,7 +605,7 @@ __big_split(
 
 	if ((ret->next_addr = __find_last_page(hashp, &big_keyp)) != 0) {
 		if (!(ret->nextp =
-		    __get_buf(hashp, (u_int32_t)ret->next_addr, big_keyp, 0)))
+		    __get_buf(hashp, (uint32_t)ret->next_addr, big_keyp, 0)))
 			return (-1);
 	} else
 		ret->nextp = NULL;
@@ -624,18 +624,18 @@ __big_split(
 	    (tmpp->ovfl ? tmpp->ovfl->addr : 0), (bp ? bp->addr : 0));
 #endif
 	tmpp->ovfl = bp;	/* one of op/np point to big_keyp */
-	tp = (u_int16_t *)(void *)tmpp->page;
+	tp = (uint16_t *)(void *)tmpp->page;
 	_DIAGASSERT(FREESPACE(tp) >= OVFLSIZE);
 	n = tp[0];
 	off = OFFSET(tp);
 	free_space = FREESPACE(tp);
-	tp[++n] = (u_int16_t)addr;
+	tp[++n] = (uint16_t)addr;
 	tp[++n] = OVFLPAGE;
 	tp[0] = n;
 	OFFSET(tp) = off;
 	temp = free_space - OVFLSIZE;
-	_DBFIT(temp, u_int16_t);
-	FREESPACE(tp) = (u_int16_t)temp;
+	_DBFIT(temp, uint16_t);
+	FREESPACE(tp) = (uint16_t)temp;
 
 	/*
 	 * Finally, set the new and old return values. BIG_KEYP contains a
@@ -647,7 +647,7 @@ __big_split(
 	ret->newp = np;
 	ret->oldp = op;
 
-	tp = (u_int16_t *)(void *)big_keyp->page;
+	tp = (uint16_t *)(void *)big_keyp->page;
 	big_keyp->flags |= BUF_MOD;
 	if (tp[0] > 2) {
 		/*
@@ -662,8 +662,8 @@ __big_split(
 		off = OFFSET(tp);
 		tp[0] -= 2;
 		temp = free_space + OVFLSIZE;
-		_DBFIT(temp, u_int16_t);
-		FREESPACE(tp) = (u_int16_t)temp;
+		_DBFIT(temp, uint16_t);
+		FREESPACE(tp) = (uint16_t)temp;
 		OFFSET(tp) = off;
 		tmpp = __add_ovflpage(hashp, big_keyp);
 		if (!tmpp)

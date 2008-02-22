@@ -1,4 +1,4 @@
-/* $NetBSD: err.c,v 1.19 2006/03/17 00:02:30 dmcmahill Exp $ */
+/* $NetBSD: err.c,v 1.21 2013/07/16 17:47:43 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)err.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: err.c,v 1.19 2006/03/17 00:02:30 dmcmahill Exp $");
+__RCSID("$NetBSD: err.c,v 1.21 2013/07/16 17:47:43 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,7 +49,7 @@ __RCSID("$NetBSD: err.c,v 1.19 2006/03/17 00:02:30 dmcmahill Exp $");
 
 char *seterr = NULL;	/* Holds last error if there was one */
 
-#define ERR_FLAGS	0xf0000000
+#define ERR_FLAGS	((int)0xf0000000)
 #define ERR_NAME	0x10000000
 #define ERR_SILENT	0x20000000
 #define ERR_OLD		0x40000000
@@ -293,7 +293,7 @@ seterror(int id, ...)
 	va_list va;
 
 	va_start(va, id);
-	if (id < 0 || id >= (sizeof(errorlist) / sizeof(errorlist[0])) - 1)
+	if (id < 0 || id >= (int)(sizeof(errorlist) / sizeof(errorlist[0])) - 1)
 	    id = ERR_INVALID;
 	(void)vsnprintf(berr, sizeof(berr), errorlist[id], va);
 	va_end(va);
@@ -333,7 +333,7 @@ stderror(int id, ...)
     if ((flags & ERR_OLD) && seterr == NULL)
 	abort();
 
-    if (id < 0 || id > sizeof(errorlist) / sizeof(errorlist[0]))
+    if (id < 0 || id > (int)(sizeof(errorlist) / sizeof(errorlist[0])))
 	id = ERR_INVALID;
 
     (void)fflush(cshout);

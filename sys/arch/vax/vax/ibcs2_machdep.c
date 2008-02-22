@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.9 2008/02/03 08:37:06 matt Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.13 2010/12/14 23:44:49 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,17 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.9 2008/02/03 08:37:06 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.13 2010/12/14 23:44:49 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/signalvar.h>
 #include <sys/signal.h>
 
-#include <machine/cpu.h>
 #include <machine/psl.h>
 #include <machine/reg.h>
 #include <machine/vmparam.h>
@@ -57,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.9 2008/02/03 08:37:06 matt Exp $
 #include <compat/ibcs2/ibcs2_signal.h>
 
 void
-ibcs2_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+ibcs2_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	/* Don't need to anything special */
 	setregs(l, epp, stack);

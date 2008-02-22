@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_acer_reg.h,v 1.11 2007/12/25 18:33:41 perry Exp $	*/
+/*	$NetBSD: pciide_acer_reg.h,v 1.13 2017/07/21 21:01:13 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1999 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -42,6 +37,8 @@
  * bit 1 is 0 -> secondary has 80 pin cable
  */
 #define ACER_0x4A_80PIN(chan)	(0x1 << (chan))
+/* From FreeBSD, use device interrupt as byte count end */
+#define ACER_0x4A_BCEINT	0x20
 
 /* From FreeBSD, for UDMA mode > 2 */
 #define ACER_0x4B	0x4b

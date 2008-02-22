@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.40 2015/04/27 08:30:10 knakahara Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.40 2015/04/27 08:30:10 knakahara Exp $");
 
 #include "ioapic.h"
 
@@ -82,9 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/extent.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bus_private.h>
 
 #include <dev/isa/isareg.h>
@@ -99,35 +91,22 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $
 /*
  * EISA doesn't have any special needs; just use the generic versions
  * of these funcions.
+ *
+ * XXX really doesn't use bounce buffers? --dyoung
  */
 struct x86_bus_dma_tag eisa_bus_dma_tag = {
-	0,			/* _tag_needs_free */
-	0,			/* _bounce_thresh */
-	0,			/* _bounce_alloc_lo */
-	0,			/* _bounce_alloc_hi */
-	NULL,			/* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	NULL,			/* _dmamap_sync */
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= 0,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= 0,
+	._may_bounce		= NULL,
 };
 
 void
-eisa_attach_hook(struct device *parent, struct device *self,
+eisa_attach_hook(device_t parent, device_t self,
     struct eisabus_attach_args *eba)
 {
-	extern int eisa_has_been_seen; 
+	extern int eisa_has_been_seen;
 
 	/*
 	 * Notify others that might need to know that the EISA bus
@@ -178,26 +157,24 @@ eisa_intr_map(eisa_chipset_tag_t ec, u_int irq,
 }
 
 const char *
-eisa_intr_string(eisa_chipset_tag_t ec, eisa_intr_handle_t ih)
+eisa_intr_string(eisa_chipset_tag_t ec, eisa_intr_handle_t ih, char *buf,
+    size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
-	if (ih == 0 || (ih & 0xff) >= NUM_LEGACY_IRQS || ih == 2)
-		panic("eisa_intr_string: bogus handle 0x%x", ih);
+	if (ih == 0 || APIC_IRQ_LEGACY_IRQ(ih) >= NUM_LEGACY_IRQS || ih == 2)
+		panic("eisa_intr_string: bogus handle 0x%" PRIx64, ih);
 
 #if NIOAPIC > 0
 	if (ih & APIC_INT_VIA_APIC)
-		snprintf(irqstr, sizeof(irqstr), "apic %d int %d (irq %d)",
+		snprintf(buf, len, "apic %d int %d (irq %d)",
 		    APIC_IRQ_APIC(ih),
 		    APIC_IRQ_PIN(ih),
-		    ih&0xff);
+		    APIC_IRQ_LEGACY_IRQ(ih));
 	else
-		snprintf(irqstr, sizeof(irqstr), "irq %d", ih&0xff);
+		snprintf(buf, len, "irq %d",  APIC_IRQ_LEGACY_IRQ(ih));
 #else
-	snprintf(irqstr, sizeof(irqstr), "irq %d", ih);
+	snprintf(buf, len, "irq %d", APIC_IRQ_LEGACY_IRQ(ih));
 #endif
-	return (irqstr);
-	
+	return buf;
 }
 
 const struct evcnt *
@@ -220,12 +197,13 @@ eisa_intr_establish(eisa_chipset_tag_t ec, eisa_intr_handle_t ih,
 
 #if NIOAPIC > 0
 	if (ih & APIC_INT_VIA_APIC) {
-		pic = (struct pic *)ioapic_find(APIC_IRQ_APIC(ih));
-		if (pic == NULL) {
-			aprint_error("eisa_intr_establish: bad ioapic %d\n",
+		struct ioapic_softc * const ioapic = ioapic_find(APIC_IRQ_APIC(ih));
+		if (ioapic == NULL) {
+			aprint_normal("eisa_intr_establish: bad ioapic %d\n",
 			    APIC_IRQ_APIC(ih));
 			return NULL;
 		}
+		pic = &ioapic->sc_pic;
 		pin = APIC_IRQ_PIN(ih);
 		irq = APIC_IRQ_LEGACY_IRQ(ih);
 		if (irq < 0 || irq >= NUM_LEGACY_IRQS)
@@ -233,7 +211,7 @@ eisa_intr_establish(eisa_chipset_tag_t ec, eisa_intr_handle_t ih,
 	}
 #endif
 
-	return intr_establish(irq, pic, pin, type, level, func, arg);
+	return intr_establish(irq, pic, pin, type, level, func, arg, false);
 }
 
 void
@@ -241,27 +219,6 @@ eisa_intr_disestablish(eisa_chipset_tag_t ec, void *cookie)
 {
 
 	intr_disestablish(cookie);
-}
-
-int
-eisa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align,
-    bus_addr_t boundary, int cacheable,
-    bus_addr_t *addrp, bus_space_handle_t *bahp)
-{
-	extern struct extent *iomem_ex;
-
-	/*
-	 * Allocate physical address space after the ISA hole.
-	 */
-	return bus_space_alloc(t, IOM_END, iomem_ex->ex_end, size, align,
-	    boundary, cacheable, addrp, bahp);
-}
-
-void
-eisa_mem_free(bus_space_tag_t t, bus_space_handle_t bah, bus_size_t size)
-{
-
-	bus_space_free(t, bah, size);
 }
 
 int

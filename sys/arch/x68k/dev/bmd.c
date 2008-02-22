@@ -1,4 +1,4 @@
-/*	$NetBSD: bmd.c,v 1.12 2007/12/15 00:39:23 perry Exp $	*/
+/*	$NetBSD: bmd.c,v 1.25 2016/07/07 06:55:39 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2002 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bmd.c,v 1.12 2007/12/15 00:39:23 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bmd.c,v 1.25 2016/07/07 06:55:39 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: bmd.c,v 1.12 2007/12/15 00:39:23 perry Exp $");
 #endif
 
 struct bmd_softc {
-	struct device sc_dev;
 	struct disk sc_dkdev;
 	bus_space_tag_t    sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -90,13 +87,13 @@ struct bmd_softc {
 #define BMD_OPEN	(BMD_OPENBLK | BMD_OPENCHR)
 };
 
-static int  bmd_match(struct device *, struct cfdata *, void *);
-static void bmd_attach(struct device *, struct device *, void *);
+static int  bmd_match(device_t, cfdata_t, void *);
+static void bmd_attach(device_t, device_t, void *);
 static int  bmd_getdisklabel(struct bmd_softc *, dev_t);
 
 extern struct cfdriver bmd_cd;
 
-CFATTACH_DECL(bmd, sizeof(struct bmd_softc),
+CFATTACH_DECL_NEW(bmd, sizeof(struct bmd_softc),
 	bmd_match, bmd_attach, NULL, NULL);
 
 dev_type_open(bmdopen);
@@ -109,22 +106,43 @@ dev_type_dump(bmddump);
 dev_type_size(bmdsize);
 
 const struct bdevsw bmd_bdevsw = {
-	bmdopen, bmdclose, bmdstrategy, bmdioctl, bmddump, bmdsize, D_DISK
+	.d_open = bmdopen,
+	.d_close = bmdclose,
+	.d_strategy = bmdstrategy,
+	.d_ioctl = bmdioctl,
+	.d_dump = bmddump,
+	.d_psize = bmdsize,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
 const struct cdevsw bmd_cdevsw = {
-	bmdopen, bmdclose, bmdread, bmdwrite, bmdioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
+	.d_open = bmdopen,
+	.d_close = bmdclose,
+	.d_read = bmdread,
+	.d_write = bmdwrite,
+	.d_ioctl = bmdioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
-struct dkdriver bmddkdriver = { bmdstrategy };
+struct dkdriver bmddkdriver = {
+	.d_strategy = bmdstrategy
+};
 
 static int
-bmd_match(struct device *parent, struct cfdata *cf, void *aux)
+bmd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_bst;
 	bus_space_handle_t ioh;
+	int window;
+	int r;
 
 	if (ia->ia_addr == INTIOCF_ADDR_DEFAULT)
 		ia->ia_addr = BMD_ADDR1;
@@ -133,34 +151,43 @@ bmd_match(struct device *parent, struct cfdata *cf, void *aux)
 	if (ia->ia_addr != BMD_ADDR1 && ia->ia_addr != BMD_ADDR2)
 		return (0);
 
-	if (badaddr(INTIO_ADDR(ia->ia_addr)))
+	/* Check CTRL addr */
+ 	if (badaddr((void *)IIOV(ia->ia_addr)))
 		return (0);
 
 	ia->ia_size = 2;
 	if (bus_space_map(iot, ia->ia_addr, ia->ia_size, 0, &ioh))
 		return (0);
 
+	/* Check window addr */
+	r = bus_space_read_1(iot, ioh, BMD_CTRL);
 	bus_space_unmap(iot, ioh, ia->ia_size);
+
+	if ((r & BMD_CTRL_WINDOW))
+		window = 0xef0000;
+	else
+		window = 0xee0000;
+	if (badaddr((void *)IIOV(window)))
+		return (0);
 
 	return (1);
 }
 
 static void
-bmd_attach(struct device *parent, struct device *self, void *aux)
+bmd_attach(device_t parent, device_t self, void *aux)
 {
-	struct bmd_softc *sc = (struct bmd_softc *)self;
+	struct bmd_softc *sc = device_private(self);
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_bst;
 	bus_space_handle_t ioh;
 	u_int8_t r;
 
-	printf(": Nereid Bank Memory Disk\n");
-	printf("%s: ", sc->sc_dev.dv_xname);
+	aprint_normal(": Nereid Bank Memory Disk\n");
 
 	/* Map I/O space */
 	ia->ia_size = 2;
 	if (bus_space_map(iot, ia->ia_addr, ia->ia_size, 0, &ioh)) {
-		printf("can't map I/O space\n");
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
@@ -172,7 +199,7 @@ bmd_attach(struct device *parent, struct device *self, void *aux)
 
 	/* check enable-bit */
 	if ((r & BMD_CTRL_ENABLE) == 0) {
-		printf("disabled by DIP-SW 8\n");
+		aprint_error_dev(self, "disabled by DIP-SW 8\n");
 		return;
 	}
 
@@ -188,29 +215,26 @@ bmd_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map bank area */
 	if (bus_space_map(iot, sc->sc_window, BMD_PAGESIZE, 0, &sc->sc_bank)) {
-		printf("can't map bank area: 0x%x\n", sc->sc_window);
+		aprint_error_dev(self, "can't map bank area: 0x%x\n",
+			sc->sc_window);
 		return;
 	}
 
-	printf("%d MB, 0x%x(64KB) x %d pages\n",
+	aprint_normal_dev(self, "%d MB, 0x%x(64KB) x %d pages\n",
 		(sc->sc_maxpage / 16), sc->sc_window, sc->sc_maxpage);
 
-	disk_init(&sc->sc_dkdev, sc->sc_dev.dv_xname, &bmddkdriver);
+	disk_init(&sc->sc_dkdev, device_xname(self), &bmddkdriver);
 	disk_attach(&sc->sc_dkdev);
 }
 
 int
 bmdopen(dev_t dev, int oflags, int devtype, struct lwp *l)
 {
-	int unit = BMD_UNIT(dev);
 	struct bmd_softc *sc;
 
 	DPRINTF(("%s%d\n", __func__, unit));
 
-	if (unit >= bmd_cd.cd_ndevs)
-		return ENXIO;
-
-	sc = bmd_cd.cd_devs[unit];
+	sc = device_lookup_private(&bmd_cd, BMD_UNIT(dev));
 	if (sc == NULL)
 		return ENXIO;
 
@@ -231,10 +255,9 @@ bmdopen(dev_t dev, int oflags, int devtype, struct lwp *l)
 int
 bmdclose(dev_t dev, int fflag, int devtype, struct lwp *l)
 {
-	int unit = BMD_UNIT(dev);
-	struct bmd_softc *sc = bmd_cd.cd_devs[unit];
+	struct bmd_softc *sc = device_lookup_private(&bmd_cd, BMD_UNIT(dev));
 
-	DPRINTF(("%s%d\n", __func__, unit));
+	DPRINTF(("%s%d\n", __func__, BMD_UNIT(dev)));
 
 	switch (devtype) {
 	case S_IFCHR:
@@ -262,7 +285,7 @@ bmdstrategy(struct buf *bp)
 		goto done;
 	}
 
-	sc = bmd_cd.cd_devs[unit];
+	sc = device_lookup_private(&bmd_cd, BMD_UNIT(bp->b_dev));
 	if (sc == NULL) {
 		bp->b_error = ENXIO;
 		goto done;
@@ -322,25 +345,22 @@ bmdstrategy(struct buf *bp)
 int
 bmdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	int unit = BMD_UNIT(dev);
 	struct bmd_softc *sc;
 	struct disklabel dl;
 	int error;
 
-	DPRINTF(("%s%d %ld\n", __func__, unit, cmd));
+	DPRINTF(("%s%d %ld\n", __func__, BMD_UNIT(dev), cmd));
 
-	if (unit >= bmd_cd.cd_ndevs)
-		return ENXIO;
+	sc = device_lookup_private(&bmd_cd, BMD_UNIT(dev));
 
-	sc = bmd_cd.cd_devs[unit];
 	if (sc == NULL)
 		return ENXIO;
 
-	switch (cmd) {
-	case DIOCGDINFO:
-		*(struct disklabel *)data = *(sc->sc_dkdev.dk_label);
-		break;
+	error = disk_ioctl(&sc->sc_dkdev, dev, cmd, data, flag, l);
+	if (error != EPASSTHROUGH)
+		return error;
 
+	switch (cmd) {
 	case DIOCWDINFO:
 		if ((flag & FWRITE) == 0)
 			return EBADF;
@@ -368,15 +388,11 @@ bmddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 int
 bmdsize(dev_t dev)
 {
-	int unit = BMD_UNIT(dev);
 	struct bmd_softc *sc;
 
-	DPRINTF(("%s%d ", __func__, unit));
+	DPRINTF(("%s%d ", __func__, BMD_UNIT(dev)));
 
-	if (unit >= bmd_cd.cd_ndevs)
-		return 0;
-
-	sc = bmd_cd.cd_devs[unit];
+	sc = device_lookup_private(&bmd_cd, BMD_UNIT(dev));
 	if (sc == NULL)
 		return 0;
 
@@ -412,7 +428,7 @@ bmd_getdisklabel(struct bmd_softc *sc, dev_t dev)
 	lp->d_secpercyl   = lp->d_nsectors * lp->d_ntracks;
 	lp->d_secperunit  = lp->d_secpercyl * lp->d_ncylinders;
 
-	lp->d_type        = DTYPE_LD;
+	lp->d_type        = DKTYPE_LD;
 	lp->d_rpm         = 300;	/* dummy */
 	lp->d_interleave  = 1;	/* dummy? */
 

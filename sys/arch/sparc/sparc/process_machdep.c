@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.14 2007/03/04 06:00:46 christos Exp $ */
+/*	$NetBSD: process_machdep.c,v 1.19 2016/12/30 17:54:43 christos Exp $ */
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -95,14 +95,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.14 2007/03/04 06:00:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.19 2016/12/30 17:54:43 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <machine/psl.h>
 #include <machine/reg.h>
@@ -110,67 +109,71 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.14 2007/03/04 06:00:46 christo
 #include <sys/ptrace.h>
 
 int
-process_read_regs(struct lwp *p, struct reg *regs)
+process_read_regs(struct lwp *l, struct reg *regs)
 {
 
 	/* NOTE: struct reg == struct trapframe */
-	bcopy(p->l_md.md_tf, (void *)regs, sizeof(struct reg));
-	return (0);
+	memcpy(regs, l->l_md.md_tf, sizeof(*regs));
+	return 0;
 }
 
 int
-process_write_regs(struct lwp *p, const struct reg *regs)
+process_write_regs(struct lwp *l, const struct reg *regs)
 {
-	int	psr = p->l_md.md_tf->tf_psr & ~PSR_ICC;
+	int	psr = l->l_md.md_tf->tf_psr & ~PSR_ICC;
 
-	bcopy(regs, p->l_md.md_tf, sizeof(struct reg));
-	p->l_md.md_tf->tf_psr = psr | (regs->r_psr & PSR_ICC);
-	return (0);
+	memcpy(l->l_md.md_tf, regs, sizeof(*regs));
+	l->l_md.md_tf->tf_psr = psr | (regs->r_psr & PSR_ICC);
+	return 0;
 }
 
 int
-process_sstep(struct lwp *p, int sstep)
+process_sstep(struct lwp *l, int sstep)
 {
 
 	if (sstep)
-		return (EINVAL);
-	return (0);
+		return EINVAL;
+	return 0;
 }
 
 int
-process_set_pc(struct lwp *p, void *addr)
+process_set_pc(struct lwp *l, void *addr)
 {
 
-	p->l_md.md_tf->tf_pc = (u_int)addr;
-	p->l_md.md_tf->tf_npc = (u_int)addr + 4;
-	return (0);
+	l->l_md.md_tf->tf_pc = (u_int)addr;
+	l->l_md.md_tf->tf_npc = (u_int)addr + 4;
+	return 0;
+}
+
+extern struct fpstate	initfpstate;
+
+int
+process_read_fpregs(struct lwp *l, struct fpreg *regs, size_t *sz)
+{
+	struct fpstate *fs;
+
+	if ((fs = l->l_md.md_fpstate) == NULL)
+		fs = &initfpstate;
+
+	*regs = fs->fs_reg;
+	return 0;
 }
 
 int
-process_read_fpregs(struct lwp *p, struct fpreg *regs)
+process_write_fpregs(struct lwp *l, const struct fpreg *regs, size_t sz)
 {
-	extern struct fpstate	initfpstate;
-	struct fpstate		*statep = &initfpstate;
+	struct fpstate *fs;
 
-	/* NOTE: struct fpreg == prefix of struct fpstate */
-	if (p->l_md.md_fpstate)
-		statep = p->l_md.md_fpstate;
-	bcopy(statep, regs, sizeof(struct fpreg));
-	return (0);
-}
-
-int
-process_write_fpregs(struct lwp *p, const struct fpreg *regs)
-{
-
-	if (p->l_md.md_fpstate == NULL)
-		return (EINVAL);
+	if ((fs = l->l_md.md_fpstate) == NULL) {
+		fs = kmem_zalloc(sizeof(*fs), KM_SLEEP);
+		l->l_md.md_fpstate = fs;
+	} else {
+		/* Reset FP queue in this process `fpstate' */
+		fs->fs_qsize = 0;
+	}
 
 	/* Write new values to the FP registers */
-	bcopy(regs, p->l_md.md_fpstate, sizeof(struct fpreg));
+	fs->fs_reg = *regs;
 
-	/* Reset FP queue in this process `fpstate' */
-	p->l_md.md_fpstate->fs_qsize = 0;
-
-	return (0);
+	return 0;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: compat_ldexp_ieee754.c,v 1.1 2006/06/27 18:16:47 drochner Exp $ */
+/* $NetBSD: compat_ldexp_ieee754.c,v 1.7 2016/08/27 09:35:13 christos Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,13 +31,14 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_ldexp_ieee754.c,v 1.1 2006/06/27 18:16:47 drochner Exp $");
+__RCSID("$NetBSD: compat_ldexp_ieee754.c,v 1.7 2016/08/27 09:35:13 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
 #include <machine/ieee.h>
 #include <errno.h>
-#include <math.h>
+
+double ldexp(double, int);
 
 /*
  * Multiply the given value by 2^expon.
@@ -106,7 +100,17 @@ ldexp(double val, int expon)
 	 */
 	newexp = oldexp + expon;
 
-	if (newexp <= 0) {
+	if (newexp >= DBL_EXP_INFNAN ||
+	    (oldexp >= 0 && expon >= DBL_EXP_INFNAN)) {
+		/*
+		 * The result overflowed; return +/-Inf.
+		 */
+		u.dblu_dbl.dbl_exp = DBL_EXP_INFNAN;
+		u.dblu_dbl.dbl_frach = 0;
+		u.dblu_dbl.dbl_fracl = 0;
+		errno = ERANGE;
+		return (u.dblu_d);
+	} else if (newexp <= 0) {
 		/*
 		 * The output number is either denormal or underflows (see
 		 * comments in machine/ieee.h).
@@ -128,15 +132,6 @@ ldexp(double val, int expon)
 		mul.dblu_d = 0.0;
 		mul.dblu_dbl.dbl_exp = expon + DBL_EXP_BIAS;
 		u.dblu_d *= mul.dblu_d;
-		return (u.dblu_d);
-	} else if (newexp >= DBL_EXP_INFNAN) {
-		/*
-		 * The result overflowed; return +/-Inf.
-		 */
-		u.dblu_dbl.dbl_exp = DBL_EXP_INFNAN;
-		u.dblu_dbl.dbl_frach = 0;
-		u.dblu_dbl.dbl_fracl = 0;
-		errno = ERANGE;
 		return (u.dblu_d);
 	} else {
 		/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_bufq.c,v 1.13 2007/07/29 12:15:45 ad Exp $	*/
+/*	$NetBSD: subr_bufq.c,v 1.26 2018/01/23 22:08:55 pgoyette Exp $	*/
 /*	NetBSD: subr_disk.c,v 1.70 2005/08/20 12:00:01 yamt Exp $	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,19 +68,61 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_bufq.c,v 1.13 2007/07/29 12:15:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_bufq.c,v 1.26 2018/01/23 22:08:55 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/bufq_impl.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/sysctl.h>
-
-BUFQ_DEFINE(dummy, 0, NULL); /* so that bufq_strats won't be empty */
+#include <sys/module.h>
 
 #define	STRAT_MATCH(id, bs)	(strcmp((id), (bs)->bs_name) == 0)
+
+static void sysctl_kern_bufq_strategies_setup(struct sysctllog **);
+static SLIST_HEAD(, bufq_strat) bufq_strat_list =
+    SLIST_HEAD_INITIALIZER(bufq_strat_list);
+
+static kmutex_t bufq_mutex;
+
+static struct sysctllog *sysctllog;
+
+void
+bufq_init(void)
+{
+
+	mutex_init(&bufq_mutex, MUTEX_DEFAULT, IPL_NONE);
+	sysctl_kern_bufq_strategies_setup(&sysctllog);
+}
+
+int
+bufq_register(struct bufq_strat *bs)
+{
+
+	mutex_enter(&bufq_mutex);
+	SLIST_INSERT_HEAD(&bufq_strat_list, bs, bs_next);
+	bs->bs_refcnt = 0;
+	mutex_exit(&bufq_mutex);
+
+	return 0;
+}
+
+int
+bufq_unregister(struct bufq_strat *bs)
+{
+
+	mutex_enter(&bufq_mutex);
+	if (bs->bs_refcnt != 0) {
+		mutex_exit(&bufq_mutex);
+		return EBUSY;
+	}
+	SLIST_REMOVE(&bufq_strat_list, bs, bufq_strat, bs_next);
+	mutex_exit(&bufq_mutex);
+
+	return 0;
+}
 
 /*
  * Create a device buffer queue.
@@ -95,11 +130,12 @@ BUFQ_DEFINE(dummy, 0, NULL); /* so that bufq_strats won't be empty */
 int
 bufq_alloc(struct bufq_state **bufqp, const char *strategy, int flags)
 {
-	__link_set_decl(bufq_strats, const struct bufq_strat);
-	const struct bufq_strat *bsp;
-	const struct bufq_strat * const *it;
+	struct bufq_strat *bsp, *it;
 	struct bufq_state *bufq;
 	int error = 0;
+	u_int gen;
+	bool found_exact;
+	char module_name[MAXPATHLEN];
 
 	KASSERT((flags & BUFQ_EXACT) == 0 || strategy != BUFQ_STRAT_ANY);
 
@@ -123,25 +159,40 @@ bufq_alloc(struct bufq_state **bufqp, const char *strategy, int flags)
 	 * if a strategy specified by flags is found, use it.
 	 * otherwise, select one with the largest bs_prio.
 	 */
-	bsp = NULL;
-	__link_set_foreach(it, bufq_strats) {
-		if ((*it) == &bufq_strat_dummy)
-			continue;
-		if (strategy != BUFQ_STRAT_ANY &&
-		    STRAT_MATCH(strategy, (*it))) {
-			bsp = *it;
-			break;
+	mutex_enter(&bufq_mutex);
+	do {
+		gen = module_gen;
+		bsp = NULL;
+		found_exact = false;
+
+		SLIST_FOREACH(it, &bufq_strat_list, bs_next) {
+			if (strategy != BUFQ_STRAT_ANY &&
+			    STRAT_MATCH(strategy, (it))) {
+				bsp = it;
+				found_exact = true;
+				break;
+			}
+			if (bsp == NULL || (it)->bs_prio > bsp->bs_prio)
+				bsp = it;
 		}
-		if (bsp == NULL || (*it)->bs_prio > bsp->bs_prio)
-			bsp = *it;
-	}
+		if (strategy == BUFQ_STRAT_ANY || found_exact)
+			break;
+
+		/* Try to autoload the bufq strategy module */
+		strlcpy(module_name, "bufq_", sizeof(module_name));
+		strlcat(module_name, strategy, sizeof(module_name));
+		mutex_exit(&bufq_mutex);
+		(void) module_autoload(module_name, MODULE_CLASS_BUFQ);
+		mutex_enter(&bufq_mutex);
+	} while (gen != module_gen);
 
 	if (bsp == NULL) {
 		panic("bufq_alloc: no strategy");
 	}
-	if (strategy != BUFQ_STRAT_ANY && !STRAT_MATCH(strategy, bsp)) {
+	if (strategy != BUFQ_STRAT_ANY && !found_exact) {
 		if ((flags & BUFQ_EXACT)) {
 			error = ENOENT;
+			mutex_exit(&bufq_mutex);
 			goto out;
 		}
 #if defined(DEBUG)
@@ -154,7 +205,9 @@ bufq_alloc(struct bufq_state **bufqp, const char *strategy, int flags)
 	printf("bufq_alloc: using '%s'\n", bsp->bs_name);
 #endif
 
-	*bufqp = bufq = malloc(sizeof(*bufq), M_DEVBUF, M_WAITOK | M_ZERO);
+	bsp->bs_refcnt++;
+	mutex_exit(&bufq_mutex);
+	*bufqp = bufq = kmem_zalloc(sizeof(*bufq), KM_SLEEP);
 	bufq->bq_flags = flags;
 	bufq->bq_strat = bsp;
 	(*bsp->bs_initfn)(bufq);
@@ -184,6 +237,13 @@ bufq_peek(struct bufq_state *bufq)
 	return (*bufq->bq_get)(bufq, 0);
 }
 
+struct buf *
+bufq_cancel(struct bufq_state *bufq, struct buf *bp)
+{
+
+	return (*bufq->bq_cancel)(bufq, bp);
+}
+
 /*
  * Drain a device buffer queue.
  */
@@ -192,7 +252,7 @@ bufq_drain(struct bufq_state *bufq)
 {
 	struct buf *bp;
 
-	while ((bp = BUFQ_GET(bufq)) != NULL) {
+	while ((bp = bufq_get(bufq)) != NULL) {
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
@@ -206,11 +266,15 @@ void
 bufq_free(struct bufq_state *bufq)
 {
 
-	KASSERT(bufq->bq_private != NULL);
-	KASSERT(BUFQ_PEEK(bufq) == NULL);
+	KASSERT(bufq_peek(bufq) == NULL);
 
-	free(bufq->bq_private, M_DEVBUF);
-	free(bufq, M_DEVBUF);
+	bufq->bq_fini(bufq);
+
+	mutex_enter(&bufq_mutex);
+	bufq->bq_strat->bs_refcnt--;
+	mutex_exit(&bufq_mutex);
+	
+	kmem_free(bufq, sizeof(*bufq));
 }
 
 /*
@@ -231,8 +295,8 @@ bufq_move(struct bufq_state *dst, struct bufq_state *src)
 {
 	struct buf *bp;
 
-	while ((bp = BUFQ_GET(src)) != NULL) {
-		BUFQ_PUT(dst, bp);
+	while ((bp = bufq_get(src)) != NULL) {
+		bufq_put(dst, bp);
 	}
 }
 
@@ -276,31 +340,35 @@ docopynul(char *buf, size_t *bufoffp, size_t buflen)
 
 /*
  * sysctl function that will print all bufq strategies
- * built in the kernel.
+ * currently available to the kernel.
  */
 static int
 sysctl_kern_bufq_strategies(SYSCTLFN_ARGS)
 {
-	__link_set_decl(bufq_strats, const struct bufq_strat);
-	const struct bufq_strat * const *bq_strat;
+	const struct bufq_strat *bq_strat;
 	const char *delim = "";
 	size_t off = 0;
 	size_t buflen = *oldlenp;
 	int error;
 
-	__link_set_foreach(bq_strat, bufq_strats) {
-		if ((*bq_strat) == &bufq_strat_dummy) {
-			continue;
-		}
+	SLIST_FOREACH(bq_strat, &bufq_strat_list, bs_next) {
 		error = docopystr(oldp, &off, buflen, delim);
 		if (error) {
 			goto out;
 		}
-		error = docopystr(oldp, &off, buflen, (*bq_strat)->bs_name);
+		error = docopystr(oldp, &off, buflen, (bq_strat)->bs_name);
 		if (error) {
 			goto out;
 		}
 		delim = " ";
+	}
+
+	/* In case there are no registered strategies ... */
+	if (off == 0) {
+		error = docopystr(oldp, &off, buflen, "NULL");
+		if (error) {
+			goto out;
+		}
 	}
 
 	/* NUL terminate */
@@ -310,15 +378,11 @@ out:
 	return error;
 }
 
-SYSCTL_SETUP(sysctl_kern_bufq_strategies_setup, "sysctl kern.bufq tree setup")
+static void
+sysctl_kern_bufq_strategies_setup(struct sysctllog **clog)
 {
 	const struct sysctlnode *node;
 
-	sysctl_createv(clog, 0, NULL, NULL,
-			CTLFLAG_PERMANENT,
-			CTLTYPE_NODE, "kern", NULL,
-			NULL, 0, NULL, 0,
-			CTL_KERN, CTL_EOL);
 	node = NULL;
 	sysctl_createv(clog, 0, NULL, &node,
 			CTLFLAG_PERMANENT,

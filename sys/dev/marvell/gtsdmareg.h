@@ -1,4 +1,4 @@
-/*	$NetBSD: gtsdmareg.h,v 1.4 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: gtsdmareg.h,v 1.6 2016/01/15 12:09:15 joerg Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -46,35 +46,22 @@
 #ifndef _GTSDMAREG_H
 #define _GTSDMAREG_H
 
-#ifndef BIT
-#define BIT(bitno)          (1U << (bitno))
-#endif
-#ifndef BITS
-#define BITS(hi, lo)        ((~((~0) << ((hi) + 1))) & ((~0) << (lo)))
-#endif
+#define GTSDMA_BASE(u)	((u) == 0 ? 0x4000 : 0x6000)
+#define GTSDMA_SIZE	0x1000
 
 /*******************************************************************************
  *
  * SDMA register address offsets relative to the base mapping
  */
-#define SDMA_SDC0	0x4000		/* SDMA #0 Configuration Register */
-#define SDMA_SDCM0	0x4008		/* SDMA #0 Command Register */
-#define SDMA_SCRDP0	0x4810		/* SDMA #0 Current RX Desc. Pointer */
-#define SDMA_SCTDP0	0x4c10		/* SDMA #0 Current TX Desc. Pointer */
-#define SDMA_SFTDP0	0x4c14		/* SDMA #0 First   TX Desc. Pointer */
-#define SDMA_SDC1	0x6000		/* SDMA #1 Configuration Register */
-#define SDMA_SDCM1	0x6008		/* SDMA #1 Command Register */
-#define SDMA_SCRDP1	0x6810		/* SDMA #1 Current RX Desc. Pointer */
-#define SDMA_SCTDP1	0x6c10		/* SDMA #1 Current TX Desc. Pointer */
-#define SDMA_SFTDP1	0x6c14		/* SDMA #1 First   TX Desc. Pointer */
+#define SDMA_SDC	0x000		/* SDMA Configuration Register */
+#define SDMA_SDCM	0x008		/* SDMA Command Register */
+#define SDMA_SCRDP	0x810		/* SDMA Current RX Desc. Pointer */
+#define SDMA_SCTDP	0xc10		/* SDMA Current TX Desc. Pointer */
+#define SDMA_SFTDP	0xc14		/* SDMA First   TX Desc. Pointer */
+
 #define SDMA_ICAUSE	0xb800		/* Interrupt Cause Register */
 #define SDMA_IMASK	0xb880		/* Interrupt Mask Register */
 
-#define SDMA_U_SDC(u)	(SDMA_SDC0 + (((u) & 1) << 13))
-#define SDMA_U_SDCM(u)	(SDMA_SDCM0 + (((u) & 1) << 13))
-#define SDMA_U_SCRDP(u)	(SDMA_SCRDP0 + (((u) & 1) << 13))
-#define SDMA_U_SCTDP(u)	(SDMA_SCTDP0 + (((u) & 1) << 13))
-#define SDMA_U_SFTDP(u)	(SDMA_SFTDP0 + (((u) & 1) << 13))
 
 /*******************************************************************************
  *
@@ -83,48 +70,48 @@
 /*
  * SDMA Configuration Register
  */
-#define SDMA_SDC_RFT		BIT(0)		/* RX FIFO Threshold */
-#define SDMA_SDC_SFM		BIT(1)		/* Single Frame Mode */
-#define SDMA_SDC_RC_MASK	BITS(5,2)	/* Re-TX  count */
+#define SDMA_SDC_RFT		__BIT(0)	/* RX FIFO Threshold */
+#define SDMA_SDC_SFM		__BIT(1)	/* Single Frame Mode */
+#define SDMA_SDC_RC_MASK	__BITS(5,2)	/* Re-TX  count */
 #define SDMA_SDC_RC_SHIFT	2
-#define SDMA_SDC_BLMR		BIT(6)		/* RX Big=0 Lil=1 Endian mode */
-#define SDMA_SDC_BLMT		BIT(7)		/* TX Big=0 Lil=1 Endian mode */
-#define SDMA_SDC_POVR		BIT(8)		/* PCI Override */
-#define SDMA_SDC_RIFB		BIT(9)		/* RX Intr on Frame boundaries */
-#define SDMA_SDC_RESa		BITS(11,10)
-#define SDMA_SDC_BSZ_MASK	BITS(13,12)	/* Maximum Burst Size */
+#define SDMA_SDC_BLMR		__BIT(6)	/* RX Big=0 Lil=1 Endian mode */
+#define SDMA_SDC_BLMT		__BIT(7)	/* TX Big=0 Lil=1 Endian mode */
+#define SDMA_SDC_POVR		__BIT(8)	/* PCI Override */
+#define SDMA_SDC_RIFB		__BIT(9)	/* RX Intr on Frame boundaries */
+#define SDMA_SDC_RESa		__BITS(11,10)
+#define SDMA_SDC_BSZ_MASK	__BITS(13,12)	/* Maximum Burst Size */
 #define SDMA_SDC_BSZ_1x64	(0 << 12)	/* 1 64 bit word */
 #define SDMA_SDC_BSZ_2x64	(1 << 12)	/* 2 64 bit words */
 #define SDMA_SDC_BSZ_4x64	(2 << 12)	/* 4 64 bit words */
 #define SDMA_SDC_BSZ_8x64	(3 << 12)	/* 8 64 bit words */
-#define SDMA_SDC_RESb		BITS(31,14)
+#define SDMA_SDC_RESb		__BITS(31,14)
 #define SDMA_SDC_RES (SDMA_SDC_RESa|SDMA_SDC_RESb)
 /*
  * SDMA Command Register
  */
-#define SDMA_SDCM_RESa		BITS(6,0)
-#define SDMA_SDCM_ERD		BIT(7)		/* Enable RX DMA */
-#define SDMA_SDCM_RESb		BITS(14,8)
-#define SDMA_SDCM_AR		BIT(15)		/* Abort Receive */
-#define SDMA_SDCM_STD		BIT(16)		/* Stop TX */
-#define SDMA_SDCM_RESc		BITS(22,17)
-#define SDMA_SDCM_TXD		BIT(23)		/* TX Demand */
-#define SDMA_SDCM_RESd		BITS(30,24)
-#define SDMA_SDCM_AT		BIT(31)		/* Abort TX */
+#define SDMA_SDCM_RESa		__BITS(6,0)
+#define SDMA_SDCM_ERD		__BIT(7)	/* Enable RX DMA */
+#define SDMA_SDCM_RESb		__BITS(14,8)
+#define SDMA_SDCM_AR		__BIT(15)	/* Abort Receive */
+#define SDMA_SDCM_STD		__BIT(16)	/* Stop TX */
+#define SDMA_SDCM_RESc		__BITS(22,17)
+#define SDMA_SDCM_TXD		__BIT(23)	/* TX Demand */
+#define SDMA_SDCM_RESd		__BITS(30,24)
+#define SDMA_SDCM_AT		__BIT(31)	/* Abort TX */
 #define SDMA_SDCM_RES \
 		(SDMA_SDCM_RESa|SDMA_SDCM_RESb|SDMA_SDCM_RESc|SDMA_SDCM_RESd)
 /*
  * SDMA Interrupt Cause and Mask Register bits
  */
 #define U__(bits,u)             ((bits) << (((u) % 2) * 8))
-#define SDMA_INTR_RXBUF(u)      U__(BIT(0),u)   /* SDMA #0 Rx Buffer Return */
-#define SDMA_INTR_RXERR(u)      U__(BIT(1),u)   /* SDMA #0 Rx Error */
-#define SDMA_INTR_TXBUF(u)      U__(BIT(2),u)   /* SDMA #0 Tx Buffer Return */
-#define SDMA_INTR_TXEND(u)      U__(BIT(3),u)   /* SDMA #0 Tx End */
-#define SDMA_INTR_RESa		BITS(7,4)
-#define SDMA_INTR_RESb		BITS(31,12)
+#define SDMA_INTR_RXBUF(u)      U__(__BIT(0),u)   /* SDMA #0 Rx Buffer Return */
+#define SDMA_INTR_RXERR(u)      U__(__BIT(1),u)   /* SDMA #0 Rx Error */
+#define SDMA_INTR_TXBUF(u)      U__(__BIT(2),u)   /* SDMA #0 Tx Buffer Return */
+#define SDMA_INTR_TXEND(u)      U__(__BIT(3),u)   /* SDMA #0 Tx End */
+#define SDMA_INTR_RESa		__BITS(7,4)
+#define SDMA_INTR_RESb		__BITS(31,12)
 #define SDMA_INTR_RES           (SDMA_INTR_RESa|SDMA_INTR_RESb)
-#define SDMA_U_INTR_MASK(u)     U__(BITS(3,0),u)
+#define SDMA_U_INTR_MASK(u)     U__(__BITS(3,0),u)
 
 
 /*******************************************************************************
@@ -139,24 +126,24 @@
  * for MPSC UART mode.  Note that pointer fields are physical addrs.
  */
 typedef struct sdma_desc {
-	u_int32_t sdma_cnt;		/* size (rx) or shadow (tx) and count */
-	u_int32_t sdma_csr;		/* command/status */
-	u_int32_t sdma_next;		/* next descriptor link */
-	u_int32_t sdma_bufp;		/* buffer pointer */
+	uint32_t sdma_cnt;		/* size (rx) or shadow (tx) and count */
+	uint32_t sdma_csr;		/* command/status */
+	uint32_t sdma_next;		/* next descriptor link */
+	uint32_t sdma_bufp;		/* buffer pointer */
 } sdma_desc_t;
 
 #define SDMA_RX_CNT_BCNT_SHIFT		0		/* byte count */
-#define SDMA_RX_CNT_BCNT_MASK		BITS(15,0)	/*  "    "    */
+#define SDMA_RX_CNT_BCNT_MASK		__BITS(15,0)	/*  "    "    */
 #define SDMA_RX_CNT_BUFSZ_SHIFT		16		/* buffer size */
-#define SDMA_RX_CNT_BUFSZNT_SIZE_MASK	BITS(31,19)	/*  "      "   */
-#define SDMA_RX_CNT_BUFP_MASK		BITS(31,3)	/* buffer pointer */
-#define SDMA_RX_CNT_NEXT_MASK		BITS(31,4)	/* next desc. pointer */
+#define SDMA_RX_CNT_BUFSZNT_SIZE_MASK	__BITS(31,19)	/*  "      "   */
+#define SDMA_RX_CNT_BUFP_MASK		__BITS(31,3)	/* buffer pointer */
+#define SDMA_RX_CNT_NEXT_MASK		__BITS(31,4)	/* next desc. pointer */
 
 #define SDMA_TX_CNT_SBC_SHIFT		0		/* shadow byte count */
-#define SDMA_TX_CNT_SBC_MASK		BITS(15,0)	/*  "      "    "    */
+#define SDMA_TX_CNT_SBC_MASK		__BITS(15,0)	/*  "      "    "    */
 #define SDMA_TX_CNT_BCNT_SHIFT		16		/* byte count */
-#define SDMA_TX_CNT_BCNT_MASK		BITS(31,16	/*  "    "    */
-#define SDMA_TX_CNT_NEXT_MASK		BITS(31,4)	/* next desc. pointer */
+#define SDMA_TX_CNT_BCNT_MASK		__BITS(31,16	/*  "    "    */
+#define SDMA_TX_CNT_NEXT_MASK		__BITS(31,4)	/* next desc. pointer */
 
 
 #endif	/* _GTSDMAREG_H */

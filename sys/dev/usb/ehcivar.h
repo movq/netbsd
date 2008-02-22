@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.26 2007/12/09 20:28:23 jmcneill Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.44 2018/04/09 16:21:11 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,15 +29,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _EHCIVAR_H_
+#define _EHCIVAR_H_
+
+#include <sys/pool.h>
+
 typedef struct ehci_soft_qtd {
 	ehci_qtd_t qtd;
-	struct ehci_soft_qtd *nextqtd; /* mirrors nextqtd in TD */
-	ehci_physaddr_t physaddr;
-	usbd_xfer_handle xfer;
-	LIST_ENTRY(ehci_soft_qtd) hnext;
-	u_int16_t len;
+	struct ehci_soft_qtd *nextqtd;	/* mirrors nextqtd in TD */
+	ehci_physaddr_t physaddr;	/* qTD's physical address */
+	usb_dma_t dma;			/* qTD's DMA infos */
+	int offs;			/* qTD's offset in usb_dma_t */
+	struct usbd_xfer *xfer;		/* xfer back pointer */
+	uint16_t len;
 } ehci_soft_qtd_t;
-#define EHCI_SQTD_SIZE ((sizeof (struct ehci_soft_qtd) + EHCI_QTD_ALIGN - 1) / EHCI_QTD_ALIGN * EHCI_QTD_ALIGN)
+#define EHCI_SQTD_ALIGN	MAX(EHCI_QTD_ALIGN, CACHE_LINE_SIZE)
+#define EHCI_SQTD_SIZE ((sizeof(struct ehci_soft_qtd) + EHCI_SQTD_ALIGN - 1) & -EHCI_SQTD_ALIGN)
 #define EHCI_SQTD_CHUNK (EHCI_PAGE_SIZE / EHCI_SQTD_SIZE)
 
 typedef struct ehci_soft_qh {
@@ -52,20 +52,95 @@ typedef struct ehci_soft_qh {
 	struct ehci_soft_qh *next;
 	struct ehci_soft_qtd *sqtd;
 	ehci_physaddr_t physaddr;
+	usb_dma_t dma;			/* QH's DMA infos */
+	int offs;			/* QH's offset in usb_dma_t */
 	int islot;
 } ehci_soft_qh_t;
-#define EHCI_SQH_SIZE ((sizeof (struct ehci_soft_qh) + EHCI_QH_ALIGN - 1) / EHCI_QH_ALIGN * EHCI_QH_ALIGN)
+#define EHCI_SQH_SIZE ((sizeof(struct ehci_soft_qh) + EHCI_QH_ALIGN - 1) / EHCI_QH_ALIGN * EHCI_QH_ALIGN)
 #define EHCI_SQH_CHUNK (EHCI_PAGE_SIZE / EHCI_SQH_SIZE)
 
+typedef struct ehci_soft_itd {
+	union {
+		ehci_itd_t itd;
+		ehci_sitd_t sitd;
+	};
+	union {
+		struct {
+			/* soft_itds links in a periodic frame */
+			struct ehci_soft_itd *next;
+			struct ehci_soft_itd *prev;
+		} frame_list;
+		/* circular list of free itds */
+		LIST_ENTRY(ehci_soft_itd) free_list;
+	};
+	struct ehci_soft_itd *xfer_next; /* Next soft_itd in xfer */
+	ehci_physaddr_t physaddr;
+	usb_dma_t dma;
+	int offs;
+	int slot;
+	struct timeval t; /* store free time */
+} ehci_soft_itd_t;
+#define EHCI_ITD_SIZE ((sizeof(struct ehci_soft_itd) + EHCI_QH_ALIGN - 1) / EHCI_ITD_ALIGN * EHCI_ITD_ALIGN)
+#define EHCI_ITD_CHUNK (EHCI_PAGE_SIZE / EHCI_ITD_SIZE)
+
+#define ehci_soft_sitd_t ehci_soft_itd_t
+#define ehci_soft_sitd ehci_soft_itd
+#define sc_softsitds sc_softitds
+#define EHCI_SITD_SIZE ((sizeof(struct ehci_soft_sitd) + EHCI_QH_ALIGN - 1) / EHCI_SITD_ALIGN * EHCI_SITD_ALIGN)
+#define EHCI_SITD_CHUNK (EHCI_PAGE_SIZE / EHCI_SITD_SIZE)
+
 struct ehci_xfer {
-	struct usbd_xfer xfer;
-	struct usb_task	abort_task;
-	LIST_ENTRY(ehci_xfer) inext; /* list of active xfers */
-	ehci_soft_qtd_t *sqtdstart;
-	ehci_soft_qtd_t *sqtdend;
-	int isdone;	/* used only when DIAGNOSTIC is defined */
+	struct usbd_xfer ex_xfer;
+	struct usb_task ex_aborttask;
+	TAILQ_ENTRY(ehci_xfer) ex_next; /* list of active xfers */
+	enum {
+		EX_NONE,
+		EX_CTRL,
+		EX_BULK,
+		EX_INTR,
+		EX_ISOC,
+		EX_FS_ISOC
+	} ex_type;
+	/* ctrl/bulk/intr */
+	struct {
+		ehci_soft_qtd_t **ex_sqtds;
+		size_t ex_nsqtd;
+	};
+	union {
+		/* ctrl */
+		struct {
+			ehci_soft_qtd_t *ex_setup;
+			ehci_soft_qtd_t *ex_data;
+			ehci_soft_qtd_t *ex_status;
+		};
+		/* bulk/intr */
+		struct {
+			ehci_soft_qtd_t *ex_sqtdstart;
+			ehci_soft_qtd_t *ex_sqtdend;
+		};
+		/* isoc */
+		struct {
+			ehci_soft_itd_t *ex_itdstart;
+			ehci_soft_itd_t *ex_itdend;
+		};
+		/* split (aka fs) isoc */
+		struct {
+			ehci_soft_sitd_t *ex_sitdstart;
+			ehci_soft_sitd_t *ex_sitdend;
+		};
+	};
+	bool ex_isdone;	/* used only when DIAGNOSTIC is defined */
 };
-#define EXFER(xfer) ((struct ehci_xfer *)(xfer))
+
+#define EHCI_BUS2SC(bus)	((bus)->ub_hcpriv)
+#define EHCI_PIPE2SC(pipe)	EHCI_BUS2SC((pipe)->up_dev->ud_bus)
+#define EHCI_XFER2SC(xfer)	EHCI_BUS2SC((xfer)->ux_bus)
+#define EHCI_EPIPE2SC(epipe)	EHCI_BUS2SC((epipe)->pipe.up_dev->ud_bus)
+
+#define EHCI_XFER2EXFER(xfer)	((struct ehci_xfer *)(xfer))
+
+#define EHCI_XFER2EPIPE(xfer)	((struct ehci_pipe *)((xfer)->ux_pipe))
+#define EHCI_PIPE2EPIPE(pipe)	((struct ehci_pipe *)(pipe))
 
 /* Information about an entry in the interrupt list. */
 struct ehci_soft_islot {
@@ -84,24 +159,29 @@ struct ehci_soft_islot {
 #define EHCI_HASH_SIZE 128
 #define EHCI_COMPANION_MAX 8
 
+#define EHCI_FREE_LIST_INTERVAL 100
+
 typedef struct ehci_softc {
-	struct usbd_bus sc_bus;		/* base device */
+	device_t sc_dev;
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
+	kcondvar_t sc_doorbell;
+	void *sc_doorbell_si;
+	void *sc_pcd_si;
+	struct usbd_bus sc_bus;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 	u_int sc_offs;			/* offset to operational regs */
 	int sc_flags;			/* misc flags */
 #define EHCIF_DROPPED_INTR_WORKAROUND	0x01
+#define EHCIF_ETTF			0x02 /* Emb. Transaction Translater func. */
 
-	char sc_vendor[32];		/* vendor string for root hub */
-	int sc_id_vendor;		/* vendor ID for root hub */
-
-	u_int32_t sc_cmd;		/* shadow of cmd reg during suspend */
-	void *sc_shutdownhook;		/* cookie from shutdown hook */
+	uint32_t sc_cmd;		/* shadow of cmd reg during suspend */
 
 	u_int sc_ncomp;
 	u_int sc_npcomp;
-	struct usbd_bus *sc_comps[EHCI_COMPANION_MAX];
+	device_t sc_comps[EHCI_COMPANION_MAX];
 
 	usb_dma_t sc_fldma;
 	ehci_link_t *sc_flist;
@@ -110,37 +190,39 @@ typedef struct ehci_softc {
 
 	struct ehci_soft_islot sc_islots[EHCI_INTRQHS];
 
-	LIST_HEAD(, ehci_xfer) sc_intrhead;
+	/*
+	 * an array matching sc_flist, but with software pointers,
+	 * not hardware address pointers
+	 */
+	struct ehci_soft_itd **sc_softitds;
+
+	TAILQ_HEAD(, ehci_xfer) sc_intrhead;
 
 	ehci_soft_qh_t *sc_freeqhs;
 	ehci_soft_qtd_t *sc_freeqtds;
+	LIST_HEAD(sc_freeitds, ehci_soft_itd) sc_freeitds;
+	LIST_HEAD(sc_freesitds, ehci_soft_sitd) sc_freesitds;
 
 	int sc_noport;
-	u_int8_t sc_hasppc;		/* has Port Power Control */
-	u_int8_t sc_addr;		/* device address */
-	u_int8_t sc_conf;		/* device configuration */
-	usbd_xfer_handle sc_intrxfer;
+	uint8_t sc_hasppc;		/* has Port Power Control */
+	uint8_t sc_istthreshold;	/* ISOC Scheduling Threshold (uframes) */
+	struct usbd_xfer *sc_intrxfer;
 	char sc_isreset[EHCI_MAX_PORTS];
-#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-#endif /* USB_USE_SOFTINTR */
+	kcondvar_t sc_softwake_cv;
 
-	u_int32_t sc_eintrs;
+	uint32_t sc_eintrs;
 	ehci_soft_qh_t *sc_async_head;
 
-	SIMPLEQ_HEAD(, usbd_xfer) sc_free_xfers; /* free xfers */
+	pool_cache_t sc_xferpool;	/* free xfer pool */
 
-	kmutex_t sc_doorbell_lock;
+	struct callout sc_tmo_intrlist;
 
-	usb_callout_t sc_tmo_intrlist;
-
-#if defined(__NetBSD__) || defined(__OpenBSD__)
-	device_ptr_t sc_child;		/* /dev/usb# device */
-#endif
+	device_t sc_child; /* /dev/usb# device */
 	char sc_dying;
-#if defined(__NetBSD__)
-	struct usb_dma_reserve sc_dma_reserve;
-#endif
+
+	void (*sc_vendor_init)(struct ehci_softc *);
+	int (*sc_vendor_port_status)(struct ehci_softc *, uint32_t, int);
 } ehci_softc_t;
 
 #define EREAD1(sc, a) bus_space_read_1((sc)->iot, (sc)->ioh, (a))
@@ -156,9 +238,13 @@ typedef struct ehci_softc {
 #define EOWRITE2(sc, a, x) bus_space_write_2((sc)->iot, (sc)->ioh, (sc)->sc_offs+(a), (x))
 #define EOWRITE4(sc, a, x) bus_space_write_4((sc)->iot, (sc)->ioh, (sc)->sc_offs+(a), (x))
 
-usbd_status	ehci_init(ehci_softc_t *);
+int		ehci_init(ehci_softc_t *);
 int		ehci_intr(void *);
 int		ehci_detach(ehci_softc_t *, int);
-int		ehci_activate(device_ptr_t, enum devact);
-bool		ehci_suspend(device_t dv);
-bool		ehci_resume(device_t dv);
+int		ehci_activate(device_t, enum devact);
+void		ehci_childdet(device_t, device_t);
+bool		ehci_suspend(device_t, const pmf_qual_t *);
+bool		ehci_resume(device_t, const pmf_qual_t *);
+bool		ehci_shutdown(device_t, int);
+
+#endif /* _EHCIVAR_H_ */

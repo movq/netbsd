@@ -1,4 +1,4 @@
-/*	$NetBSD: arp.c,v 1.28 2007/11/24 13:20:53 isaki Exp $	*/
+/*	$NetBSD: arp.c,v 1.34 2014/03/29 14:25:10 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -81,7 +81,7 @@ struct ether_arp {
 
 struct arp_list {
 	struct in_addr	addr;
-	u_char		ea[6];
+	u_char		ea[ETHER_ADDR_LEN];
 } arp_list[ARP_NUM] = {
 	/* XXX - net order `INADDR_BROADCAST' must be a constant */
 	{ {0xffffffff}, BA }
@@ -89,8 +89,8 @@ struct arp_list {
 int arp_num = 1;
 
 /* Local forwards */
-static	ssize_t arpsend __P((struct iodesc *, void *, size_t));
-static	ssize_t arprecv __P((struct iodesc *, void *, size_t, time_t));
+static	ssize_t arpsend(struct iodesc *, void *, size_t);
+static	ssize_t arprecv(struct iodesc *, void *, size_t, saseconds_t);
 
 /* Broadcast an ARP packet, asking who has addr on interface d */
 u_char *
@@ -130,7 +130,7 @@ arpwhohas(struct iodesc *d, struct in_addr addr)
  		printf("arpwhohas: send request for %s\n", inet_ntoa(addr));
 #endif
 
-	bzero((char *)&wbuf.data, sizeof(wbuf.data));
+	(void)memset(&wbuf.data, 0, sizeof(wbuf.data));
 	ah = &wbuf.data.arp;
 	ah->arp_hrd = htons(ARPHRD_ETHER);
 	ah->arp_pro = htons(ETHERTYPE_IP);
@@ -138,9 +138,9 @@ arpwhohas(struct iodesc *d, struct in_addr addr)
 	ah->arp_pln = sizeof(ah->arp_spa); /* protocol address length */
 	ah->arp_op = htons(ARPOP_REQUEST);
 	MACPY(d->myea, ah->arp_sha);
-	bcopy(&d->myip, ah->arp_spa, sizeof(ah->arp_spa));
+	(void)memcpy(ah->arp_spa, &d->myip, sizeof(ah->arp_spa));
 	/* Leave zeros in arp_tha */
-	bcopy(&addr, ah->arp_tpa, sizeof(ah->arp_tpa));
+	(void)memcpy(ah->arp_tpa, &addr, sizeof(ah->arp_tpa));
 
 	/* Store ip address in cache (incomplete entry). */
 	al->addr = addr;
@@ -186,7 +186,7 @@ arpsend(struct iodesc *d, void *pkt, size_t len)
  * else -1 (and errno == 0)
  */
 static ssize_t
-arprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+arprecv(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	ssize_t n;
 	struct ether_arp *ah;
@@ -308,11 +308,11 @@ arp_reply(struct iodesc *d, void *pkt)
 
 	arp->arp_op = htons(ARPOP_REPLY);
 	/* source becomes target */
-	bcopy(arp->arp_sha, arp->arp_tha, sizeof(arp->arp_tha));
-	bcopy(arp->arp_spa, arp->arp_tpa, sizeof(arp->arp_tpa));
+	(void)memcpy(arp->arp_tha, arp->arp_sha, sizeof(arp->arp_tha));
+	(void)memcpy(arp->arp_tpa, arp->arp_spa, sizeof(arp->arp_tpa));
 	/* here becomes source */
-	bcopy(d->myea,  arp->arp_sha, sizeof(arp->arp_sha));
-	bcopy(&d->myip, arp->arp_spa, sizeof(arp->arp_spa));
+	(void)memcpy(arp->arp_sha, d->myea, sizeof(arp->arp_sha));
+	(void)memcpy(arp->arp_spa, &d->myip, sizeof(arp->arp_spa));
 
 	/*
 	 * No need to get fancy here.  If the send fails, the

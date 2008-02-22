@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_mchain.c,v 1.14 2007/03/04 06:03:36 christos Exp $	*/
+/*	$NetBSD: subr_mchain.c,v 1.23 2014/11/15 18:52:45 nakayama Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.14 2007/03/04 06:03:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.23 2014/11/15 18:52:45 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,66 +47,59 @@ __KERNEL_RCSID(0, "$NetBSD: subr_mchain.c,v 1.14 2007/03/04 06:03:36 christos Ex
 
 #include <netsmb/mchain.h>
 
-#define MBERROR(format, args...) printf("%s(%d): "format, __func__ , \
-				    __LINE__ ,## args)
+#define MBERROR(x)	aprint_error x
+#define MBPANIC(x)	aprint_error x
 
-#define MBPANIC(format, args...) printf("%s(%d): "format, __func__ , \
-				    __LINE__ ,## args)
-
-#ifdef __NetBSD__
 static struct mbuf *
-m_getm(struct mbuf *m, int len, int how, int type)
+m_getm(struct mbuf *m, size_t len, int how, int type)
 {
-        struct mbuf *top, *tail, *mp, *mtail = NULL;
+	struct mbuf *top, *tail, *mp, *mtail = NULL;
 
-        KASSERT(len >= 0);
+	mp = m_get(how, type);
+	if (mp == NULL)
+		return (NULL);
+	else if (len > MINCLSIZE) {
+		m_clget(mp, how);
+		if ((mp->m_flags & M_EXT) == 0) {
+			m_free(mp);
+			return (NULL);
+		}
+	}
+	mp->m_len = 0;
+	len -= min(len, M_TRAILINGSPACE(mp));
 
-        mp = m_get(how, type);
-        if (mp == NULL)
-                return (NULL);
-        else if (len > MINCLSIZE) {
-                m_clget(mp, how);
-                if ((mp->m_flags & M_EXT) == 0) {
-                        m_free(mp);
-                        return (NULL);
-                }
-        }
-        mp->m_len = 0;
-        len -= M_TRAILINGSPACE(mp);
+	if (m != NULL)
+		for (mtail = m; mtail->m_next != NULL; mtail = mtail->m_next);
+	else
+		m = mp;
 
-        if (m != NULL)
-                for (mtail = m; mtail->m_next != NULL; mtail = mtail->m_next);
-        else
-                m = mp;
+	top = tail = mp;
+	while (len > 0) {
+		mp = m_get(how, type);
+		if (mp == NULL)
+			goto failed;
 
-        top = tail = mp;
-        while (len > 0) {
-                mp = m_get(how, type);
-                if (mp == NULL)
-                        goto failed;
+		tail->m_next = mp;
+		tail = mp;
+		if (len > MINCLSIZE) {
+			m_clget(mp, how);
+			if ((mp->m_flags & M_EXT) == 0)
+				goto failed;
+		}
 
-                tail->m_next = mp;
-                tail = mp;
-                if (len > MINCLSIZE) {
-                        m_clget(mp, how);
-                        if ((mp->m_flags & M_EXT) == 0)
-                                goto failed;
-                }
+		mp->m_len = 0;
+		len -= min(len, M_TRAILINGSPACE(mp));
+	}
 
-                mp->m_len = 0;
-                len -= M_TRAILINGSPACE(mp);
-        }
-
-        if (mtail != NULL)
-                mtail->m_next = top;
-        return (m);
+	if (mtail != NULL)
+		mtail->m_next = top;
+	return (m);
 
 failed:
-        m_freem(top);
-        return (NULL);
+	m_freem(top);
+	return (NULL);
 }
 
-#endif /* __NetBSD__ */
 
 /*
  * Various helper functions
@@ -115,7 +108,7 @@ int
 m_fixhdr(struct mbuf *m0)
 {
 	struct mbuf *m = m0;
-	int len = 0;
+	size_t len = 0;
 
 	while (m) {
 		len += m->m_len;
@@ -141,7 +134,7 @@ mb_init(struct mbchain *mbp)
 void
 mb_initm(struct mbchain *mbp, struct mbuf *m)
 {
-	bzero(mbp, sizeof(*mbp));
+	memset(mbp, 0, sizeof(*mbp));
 	mbp->mb_top = mbp->mb_cur = m;
 	mbp->mb_mleft = M_TRAILINGSPACE(m);
 }
@@ -178,13 +171,13 @@ mb_fixhdr(struct mbchain *mbp)
  * Note: size should be <= MLEN
  */
 void *
-mb_reserve(struct mbchain *mbp, int size)
+mb_reserve(struct mbchain *mbp, size_t size)
 {
 	struct mbuf *m, *mn;
 	void *bpos;
 
 	if (size > MLEN)
-		panic("mb_reserve: size = %d", size);
+		panic("mb_reserve: size = %zu", size);
 	m = mbp->mb_cur;
 	if (mbp->mb_mleft < size) {
 		mn = m_get(M_WAIT, MT_DATA);
@@ -251,12 +244,14 @@ mb_put_int64le(struct mbchain *mbp, int64_t x)
 }
 
 int
-mb_put_mem(struct mbchain *mbp, const char *source, int size, int type)
+mb_put_mem(struct mbchain *mbp, const char *source, size_t size, int type)
 {
 	struct mbuf *m;
 	char *dst;
 	const char *src;
-	int cplen, error, mleft, count;
+	int error;
+	size_t cplen, mleft, count;
+	size_t srclen, dstlen;
 
 	m = mbp->mb_cur;
 	mleft = mbp->mb_mleft;
@@ -273,10 +268,17 @@ mb_put_mem(struct mbchain *mbp, const char *source, int size, int type)
 			continue;
 		}
 		cplen = mleft > size ? size : mleft;
+		srclen = dstlen = cplen;
 		dst = mtod(m, char *) + m->m_len;
 		switch (type) {
 		    case MB_MCUSTOM:
-			error = mbp->mb_copy(mbp, source, dst, cplen);
+			srclen = size;
+			dstlen = mleft;
+			error = mbp->mb_copy(mbp, source, dst, &srclen, &dstlen);
+			if (error == E2BIG) {
+				mleft = 0;
+				continue;
+			}
 			if (error)
 				return error;
 			break;
@@ -285,7 +287,7 @@ mb_put_mem(struct mbchain *mbp, const char *source, int size, int type)
 				*dst++ = *src++;
 			break;
 		    case MB_MSYSTEM:
-			bcopy(source, dst, cplen);
+			memcpy(dst, source, cplen);
 			break;
 		    case MB_MUSER:
 			error = copyin(source, dst, cplen);
@@ -293,14 +295,14 @@ mb_put_mem(struct mbchain *mbp, const char *source, int size, int type)
 				return error;
 			break;
 		    case MB_MZERO:
-			bzero(dst, cplen);
+			memset(dst, 0, cplen);
 			break;
 		}
-		size -= cplen;
-		source += cplen;
-		m->m_len += cplen;
-		mleft -= cplen;
-		mbp->mb_count += cplen;
+		size -= srclen;
+		source += srclen;
+		m->m_len += dstlen;
+		mleft -= dstlen;
+		mbp->mb_count += dstlen;
 	}
 	mbp->mb_cur = m;
 	mbp->mb_mleft = mleft;
@@ -326,9 +328,9 @@ mb_put_mbuf(struct mbchain *mbp, struct mbuf *m)
  * copies a uio scatter/gather list to an mbuf chain.
  */
 int
-mb_put_uio(struct mbchain *mbp, struct uio *uiop, int size)
+mb_put_uio(struct mbchain *mbp, struct uio *uiop, size_t size)
 {
-	long left;
+	size_t left;
 	int mtype, error;
 
 	mtype = VMSPACE_IS_KERNEL_P(uiop->uio_vmspace) ? MB_MSYSTEM : MB_MUSER;
@@ -350,7 +352,7 @@ mb_put_uio(struct mbchain *mbp, struct uio *uiop, int size)
 		uiop->uio_offset += left;
 		uiop->uio_resid -= left;
 		uiop->uio_iov->iov_base =
-                        (char *)uiop->uio_iov->iov_base + left;
+			(char *)uiop->uio_iov->iov_base + left;
 		uiop->uio_iov->iov_len -= left;
 		size -= left;
 	}
@@ -376,7 +378,7 @@ md_init(struct mdchain *mdp)
 void
 md_initm(struct mdchain *mdp, struct mbuf *m)
 {
-	bzero(mdp, sizeof(*mdp));
+	memset(mdp, 0, sizeof(*mdp));
 	mdp->md_top = mdp->md_cur = m;
 	mdp->md_pos = mtod(m, u_char*);
 }
@@ -517,18 +519,18 @@ md_get_int64le(struct mdchain *mdp, int64_t *x)
 }
 
 int
-md_get_mem(struct mdchain *mdp, void *targetv, int size, int type)
+md_get_mem(struct mdchain *mdp, void *targetv, size_t size, int type)
 {
 	char *target = targetv;
 	struct mbuf *m = mdp->md_cur;
 	int error;
-	u_int count;
+	size_t count;
 	u_char *s;
 
 	while (size > 0) {
 		if (m == NULL) {
 #ifdef MCHAIN_DEBUG
-			MBERROR("incomplete copy\n");
+			MBERROR(("incomplete copy\n"));
 #endif
 			return EBADRPC;
 		}
@@ -553,7 +555,7 @@ md_get_mem(struct mdchain *mdp, void *targetv, int size, int type)
 				return error;
 			break;
 		    case MB_MSYSTEM:
-			bcopy(s, target, count);
+			memcpy(target, s, count);
 			break;
 		    case MB_MINLINE:
 			while (count--)
@@ -579,10 +581,10 @@ md_get_mbuf(struct mdchain *mdp, int size, struct mbuf **ret)
 }
 
 int
-md_get_uio(struct mdchain *mdp, struct uio *uiop, int size)
+md_get_uio(struct mdchain *mdp, struct uio *uiop, size_t size)
 {
 	char *uiocp;
-	long left;
+	size_t left;
 	int mtype, error;
 
 	mtype = VMSPACE_IS_KERNEL_P(uiop->uio_vmspace) ? MB_MSYSTEM : MB_MUSER;
@@ -603,8 +605,8 @@ md_get_uio(struct mdchain *mdp, struct uio *uiop, int size)
 			return error;
 		uiop->uio_offset += left;
 		uiop->uio_resid -= left;
-                uiop->uio_iov->iov_base =
-                                (char *)uiop->uio_iov->iov_base + left;
+		uiop->uio_iov->iov_base =
+				(char *)uiop->uio_iov->iov_base + left;
 		uiop->uio_iov->iov_len -= left;
 		size -= left;
 	}

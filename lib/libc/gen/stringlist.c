@@ -1,4 +1,4 @@
-/*	$NetBSD: stringlist.c,v 1.12 2007/05/09 17:10:29 christos Exp $	*/
+/*	$NetBSD: stringlist.c,v 1.14 2015/05/21 01:29:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,13 +31,14 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: stringlist.c,v 1.12 2007/05/09 17:10:29 christos Exp $");
+__RCSID("$NetBSD: stringlist.c,v 1.14 2015/05/21 01:29:13 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 
 #include <assert.h>
 #include <err.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,8 +68,9 @@ sl_init(void)
 
 	sl->sl_cur = 0;
 	sl->sl_max = _SL_CHUNKSIZE;
-	sl->sl_str = malloc(sl->sl_max * sizeof(char *));
-	if (sl->sl_str == NULL) {
+	sl->sl_str = NULL;
+	errno = reallocarr(&sl->sl_str, sl->sl_max, sizeof(char *));
+	if (errno) {
 		free(sl);
 		sl = NULL;
 	}
@@ -93,11 +88,11 @@ sl_add(StringList *sl, char *name)
 	_DIAGASSERT(sl != NULL);
 
 	if (sl->sl_cur == sl->sl_max - 1) {
-		char	**new;
+		char	**new = sl->sl_str;
 
-		new = realloc(sl->sl_str,
-		    (sl->sl_max + _SL_CHUNKSIZE) * sizeof(char *));
-		if (new == NULL)
+		errno = reallocarr(&new, (sl->sl_max + _SL_CHUNKSIZE),
+		    sizeof(char *));
+		if (errno)
 			return -1;
 		sl->sl_max += _SL_CHUNKSIZE;
 		sl->sl_str = new;

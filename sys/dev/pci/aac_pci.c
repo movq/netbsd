@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_pci.c,v 1.22 2007/10/19 12:00:38 ad Exp $	*/
+/*	$NetBSD: aac_pci.c,v 1.38 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.22 2007/10/19 12:00:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.38 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -352,6 +345,39 @@ static struct aac_ident {
 		"HP ML110 G2 (Adaptec ASR-2610SA)"
 	},
 	{
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2120S,
+		PCI_VENDOR_IBM,
+		PCI_PRODUCT_IBM_SERVERAID8K,
+		AAC_HWIF_RKT,
+		0,
+		"IBM ServeRAID 8k"
+	},
+	{	PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_2405,
+		AAC_HWIF_I960RX,
+		0,
+		"Adaptec RAID 2405"
+	},
+	{	PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_3405,
+		AAC_HWIF_I960RX,
+		0,
+		"Adaptec RAID 3405"
+	},
+	{	PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_3805,
+		AAC_HWIF_I960RX,
+		0,
+		"Adaptec RAID 3805"
+	},
+	{
 		PCI_VENDOR_DEC,
 		PCI_PRODUCT_DEC_21554,
 		PCI_VENDOR_ADP2,
@@ -396,6 +422,15 @@ static struct aac_ident {
 		0,
 		"HP NetRAID-4M"
 	},
+	{
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_SUN,
+		PCI_PRODUCT_ADP2_ASR2120S,
+		AAC_HWIF_I960RX,
+		0,
+		"SG-XPCIESAS-R-IN"
+	},
 };
 
 static const struct aac_ident *
@@ -439,8 +474,7 @@ aac_pci_intr_set(struct aac_softc *sc, int (*hand)(void*), void *arg)
 }
 
 static int
-aac_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+aac_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -453,7 +487,7 @@ aac_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-aac_pci_attach(struct device *parent, struct device *self, void *aux)
+aac_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	pci_chipset_tag_t pc;
@@ -465,12 +499,14 @@ aac_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr;
 	int state;
 	const struct aac_ident *m;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	pa = aux;
 	pc = pa->pa_pc;
-	pcisc = (struct aac_pci_softc *)self;
+	pcisc = device_private(self);
 	pcisc->sc_pc = pc;
 	sc = &pcisc->sc_aac;
+	sc->sc_dv = self;
 	state = 0;
 
 	aprint_naive(": RAID controller\n");
@@ -510,13 +546,13 @@ aac_pci_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error("couldn't map interrupt\n");
 		goto bail_out;
 	}
-	intrstr = pci_intr_string(pc, pcisc->sc_ih);
+	intrstr = pci_intr_string(pc, pcisc->sc_ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, pcisc->sc_ih, IPL_BIO, aac_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto bail_out;
 	}
 	state++;
@@ -526,8 +562,7 @@ aac_pci_attach(struct device *parent, struct device *self, void *aux)
 	m = aac_find_ident(pa);
 	aprint_normal("%s\n", m->prodstr);
 	if (intrstr != NULL)
-		aprint_normal("%s: interrupting at %s\n",
-		    sc->sc_dv.dv_xname, intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	sc->sc_hwif = m->hwif;
 	sc->sc_quirks = m->quirks;
@@ -563,8 +598,16 @@ aac_pci_attach(struct device *parent, struct device *self, void *aux)
 		bus_space_unmap(sc->sc_memt, sc->sc_memh, memsize);
 }
 
-CFATTACH_DECL(aac_pci, sizeof(struct aac_softc),
-    aac_pci_match, aac_pci_attach, NULL, NULL);
+/* ARGSUSED */
+static int
+aac_pci_rescan(device_t self, const char *attr, const int *flags)
+{
+
+	return aac_devscan(device_private(self));
+}
+
+CFATTACH_DECL3_NEW(aac_pci, sizeof(struct aac_pci_softc),
+    aac_pci_match, aac_pci_attach, NULL, NULL, aac_pci_rescan, NULL, 0);
 
 /*
  * Read the current firmware status word.

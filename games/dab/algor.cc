@@ -1,4 +1,4 @@
-/*	$NetBSD: algor.cc,v 1.3 2006/05/14 03:20:42 christos Exp $	*/
+/*	$NetBSD: algor.cc,v 1.5 2012/02/29 23:39:53 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
  * algor.C: Computer algorithm
  */
 #include "defs.h"
-RCSID("$NetBSD: algor.cc,v 1.3 2006/05/14 03:20:42 christos Exp $")
+RCSID("$NetBSD: algor.cc,v 1.5 2012/02/29 23:39:53 joerg Exp $")
 
 #include "algor.h"
 #include "board.h"
@@ -72,7 +65,7 @@ int ALGOR::find_closure(size_t& y, size_t& x, int& dir, BOARD& b)
 		for (dir = BOX::first; dir < BOX::last; dir++)
 		    if (!box.isset(dir))
 			return 1;
-		b.abort("find_closure: 3 sided box[%d,%d] has no free sides",
+		b.abort("find_closure: 3 sided box[%zu,%zu] has no free sides",
 			y, x);
 	    }
 	}
@@ -119,7 +112,7 @@ size_t ALGOR::count_closure(size_t& y, size_t& x, int& dir, BOARD& b)
 	    dir = tdir;
 	}
 	if ((mv = b.domove(ty, tx, tdir, getWho())) == -1)
-	    b.abort("count_closure: Invalid move (%d, %d, %d)", y, x, dir);
+	    b.abort("count_closure: Invalid move (%zu, %zu, %d)", y, x, dir);
 	else
 	    i += mv;
     }
@@ -164,7 +157,7 @@ int ALGOR::try_good_turn(BOX& box, size_t y, size_t x, int& dir, BOARD& b)
 {
     // Sanity check; we must have a good box
     if (box.count() >= 2)
-	b.abort("try_good_turn: box[%d,%d] has more than 2 sides occupied",
+	b.abort("try_good_turn: box[%zu,%zu] has more than 2 sides occupied",
 		y, x);
 
     // Make sure we don't make a closure in an adjacent box.
@@ -210,7 +203,7 @@ int ALGOR::try_bad_turn(BOX& box, size_t& y, size_t& x, int& dir, BOARD& b,
 			int last)
 {
     if (4 - box.count() <= last)
-	b.abort("try_bad_turn: Called at [%d,%d] for %d with %d",
+	b.abort("try_bad_turn: Called at [%zu,%zu] for %d with %d",
 		y, x, last, box.count());
     for (dir = BOX::first; dir < BOX::last; dir++)
 	if (!box.isset(dir)) {
@@ -253,7 +246,7 @@ size_t ALGOR::find_min_closure1(size_t& y, size_t& x, int& dir, const BOARD& b,
 
         // Play a bad move that would cause the opponent's closure
 	if ((mv = nb.domove(ty, tx, tdir, getWho())) != 0)
-	    b.abort("find_min_closure1: Invalid move %d (%d, %d, %d)", mv,
+	    b.abort("find_min_closure1: Invalid move %d (%zu, %zu, %d)", mv,
 		    ty, tx, tdir);
 
         // Count the opponent's closure

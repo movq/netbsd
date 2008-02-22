@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.5 2005/12/11 12:17:06 christos Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.9 2015/10/23 08:40:08 knakahara Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt
@@ -54,8 +54,8 @@ struct pci_attach_args;
  */
 struct dreamcast_pci_chipset {
         void            *pc_conf_v;
-        void            (*pc_attach_hook)(struct device *,
-                            struct device *, struct pcibus_attach_args *);
+        void            (*pc_attach_hook)(device_t, device_t,
+			    struct pcibus_attach_args *);
         int             (*pc_bus_maxdevs)(void *, int);
         pcitag_t        (*pc_make_tag)(void *, int, int, int);
 	void		(*pc_decompose_tag)(void *, pcitag_t, int *,
@@ -65,9 +65,10 @@ struct dreamcast_pci_chipset {
 
 	void		*pc_intr_v;
 
-  	int		(*pc_intr_map)(struct pci_attach_args *,
+  	int		(*pc_intr_map)(const struct pci_attach_args *,
 			    pci_intr_handle_t *);
-	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
+	const char	*(*pc_intr_string)(void *, pci_intr_handle_t,
+			    char *, size_t);
 	void		*(*pc_intr_establish)(void *, pci_intr_handle_t,
 			    int, int (*)(void *), void *);
 	void		(*pc_intr_disestablish)(void *, void *);
@@ -88,9 +89,9 @@ struct dreamcast_pci_chipset {
 
 #define	pci_intr_map(pa, ihp)						\
     (*(pa)->pa_pc->pc_intr_map)((pa), (ihp))
-#define	pci_intr_string(c, ih)						\
-    (*(c)->pc_intr_string)((c)->pc_intr_v, (ih))
+#define	pci_intr_string(c, ih, buf, len)				\
+    (*(c)->pc_intr_string)((c)->pc_intr_v, (ih), (buf), (len))
 #define	pci_intr_establish(c, ih, l, h, a)				\
     (*(c)->pc_intr_establish)((c)->pc_intr_v, (ih), (l), (h), (a))
 #define	pci_intr_disestablish(c, ih)					\
-    (*(c)->pc_intr_disestablish)((v)->pc_intr_v, (ih))
+    (*(c)->pc_intr_disestablish)((c)->pc_intr_v, (ih))

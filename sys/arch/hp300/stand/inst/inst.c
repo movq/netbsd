@@ -1,4 +1,4 @@
-/*	$NetBSD: inst.c,v 1.16 2007/12/29 16:48:03 tsutsui Exp $	*/
+/*	$NetBSD: inst.c,v 1.22 2016/06/11 06:20:11 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -130,15 +123,15 @@ main(void)
 	netio_ask = 1;
 
 	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
+	printf(">> %s, Revision %s (from NetBSD %s)\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 	printf(">> HP 9000/%s SPU\n", getmachineid());
 	gethelp();
 
 	for (;;) {
 		printf("sys_inst> ");
 		memset(line, 0, sizeof(line));
-		gets(line);
+		kgets(line, sizeof(line));
 		if (line[0] == '\n' || line[0] == '\0')
 			continue;
 
@@ -207,7 +200,7 @@ dsklabel(void)
  disklabel_loop:
 	memset(line, 0, sizeof(line));
 	printf("(z)ap, (e)dit, (s)how, (w)rite, (d)one > ");
-	gets(line);
+	kgets(line, sizeof(line));
 	if (line[0] == '\n' || line[0] == '\0')
 		goto disklabel_loop;
 
@@ -266,28 +259,28 @@ dsklabel(void)
 #define GETNUM(out, num)						\
 	printf((out), (num));						\
 	memset(line, 0, sizeof(line));					\
-	gets(line);							\
+	kgets(line, sizeof(line));							\
 	if (line[0])							\
 		(num) = atoi(line);
 
 #define GETNUM2(out, num1, num2)					\
 	printf((out), (num1), (num2));					\
 	memset(line, 0, sizeof(line));					\
-	gets(line);							\
+	kgets(line, sizeof(line));							\
 	if (line[0])							\
 		(num2) = atoi(line);
 
 #define GETSTR(out, str)						\
 	printf((out), (str));						\
 	memset(line, 0, sizeof(line));					\
-	gets(line);							\
+	kgets(line, sizeof(line));							\
 	if (line[0])							\
 		strcpy((str), line);
 
 #define FLAGS(out, flag)						\
 	printf((out), lp->d_flags & (flag) ? 'y' : 'n');		\
 	memset(line, 0, sizeof(line));					\
-	gets(line);							\
+	kgets(line, sizeof(line));							\
 	if (line[0] == 'y' || line[0] == 'Y')				\
 		lp->d_flags |= (flag);					\
 	else								\
@@ -492,8 +485,8 @@ disklabel_show(struct disklabel *lp)
 	printf("     size   offset\n");
 	pp = lp->d_partitions;
 	for (i = 0; i < lp->d_npartitions; i++) {
-		printf("%c:   %d,    %d\n", 97 + i, lp->d_partitions[i].p_size,
-		    lp->d_partitions[i].p_offset);
+		printf("%c:   %d,    %d\n", 'a' + i, pp[i].p_size,
+		    pp[i].p_offset);
 	}
 	printf("\n");
 }
@@ -521,7 +514,7 @@ opendisk(char *question, char *diskname, int len, char partition, int *fdp)
 	printf("%s ", question);
 	memset(diskname, 0, len);
 	memset(fulldiskname, 0, sizeof(fulldiskname));
-	gets(diskname);
+	kgets(diskname, sizeof(diskname));
 	if (diskname[0] == '\n' || diskname[0] == '\0')
 		goto getdiskname;
 
@@ -577,7 +570,7 @@ miniroot(void)
  getsource:
 	printf("Source? (N)FS, (t)ape, (d)one > ");
 	memset(line, 0, sizeof(line));
-	gets(line);
+	kgets(line, sizeof(line));
 	if (line[0] == '\0')
 		goto getsource;
 
@@ -588,7 +581,7 @@ miniroot(void)
 		printf("Name of miniroot file? ");
 		memset(line, 0, sizeof(line));
 		memset(minirootname, 0, sizeof(minirootname));
-		gets(line);
+		kgets(line, sizeof(line));
 		if (line[0] == '\0')
 			goto name_of_nfs_miniroot;
 		(void)strcat(minirootname, "le0a:");
@@ -620,7 +613,7 @@ miniroot(void)
 		memset(line, 0, sizeof(line));
 		memset(minirootname, 0, sizeof(minirootname));
 		memset(tapename, 0, sizeof(tapename));
-		gets(line);
+		kgets(line, sizeof(line));
 		if (line[0] == '\0')
 			goto name_of_tape_miniroot;
 		strcat(minirootname, line);
@@ -628,7 +621,7 @@ miniroot(void)
 
 		printf("File number (first == 1)? ");
 		memset(line, 0, sizeof(line));
-		gets(line);
+		kgets(line, sizeof(line));
 		fileno = a2int(line);
 		if (fileno < 1 || fileno > 8) {
 			printf("Invalid file number: %s\n", line);
@@ -650,7 +643,7 @@ miniroot(void)
 		ignoreshread = 0;
 		printf("Copy how many %d byte blocks? ", DEV_BSIZE);
 		memset(line, 0, sizeof(line));
-		gets(line);
+		kgets(line, sizeof(line));
 		nblks = a2int(line);
 		if (nblks < 0) {
 			printf("Invalid block count: %s\n", line);
@@ -730,7 +723,7 @@ bootmini(void)
 	printf("Disk to boot from? ");
 	memset(diskname, 0, sizeof(diskname));
 	memset(bootname, 0, sizeof(bootname));
-	gets(diskname);
+	kgets(diskname, sizeof(diskname));
 	if (diskname[0] == '\n' || diskname[0] == '\0')
 		goto getdiskname;
 
@@ -767,18 +760,11 @@ resetsys(void)
 	__asm("stop #0x2700");
 }
 
-/*
- * XXX Should have a generic atoi for libkern/libsa.
- */
 int
 a2int(char *cp)
 {
-	int i = 0;
-
 	if (*cp == '\0')
-		return (-1);
+		return -1;
 
-	while (*cp != '\0')
-		i = i * 10 + *cp++ - '0';
-	return (i);
+	return atoi(cp);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.41 2007/12/15 14:23:14 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.45 2013/12/16 15:45:29 mrg Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.41 2007/12/15 14:23:14 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.45 2013/12/16 15:45:29 mrg Exp $");
 
 #include "opt_ddb.h"
 
@@ -55,18 +55,17 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.41 2007/12/15 14:23:14 tsutsui Exp $"
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
-static struct device *booted_controller = NULL;
+static device_t booted_controller = NULL;
 static int	booted_slot, booted_unit;
 static const char	*booted_protocol = NULL;
 
 extern struct platform platform;
 
 void
-cpu_configure()
+cpu_configure(void)
 {
-	int s;
 
-	s = splhigh();
+	(void)splhigh();
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
@@ -158,12 +157,12 @@ makebootdev(const char *cp)
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 	printf("boot device: %s\n",
-		booted_device ? booted_device->dv_xname : "<unknown>");
+		booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 /*
@@ -176,10 +175,10 @@ cpu_rootconf()
      ((pa)->pa_bus == 0 && (pa)->pa_device == 2 && (pa)->pa_function == 0))
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	static int found, initted, scsiboot, netboot;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (mach_type == MACH_SGI_IP32 &&
 	    parent != NULL && device_is_a(parent, "pci")) {
@@ -190,14 +189,14 @@ device_register(struct device *dev, void *aux)
 			    "aic7xxx-use-target-defaults", true) == false) {
 				printf("WARNING: unable to set "
 				    "aic7xxx-use-target-defaults property "
-				    "for %s\n", dev->dv_xname);
+				    "for %s\n", device_xname(dev));
 			}
 
 			if (prop_dictionary_set_bool(device_properties(dev),
 			    "aic7xxx-override-ultra", true) == false) {
 				printf("WARNING: unable to set "
 				    "aic7xxx-override-ultra property for %s\n",
-				    dev->dv_xname);
+				    device_xname(dev));
 			}
 		}
 	}
@@ -207,7 +206,7 @@ device_register(struct device *dev, void *aux)
 	 * on DMA boundaries.
 	 */
 	if (device_is_a(dev, "tl")) {
-		struct device *grandparent;
+		device_t grandparent;
 		prop_number_t gfe_boundary;
 
 		grandparent = device_parent(parent);
@@ -219,7 +218,7 @@ device_register(struct device *dev, void *aux)
 			    "tl-dma-page-boundary", gfe_boundary) == false) {
 				printf("WARNING: unable to set "
 				    "tl-dma-page-boundary property "
-				    "for %s\n", dev->dv_xname);
+				    "for %s\n", device_xname(dev));
 			}
 			prop_object_release(gfe_boundary);
 			return;

@@ -1,45 +1,37 @@
-#	$NetBSD: Makefile,v 1.21 2006/12/16 12:59:17 bouyer Exp $
+#	$NetBSD: Makefile,v 1.36 2013/08/05 14:41:57 reinoud Exp $
 #
+
+WARNS?=	5
 
 .include <bsd.own.mk>
 
 PROG=	makefs
-SRCS=	buf.c \
-	cd9660.c cd9660_strings.c cd9660_debug.c cd9660_eltorito.c \
-	cd9660_write.c cd9660_conversion.c iso9660_rrip.c \
-	ffs.c ffs_alloc.c ffs_balloc.c ffs_bswap.c ffs_subr.c ffs_tables.c \
+SRCS=	cd9660.c chfs.c ffs.c v7fs.c msdos.c udf.c\
 	getid.c \
-	makefs.c misc.c mkfs.c \
+	makefs.c misc.c \
 	pack_dev.c \
 	spec.c \
-	ufs_bmap.c \
 	walk.c
 MAN=	makefs.8
 
 MKNODSRC=	${NETBSDSRCDIR}/sbin/mknod
 MTREESRC=	${NETBSDSRCDIR}/usr.sbin/mtree
-UFSSRC=		${NETBSDSRCDIR}/sys/ufs
-CD9660SRC=	${NETBSDSRCDIR}/sys/fs/cd9660
 
-CPPFLAGS+=	-I${.CURDIR} \
-		-I${MKNODSRC} -I${MTREESRC} -I${CD9660SRC}
-.PATH:		${.CURDIR}/ffs ${UFSSRC}/ffs \
-		${.CURDIR}/cd9660 ${CD9660SRC} \
-		${MKNODSRC} ${MTREESRC}
+CPPFLAGS+=	-I${.CURDIR} -I${MKNODSRC} -I${MTREESRC} -DMAKEFS
+#CPPFLAGS+=	-DMSDOSFS_DEBUG
+.PATH:		${MKNODSRC} ${MTREESRC}
 
-.if (${HOSTPROG:U} == "")
+.include "${.CURDIR}/cd9660/Makefile.inc"
+.include "${.CURDIR}/chfs/Makefile.inc"
+.include "${.CURDIR}/ffs/Makefile.inc"
+.include "${.CURDIR}/v7fs/Makefile.inc"
+.include "${.CURDIR}/msdos/Makefile.inc"
+.include "${.CURDIR}/udf/Makefile.inc"
+
+.if !defined(HOSTPROG)
 DPADD+= ${LIBUTIL}
 LDADD+= -lutil
 .endif
 
-WARNS?=	3
-
-.if !defined(HOSTPROGNAME)
-.if ${HAVE_GCC} == 4
-.for f in cd9660_debug cd9660_write
-COPTS.${f}.c+=  -Wno-pointer-sign
-.endfor
-.endif
-.endif
-
 .include <bsd.prog.mk>
+# DO NOT DELETE

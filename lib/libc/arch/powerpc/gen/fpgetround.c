@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetround.c,v 1.8 2005/12/24 23:10:08 perry Exp $	*/
+/*	$NetBSD: fpgetround.c,v 1.10 2011/07/10 21:18:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  * 
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpgetround.c,v 1.8 2005/12/24 23:10:08 perry Exp $");
+__RCSID("$NetBSD: fpgetround.c,v 1.10 2011/07/10 21:18:47 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -57,8 +50,11 @@ __weak_alias(fpgetround,_fpgetround)
 fp_rnd
 fpgetround(void)
 {
-	uint64_t fpscr;
+	union {
+		double u_d;
+		uint64_t u_fpscr;
+	} ud;
 
-	__asm volatile("mffs %0" : "=f"(fpscr));
-	return (((uint32_t)fpscr & ROUNDBITS) >> ROUNDSHFT);
+	__asm volatile("mffs %0" : "=f"(ud.u_d));
+	return (((uint32_t)ud.u_fpscr & ROUNDBITS) >> ROUNDSHFT);
 }

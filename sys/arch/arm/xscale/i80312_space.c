@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312_space.c,v 1.9 2005/11/24 13:08:32 yamt Exp $	*/
+/*	$NetBSD: i80312_space.c,v 1.12 2018/03/16 17:56:32 ryo Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,14 +40,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312_space.c,v 1.9 2005/11/24 13:08:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312_space.c,v 1.12 2018/03/16 17:56:32 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/i80312reg.h>
 #include <arm/xscale/i80312var.h>
@@ -66,79 +66,79 @@ bs_protos(bs_notimpl);
  */
 const struct bus_space i80312_bs_tag_template = {
 	/* cookie */
-	(void *) 0,
+	.bs_cookie = (void *) 0,
 
 	/* mapping/unmapping */
-	NULL,
-	NULL,
-	i80312_bs_subregion,
+	.bs_map = NULL,
+	.bs_unmap = NULL,
+	.bs_subregion = i80312_bs_subregion,
 
 	/* allocation/deallocation */
-	NULL,
-	NULL,
+	.bs_alloc = NULL,
+	.bs_free = NULL,
 
 	/* get kernel virtual address */
-	i80312_bs_vaddr,
+	.bs_vaddr = i80312_bs_vaddr,
 
 	/* mmap */
-	i80312_bs_mmap,
+	.bs_mmap = i80312_bs_mmap,
 
 	/* barrier */
-	i80312_bs_barrier,
+	.bs_barrier = i80312_bs_barrier,
 
 	/* read (single) */
-	generic_bs_r_1,
-	generic_armv4_bs_r_2,
-	generic_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = generic_bs_r_1,
+	.bs_r_2 = generic_armv4_bs_r_2,
+	.bs_r_4 = generic_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	generic_bs_rm_1,
-	generic_armv4_bs_rm_2,
-	generic_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = generic_bs_rm_1,
+	.bs_rm_2 = generic_armv4_bs_rm_2,
+	.bs_rm_4 = generic_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	bs_notimpl_bs_rr_1,
-	generic_armv4_bs_rr_2,
-	generic_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = bs_notimpl_bs_rr_1,
+	.bs_rr_2 = generic_armv4_bs_rr_2,
+	.bs_rr_4 = generic_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	generic_bs_w_1,
-	generic_armv4_bs_w_2,
-	generic_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = generic_bs_w_1,
+	.bs_w_2 = generic_armv4_bs_w_2,
+	.bs_w_4 = generic_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	generic_bs_wm_1,
-	generic_armv4_bs_wm_2,
-	generic_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = generic_bs_wm_1,
+	.bs_wm_2 = generic_armv4_bs_wm_2,
+	.bs_wm_4 = generic_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	bs_notimpl_bs_wr_1,
-	generic_armv4_bs_wr_2,
-	generic_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = bs_notimpl_bs_wr_1,
+	.bs_wr_2 = generic_armv4_bs_wr_2,
+	.bs_wr_4 = generic_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	generic_armv4_bs_sr_2,
-	generic_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = generic_armv4_bs_sr_2,
+	.bs_sr_4 = generic_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	generic_armv4_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = generic_armv4_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 void
@@ -309,7 +309,7 @@ i80312_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags,
 		return (EINVAL);
 
 	/*
-	 * Found the window -- PCI MEM space is not mapped by allocating
+	 * Found the window -- PCI MEM space is now mapped by allocating
 	 * some kernel VA space and mapping the pages with pmap_enter().
 	 * pmap_enter() will map unmanaged pages as non-cacheable.
 	 */

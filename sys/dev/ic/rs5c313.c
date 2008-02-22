@@ -1,4 +1,4 @@
-/*	$NetBSD: rs5c313.c,v 1.6 2008/01/09 22:29:20 uwe Exp $	*/
+/*	$NetBSD: rs5c313.c,v 1.10 2014/11/20 16:34:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -12,10 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -31,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rs5c313.c,v 1.6 2008/01/09 22:29:20 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rs5c313.c,v 1.10 2014/11/20 16:34:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +60,29 @@ static void rs5c313_write_reg(struct rs5c313_softc *, int, int);
 void
 rs5c313_attach(struct rs5c313_softc *sc)
 {
-	device_t self = &sc->sc_dev;
+	device_t self = sc->sc_dev;
+	const char *model;
+
+	switch (sc->sc_model) {
+	case MODEL_5C313:
+		model = "5C313";
+		sc->sc_ctrl[0] = CTRL_24H;
+		sc->sc_ctrl[1] = CTRL2_NTEST;
+		break;
+
+	case MODEL_5C316:
+		model = "5C316";
+		sc->sc_ctrl[0] = 0;
+		sc->sc_ctrl[1] = CTRL2_24H|CTRL2_NTEST;
+		break;
+	
+	default:
+		aprint_error("unknown model (%d)\n", sc->sc_model);
+		return;
+	}
 
 	aprint_naive("\n");
-	aprint_normal(": real time clock\n");
+	aprint_normal(": RICOH %s real time clock\n", model);
 
 	sc->sc_todr.cookie = sc;
 	sc->sc_todr.todr_gettime_ymdhms = rs5c313_todr_gettime_ymdhms;
@@ -85,7 +100,7 @@ rs5c313_attach(struct rs5c313_softc *sc)
 static int
 rs5c313_init(struct rs5c313_softc *sc)
 {
-	device_t self = &sc->sc_dev;
+	device_t self = sc->sc_dev;
 	int status = 0;
 	int retry;
 
@@ -103,7 +118,7 @@ rs5c313_init(struct rs5c313_softc *sc)
 	aprint_error_dev(self, "time not valid\n");
 
 	rs5c313_write_reg(sc, RS5C313_TINT, 0);
-	rs5c313_write_reg(sc, RS5C313_CTRL, (CTRL_BASE | CTRL_ADJ));
+	rs5c313_write_reg(sc, RS5C313_CTRL, (sc->sc_ctrl[0] | CTRL_ADJ));
 
 	for (retry = 1000; retry > 0; --retry) {
 		if (rs5c313_read_reg(sc, RS5C313_CTRL) & CTRL_BSY)
@@ -111,13 +126,13 @@ rs5c313_init(struct rs5c313_softc *sc)
 		else
 			break;
 	}
-
 	if (retry == 0) {
 		status = EIO;
 		goto done;
 	}
 
-	rs5c313_write_reg(sc, RS5C313_CTRL, CTRL_BASE);
+	rs5c313_write_reg(sc, RS5C313_CTRL, sc->sc_ctrl[0]);
+	rs5c313_write_reg(sc, RS5C313_CTRL2, sc->sc_ctrl[1]);
 
   done:
 	rtc_ce(sc, 0);
@@ -145,14 +160,13 @@ rs5c313_todr_gettime_ymdhms(todr_chip_handle_t todr, struct clock_ymdhms *dt)
 	for (retry = 10; retry > 0; --retry) {
 		rtc_ce(sc, 1);
 
-		rs5c313_write_reg(sc, RS5C313_CTRL, CTRL_BASE);
+		rs5c313_write_reg(sc, RS5C313_CTRL, sc->sc_ctrl[0]);
 		if ((rs5c313_read_reg(sc, RS5C313_CTRL) & CTRL_BSY) == 0)
 			break;
 
 		rtc_ce(sc, 0);
 		delay(1);
 	}
-
 	if (retry == 0) {
 		splx(s);
 		return EIO;
@@ -177,7 +191,6 @@ rs5c313_todr_gettime_ymdhms(todr_chip_handle_t todr, struct clock_ymdhms *dt)
 	rtc_ce(sc, 0);
 	splx(s);
 
-
 	dt->dt_year = (dt->dt_year % 100) + 1900;
 	if (dt->dt_year < POSIX_BASE_YEAR) {
 		dt->dt_year += 100;
@@ -201,7 +214,7 @@ rs5c313_todr_settime_ymdhms(todr_chip_handle_t todr, struct clock_ymdhms *dt)
 	for (retry = 10; retry > 0; --retry) {
 		rtc_ce(sc, 1);
 
-		rs5c313_write_reg(sc, RS5C313_CTRL, CTRL_BASE);
+		rs5c313_write_reg(sc, RS5C313_CTRL, sc->sc_ctrl[0]);
 		if ((rs5c313_read_reg(sc, RS5C313_CTRL) & CTRL_BSY) == 0)
 			break;
 
@@ -216,7 +229,7 @@ rs5c313_todr_settime_ymdhms(todr_chip_handle_t todr, struct clock_ymdhms *dt)
 
 #define	RTCSET(x, y)							     \
 	do {								     \
-		t = TOBCD(dt->dt_ ## y) & 0xff;				     \
+		t = bintobcd(dt->dt_ ## y) & 0xff;				     \
 		rs5c313_write_reg(sc, RS5C313_ ## x ## 1, t & 0x0f);	     \
 		rs5c313_write_reg(sc, RS5C313_ ## x ## 10, (t >> 4) & 0x0f); \
 	} while (/* CONSTCOND */0)
@@ -230,7 +243,7 @@ rs5c313_todr_settime_ymdhms(todr_chip_handle_t todr, struct clock_ymdhms *dt)
 #undef	RTCSET
 
 	t = dt->dt_year % 100;
-	t = TOBCD(t);
+	t = bintobcd(t);
 	rs5c313_write_reg(sc, RS5C313_YEAR1, t & 0x0f);
 	rs5c313_write_reg(sc, RS5C313_YEAR10, (t >> 4) & 0x0f);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425.c,v 1.11 2006/12/10 10:01:49 scw Exp $ */
+/*	$NetBSD: ixp425.c,v 1.16 2012/10/14 14:20:57 msaitoh Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,15 +27,17 @@
  * SUCH DAMAGE.
  */
 
+#include "pci.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425.c,v 1.11 2006/12/10 10:01:49 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425.c,v 1.16 2012/10/14 14:20:57 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -49,10 +45,14 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425.c,v 1.11 2006/12/10 10:01:49 scw Exp $");
 struct	ixp425_softc *ixp425_softc;
 
 void
-ixp425_attach(struct ixp425_softc *sc)
+ixp425_attach(device_t self)
 {
+	struct ixp425_softc *sc = device_private(self);
+#if NPCI > 0
 	struct pcibus_attach_args pba;
+#endif
 
+	sc->sc_dev = self;
 	sc->sc_iot = &ixp425_bs_tag;
 
 	ixp425_softc = sc;
@@ -60,23 +60,24 @@ ixp425_attach(struct ixp425_softc *sc)
 	printf("\n");
 
 	/*
-	 * Mapping for PCI CSR
-	 */
-	if (bus_space_map(sc->sc_iot, IXP425_PCI_HWBASE, IXP425_PCI_SIZE,
-			  0, &sc->sc_pci_ioh))
-		panic("%s: unable to map PCI registers", sc->sc_dev.dv_xname);
-
-	/*
 	 * Mapping for GPIO Registers
 	 */
 	if (bus_space_map(sc->sc_iot, IXP425_GPIO_HWBASE, IXP425_GPIO_SIZE,
 			  0, &sc->sc_gpio_ioh))
-		panic("%s: unable to map GPIO registers", sc->sc_dev.dv_xname);
+		panic("%s: unable to map GPIO registers", device_xname(self));
 
 	if (bus_space_map(sc->sc_iot, IXP425_EXP_HWBASE, IXP425_EXP_SIZE,
 			  0, &sc->sc_exp_ioh))
 		panic("%s: unable to map Expansion Bus registers",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
+
+#if NPCI > 0
+	/*
+	 * Mapping for PCI CSR
+	 */
+	if (bus_space_map(sc->sc_iot, IXP425_PCI_HWBASE, IXP425_PCI_SIZE,
+			  0, &sc->sc_pci_ioh))
+		panic("%s: unable to map PCI registers", device_xname(self));
 
 	/*
 	 * Invoke the board-specific PCI initialization code
@@ -104,8 +105,9 @@ ixp425_attach(struct ixp425_softc *sc)
 	pba.pba_bridgetag = NULL;
 	pba.pba_intrswiz = 0;	/* XXX */
 	pba.pba_intrtag = 0;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 			PCI_FLAGS_MRL_OKAY   | PCI_FLAGS_MRM_OKAY |
 			PCI_FLAGS_MWI_OKAY;
-	(void) config_found_ia(&sc->sc_dev, "pcibus", &pba, pcibusprint);
+	(void) config_found_ia(self, "pcibus", &pba, pcibusprint);
+#endif
 }

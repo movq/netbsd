@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_pipe.c,v 1.12 2007/12/20 23:02:51 dsl Exp $	*/
+/*	$NetBSD: linux_pipe.c,v 1.18 2017/12/26 08:30:57 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,22 +30,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.12 2007/12/20 23:02:51 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.18 2017/12/26 08:30:57 kamil Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
+#include <sys/filedesc.h>
+#include <sys/fcntl.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_fcntl.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
@@ -67,11 +62,35 @@ __KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.12 2007/12/20 23:02:51 dsl Exp $");
 int
 linux_sys_pipe(struct lwp *l, const void *v, register_t *retval)
 {
-	int error;
+	int fd[2], error;
 
-	if ((error = sys_pipe(l, 0, retval)))
+	if ((error = pipe1(l, fd, 0)))
 		return error;
 
-	(l->l_md.md_tf)->tf_regs[FRAME_A4] = retval[1];
+	retval[0] = fd[0];
+	(l->l_md.md_tf)->tf_regs[FRAME_A4] = fd[1];
+	return 0;
+}
+
+int
+linux_sys_pipe2(struct lwp *l, const struct linux_sys_pipe2_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int *) pfds;
+		syscallarg(int) flags;
+	} */
+	int fd[2], error, flags;
+
+	flags = linux_to_bsd_ioflags(SCARG(uap, flags));
+	if ((flags & ~(O_CLOEXEC|O_NONBLOCK)) != 0)
+		return EINVAL;
+
+	if ((error = pipe1(l, fd, flags)))
+		return error;
+
+	retval[0] = fd[0];
+	(l->l_md.md_tf)->tf_regs[FRAME_A4] = fd[1];
+
 	return 0;
 }

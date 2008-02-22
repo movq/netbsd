@@ -1,4 +1,4 @@
-/*	$NetBSD: strncmp.S,v 1.1 2005/12/20 19:28:49 christos Exp $	*/
+/*	$NetBSD: strncmp.S,v 1.7 2013/09/07 19:06:29 chs Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,46 +33,68 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: strncmp.S,v 1.1 2005/12/20 19:28:49 christos Exp $")
+	RCSID("$NetBSD: strncmp.S,v 1.7 2013/09/07 19:06:29 chs Exp $")
 #endif /* LIBC_SCCS and not lint */
 
+
+#ifdef __mcoldfire__
+#define GETC(a,b)	mvsb	a,b
+#define	SUBC(a,b)	mvsb	a,%d2; subl %d2,b
+#else
+#define GETC(a,b)	movb	a,b
+#define	SUBC(a,b)	subb	a,b
+#endif
+
 ENTRY(strncmp)
-	movl	%sp@(12),%d0
-	jeq	L4
-	movl	%sp@(4),%a0
-	movl	%sp@(8),%a1
-L1:				/* unroll by 4 for m680[23]0's */
-	movb	%a0@+,%d1
-	jeq	L2
-	subb	%a1@+,%d1
-	jne	L3
+	movl	12(%sp),%d0
+	jeq	.L4
+	movl	4(%sp),%a0
+	movl	8(%sp),%a1
+#ifdef __coldfire__
+	movl	%d2,-(%sp)	| save temp
+#endif
+.L1:				/* unroll by 4 for m680[23]0's */
+	GETC((%a0)+,%d1)
+	jeq	.L2
+	SUBC((%a1)+,%d1)
+	jne	.L3
 	subql	#1,%d0
-	jeq	L4
+	jeq	.L4
 
-	movb	%a0@+,%d1
-	jeq	L2
-	subb	%a1@+,%d1
-	jne	L3
+	GETC((%a0)+,%d1)
+	jeq	.L2
+	SUBC((%a1)+,%d1)
+	jne	.L3
 	subql	#1,%d0
-	jeq	L4
+	jeq	.L4
 
-	movb	%a0@+,%d1
-	jeq	L2
-	subb	%a1@+,%d1
-	jne	L3
+	GETC((%a0)+,%d1)
+	jeq	.L2
+	SUBC((%a1)+,%d1)
+	jne	.L3
 	subql	#1,%d0
-	jeq	L4
+	jeq	.L4
 
-	movb	%a0@+,%d1
-	jeq	L2
-	subb	%a1@+,%d1
-	jne	L3
+	GETC((%a0)+,%d1)
+	jeq	.L2
+	SUBC((%a1)+,%d1)
+	jne	.L3
 	subql	#1,%d0
-	jne	L1
-L4:	rts
+	jne	.L1
+#ifdef __mcoldfire__
+	movl	(%sp)+,%d2		| restore temp
+#endif
+.L4:	rts
 
-L2:	subb	%a1@,%d1
-L3:	scs	%d0
+.L2:	SUBC((%a1),%d1)
+.L3:	
+#ifdef __mcoldfire__
+	movl	(%sp)+,%d2		| restore temp
+	movl	%d1,%d0
+#else
+	scs	%d0
 	EXTBL(%d0)
-	movb	%d1,%d0
+	moveb	%d1,%d0
+#endif
 	rts
+END(strncmp)

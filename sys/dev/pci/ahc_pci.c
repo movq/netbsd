@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ahc_pci.c,v 1.62 2008/01/28 16:08:38 macallan Exp $
+ * $Id: ahc_pci.c,v 1.72 2018/06/03 10:45:16 maxv Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx_pci.c#57 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.62 2008/01/28 16:08:38 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.72 2018/06/03 10:45:16 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -266,7 +266,7 @@ static ahc_device_setup_t ahc_aha394XX_setup;
 static ahc_device_setup_t ahc_aha494XX_setup;
 static ahc_device_setup_t ahc_aha398XX_setup;
 
-static struct ahc_pci_identity ahc_pci_ident_table [] =
+static const struct ahc_pci_identity ahc_pci_ident_table[] =
 {
 	/* aic7850 based controllers */
 	{
@@ -709,9 +709,6 @@ static void ahc_probe_ext_scbram(struct ahc_softc *ahc);
 
 static void ahc_pci_intr(struct ahc_softc *);
 
-static bool ahc_pci_suspend(struct device *);
-static bool ahc_pci_resume(struct device *);
-
 static const struct ahc_pci_identity *
 ahc_find_pci_device(pcireg_t id, pcireg_t subid, u_int func)
 {
@@ -744,8 +741,7 @@ ahc_find_pci_device(pcireg_t id, pcireg_t subid, u_int func)
 }
 
 static int
-ahc_pci_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+ahc_pci_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahc_pci_identity *entry;
@@ -757,11 +753,11 @@ ahc_pci_probe(struct device *parent, struct cfdata *match,
 }
 
 static void
-ahc_pci_attach(struct device *parent, struct device *self, void *aux)
+ahc_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahc_pci_identity *entry;
-	struct		   ahc_softc *ahc = (void *)self;
+	struct		   ahc_softc *ahc = device_private(self);
 	pcireg_t	   command;
 	u_int		   our_id = 0;
 	u_int		   sxfrctl1;
@@ -784,8 +780,10 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char        *intrstr;
 	struct ahc_pci_busdata *bd;
 	bool               override_ultra;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	ahc_set_name(ahc, ahc->sc_dev.dv_xname);
+	ahc->sc_dev = self;
+	ahc_set_name(ahc, device_xname(ahc->sc_dev));
 	ahc->parent_dmat = pa->pa_dmat;
 
 	command = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
@@ -793,12 +791,13 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	entry = ahc_find_pci_device(pa->pa_id, subid, pa->pa_function);
 	if (entry == NULL)
 		return;
-	printf(": %s\n", entry->name);
+	aprint_naive("\n");
+	aprint_normal(": %s\n", entry->name);
 
 	/* Keep information about the PCI bus */
 	bd = malloc(sizeof (struct ahc_pci_busdata), M_DEVBUF, M_NOWAIT);
 	if (bd == NULL) {
-		printf("%s: unable to allocate bus-specific data\n",
+		aprint_error("%s: unable to allocate bus-specific data\n",
 		    ahc_name(ahc));
 		return;
 	}
@@ -827,7 +826,7 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT:
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_64BIT:
 		memh_valid = (pci_mapreg_map(pa, AHC_PCI_MEMADDR,
-					     memtype, 0, &memt, &memh, NULL, NULL) == 0);
+			memtype, 0, &memt, &memh, NULL, NULL) == 0);
 		break;
 	default:
 		memh_valid = 0;
@@ -836,22 +835,24 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	ioh_valid = (pci_mapreg_map(pa, AHC_PCI_IOADDR,
 				    PCI_MAPREG_TYPE_IO, 0, &iot,
 				    &ioh, NULL, NULL) == 0);
+
 #if 0
 	printf("%s: bus info: memt 0x%lx, memh 0x%lx, iot 0x%lx, ioh 0x%lx\n",
 	    ahc_name(ahc), (u_long)memt, (u_long)memh, (u_long)iot,
 	    (u_long)ioh);
 #endif
 
+#ifdef AHC_ALLOW_MEMIO
+	if (memh_valid) {
+		st = memt;
+		sh = memh;
+	} else
+#endif
 	if (ioh_valid) {
 		st = iot;
 		sh = ioh;
-#ifdef AHC_ALLOW_MEMIO
-	} else if (memh_valid) {
-		st = memt;
-		sh = memh;
-#endif
 	} else {
-		printf(": unable to map registers\n");
+		aprint_error(": unable to map registers\n");
 		return;
 	}
 	ahc->tag = st;
@@ -883,7 +884,7 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	if ((ahc->flags & AHC_39BIT_ADDRESSING) != 0) {
 
 		if (1/*bootverbose*/)
-			printf("%s: Enabling 39Bit Addressing\n",
+			aprint_normal("%s: Enabling 39Bit Addressing\n",
 			       ahc_name(ahc));
 		devconfig |= DACEN;
 	}
@@ -894,7 +895,7 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_conf_write(pa->pa_pc, pa->pa_tag, DEVCONFIG, devconfig);
 
 	/* Ensure busmastering is enabled */
-	command |= PCI_COMMAND_MASTER_ENABLE;;
+	command |= PCI_COMMAND_MASTER_ENABLE;
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, command);
 
 	/*
@@ -950,23 +951,24 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", ahc_name(ahc));
+		aprint_error("%s: couldn't map interrupt\n", ahc_name(ahc));
 		ahc_free(ahc);
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	ahc->ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, ahc_intr, ahc);
 	if (ahc->ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       ahc->sc_dev.dv_xname);
+		aprint_error_dev(ahc->sc_dev,
+		    "couldn't establish interrupt\n");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		ahc_free(ahc);
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", ahc_name(ahc), intrstr);
+		aprint_normal("%s: interrupting at %s\n", ahc_name(ahc),
+		    intrstr);
 
 	dscommand0 = ahc_inb(ahc, DSCOMMAND0);
 	dscommand0 |= MPARCKEN|CACHETHEN;
@@ -1061,9 +1063,9 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 			 * conservative settings (async, no tagged
 			 * queuing etc.) and machine dependent device
 			 * property is set.
-			 */ 
+			 */
 			usetd = prop_dictionary_get(
-					device_properties(&ahc->sc_dev),
+					device_properties(ahc->sc_dev),
 					"aic7xxx-use-target-defaults");
 			if (usetd != NULL) {
 				KASSERT(prop_object_type(usetd) ==
@@ -1102,7 +1104,6 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (ahc_init(ahc))
 		goto error_out;
 
-	pmf_device_register(self, ahc_pci_suspend, ahc_pci_resume);
 	ahc_attach(ahc);
 
 	return;
@@ -1112,36 +1113,7 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	return;
 }
 
-/*
- * XXX we should call the real suspend and resume functions here
- * but for some reason ahc_suspend() panics on shutdown
- */
-
-static bool
-ahc_pci_suspend(struct device *dev)
-{
-	struct ahc_softc *sc = device_private(dev);
-#if 0
-	return (ahc_suspend(sc) == 0);
-#else
-	ahc_shutdown(sc);
-	return true;
-#endif
-}
-
-static bool
-ahc_pci_resume(struct device *dev)
-{
-#if 0
-	struct ahc_softc *sc = device_private(dev);
-
-	return (ahc_resume(sc) == 0);
-#else
-	return true;
-#endif
-}
-
-CFATTACH_DECL(ahc_pci, sizeof(struct ahc_softc),
+CFATTACH_DECL_NEW(ahc_pci, sizeof(struct ahc_softc),
     ahc_pci_probe, ahc_pci_attach, NULL, NULL);
 
 static int
@@ -1749,7 +1721,7 @@ ahc_aha29160C_setup(struct ahc_softc *ahc)
 static int
 ahc_raid_setup(struct ahc_softc *ahc)
 {
-	printf("%s: RAID functionality unsupported\n", ahc->sc_dev.dv_xname);
+	aprint_normal_dev(ahc->sc_dev, "RAID functionality unsupported\n");
 	return (ENXIO);
 }
 

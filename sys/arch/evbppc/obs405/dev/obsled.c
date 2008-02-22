@@ -1,4 +1,4 @@
-/*	$NetBSD: obsled.c,v 1.6 2006/03/28 17:38:24 thorpej Exp $	*/
+/*	$NetBSD: obsled.c,v 1.10 2014/02/25 18:30:08 pooka Exp $	*/
 
 /*
  * Copyright (c) 2004 Shigeyuki Fukushima.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obsled.c,v 1.6 2006/03/28 17:38:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obsled.c,v 1.10 2014/02/25 18:30:08 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -44,23 +44,23 @@ __KERNEL_RCSID(0, "$NetBSD: obsled.c,v 1.6 2006/03/28 17:38:24 thorpej Exp $");
 #include <powerpc/ibm4xx/dev/gpiovar.h>
 
 struct obsled_softc {
-        struct device sc_dev;
+        device_t sc_dev;
 	gpio_tag_t sc_tag;
         int sc_addr;
 	int sc_led_state;	/* LED status (ON=1/OFF=0) */
 	int sc_led_state_mib;
 };
 
-static void	obsled_attach(struct device *, struct device *, void *);
-static int	obsled_match(struct device *, struct cfdata *, void *);
+static void	obsled_attach(device_t, device_t, void *);
+static int	obsled_match(device_t, cfdata_t, void *);
 static int	obsled_sysctl_verify(SYSCTLFN_PROTO);
 static void	obsled_set_state(struct obsled_softc *);
 
-CFATTACH_DECL(obsled, sizeof(struct obsled_softc),
+CFATTACH_DECL_NEW(obsled, sizeof(struct obsled_softc),
 	obsled_match, obsled_attach, NULL, NULL);
 
 static int
-obsled_match(struct device *parent, struct cfdata *cf, void *aux)
+obsled_match(device_t parent, cfdata_t cf, void *aux)
 {
         struct gpio_attach_args *ga = aux;
 
@@ -76,20 +76,21 @@ obsled_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-obsled_attach(struct device *parent, struct device *self, void *aux)
+obsled_attach(device_t parent, device_t self, void *aux)
 {
-        struct obsled_softc *sc = (struct obsled_softc *)self;
+        struct obsled_softc *sc = device_private(self);
         struct gpio_attach_args *ga = aux;
 	struct sysctlnode *node;
 	int err, node_mib;
 	char led_name[5];
-	/* int led = (1 << device_unit(&sc->sc_dev)); */
+	/* int led = (1 << device_unit(sc->sc_dev)); */
 
 	snprintf(led_name, sizeof(led_name),
-		"led%d", (1 << device_unit(&sc->sc_dev)) & 0x7);
+		"led%d", (1 << device_unit(sc->sc_dev)) & 0x7);
         aprint_naive(": OpenBlockS %s\n", led_name);
         aprint_normal(": OpenBlockS %s\n", led_name);
 
+	sc->sc_dev = self;
         sc->sc_tag = ga->ga_tag;
         sc->sc_addr = ga->ga_addr;
 	sc->sc_led_state = 0;
@@ -97,15 +98,6 @@ obsled_attach(struct device *parent, struct device *self, void *aux)
 	obs266_led_set(OBS266_LED_OFF);
 
 	/* add sysctl interface */
-	err = sysctl_createv(NULL, 0,
-			NULL, NULL,
-			0, CTLTYPE_NODE,
-			"hw",
-			NULL,
-			NULL, 0, NULL, 0,
-			CTL_HW, CTL_EOL);
-	if (err != 0)
-		return;
 	err = sysctl_createv(NULL, 0,
 			NULL, (const struct sysctlnode **)&node,
 			0, CTLTYPE_NODE,
@@ -121,7 +113,7 @@ obsled_attach(struct device *parent, struct device *self, void *aux)
 			CTLFLAG_READWRITE, CTLTYPE_INT,
 			led_name,
 			SYSCTL_DESCR("OpenBlockS LED state (0=off, 1=on)"),
-			obsled_sysctl_verify, 0, sc, 0,
+			obsled_sysctl_verify, 0, (void *)sc, 0,
 			CTL_HW, node_mib, CTL_CREATE, CTL_EOL);
 	if (err  != 0)
 		return;
@@ -178,19 +170,21 @@ obsled_set_state(struct obsled_softc *sc)
 void
 obs266_led_set(int led)
 {
-	struct device *dp = NULL;
-	struct devicelist *dlp = &alldevs;
+	device_t dv;
+	deviter_t di;
 
 	/*
 	 * Sarching "obsled" devices from device tree.
 	 * Do you have something better idea?
 	 */
-        for (dp = TAILQ_FIRST(dlp); dp != NULL; dp = TAILQ_NEXT(dp, dv_list)) {
-		if (device_is_a(dp, "obsles")) {
-			struct obsled_softc *sc = (struct obsled_softc *)dp;
+        for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
+	     dv = deviter_next(&di)) {
+		if (device_is_a(dv, "obsles")) {
+			struct obsled_softc *sc = device_private(dv);
 			sc->sc_led_state =
-			    (led & (1 << device_unit(dp))) >> device_unit(dp);
+			    (led & (1 << device_unit(dv))) >> device_unit(dv);
 			obsled_set_state(sc);
 		}
 	}
+	deviter_release(&di);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: devicename.c,v 1.3 2006/11/24 19:38:55 christos Exp $	*/
+/*	$NetBSD: devicename.c,v 1.9 2016/08/15 09:00:52 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -31,6 +31,8 @@
 /* __FBSDID("$FreeBSD: src/sys/boot/efi/libefi/devicename.c,v 1.3 2004/01/04 23:28:16 obrien Exp $"); */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 #include <sys/disklabel.h>
 
 #include <bootstrap.h>
@@ -93,7 +95,7 @@ efi_parsedev(struct efi_devdesc **dev, const char *devspec, const char **path)
 	struct devsw	*dv;
 	int dv_type;
 	int		i, unit, slice, partition, err;
-	char		*cp;
+	char		*cp = NULL;
 	const char	*np;
 
 	/* minimum length check */
@@ -149,6 +151,10 @@ efi_parsedev(struct efi_devdesc **dev, const char *devspec, const char **path)
 				cp++;
 			}
 		}
+		if (cp == NULL) {
+			err = EINVAL;
+			goto fail;
+		}
 		if (*cp && (*cp != ':')) {
 			err = EINVAL;
 			goto fail;
@@ -171,6 +177,10 @@ efi_parsedev(struct efi_devdesc **dev, const char *devspec, const char **path)
 				err = EUNIT;
 				goto fail;
 			}
+		}
+		if (cp == NULL) {
+			err = EINVAL;
+			goto fail;
 		}
 		if (*cp && (*cp != ':')) {
 			err = EINVAL;
@@ -206,25 +216,32 @@ efi_fmtdev(void *vdev)
 {
 	struct efi_devdesc *dev = (struct efi_devdesc *)vdev;
 	static char	buf[128];	/* XXX device length constant? */
-	char		*cp;
+	size_t		len, buflen = sizeof(buf);
     
 	switch(dev->d_type) {
 	case DEVT_NONE:
-		strcpy(buf, "(no device)");
+		strlcpy(buf, "(no device)", sizeof(buf));
 		break;
 
 	case DEVT_DISK:
-		cp = buf;
-		cp += sprintf(cp, "%s%d", dev->d_dev->dv_name, dev->d_kind.efidisk.unit);
-		if (dev->d_kind.efidisk.slice > 0)
-			cp += sprintf(cp, "s%d", dev->d_kind.efidisk.slice);
-		if (dev->d_kind.efidisk.partition >= 0)
-			cp += sprintf(cp, "%c", dev->d_kind.efidisk.partition + 'a');
-		strcat(cp, ":");
+		len = snprintf(buf, buflen, "%s%d", dev->d_dev->dv_name, dev->d_kind.efidisk.unit);
+		if (len > buflen)
+			len = buflen;
+		if (dev->d_kind.efidisk.slice > 0) {
+			len += snprintf(buf + len, buflen - len, "s%d", dev->d_kind.efidisk.slice);
+			if (len > buflen)
+				len = buflen;
+		}
+		if (dev->d_kind.efidisk.partition >= 0) {
+			len += snprintf(buf + len, buflen - len, "%c", dev->d_kind.efidisk.partition + 'a');
+			if (len > buflen)
+				len = buflen;
+		}
+		strlcat(buf, ":", sizeof(buf) - len);
 		break;
 
 	case DEVT_NET:
-		sprintf(buf, "%s%d:", dev->d_dev->dv_name, dev->d_kind.netif.unit);
+		snprintf(buf, buflen, "%s%d:", dev->d_dev->dv_name, dev->d_kind.netif.unit);
 		break;
 	}
 	return(buf);

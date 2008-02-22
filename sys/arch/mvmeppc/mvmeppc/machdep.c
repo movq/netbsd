@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.31 2014/03/26 17:44:36 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.31 2014/03/26 17:44:36 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_mvmetype.h"
@@ -40,10 +40,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $")
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -54,22 +56,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2007/10/17 19:55:51 garbled Exp $")
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-
-#include <uvm/uvm_extern.h>
-
 #include <sys/sysctl.h>
-
-#include <net/netisr.h>
 
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/platform.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
 
@@ -128,7 +123,7 @@ initppc(u_long startkernel, u_long endkernel, void *btinfo)
 		extern void _mvmeppc_unsup_board(const char *, const char *);
 		char msg[80];
 
-		sprintf(msg, "Unsupported model: MVME%04x",
+		snprintf(msg, sizeof(msg), "Unsupported model: MVME%04x",
 		    bootinfo.bi_modelnumber);
 		_mvmeppc_unsup_board(msg, &msg[strlen(msg)]);
 		/* NOTREACHED */
@@ -162,18 +157,19 @@ initppc(u_long startkernel, u_long endkernel, void *btinfo)
  * Machine dependent startup code.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	char modelbuf[256];
 
 	/*
 	 * Mapping PReP-compatible interrput vector register.
 	 */
-	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE);
+	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE, false);
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
 
-	sprintf(modelbuf, "%s\nCore Speed: %dMHz, Bus Speed: %dMHz\n",
+	snprintf(modelbuf, sizeof(modelbuf),
+	    "%s\nCore Speed: %dMHz, Bus Speed: %dMHz\n",
 	    platform->model,
 	    bootinfo.bi_mpuspeed/1000000,
 	    bootinfo.bi_busspeed/1000000);
@@ -198,7 +194,7 @@ cpu_startup()
  * Initialize system console.
  */
 void
-consinit()
+consinit(void)
 {
 	static int initted = 0;
 
@@ -213,7 +209,7 @@ consinit()
 		pfb_cnattach(consinfo->addr);
 #if (NPCKBC > 0)
 		pckbc_cnattach(&mvmeppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 #endif
 		return;
 	}
@@ -233,7 +229,7 @@ consinit()
 dokbd:
 #if (NPCKBC > 0)
 		pckbc_cnattach(&mvmeppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 #endif
 		return;
 	}
@@ -287,6 +283,8 @@ cpu_reboot(int howto, char *what)
 
 halt_sys:
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
                 printf("\n");

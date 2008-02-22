@@ -1,4 +1,4 @@
-/*	$NetBSD: forward.c,v 1.28 2006/05/24 16:34:25 christos Exp $	*/
+/*	$NetBSD: forward.c,v 1.33 2015/10/09 17:51:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)forward.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: forward.c,v 1.28 2006/05/24 16:34:25 christos Exp $");
+__RCSID("$NetBSD: forward.c,v 1.33 2015/10/09 17:51:26 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -90,13 +90,7 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 	int ch, n;
 	int kq=-1, action=USE_SLEEP;
 	struct stat statbuf;
-	dev_t lastdev;
-	ino_t lastino;
 	struct kevent ev[2];
-
-	/* Keep track of file's previous incarnation. */
-	lastdev = sbp->st_dev;
-	lastino = sbp->st_ino;
 
 	switch(style) {
 	case FBYTES:
@@ -147,7 +141,7 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 				return;
 			}
 		} else {
-			if (bytes(fp, off))
+			if (displaybytes(fp, off))
 				return;
 		}
 		break;
@@ -169,7 +163,7 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 				return;
 			}
 		} else {
-			if (lines(fp, off))
+			if (displaylines(fp, off))
 				return;
 		}
 		break;
@@ -180,7 +174,7 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 	if (fflag) {
 		kq = kqueue();
 		if (kq < 0)
-			err(1, "kqueue");
+			xerr(1, "kqueue");
 		action = ADD_EVENTS;
 	}
 
@@ -204,17 +198,17 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 			n = 0;
 
 			memset(ev, 0, sizeof(ev));
-			if (fflag == 2 && fileno(fp) != STDIN_FILENO) {
+			if (fflag == 2 && fp != stdin) {
 				EV_SET(&ev[n], fileno(fp), EVFILT_VNODE,
-					EV_ADD | EV_ENABLE | EV_CLEAR,
-					NOTE_DELETE | NOTE_RENAME, 0, 0);
+				    EV_ADD | EV_ENABLE | EV_CLEAR,
+				    NOTE_DELETE | NOTE_RENAME, 0, 0);
 				n++;
 			}
 			EV_SET(&ev[n], fileno(fp), EVFILT_READ,
-				EV_ADD | EV_ENABLE, 0, 0, 0);
+			    EV_ADD | EV_ENABLE, 0, 0, 0);
 			n++;
 
-			if (kevent(kq, ev, n, NULL, 0, NULL) < 0) {
+			if (kevent(kq, ev, n, NULL, 0, NULL) == -1) {
 				close(kq);
 				kq = -1;
 				action = USE_SLEEP;
@@ -224,8 +218,8 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 			break;
 
 		case USE_KQUEUE:
-			if (kevent(kq, NULL, 0, ev, 1, NULL) < 0)
-				err(1, "kevent");
+			if (kevent(kq, NULL, 0, ev, 1, NULL) == -1)
+				xerr(1, "kevent");
 
 			if (ev[0].filter == EVFILT_VNODE) {
 				/* file was rotated, wait until it reappears */
@@ -246,7 +240,7 @@ forward(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 			 */
                 	(void) sleep(1);
 
-			if (fflag == 2 && fileno(fp) != STDIN_FILENO &&
+			if (fflag == 2 && fp != stdin &&
 			    stat(fname, &statbuf) != -1) {
 				if (statbuf.st_ino != sbp->st_ino ||
 				    statbuf.st_dev != sbp->st_dev ||
@@ -290,7 +284,7 @@ rlines(FILE *fp, off_t off, struct stat *sbp)
 #define MMAP_MAXSIZE  (10 * 1024 * 1024)
 
 	if (!(file_size = sbp->st_size))
-		return (0);
+		return 0;
 	file_remaining = file_size;
 
 	if (file_remaining > MMAP_MAXSIZE) {
@@ -305,8 +299,8 @@ rlines(FILE *fp, off_t off, struct stat *sbp)
 		start = mmap(NULL, (size_t)mmap_size, PROT_READ,
 			     MAP_FILE|MAP_SHARED, fileno(fp), mmap_offset);
 		if (start == MAP_FAILED) {
-			err(0, "%s: %s", fname, strerror(EFBIG));
-			return (1);
+			xerr(0, "%s", fname);
+			return 1;
 		}
 
 		mmap_remaining = mmap_size;
@@ -326,8 +320,8 @@ rlines(FILE *fp, off_t off, struct stat *sbp)
 			break;
 
 		if (munmap(start, mmap_size)) {
-			err(0, "%s: %s", fname, strerror(errno));
-			return (1);
+			xerr(0, "%s", fname);
+			return 1;
 		}
 
 		if (mmap_offset >= MMAP_MAXSIZE) {
@@ -344,8 +338,8 @@ rlines(FILE *fp, off_t off, struct stat *sbp)
 	WR(p, mmap_size - mmap_remaining);
 	file_remaining += mmap_size - mmap_remaining;
 	if (munmap(start, mmap_size)) {
-		err(0, "%s: %s", fname, strerror(errno));
-		return (1);
+		xerr(0, "%s", fname);
+		return 1;
 	}
 
 	/*
@@ -355,7 +349,7 @@ rlines(FILE *fp, off_t off, struct stat *sbp)
 	 */
 	if (fseeko(fp, file_remaining, SEEK_SET) == -1) {
 		ierr();
-		return (1);
+		return 1;
 	}
-	return (0);
+	return 0;
 }

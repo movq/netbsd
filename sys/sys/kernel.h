@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.h,v 1.27 2008/01/20 18:09:13 joerg Exp $	*/
+/*	$NetBSD: kernel.h,v 1.30 2018/06/02 22:25:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -40,6 +40,8 @@
 #define _SYS_KERNEL_H_
 
 #if defined(_KERNEL) || defined(_STANDALONE)
+#include <sys/param.h>
+
 /* Global variables for the kernel. */
 
 extern long hostid;
@@ -48,7 +50,7 @@ extern int hostnamelen;
 extern char domainname[MAXHOSTNAMELEN];
 extern int domainnamelen;
 
-extern struct timeval boottime;
+extern struct timespec boottime;
 
 extern int rtc_offset;		/* offset of rtc from UTC in minutes */
 
@@ -61,6 +63,7 @@ extern int stathz;		/* statistics clock's frequency */
 extern int profhz;		/* profiling clock's frequency */
 
 extern int profsrc;		/* profiling source */
+extern int psratio;		/* ratio: prof / stat */
 
 #define PROFSRC_CLOCK	0
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vsbus.h,v 1.17 2008/02/03 08:42:48 matt Exp $ */
+/*	$NetBSD: vsbus.h,v 1.20 2017/05/22 17:12:11 ragge Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -60,10 +54,13 @@ struct	vsbus_attach_args {
  */
 #define VS_CFGTST	0x20020000      /* config register */
 #define VS_REGS         0x20080000      /* Misc CPU internal regs */
+#define VS_REGS_KA49	0x25c00000      /* ... same, on 512KB ROM systems */
 #define NI_ADDR         0x20090000      /* Ethernet address */
 #define DZ_CSR          0x200a0000      /* DZ11-compatible chip csr */
+#define DZ_CSR_KA49	0x25000000      /* ... same, on 512KB ROM systems */
 #define VS_CLOCK        0x200b0000      /* clock chip address */
 #define SCA_REGS        0x200c0000      /* disk device addresses */
+#define SCA_REGS_KA49	0x26000000      /* ... same, on 512KB ROM systems */
 #define NI_BASE         0x200e0000      /* LANCE CSRs */
 #define NI_IOSIZE       (128 * VAX_NBPG)    /* IO address size */
 
@@ -75,7 +72,7 @@ struct	vsbus_attach_args {
 #define	SMSIZE		0x20000		/* Actually 256k, only 128k used */
 
 struct	vsbus_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 	u_char	*sc_intmsk;	/* Mask register */
 	u_char	*sc_intclr;	/* Clear interrupt register */
 	u_char	*sc_intreq;	/* Interrupt request register */
@@ -84,6 +81,7 @@ struct	vsbus_softc {
 	vaddr_t sc_dmaaddr;	/* Mass storage virtual DMA area */
 	vsize_t sc_dmasize;	/* Size of the DMA area */
 
+	bus_space_tag_t sc_iot;
 	struct vax_bus_dma_tag sc_dmatag;
 	struct vax_sgmap sc_sgmap;
 };

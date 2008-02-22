@@ -1,4 +1,4 @@
-/*	$NetBSD: ucbio.c,v 1.10 2007/12/15 00:39:18 perry Exp $	*/
+/*	$NetBSD: ucbio.c,v 1.12 2012/10/27 17:17:53 chs Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucbio.c,v 1.10 2007/12/15 00:39:18 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucbio.c,v 1.12 2012/10/27 17:17:53 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: ucbio.c,v 1.10 2007/12/15 00:39:18 perry Exp $");
 
 #include <machine/debug.h>
 
-int ucbio_match(struct device*, struct cfdata *, void *);
-void ucbio_attach(struct device*, struct device *, void *);
+int ucbio_match(device_t, cfdata_t, void *);
+void ucbio_attach(device_t, device_t, void *);
 
 struct betty_port_status {
 	u_int16_t dir;
@@ -71,14 +64,14 @@ struct betty_port_status {
 };
 
 struct ucbio_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	tx_chipset_tag_t sc_tc;
 
 	struct betty_port_status sc_stat, sc_ostat;
 	struct hpcio_chip sc_hc;
 };
 
-CFATTACH_DECL(ucbio, sizeof(struct ucbio_softc),
+CFATTACH_DECL_NEW(ucbio, sizeof(struct ucbio_softc),
     ucbio_match, ucbio_attach, NULL, NULL);
 
 /* I/O */
@@ -93,18 +86,19 @@ static void betty_update(hpcio_chip_t);
 static void betty_dump(hpcio_chip_t);
 
 int
-ucbio_match(struct device *parent, struct cfdata *cf, void *aux)
+ucbio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-ucbio_attach(struct device *parent, struct device *self, void *aux)
+ucbio_attach(device_t parent, device_t self, void *aux)
 {
 	struct ucb1200_attach_args *ucba = aux;
-	struct ucbio_softc *sc = (void *)self;
+	struct ucbio_softc *sc = device_private(self);
 	struct hpcio_chip *hc = &sc->sc_hc;
 
+	sc->sc_dev = self;
 	sc->sc_tc = ucba->ucba_tc;
 	printf("\n");
 
@@ -158,7 +152,7 @@ betty_intr_establish(hpcio_chip_t hc, int port, int mode, int (*func)(void *),
 {
 	struct ucbio_softc *sc = hc->hc_sc;
 
-	printf("%s: %s not implemented.\n", sc->sc_dev.dv_xname,
+	printf("%s: %s not implemented.\n", device_xname(sc->sc_dev),
 	    __func__);
 
 	return (0);
@@ -169,7 +163,7 @@ betty_intr_disestablish(hpcio_chip_t hc, void *ih)
 {
 	struct ucbio_softc *sc = hc->hc_sc;
 
-	printf("%s: %s not implemented.\n", sc->sc_dev.dv_xname,
+	printf("%s: %s not implemented.\n", device_xname(sc->sc_dev),
 	    __func__);
 }
 

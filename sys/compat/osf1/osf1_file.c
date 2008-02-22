@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_file.c,v 1.29 2007/12/20 23:03:02 dsl Exp $ */
+/* $NetBSD: osf1_file.c,v 1.44 2017/07/28 15:34:06 riastradh Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_file.c,v 1.29 2007/12/20 23:03:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_file.c,v 1.44 2017/07/28 15:34:06 riastradh Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -86,11 +86,17 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_file.c,v 1.29 2007/12/20 23:03:02 dsl Exp $");
 #include <sys/resourcevar.h>
 #include <sys/wait.h>
 #include <sys/vfs_syscalls.h>
+#include <sys/dirent.h>
 
 #include <compat/osf1/osf1.h>
 #include <compat/osf1/osf1_syscallargs.h>
 #include <compat/common/compat_util.h>
 #include <compat/osf1/osf1_cvt.h>
+#include <compat/osf1/osf1_dirent.h>
+
+#ifdef SYSCALL_DEBUG
+extern int scdebug;
+#endif
 
 int
 osf1_sys_access(struct lwp *l, const struct osf1_sys_access_args *uap, register_t *retval)
@@ -121,6 +127,144 @@ osf1_sys_execve(struct lwp *l, const struct osf1_sys_execve_args *uap, register_
 	return sys_execve(l, &ap, retval);
 }
 
+int
+osf1_sys_getdirentries(struct lwp *l, const struct osf1_sys_getdirentries_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(char *) buf;
+		syscallarg(int) nbytes;
+		syscallarg(long *) basep;
+	} */
+	struct dirent *bdp;
+	struct vnode *vp;
+	char *inp, *buf;        /* BSD-format */
+	int len, reclen;        /* BSD-format */
+	char *outp;             /* OSF1-format */
+	int resid, osf1_reclen; /* OSF1-format */
+	struct file *fp;
+	struct uio auio;
+	struct iovec aiov;
+	struct osf1_dirent idb;
+	off_t off, off1;        /* true file offset */
+	int buflen, error, eofflag;
+	off_t *cookiebuf = NULL, *cookie;
+	int ncookies, fd;
+
+	if (SCARG(uap, nbytes) < 0)
+		return EINVAL;
+	if (SCARG(uap, nbytes) == 0)
+		return 0;
+
+	fd = SCARG(uap, fd);
+	if ((error = fd_getvnode(fd, &fp)) != 0)
+		return (error);
+	if ((fp->f_flag & FREAD) == 0) {
+		error = EBADF;
+		goto out1;
+	}
+
+	vp = fp->f_vnode;
+	if (vp->v_type != VDIR) {
+		error = EINVAL;
+		goto out1;
+	}
+
+	buflen = min(MAXBSIZE, SCARG(uap, nbytes));
+	buf = kmem_alloc(buflen, KM_SLEEP);
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	off = off1 = fp->f_offset;
+again:
+	aiov.iov_base = buf;
+	aiov.iov_len = buflen;
+	auio.uio_iov = &aiov;
+	auio.uio_iovcnt = 1;
+	auio.uio_rw = UIO_READ;
+	auio.uio_resid = buflen;
+	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
+	/*
+	 * First we read into the allocated buffer, then
+	 * we massage it into user space, one record at a time.
+	 */
+	error = VOP_READDIR(vp, &auio, fp->f_cred, &eofflag, &cookiebuf,
+	    &ncookies);
+	if (error)
+		goto out;
+
+	inp = buf;
+	outp = (char *)SCARG(uap, buf);
+	resid = SCARG(uap, nbytes);
+	if ((len = buflen - auio.uio_resid) == 0)
+		goto eof;
+
+	for (cookie = cookiebuf; len > 0; len -= reclen) {
+		bdp = (struct dirent *)inp;
+		reclen = bdp->d_reclen;
+		if (reclen & 3) {
+			error = EIO;
+			goto out;
+		}
+		if (cookie)
+			off = *cookie++; /* each entry points to the next */
+		else
+			off += reclen;
+		if ((off >> 32) != 0) {
+			compat_offseterr(vp, "osf1_sys_getdirentries");
+			error = EINVAL;
+			goto out;
+		}
+		if (bdp->d_fileno == 0) {
+			inp += reclen;  /* it is a hole; squish it out */
+			continue;
+		}
+		osf1_reclen = OSF1_RECLEN(&idb, bdp->d_namlen);
+		if (reclen > len || resid < osf1_reclen) {
+			/* entry too big for buffer, so just stop */
+			outp++;
+			break;
+		}
+		/*
+		 * Massage in place to make a OSF1-shaped dirent (otherwise
+		 * we have to worry about touching user memory outside of
+		 * the copyout() call).
+		 */
+		idb.d_ino = (osf1_ino_t)bdp->d_fileno;
+		idb.d_reclen = (u_short)osf1_reclen;
+		idb.d_namlen = (u_short)bdp->d_namlen;
+		strlcpy(idb.d_name, bdp->d_name, sizeof(idb.d_name));
+		if ((error = copyout((void *)&idb, outp, osf1_reclen)))
+			goto out;
+		/* advance past this real entry */
+		inp += reclen;
+		/* advance output past OSF1-shaped entry */
+		outp += osf1_reclen;
+		resid -= osf1_reclen;
+	}
+
+	/* if we squished out the whole block, try again */
+	if (outp == (char *)SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
+		goto again;
+	}
+	fp->f_offset = off;     /* update the vnode offset */
+
+eof:
+	*retval = SCARG(uap, nbytes) - resid;
+out:
+	VOP_UNLOCK(vp);
+	if (cookiebuf)
+		free(cookiebuf, M_TEMP);
+	kmem_free(buf, buflen);
+	if (SCARG(uap, basep) != NULL)
+		error = copyout(&off1, SCARG(uap, basep), sizeof(long));
+out1:
+	fd_putfile(fd);
+	return error;
+}
+
 /*
  * Get file status; this version does not follow links.
  */
@@ -132,7 +276,7 @@ osf1_sys_lstat(struct lwp *l, const struct osf1_sys_lstat_args *uap, register_t 
 	struct osf1_stat osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
 	if (error)
 		return (error);
 	osf1_cvt_stat_from_native(&sb, &osb);
@@ -151,7 +295,7 @@ osf1_sys_lstat2(struct lwp *l, const struct osf1_sys_lstat2_args *uap, register_
 	struct osf1_stat2 osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
 	if (error)
 		return (error);
 	osf1_cvt_stat2_from_native(&sb, &osb);
@@ -162,13 +306,9 @@ osf1_sys_lstat2(struct lwp *l, const struct osf1_sys_lstat2_args *uap, register_
 int
 osf1_sys_mknod(struct lwp *l, const struct osf1_sys_mknod_args *uap, register_t *retval)
 {
-	struct sys_mknod_args a;
 
-	SCARG(&a, path) = SCARG(uap, path);
-	SCARG(&a, mode) = SCARG(uap, mode);
-	SCARG(&a, dev) = osf1_cvt_dev_to_native(SCARG(uap, dev));
-
-	return sys_mknod(l, &a, retval);
+	return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
+	    osf1_cvt_dev_to_native(SCARG(uap, dev)), retval, UIO_USERSPACE);
 }
 
 int
@@ -229,7 +369,7 @@ osf1_sys_stat(struct lwp *l, const struct osf1_sys_stat_args *uap, register_t *r
 	struct osf1_stat osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error)
 		return (error);
 	osf1_cvt_stat_from_native(&sb, &osb);
@@ -248,7 +388,7 @@ osf1_sys_stat2(struct lwp *l, const struct osf1_sys_stat2_args *uap, register_t 
 	struct osf1_stat2 osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error)
 		return (error);
 	osf1_cvt_stat2_from_native(&sb, &osb);
@@ -262,7 +402,7 @@ osf1_sys_truncate(struct lwp *l, const struct osf1_sys_truncate_args *uap, regis
 	struct sys_truncate_args a;
 
 	SCARG(&a, path) = SCARG(uap, path);
-	SCARG(&a, pad) = 0;
+	SCARG(&a, PAD) = 0;
 	SCARG(&a, length) = SCARG(uap, length);
 
 	return sys_truncate(l, &a, retval);

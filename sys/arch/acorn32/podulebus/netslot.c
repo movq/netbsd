@@ -1,4 +1,4 @@
-/*	$NetBSD: netslot.c,v 1.6 2002/10/05 17:16:34 chs Exp $	*/
+/*	$NetBSD: netslot.c,v 1.11 2014/10/25 10:58:12 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -35,7 +35,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(1, "$NetBSD: netslot.c,v 1.6 2002/10/05 17:16:34 chs Exp $");
+__KERNEL_RCSID(1, "$NetBSD: netslot.c,v 1.11 2014/10/25 10:58:12 skrll Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -44,7 +44,6 @@ __KERNEL_RCSID(1, "$NetBSD: netslot.c,v 1.6 2002/10/05 17:16:34 chs Exp $");
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 #include <machine/io.h>
-#include <arm/arm32/katelib.h>
 #include <machine/intr.h>
 #include <machine/bootconfig.h>
 #include <arm/iomd/iomdreg.h>
@@ -52,12 +51,15 @@ __KERNEL_RCSID(1, "$NetBSD: netslot.c,v 1.6 2002/10/05 17:16:34 chs Exp $");
 #include <dev/podulebus/podulebus.h>
 #include <dev/podulebus/podules.h>
 
-u_int netslotread __P((u_int, int));
+#define WriteByte(a, b) \
+    *((volatile unsigned char *)(a)) = (b)
+#define ReadByte(a) \
+    (*((volatile unsigned char *)(a)))
+
+u_int netslotread(u_int, int);
 
 u_int
-netslotread(address, offset)
-	u_int address;
-	int offset;
+netslotread(u_int address, int offset)
 {
 	static int netslotoffset = -1;
 
@@ -75,8 +77,7 @@ netslotread(address, offset)
 }
 
 void
-netslotscan(dev)
-	struct device *dev;
+netslotscan(device_t dev)
 {
 	podule_t *podule;
 	volatile u_char *address;
@@ -146,8 +147,7 @@ netslotscan(dev)
 }
 
 void
-netslot_ea(buffer)
-	u_int8_t *buffer;
+netslot_ea(uint8_t *buffer)
 {
 	/* Build station address from machine ID */
 	buffer[0] = 0x00;

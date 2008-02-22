@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.17 2006/03/04 01:55:03 uwe Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.22 2016/09/03 09:07:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,10 @@
 
 #ifndef _SH3_VMPARAM_H_
 #define	_SH3_VMPARAM_H_
+
 #include <sys/queue.h>
+
+#define __USE_TOPDOWN_VM
 
 /*
  * We use 4K pages on the sh3/sh4.  Override the PAGE_* definitions
@@ -58,7 +54,7 @@
 /* top of stack */
 #define	USRSTACK		VM_MAXUSER_ADDRESS
 
-/* Virtual memory resoruce limit. */
+/* Virtual memory resource limit. */
 #define	MAXTSIZ			(64 * 1024 * 1024)	/* max text size */
 #ifndef MAXDSIZ
 #define	MAXDSIZ			(512 * 1024 * 1024)	/* max data size */
@@ -76,13 +72,6 @@
 #define	DFLSSIZ			(2 * 1024 * 1024)
 #endif
 
-/*
- * Size of shared memory map
- */
-#ifndef SHMMAXPGS
-#define	SHMMAXPGS		1024
-#endif
-
 /* Size of user raw I/O map */
 #ifndef USRIOSIZE
 #define	USRIOSIZE		(MAXBSIZE / PAGE_SIZE * 8)
@@ -92,30 +81,9 @@
 
 /* Physical memory segments */
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
-#define	VM_PHYSSEG_NOADD
 
 #define	sh3_round_page(x)	((((uint32_t)(x)) + PGOFSET) & ~PGOFSET)
 #define	sh3_trunc_page(x)	((uint32_t)(x) & ~PGOFSET)
 #define	sh3_btop(x)		((uint32_t)(x) >> PGSHIFT)
 #define	sh3_ptob(x)		((uint32_t)(x) << PGSHIFT)
-
-/* pmap-specific data store in the vm_page structure. */
-#define	__HAVE_VM_PAGE_MD
-#define	PVH_REFERENCED		1
-#define	PVH_MODIFIED		2
-
-#ifndef _LOCORE
-struct pv_entry;
-struct vm_page_md {
-	SLIST_HEAD(, pv_entry) pvh_head;
-	int pvh_flags;
-};
-
-#define	VM_MDPAGE_INIT(pg)						\
-do {									\
-	struct vm_page_md *pvh = &(pg)->mdpage;				\
-	SLIST_INIT(&pvh->pvh_head);					\
-	pvh->pvh_flags = 0;						\
-} while (/*CONSTCOND*/0)
-#endif /* _LOCORE */
 #endif /* !_SH3_VMPARAM_H_ */

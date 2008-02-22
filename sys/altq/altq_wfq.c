@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_wfq.c,v 1.18 2007/03/04 05:59:03 christos Exp $	*/
+/*	$NetBSD: altq_wfq.c,v 1.22 2017/07/28 13:58:47 riastradh Exp $	*/
 /*	$KAME: altq_wfq.c,v 1.14 2005/04/13 03:44:25 suz Exp $	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_wfq.c,v 1.18 2007/03/04 05:59:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_wfq.c,v 1.22 2017/07/28 13:58:47 riastradh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -69,10 +69,10 @@ __KERNEL_RCSID(0, "$NetBSD: altq_wfq.c,v 1.18 2007/03/04 05:59:03 christos Exp $
 static int		wfq_setenable(struct wfq_interface *, int);
 static int		wfq_ifattach(struct wfq_interface *);
 static int		wfq_ifdetach(struct wfq_interface *);
-static int		wfq_ifenqueue(struct ifaltq *, struct mbuf *,
-				      struct altq_pktattr *);
+static int		wfq_ifenqueue(struct ifaltq *, struct mbuf *);
 static u_long		wfq_hash(struct flowinfo *, int);
 static inline u_long	wfq_hashbydstaddr(struct flowinfo *, int);
+static inline u_long	wfq_hashbysrcaddr(struct flowinfo *, int);
 static inline u_long	wfq_hashbysrcport(struct flowinfo *, int);
 static wfq		*wfq_maxqueue(wfq_state_t *);
 static struct mbuf	*wfq_ifdequeue(struct ifaltq *, int);
@@ -248,7 +248,7 @@ wfq_classify(void *clfier, struct mbuf *m, int af)
 }
 
 static int
-wfq_ifenqueue(struct ifaltq *ifq, struct mbuf *mp, struct altq_pktattr *pktattr)
+wfq_ifenqueue(struct ifaltq *ifq, struct mbuf *mp)
 {
 	wfq_state_t *wfqp;
 	wfq *queue;
@@ -258,7 +258,7 @@ wfq_ifenqueue(struct ifaltq *ifq, struct mbuf *mp, struct altq_pktattr *pktattr)
 	mp->m_nextpkt = NULL;
 
 	/* grab a queue selected by classifier */
-	if (pktattr == NULL || (queue = pktattr->pattr_class) == NULL)
+	if ((queue = mp->m_pkthdr.pattr_class) == NULL)
 		queue = &wfqp->queue[0];
 
 	if (queue->tail == NULL)
@@ -349,6 +349,30 @@ wfq_hashbydstaddr(struct flowinfo *flow, int n)
 			struct flowinfo_in *fp = (struct flowinfo_in *)flow;
 
 			val = fp->fi_dst.s_addr;
+			val = val ^ (val >> 8) ^ (val >> 16) ^ (val >> 24);
+		}
+#ifdef INET6
+		else if (flow->fi_family == AF_INET6) {
+			struct flowinfo_in6 *fp6 = (struct flowinfo_in6 *)flow;
+
+			val = ntohl(fp6->fi6_flowlabel);
+		}
+#endif
+	}
+
+	return (val % n);
+}
+
+static inline u_long
+wfq_hashbysrcaddr(struct flowinfo *flow, int n)
+{
+	u_long val = 0;
+
+	if (flow != NULL) {
+		if (flow->fi_family == AF_INET) {
+			struct flowinfo_in *fp = (struct flowinfo_in *)flow;
+
+			val = fp->fi_src.s_addr;
 			val = val ^ (val >> 8) ^ (val >> 16) ^ (val >> 24);
 		}
 #ifdef INET6
@@ -493,13 +517,14 @@ wfq_setweight(struct wfq_setweight *swp)
 	wfq *queue;
 	int old;
 
-	if (swp->weight < 0) {
-		printf("set weight in natural number\n");
+	if (swp->weight < 0)
 		return (EINVAL);
-	}
 
 	if ((wfqp = altq_lookup(swp->iface.wfq_ifacename, ALTQT_WFQ)) == NULL)
 		return (EBADF);
+
+	if (swp->qid < 0 || swp->qid >= wfqp->nums)
+		return (EINVAL);
 
 	queue = &wfqp->queue[swp->qid];
 	old = queue->weight;
@@ -519,7 +544,7 @@ wfq_getstats(struct wfq_getstats *gsp)
 	if ((wfqp = altq_lookup(gsp->iface.wfq_ifacename, ALTQT_WFQ)) == NULL)
 		return (EBADF);
 
-	if (gsp->qid >= wfqp->nums)
+	if (gsp->qid < 0 || gsp->qid >= wfqp->nums)
 		return (EINVAL);
 
 	queue = &wfqp->queue[gsp->qid];
@@ -594,6 +619,13 @@ wfq_config(struct wfq_conf *cf)
 		wfqp->fbmask |= FIMB6_FLABEL;	/* use flowlabel for ipv6 */
 #endif
 		break;
+	case WFQ_HASH_SRCADDR:
+		wfqp->hash_func = wfq_hashbysrcaddr;
+		wfqp->fbmask = FIMB4_DADDR;
+#ifdef INET6
+		wfqp->fbmask |= FIMB6_FLABEL;	/* use flowlabel for ipv6 */
+#endif
+		break;
 	default:
 		error = EINVAL;
 		break;
@@ -626,7 +658,8 @@ wfqclose(dev_t dev, int flag, int fmt,
 	s = splnet();
 	while ((wfqp = wfq_list) != NULL) {
 		ifp = wfqp->ifq->altq_ifp;
-		sprintf(iface.wfq_ifacename, "%s", ifp->if_xname);
+		snprintf(iface.wfq_ifacename, sizeof(iface.wfq_ifacename),
+		    "%s", ifp->if_xname);
 		wfq_ifdetach(&iface);
 	}
 	splx(s);

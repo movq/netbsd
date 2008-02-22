@@ -1,7 +1,7 @@
-/*	$NetBSD: omap_start.S,v 1.1 2007/01/06 00:29:52 christos Exp $ */
+/*	$NetBSD: omap_start.S,v 1.5 2012/09/01 14:46:25 matt Exp $ */
 
 /*
- * Machine dependant startup code for OMAP boards.
+ * Machine dependent startup code for OMAP boards.
  * Based on lubbock_start.S and tsarm_start.S
  *
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -43,12 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,14 +55,39 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * Copyright (c) 2007 Microsoft
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by Microsoft
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTERS BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #include "assym.h"
 
 #include <machine/asm.h>
 #include <arm/armreg.h>
-#undef DOMAIN_CLIENT	/* assym.h defines as 1, but pte.h defines as 0x01 */
-#include <arm/arm32/pmap.h>
 #include <arm/omap/omap_reg.h>
 
 /*
@@ -207,14 +226,14 @@ mmu_init_table:
 	/* Map SDRAM where we're executing from VA==PA, read-only */
 	MMU_INIT(KERNEL_BASE_phys, KERNEL_BASE_phys,
 		1,
-		L1_S_PROTO | L1_S_AP(AP_KR))
+		L1_S_PROTO | L1_S_AP_KR)
 	/* Map KERNEL_BASE VA to SDRAM PA, write-back cacheable */
 	MMU_INIT(KERNEL_BASE, KERNEL_BASE_phys,
 		(MEMSIZE_BYTES + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_AP(AP_KRW) | L1_S_B | L1_S_C)
+		L1_S_PROTO | L1_S_AP_KRW | L1_S_B | L1_S_C)
 	/* Map TIPB VA==PA so peripherals will work. */
 	MMU_INIT(OMAP_TIPB_PBASE, OMAP_TIPB_PBASE,
 		(OMAP_TIPB_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
-		L1_S_PROTO | L1_S_AP(AP_KRW))
+		L1_S_PROTO | L1_S_AP_KRW)
 	/* end of table */
 	MMU_INIT(0, 0, 0, 0)

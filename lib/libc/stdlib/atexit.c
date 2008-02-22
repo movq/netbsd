@@ -1,4 +1,4 @@
-/*	$NetBSD: atexit.c,v 1.19 2007/08/08 01:05:34 kristerw Exp $	*/
+/*	$NetBSD: atexit.c,v 1.32 2017/11/06 14:26:03 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: atexit.c,v 1.19 2007/08/08 01:05:34 kristerw Exp $");
+__RCSID("$NetBSD: atexit.c,v 1.32 2017/11/06 14:26:03 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "reentrant.h"
@@ -81,8 +74,10 @@ static struct atexit_handler *atexit_handler_stack;
 
 #ifdef _REENTRANT
 /* ..and a mutex to protect it all. */
-static mutex_t atexit_mutex = MUTEX_INITIALIZER;
+mutex_t __atexit_mutex;
 #endif /* _REENTRANT */
+
+void	__libc_atexit_init(void) __attribute__ ((visibility("hidden")));
 
 /*
  * Allocate an atexit handler descriptor.  If "dso" is NULL, it indicates
@@ -90,7 +85,7 @@ static mutex_t atexit_mutex = MUTEX_INITIALIZER;
  * if possible. cxa_atexit handlers are never allocated from the static
  * pool.
  *
- * atexit_mutex must be held.
+ * __atexit_mutex must be held.
  */
 static struct atexit_handler *
 atexit_handler_alloc(void *dso)
@@ -110,12 +105,27 @@ atexit_handler_alloc(void *dso)
 
 	/*
 	 * Either no static slot was free, or this is a cxa_atexit
-	 * handler.  Allocate a new one.  We keep the atexit_mutex
+	 * handler.  Allocate a new one.  We keep the __atexit_mutex
 	 * held to prevent handlers from being run while we (potentially)
 	 * block in malloc().
 	 */
 	ah = malloc(sizeof(*ah));
 	return (ah);
+}
+
+/*
+ * Initialize __atexit_mutex with the PTHREAD_MUTEX_RECURSIVE attribute.
+ * Note that __cxa_finalize may generate calls to __cxa_atexit.
+ */
+void __section(".text.startup")
+__libc_atexit_init(void)
+{
+#ifdef _REENTRANT
+	mutexattr_t atexit_mutex_attr;
+	mutexattr_init(&atexit_mutex_attr);
+	mutexattr_settype(&atexit_mutex_attr, PTHREAD_MUTEX_RECURSIVE);
+	mutex_init(&__atexit_mutex, &atexit_mutex_attr);
+#endif
 }
 
 /*
@@ -125,18 +135,29 @@ atexit_handler_alloc(void *dso)
  *
  *	http://www.codesourcery.com/cxx-abi/abi.html#dso-dtor
  */
+#if defined(__ARM_EABI__) && !defined(lint)
 int
-__cxa_atexit(void (*func)(void *), void *arg, void *dso)
+__aeabi_atexit(void *arg, void (*func)(void *), void *dso);
+
+int
+__aeabi_atexit(void *arg, void (*func)(void *), void *dso)
+{
+	return (__cxa_atexit(func, arg, dso));
+}
+#endif
+
+static int
+__cxa_atexit_internal(void (*func)(void *), void *arg, void *dso)
 {
 	struct atexit_handler *ah;
 
 	_DIAGASSERT(func != NULL);
 
-	mutex_lock(&atexit_mutex);
+	mutex_lock(&__atexit_mutex);
 
 	ah = atexit_handler_alloc(dso);
 	if (ah == NULL) {
-		mutex_unlock(&atexit_mutex);
+		mutex_unlock(&__atexit_mutex);
 		return (-1);
 	}
 
@@ -147,8 +168,15 @@ __cxa_atexit(void (*func)(void *), void *arg, void *dso)
 	ah->ah_next = atexit_handler_stack;
 	atexit_handler_stack = ah;
 
-	mutex_unlock(&atexit_mutex);
+	mutex_unlock(&__atexit_mutex);
 	return (0);
+}
+
+int
+__cxa_atexit(void (*func)(void *), void *arg, void *dso)
+{
+	_DIAGASSERT(dso != NULL);
+	return (__cxa_atexit_internal(func, arg, dso));
 }
 
 /*
@@ -162,24 +190,12 @@ __cxa_atexit(void (*func)(void *), void *arg, void *dso)
 void
 __cxa_finalize(void *dso)
 {
-	static thr_t owner;
 	static u_int call_depth;
 	struct atexit_handler *ah, *dead_handlers = NULL, **prevp;
 	void (*cxa_func)(void *);
 	void (*atexit_func)(void);
 
-	/*
-	 * We implement our own recursive mutex here because we need
-	 * to keep track of the call depth anyway, and it saves us
-	 * having to dynamically initialize the mutex.
-	 */
-	if (mutex_trylock(&atexit_mutex) == 0)
-		owner = thr_self();
-	else if (owner != thr_self()) {
-		mutex_lock(&atexit_mutex);
-		owner = thr_self();
-	}
-
+	mutex_lock(&__atexit_mutex);
 	call_depth++;
 
 	/*
@@ -223,13 +239,11 @@ again:
 		} else
 			prevp = &ah->ah_next;
 	}
-
 	call_depth--;
+	mutex_unlock(&__atexit_mutex);
 
 	if (call_depth > 0)
 		return;
-
-	mutex_unlock(&atexit_mutex);
 
 	/*
 	 * Now free any dead handlers.  Do this even if we're about to
@@ -248,5 +262,5 @@ int
 atexit(void (*func)(void))
 {
 
-	return (__cxa_atexit((void (*)(void *))func, NULL, NULL));
+	return (__cxa_atexit_internal((void (*)(void *))func, NULL, NULL));
 }

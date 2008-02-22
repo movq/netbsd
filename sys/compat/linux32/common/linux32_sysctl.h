@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_sysctl.h,v 1.1 2006/02/09 19:18:57 manu Exp $ */
+/*	$NetBSD: linux32_sysctl.h,v 1.3 2017/09/29 17:47:29 maxv Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -58,8 +58,9 @@ extern char linux32_version[];
 	 { "osversion", CTLTYPE_STRING }, \
 }  
 
-#ifdef SYSCTL_SETUP_PROTO	                                
-SYSCTL_SETUP_PROTO(sysctl_emul_linux32_setup);	             
-#endif /* SYSCTL_SETUP_PROTO */	                          
+void	linux32_sysctl_init(void);
+void	linux32_sysctl_fini(void);
+
+int	linux32_sysctl_enable(SYSCTLFN_PROTO);
 
 #endif /* !_LINUX32_SYSCTL_H */

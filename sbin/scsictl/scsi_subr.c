@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_subr.c,v 1.11 2005/02/21 00:29:08 thorpej Exp $	*/
+/*	$NetBSD: scsi_subr.c,v 1.14 2012/02/21 02:22:54 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsi_subr.c,v 1.11 2005/02/21 00:29:08 thorpej Exp $");
+__RCSID("$NetBSD: scsi_subr.c,v 1.14 2012/02/21 02:22:54 jakllsch Exp $");
 #endif
 
 
@@ -66,13 +59,14 @@ __RCSID("$NetBSD: scsi_subr.c,v 1.11 2005/02/21 00:29:08 thorpej Exp $");
 #define	STRVIS_ISWHITE(x) ((x) == ' ' || (x) == '\0' || (x) == (u_char)'\377')
 
 void
-scsi_command(int fd, void *cmd, size_t cmdlen, void *data, size_t datalen, 
-	int timeout, int flags)
+scsi_command(int fd, const void *cmd, size_t cmdlen,
+	void *data, size_t datalen, int timeout, int flags)
 {
 	scsireq_t req;
 
 	memset(&req, 0, sizeof(req));
 
+	cmdlen = MIN(cmdlen, sizeof(req.cmd));
 	memcpy(req.cmd, cmd, cmdlen);
 	req.cmdlen = cmdlen;
 	req.databuf = data;

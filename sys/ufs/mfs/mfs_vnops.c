@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vnops.c,v 1.48 2008/02/21 14:10:57 ad Exp $	*/
+/*	$NetBSD: mfs_vnops.c,v 1.58 2017/05/26 14:21:02 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.48 2008/02/21 14:10:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.58 2017/05/26 14:21:02 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.48 2008/02/21 14:10:57 ad Exp $");
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
@@ -68,6 +68,8 @@ const struct vnodeopv_entry_desc mfs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, mfs_setattr },		/* setattr */
 	{ &vop_read_desc, mfs_read },			/* read */
 	{ &vop_write_desc, mfs_write },			/* write */
+	{ &vop_fallocate_desc, genfs_eopnotsupp },	/* fallocate */
+	{ &vop_fdiscard_desc, genfs_eopnotsupp },	/* fdiscard */
 	{ &vop_ioctl_desc, mfs_ioctl },			/* ioctl */
 	{ &vop_poll_desc, mfs_poll },			/* poll */
 	{ &vop_revoke_desc, mfs_revoke },		/* revoke */
@@ -164,10 +166,10 @@ mfs_strategy(void *v)
 		bp->b_resid = 0;
 		biodone(bp);
 	} else {
-		mutex_enter(&mfsp->mfs_lock);
-		BUFQ_PUT(mfsp->mfs_buflist, bp);
+		mutex_enter(&mfs_lock);
+		bufq_put(mfsp->mfs_buflist, bp);
 		cv_broadcast(&mfsp->mfs_cv);
-		mutex_exit(&mfsp->mfs_lock);
+		mutex_exit(&mfs_lock);
 	}
 	return (0);
 }
@@ -232,13 +234,13 @@ mfs_close(void *v)
 	/*
 	 * Finish any pending I/O requests.
 	 */
-	mutex_enter(&mfsp->mfs_lock);
-	while ((bp = BUFQ_GET(mfsp->mfs_buflist)) != NULL) {
-		mutex_exit(&mfsp->mfs_lock);
+	mutex_enter(&mfs_lock);
+	while ((bp = bufq_get(mfsp->mfs_buflist)) != NULL) {
+		mutex_exit(&mfs_lock);
 		mfs_doio(bp, mfsp->mfs_baseoff);
-		mutex_enter(&mfsp->mfs_lock);
+		mutex_enter(&mfs_lock);
 	}
-	mutex_exit(&mfsp->mfs_lock);
+	mutex_exit(&mfs_lock);
 	/*
 	 * On last close of a memory filesystem
 	 * we must invalidate any in core blocks, so that
@@ -250,15 +252,15 @@ mfs_close(void *v)
 	 * There should be no way to have any more uses of this
 	 * vnode, so if we find any other uses, it is a panic.
 	 */
-	if (BUFQ_PEEK(mfsp->mfs_buflist) != NULL)
+	if (bufq_peek(mfsp->mfs_buflist) != NULL)
 		panic("mfs_close");
 	/*
 	 * Send a request to the filesystem server to exit.
 	 */
-	mutex_enter(&mfsp->mfs_lock);
+	mutex_enter(&mfs_lock);
 	mfsp->mfs_shutdown = 1;
 	cv_broadcast(&mfsp->mfs_cv);
-	mutex_exit(&mfsp->mfs_lock);
+	mutex_exit(&mfs_lock);
 	return (0);
 }
 
@@ -269,17 +271,17 @@ mfs_close(void *v)
 int
 mfs_inactive(void *v)
 {
-	struct vop_inactive_args /* {
+	struct vop_inactive_v2_args /* {
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct mfsnode *mfsp = VTOMFS(vp);
 
-	if (BUFQ_PEEK(mfsp->mfs_buflist) != NULL)
+	if (bufq_peek(mfsp->mfs_buflist) != NULL)
 		panic("mfs_inactive: not inactive (mfs_buflist %p)",
-			BUFQ_PEEK(mfsp->mfs_buflist));
-	VOP_UNLOCK(vp, 0);
-	return (0);
+			bufq_peek(mfsp->mfs_buflist));
+
+	return VOCALL(spec_vnodeop_p,  VOFFSET(vop_inactive), ap);
 }
 
 /*
@@ -288,18 +290,27 @@ mfs_inactive(void *v)
 int
 mfs_reclaim(void *v)
 {
-	struct vop_reclaim_args /* {
+	struct vop_reclaim_v2_args /* {
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct mfsnode *mfsp = VTOMFS(vp);
+	int refcnt;
 
-	cv_destroy(&mfsp->mfs_cv);
-	mutex_destroy(&mfsp->mfs_lock);
+	VOP_UNLOCK(vp);
 
-	FREE(vp->v_data, M_MFSNODE);
+	mutex_enter(&mfs_lock);
 	vp->v_data = NULL;
-	return (0);
+	refcnt = --mfsp->mfs_refcnt;
+	mutex_exit(&mfs_lock);
+
+	if (refcnt == 0) {
+		bufq_free(mfsp->mfs_buflist);
+		cv_destroy(&mfsp->mfs_cv);
+		kmem_free(mfsp, sizeof(*mfsp));
+	}
+
+	return VOCALL(spec_vnodeop_p,  VOFFSET(vop_reclaim), ap);
 }
 
 /*

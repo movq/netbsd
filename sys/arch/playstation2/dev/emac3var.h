@@ -1,4 +1,4 @@
-/*	$NetBSD: emac3var.h,v 1.2 2008/01/19 22:10:15 dyoung Exp $	*/
+/*	$NetBSD: emac3var.h,v 1.6 2016/04/03 10:01:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,6 +53,6 @@ int emac3_tx_done(void);
 
 void emac3_setmulti(struct emac3_softc *, struct ethercom *);
 
-int emac3_phy_readreg(struct device *, int, int);
-void emac3_phy_writereg(struct device *, int, int, int);
-void emac3_phy_statchg(struct device *);
+int emac3_phy_readreg(device_t, int, int);
+void emac3_phy_writereg(device_t, int, int, int);
+void emac3_phy_statchg(struct ifnet *);

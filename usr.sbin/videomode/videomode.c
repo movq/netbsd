@@ -1,4 +1,4 @@
-/*	$NetBSD: videomode.c,v 1.5 2003/07/13 12:10:58 itojun Exp $	*/
+/*	$NetBSD: videomode.c,v 1.9 2018/01/23 21:06:26 sevan Exp $	*/
 
 /*
  * Copyright (c) 1995 Christian E. Hopps
@@ -45,17 +45,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void	dump_mode __P((int));
-void	dump_vm   __P((struct grfvideo_mode *));
-int	get_grf __P((void));
-int	main __P((int, char **));
-void	set_mode __P((int));
-void	usage __P((void));
+void	dump_mode(int);
+void	dump_vm(struct grfvideo_mode *);
+int	get_grf(void);
+void	set_mode(int);
+void	usage(void) __dead;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int m;
 	int c;
@@ -104,16 +101,15 @@ get_grf()
 		errx(1, "stdin not a tty");
 	if (major(stb.st_rdev) != 13)
 		errx(1, "stdin not an ite device");
-	(void)snprintf(grfname, sizeof(grfname), "/dev/grf%d",
-	    minor(stb.st_rdev) & 0x7);
+	(void)snprintf(grfname, sizeof(grfname), "/dev/grf%u",
+	    (u_int)minor(stb.st_rdev) & 0x7);
 	if ((grffd = open(grfname, 2)) < 0)
 		err(1, "%s", grfname);
 	return (grffd);
 }
 
 void
-dump_mode(m)
-	int m;
+dump_mode(int m)
 {
 	struct grfvideo_mode vm;
 	int num_vm;
@@ -132,29 +128,31 @@ dump_mode(m)
 			dump_vm(&vm);
 		(void)printf("\n");
 	}
-	if (m >= 0)
+	if (m >= 0) {
+		(void)close(grffd);
 		return;
+	}
 	for (m = 1; m <= num_vm; m++) {
 		vm.mode_num = m;
 		if (ioctl(grffd, GRFGETVMODE, &vm) == -1)
 			break;
 		dump_vm(&vm);
 	}
+	(void)close(grffd);
 }
 
 void
-set_mode(m)
-	int m;
+set_mode(int m)
 {
 	int grffd;
 
 	grffd = get_grf();
 	(void)ioctl(grffd, GRFSETVMODE, &m);
+	(void)close(grffd);
 }
 
 void
-dump_vm(vm)
-	struct grfvideo_mode *vm;
+dump_vm(struct grfvideo_mode *vm)
 {
 	(void)printf("%d: %s\n", vm->mode_num, vm->mode_descr);
 	(void)printf(

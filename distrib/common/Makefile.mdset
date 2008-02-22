@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mdset,v 1.30 2007/09/08 14:25:09 chris Exp $
+#	$NetBSD: Makefile.mdset,v 1.42 2018/01/16 09:59:37 maya Exp $
 #
 # Makefile snippet to ${TOOL_MDSETIMAGE} file system images into kernels
 #
@@ -28,6 +28,9 @@
 #	MDSET_NOGZIP			If defined, don't gzip any kernels.
 #
 #	MDSET_NOGZIP.${FILENAME}	If defined, don't gzip ${FILENAME}
+#
+#	MDSET_NOIMAGE.${FILENAME}	If defined, don't add ${IMAGE} to
+#					${FILENAME}
 #
 #	MDSET_NOSTRIP			If defined, don't strip any kernels.
 #
@@ -66,7 +69,12 @@ _MAKEFILE_MDSET_=1
 
 .include <bsd.kernobj.mk>
 
+# The default is to build for all MDSETTARGETS
+ALL_KERNELS?= +
+
 .for _K _I _F in ${MDSETTARGETS}			# {
+.for currentsel in ${ALL_KERNELS}			# {
+.if ${currentsel} == "+" || ${_K} == ${currentsel}
 
 _KERNEL:=${_K}			# (work around obscure issue in make(1))
 .if (${_KERNEL:M*/*} != "")
@@ -94,7 +102,7 @@ ${_KERNEL.${_K}.${_F}}.${_S}: ${_KERNEL.${_K}.${_F}}
 	false
 .endif
 
-.if defined(MDSET_NOGZIP.${_FILENAME}) && defined(MDSET_NOGZIP)
+.if defined(MDSET_NOGZIP.${_FILENAME}) || defined(MDSET_NOGZIP)
 KERNELS+=	${_KERNEL.${_K}.${_F}}.${_S}
 .else							# {
 KERNELS+=	${_KERNEL.${_K}.${_F}}.${_S}.gz
@@ -102,7 +110,7 @@ KERNELS+=	${_KERNEL.${_K}.${_F}}.${_S}.gz
 ${_KERNEL.${_K}.${_F}}.${_S}.gz: ${_KERNEL.${_K}.${_F}}.${_S}
 	${_MKTARGET_CREATE}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	${TOOL_GZIP_N} -9c ${.ALLSRC} > ${.TARGET}
 .endif							# }
 
 .endfor							# }
@@ -120,16 +128,32 @@ _POST.${_KERNEL.${_K}.${_F}}:= ${MDSET_POST}
 
 CLEANFILES+=	${_KERNEL.${_K}.${_F}}
 
+.if defined(MDSET_NOIMAGE.${_FILENAME})
+${_I}=
+.endif
+
+# Darwin requires a special hack - this is documented in
+# doc/HACKS, and just works around the problems described more
+# fully in http://mail-index.netbsd.org/current-users/2008/06/27/msg003242.html
+OPSYS!= uname -s
+.if ${OPSYS} == "Darwin"
+MDSETIMAGEFLAGS=
+.else
+MDSETIMAGEFLAGS=-v
+.endif
+
 ${_KERNEL.${_K}.${_F}}: .NOTMAIN ${_KERNNAME.${_K}.${_F}} ${_I}
 	${_MKTARGET_CREATE} "(from: ${.ALLSRC})"
 	@rm -f ${.TARGET} ${.TARGET}.tmp ${.TARGET}.symbols.gz
 	@cp ${_KERNNAME.${_K}.${_F}} ${.TARGET}.tmp
-	${TOOL_MDSETIMAGE} -v ${.TARGET}.tmp ${_I}
+.if !defined(MDSET_NOIMAGE.${_FILENAME})
+	${TOOL_MDSETIMAGE} ${MDSETIMAGEFLAGS} ${.TARGET}.tmp ${_I}
+.endif
 .if !defined(MDSET_NOSYMBOLS.${_FILENAME}) && !defined(MDSET_NOSYMBOLS)
-	${NM} ${.TARGET}.tmp | gzip -9 > ${.TARGET}.symbols.gz
+	${NM} ${.TARGET}.tmp | ${TOOL_GZIP_N} -9 > ${.TARGET}.symbols.gz
 .endif
 .if !defined(MDSET_NOSTRIP.${_FILENAME}) && !defined(MDSET_NOSTRIP)
-	${STRIP} -R .comment -R .ident ${.TARGET}.tmp
+	${STRIP} -R .eh_frame -R .eh_frame_hdr -R .comment -R .ident ${MDSET_STRIPSECTIONS} ${.TARGET}.tmp
 .endif
 	@mv ${.TARGET}.tmp ${.TARGET}
 .if defined(MDSET_POST.${_FILENAME}) || defined(MDSET_POST)
@@ -144,9 +168,11 @@ KERNELS+=	${_KERNEL.${_K}.${_F}}.gz
 ${_KERNEL.${_K}.${_F}}.gz: ${_KERNEL.${_K}.${_F}}
 	${_MKTARGET_CREATE}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	${TOOL_GZIP_N} -9c ${.ALLSRC} > ${.TARGET}
 .endif							# }
 
+.endif
+.endfor							# }
 .endfor							# }
 
 CLEANFILES+=	${KERNELS} ${KERNELSYMS}
@@ -155,8 +181,9 @@ realall: ${KERNELS}
 
 .if defined(MDSET_RELEASEDIR)
 release:: check_RELEASEDIR .WAIT ${KERNELS}
+	test -z "${KERNELS}" || \
 	${RELEASE_INSTALL} ${KERNELS} ${KERNELSYMS} \
-	    ${RELEASEDIR}/${MACHINE}/${MDSET_RELEASEDIR}
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${MDSET_RELEASEDIR}
 .endif
 
 

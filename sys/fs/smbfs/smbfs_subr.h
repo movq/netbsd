@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_subr.h,v 1.16 2007/03/04 06:03:01 christos Exp $	*/
+/*	$NetBSD: smbfs_subr.h,v 1.22 2014/11/15 18:52:44 nakayama Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -39,12 +39,14 @@
 MALLOC_DECLARE(M_SMBNODENAME);
 MALLOC_DECLARE(M_SMBFSDATA);
 
-#define SMBFSERR(format, args...) printf("%s: "format, __func__ ,## args)
+#define SMBFSERR(format, ...) printf("%s: "format, __func__, __VA_ARGS__)
 
 #ifdef SMB_VNODE_DEBUG
-#define SMBVDEBUG(format, args...) printf("%s: "format, __func__ ,## args)
+#define SMBVDEBUG0(format) printf("%s: "format, __func__);
+#define SMBVDEBUG(format, ...) printf("%s: "format, __func__, __VA_ARGS__)
 #else
-#define SMBVDEBUG(format, args...)
+#define SMBVDEBUG0(format)
+#define SMBVDEBUG(format, ...)
 #endif
 
 /*
@@ -133,16 +135,15 @@ int  smbfs_smb_lock(struct smbnode *np, int op, void *id,
 	off_t start, off_t end,	struct smb_cred *scred);
 int  smbfs_smb_statvfs(struct smb_share *ssp, struct statvfs *sbp,
 	struct smb_cred *scred);
-int  smbfs_smb_setfsize(struct smbnode *np, int newsize, struct smb_cred *scred);
+int  smbfs_smb_setfsize(struct smbnode *np, u_quad_t newsize,
+			struct smb_cred *scred);
 
 int  smbfs_smb_setpattr(struct smbnode *np, u_int16_t attr,
 	struct timespec *mtime, struct smb_cred *scred);
 int  smbfs_smb_setptime2(struct smbnode *np, struct timespec *mtime,
 	struct timespec *atime, int attr, struct smb_cred *scred);
-#if 0
 int  smbfs_smb_setpattrNT(struct smbnode *np, u_int16_t attr,
 	struct timespec *mtime, struct timespec *atime, struct smb_cred *scred);
-#endif
 
 int  smbfs_smb_setftime(struct smbnode *np, struct timespec *mtime,
 	struct timespec *atime, struct smb_cred *scred);
@@ -175,7 +176,7 @@ int  smbfs_fullpath(struct mbchain *mbp, struct smb_vc *vcp,
 int  smbfs_smb_lookup(struct smbnode *dnp, const char *name, int nmlen,
 	struct smbfattr *fap, struct smb_cred *scred);
 
-int  smbfs_fname_tolocal(struct smb_vc *vcp, char *name, int nmlen, int caseopt);
+int  smbfs_fname_tolocal(struct smb_vc *vcp, char *name, int *nmlen, int caseopt);
 
 void  smb_time_local2server(struct timespec *tsp, int tzoff, u_long *seconds);
 void  smb_time_server2local(u_long seconds, int tzoff, struct timespec *tsp);
@@ -185,7 +186,4 @@ void  smb_time_unix2dos(struct timespec *tsp, int tzoff, u_int16_t *ddp,
 	     u_int16_t *dtp, u_int8_t *dhp);
 void smb_dos2unixtime (u_int dd, u_int dt, u_int dh, int tzoff, struct timespec *tsp);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_samba_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 #endif /* !_FS_SMBFS_SMBFS_SUBR_H_ */

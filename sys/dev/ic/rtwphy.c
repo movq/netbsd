@@ -1,4 +1,4 @@
-/* $NetBSD: rtwphy.c,v 1.13 2007/10/19 12:00:00 ad Exp $ */
+/* $NetBSD: rtwphy.c,v 1.16 2013/11/15 14:52:11 nisimura Exp $ */
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -35,11 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtwphy.c,v 1.13 2007/10/19 12:00:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtwphy.c,v 1.16 2013/11/15 14:52:11 nisimura Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/types.h>
+#include <sys/device.h>
 
 #include <sys/bus.h>
 
@@ -129,6 +127,7 @@ rtw_sa2400_txpower(struct rtw_rf *rf, uint8_t opaque_txpower)
 static void
 verify_syna(u_int freq, uint32_t val)
 {
+#ifdef DIAGNOSTIC
 	uint32_t expected_val = ~val;
 
 	switch (freq) {
@@ -176,6 +175,7 @@ verify_syna(u_int freq, uint32_t val)
 		break;
 	}
 	KASSERT(val == expected_val);
+#endif
 }
 
 /* freq is in MHz */

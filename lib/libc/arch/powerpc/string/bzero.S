@@ -1,4 +1,4 @@
-/*	$NetBSD: bzero.S,v 1.7 2003/07/26 19:24:37 salo Exp $ */
+/*	$NetBSD: bzero.S,v 1.15 2016/12/19 14:30:23 christos Exp $ */
 
 /*-
  * Copyright (C) 2001	Martin J. Laubach <mjl@NetBSD.org>
@@ -29,9 +29,13 @@
 /*----------------------------------------------------------------------*/
 
 #include <machine/asm.h>
-#ifdef _KERNEL
-#include <assym.h>
-#endif
+
+
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: bzero.S,v 1.15 2016/12/19 14:30:23 christos Exp $")
+#endif /* LIBC_SCCS && !lint */
+
+#include "assym.h"
 
 #define USE_STSWX 0	/* don't. slower than trivial copy loop */
 
@@ -50,13 +54,16 @@
 		.align 4
 ENTRY(bzero)
 		li	r_val, 0		/* Value to stuff in */
+		cmplwi	%cr1, %r4, 0		/* Zero length? */
+		beqlr-	%cr1			/* Yes, do nothing */
 		b	cb_memset
+END(bzero)
 
 ENTRY(memset)
-		cmplwi	cr1, %r5, 0
+		cmplwi	%cr1, %r5, 0
 		mr.	%r0, %r4
 		mr	%r8, %r3
-		beqlr-	cr1			/* Nothing to do */
+		beqlr-	%cr1			/* Nothing to do */
 
 		rlwimi	%r0, %r4, 8, 16, 23	/* word extend fill value */
 		rlwimi	%r0, %r0, 16, 0, 15
@@ -66,136 +73,20 @@ cb_memset:
 
 /*----------------------------------------------------------------------*/
 #ifndef _KERNEL
-		/* First find out cache line size */
-#ifdef PIC
+#ifdef __PIC__
+		/* First get cache line size */
 		mflr	%r9
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
+		bcl	20,31,1f
+1:		mflr	%r10
 		mtlr	%r9
-		lwz	%r5,cache_info@got(%r10)
+		addis	%r10,%r10,_libc_powerpc_cache_info+CACHE_INFO_DCACHE_LINE_SIZE-1b@ha
+		lwz	%r9,_libc_powerpc_cache_info+CACHE_INFO_DCACHE_LINE_SIZE-1b@l(%r10)
 #else
-		lis	%r5,cache_info@h
-		ori	%r5,%r5,cache_info@l
+		lis	%r10,_libc_powerpc_cache_info+CACHE_INFO_DCACHE_LINE_SIZE@ha
+		lwz	%r9,_libc_powerpc_cache_info+CACHE_INFO_DCACHE_LINE_SIZE@l(%r10)
 #endif
-		lwz	%r6, 4(%r5)
-		cmpwi	%r6, -1
-		bne+	cb_cacheline_known
-
-/*----------------------------------------------------------------------*/
-#define CTL_MACHDEP	7
-#define CPU_CACHELINE	1
-#define	CPU_CACHEINFO	5
-
-#define STKFRAME_SZ	48
-#define MIB		8
-#define OLDPLEN		16
-#define R3_SAVE		20
-#define R4_SAVE		24
-#define R0_SAVE		28
-#define R8_SAVE		32
-
-		mflr	%r6
-		stw	%r6, 4(%r1)
-		stwu	%r1, -STKFRAME_SZ(%r1)
-
-		stw	%r8, R8_SAVE(%r1)
-		stw	%r3, R3_SAVE(%r1)
-		stw	%r4, R4_SAVE(%r1)
-		stw	%r0, R0_SAVE(%r1)
-
-	
-
-		li	%r0, CTL_MACHDEP		/* Construct MIB */
-		stw	%r0, MIB(%r1)
-		li	%r0, CPU_CACHEINFO
-		stw	%r0, MIB+4(%r1)
-
-		li	%r0, 4*4			/* Oldlenp := 4*4 */
-		stw	%r0, OLDPLEN(%r1)
-
-		addi	%r3, %r1, MIB
-		li	%r4, 2			/* namelen */
-		/* %r5 already contains &cache_info */
-		addi	%r6, %r1, OLDPLEN
-		li	%r7, 0
-		li	%r8, 0
-		bl	PIC_PLT(_C_LABEL(sysctl))
-	
-		cmpwi	%r3, 0			/* Check result */
-		beq	1f
-
-		/* Failure, try older sysctl */
-	
-		li	%r0, CTL_MACHDEP		/* Construct MIB */
-		stw	%r0, MIB(%r1)
-		li	%r0, CPU_CACHELINE
-		stw	%r0, MIB+4(%r1)
-
-		li	%r0, 4			/* Oldlenp := 4 */
-		stw	%r0, OLDPLEN(%r1)
-
-		addi	%r3, %r1, MIB
-		li	%r4, 2			/* namelen */
-#ifdef PIC
-		mflr	%r9
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
-		mtlr	%r9
-		lwz	%r5,cache_info@got(%r10)
-		addi	%r5, %r5, 4
-#else
-		lis	%r5,cache_info+4@h
-		ori	%r5,%r5,cache_info+4@l
-#endif
-		addi	%r6, %r1, OLDPLEN
-		li	%r7, 0
-		li	%r8, 0
-		bl	PIC_PLT(_C_LABEL(sysctl))
-1:
-		lwz	%r8, R8_SAVE(%r1)
-		lwz	%r3, R3_SAVE(%r1)
-		lwz	%r4, R4_SAVE(%r1)
-		lwz	%r0, R0_SAVE(%r1)
-
-#ifdef PIC
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
-		lwz	%r9, cache_info@got(%r10)
-		lwz	%r9, 4(%r9)
-#else
-		lis	%r5, cache_info+4@ha
-		lwz	%r9, cache_info+4@l(%r5)
-#endif
-		la	%r1, STKFRAME_SZ(%r1)
-		lwz	%r5, 4(%r1)
-		mtlr	%r5
-
-		cntlzw	%r6, %r9			/* compute shift value */
-		li	%r5, 31
-		subf	%r5, %r6, %r5
-
-#ifdef PIC
-		lwz	%r6, cache_sh@got(%r10)
-		stw	%r5, 0(%r6)
-#else
-		lis	%r6, cache_sh@ha
-		stw	%r5, cache_sh@l(%r6)
-#endif
-/*----------------------------------------------------------------------*/
-/* Okay, we know the cache line size (%r9) and shift value (%r10) */
-cb_cacheline_known:
-#ifdef PIC
-		lwz	%r5, cache_info@got(%r10)
-		lwz	%r9, 4(%r5)
-		lwz	%r5, cache_sh@got(%r10)
-		lwz	%r10, 0(%r5)
-#else
-		lis	%r9, cache_info+4@ha
-		lwz	%r9, cache_info+4@l(%r9)
-		lis	%r10, cache_sh@ha
-		lwz	%r10, cache_sh@l(%r10)
-#endif
-
+		cmplwi	%cr1, %r9, 0		/* Unknown? */
+		beq-	simple_fill		/* a trivial fill routine */
 #else /* _KERNEL */
 #ifdef	MULTIPROCESSOR
 		mfsprg	%r10, 0			/* Get cpu_info pointer */
@@ -203,17 +94,17 @@ cb_cacheline_known:
 		lis	%r10, cpu_info_store@ha
 		addi	%r10, %r10, cpu_info_store@l
 #endif
-		lwz	%r9, CPU_CI+4(%r10)	/* Load D$ line size */
+		lwz	%r9, CPU_CI+CACHE_INFO_DCACHE_LINE_SIZE(%r10)	/* Load D$ line size */
+#endif /* _KERNEL */
 		cntlzw	%r10, %r9			/* Calculate shift.. */
 		li	%r6, 31
 		subf	%r10, %r10, %r6
-#endif /* _KERNEL */
 		/* Back in memory filling business */
 		
-		cmplwi	cr1, r_len, 0		/* Nothing to do? */
+		cmplwi	%cr1, r_len, 0		/* Nothing to do? */
 		add	%r5, %r9, %r9
 		cmplw	r_len, %r5		/* <= 2*CL bytes to move? */
-		beqlr-	cr1			/* then do nothing */
+		beqlr-	%cr1			/* then do nothing */
 
 		blt+	simple_fill		/* a trivial fill routine */
 
@@ -274,9 +165,9 @@ cb_aligned_cb:	/* no need to check r_len, see above */
 		bdnz	1b
 
 cblocks_done:	/* still CL aligned, but less than CL bytes left */
-		cmplwi	cr1, r_len, 0
+		cmplwi	%cr1, r_len, 0
 		cmplwi	r_len, 8
-		beq-	cr1, sf_return
+		beq-	%cr1, sf_return
 
 		blt-	sf_bytewise		/* <8 remaining? */
 		b	sf_aligned_w
@@ -289,12 +180,12 @@ wbzero:		li	r_val, 0
 
 simple_fill:
 #if USE_STSWX
-		cmplwi	cr1, r_len, 12		/* < 12 bytes to move? */
+		cmplwi	%cr1, r_len, 12		/* < 12 bytes to move? */
 #else
-		cmplwi	cr1, r_len, 8		/* < 8 bytes to move? */
+		cmplwi	%cr1, r_len, 8		/* < 8 bytes to move? */
 #endif
 		andi.	%r5, r_dst, 0x03		/* bytes to fill to align4 */
-		blt	cr1, sf_bytewise	/* trivial byte mover */
+		blt	%cr1, sf_bytewise	/* trivial byte mover */
 
 		li	%r6, 4
 		subf	%r5, %r5, %r6
@@ -363,10 +254,12 @@ sf_bytewise:
 #endif
 		mr	%r3, %r8			/* restore orig ptr */
 		blr				/* for memset functionality */
+END(memset)
 
 /*----------------------------------------------------------------------*/
 #ifndef _KERNEL
 		.data
+		.p2align 2
 cache_info:	.long	-1, -1, -1, -1
 cache_sh:	.long	0
 

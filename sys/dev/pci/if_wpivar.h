@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpivar.h,v 1.11 2008/01/09 20:15:40 degroote Exp $    */
+/*  $NetBSD: if_wpivar.h,v 1.21 2017/02/02 10:05:35 nonaka Exp $    */
 
 /*-
  * Copyright (c) 2006
@@ -79,8 +79,7 @@ struct wpi_tx_ring {
 	int			cur;
 };
 
-#define WPI_RBUF_COUNT	(WPI_RX_RING_COUNT + 16)
-#define WPI_RBUF_LOW_LIMIT	8
+#define WPI_RBUF_COUNT	(WPI_RX_RING_COUNT * 2)
 
 struct wpi_softc;
 
@@ -92,7 +91,8 @@ struct wpi_rbuf {
 };
 
 struct wpi_rx_data {
-	struct mbuf	*m;
+	bus_dmamap_t		map;
+	struct mbuf		*m;
 };
 
 struct wpi_rx_ring {
@@ -102,7 +102,7 @@ struct wpi_rx_ring {
 	struct wpi_rx_data	data[WPI_RX_RING_COUNT];
 	struct wpi_rbuf		rbuf[WPI_RBUF_COUNT];
 	SLIST_HEAD(, wpi_rbuf)	freelist;
-	int			nb_free_entries;
+	kmutex_t		freelist_mtx;
 	int			cur;
 };
 
@@ -141,6 +141,7 @@ struct wpi_softc {
 
 	/* firmware DMA transfer */
 	struct wpi_dma_info	fw_dma;
+	bool			fw_used;
 
 	struct wpi_tx_ring	txq[4];
 	struct wpi_tx_ring	cmdq;
@@ -149,6 +150,8 @@ struct wpi_softc {
 	bus_space_tag_t		sc_st;
 	bus_space_handle_t	sc_sh;
 	void 			*sc_ih;
+	void			*sc_soft_ih;
+	pci_intr_handle_t	*sc_pihp;
 	pci_chipset_tag_t	sc_pct;
 	pcitag_t		sc_pcitag;
 	bus_size_t		sc_sz;
@@ -167,8 +170,7 @@ struct wpi_softc {
 
 	int			sc_tx_timer;
 
-#if NBPFILTER > 0
-	void *			sc_drvbpf;
+	struct bpf_if *		sc_drvbpf;
 
 	union {
 		struct wpi_rx_radiotap_header th;
@@ -183,9 +185,17 @@ struct wpi_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
-#endif
 
 	bool		is_scanning;
 
 	struct sysctllog	*sc_sysctllog;
+	struct sysmon_pswitch 	sc_rsw;		/* for radio switch events */
+	int			sc_rsw_status;
+#define WPI_RSW_UNKNOWN		0
+#define WPI_RSW_OFF		1
+#define WPI_RSW_ON		2
+	struct lwp		*sc_rsw_lwp;
+	struct kmutex 		sc_rsw_mtx;
+	struct kcondvar 	sc_rsw_cv;
+	int 			sc_dying;
 };

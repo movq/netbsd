@@ -1,4 +1,4 @@
-/*	$NetBSD: ftree.c,v 1.37 2008/02/18 15:54:48 simonb Exp $	*/
+/*	$NetBSD: ftree.c,v 1.42 2012/09/27 00:44:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -48,13 +48,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,7 +71,7 @@
 #if 0
 static char sccsid[] = "@(#)ftree.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ftree.c,v 1.37 2008/02/18 15:54:48 simonb Exp $");
+__RCSID("$NetBSD: ftree.c,v 1.42 2012/09/27 00:44:59 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -129,11 +122,7 @@ static NODE *ftnode = NULL;		/* mtree(8) specfile; used by -M */
 
 static int ftree_arg(void);
 
-#ifdef NET2_FTS
-#define	FTS_ERRNO(x)	errno
-#else
 #define	FTS_ERRNO(x)	(x)->fts_errno
-#endif
 
 /*
  * ftree_start()
@@ -146,7 +135,7 @@ static int ftree_arg(void);
  */
 
 int
-ftree_start()
+ftree_start(void)
 {
 
 #ifndef SMALL
@@ -195,11 +184,7 @@ ftree_start()
 	else
 		ftsopts |= FTS_PHYSICAL;
 	if (Hflag)
-#ifdef NET2_FTS
-		tty_warn(0, "The -H flag is not supported on this version");
-#else
 		ftsopts |= FTS_COMFOLLOW;
-#endif
 	if (Xflag)
 		ftsopts |= FTS_XDEV;
 
@@ -362,7 +347,7 @@ ftree_arg(void)
 			 * the user didn't supply any args, get the file trees
 			 * to process from stdin;
 			 */
-			for (i = 0; i < PAXPATHLEN + 2; i++) {
+			for (i = 0; i < PAXPATHLEN + 2;) {
 				c = getchar();
 				if (c == EOF)
 					break;
@@ -370,7 +355,7 @@ ftree_arg(void)
 					if (i != 0)
 						break;
 				} else
-					farray[0][i] = c;
+					farray[0][i++] = c;
 			}
 			if (i == 0)
 				return -1;
@@ -450,7 +435,7 @@ next_file(ARCHD *arcn)
 						/* get current name */
 		if (snprintf(curpath, sizeof(curpath), "%s%s%s",
 		    curdir, curdirlen ? "/" : "", ftnode->name)
-		    >= sizeof(curpath)) {
+		    >= (int)sizeof(curpath)) {
 			tty_warn(1, "line %lu: %s: %s", (u_long)ftnode->lineno,
 			    curdir, strerror(ENAMETOOLONG));
 			return (-1);
@@ -621,11 +606,7 @@ next_file(ARCHD *arcn)
 			 * directory, not a created directory).
 			 */
 			if (!tflag || (get_atdir(
-#ifdef NET2_FTS
-			    ftent->fts_statb.st_dev, ftent->fts_statb.st_ino,
-#else
 			    ftent->fts_statp->st_dev, ftent->fts_statp->st_ino,
-#endif
 			    &mtime, &atime) < 0))
 				continue;
 			set_ftime(ftent->fts_path, mtime, atime, 1, 0);
@@ -663,11 +644,7 @@ next_file(ARCHD *arcn)
 		arcn->pad = 0;
 		arcn->ln_nlen = 0;
 		arcn->ln_name[0] = '\0';
-#ifdef NET2_FTS
-		arcn->sb = ftent->fts_statb;
-#else
 		arcn->sb = *(ftent->fts_statp);
-#endif
 
 		/*
 		 * file type based set up and copy into the arcn struct

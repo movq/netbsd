@@ -1,4 +1,4 @@
-/*	$NetBSD: scandir.c,v 1.26 2007/06/09 23:57:25 christos Exp $	*/
+/*	$NetBSD: scandir.c,v 1.28 2016/12/16 04:45:04 mrg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)scandir.c	8.3 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: scandir.c,v 1.26 2007/06/09 23:57:25 christos Exp $");
+__RCSID("$NetBSD: scandir.c,v 1.28 2016/12/16 04:45:04 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -82,10 +82,14 @@ dirsize(int fd, size_t olen)
 	return olen + nlen;
 }
 
+#ifndef COMPARARG
+#define COMPARARG struct dirent **
+#endif
+
 int
 scandir(const char *dirname, struct dirent ***namelist,
     int (*selectfn)(const struct dirent *),
-    int (*dcomp)(const void *, const void *))
+    int (*dcomp)(const COMPARARG, const COMPARARG))
 {
 	struct dirent *d, *p, **names, **newnames;
 	size_t nitems, arraysz;
@@ -137,9 +141,11 @@ scandir(const char *dirname, struct dirent ***namelist,
 	}
 	(void)closedir(dirp);
 	if (nitems && dcomp != NULL)
-		qsort(names, nitems, sizeof(*names), dcomp);
+		qsort(names, nitems, sizeof(*names),
+		      (int (*)(const void *, const void *))dcomp);
 	*namelist = names;
-	return nitems;
+	_DIAGASSERT(__type_fit(int, nitems));
+	return (int)nitems;
 
 bad2:
 	while (nitems-- > 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_irq.S,v 1.11 2008/01/06 01:19:42 matt Exp $	*/
+/*	$NetBSD: isa_irq.S,v 1.17 2018/01/30 19:22:28 skrll Exp $	*/
 
 /*
  * Copyright 1997
@@ -101,26 +101,20 @@
  * is zero then a pointer to the IRQ frame on the stack is passed instead.
  */
 
-Ldisabled_mask:
+.Ldisabled_mask:
 	.word	_C_LABEL(disabled_mask)
 
-Lcurrent_spl_level:	
-	.word	_C_LABEL(current_spl_level)
-
-Lcurrent_intr_depth:
-	.word	_C_LABEL(cpu_info_store) + CI_IDEPTH
-
-Lvam_io_data:
+.Lvam_io_data:
 	.word	_C_LABEL(isa_io_bs_tag)
 
-Lspl_masks:
+.Lspl_masks:
 	.word	_C_LABEL(spl_masks)
 
 /*
  * Register usage
  *
+ *  r5  - Pointer to handler pointer list
  *  r6  - Address of current handler
- *  r7  - Pointer to handler pointer list
  *  r8  - Current IRQ requests.
  *  r9  - Used to count through possible IRQ bits.
  *  r10 - Base address of IOMD
@@ -131,25 +125,25 @@ ASENTRY_NP(irq_entry)
 	sub	lr, lr, #0x00000004	/* Adjust the lr */
 
 	PUSHFRAMEINSVC			/* Push an interrupt frame */
-	ENABLE_ALIGNMENT_FAULTS
+	ENABLE_ALIGNMENT_FAULTS		/* cpuinfo is in r4 after execution */
 
 	/* Load r8 with the ISA 8259 irqs */
 	/* r8 <- irq's pending [15:0] */
 
 	/* address of 8259 #1 */
-	ldr	r0, Lvam_io_data
+	ldr	r0, .Lvam_io_data
 	ldr	r0, [r0]
 	ldrb	r8, [r0, #IO_ICU1]                /* ocw3 = irr */
-	
+
 	/* clear the IRR bits that are currently masked. */
-	ldr	r2, Li8259_mask
+	ldr	r2, .Li8259_mask
 	ldr	r2, [r2]
 	mvn	r2, r2                            /* disabled -> enabled */
 
 	/* address of 8259 #2 */
 	tst	r2, #(1 << IRQ_SLAVE)             /* if slave is enabled */
 	tstne	r8, #(1 << IRQ_SLAVE)             /* anything from slave? */
-	ldrneb	r1, [r0, #IO_ICU2]                /* ocw3 = irr */
+	ldrbne	r1, [r0, #IO_ICU2]                /* ocw3 = irr */
 	orrne	r8, r8, r1, lsl #8
 
 	and	r8, r8, r2                        /* clear disabled */
@@ -164,14 +158,13 @@ ASENTRY_NP(irq_entry)
 	 * each time the interrupt handler is nested.
 	 */
 
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	add	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	/* Block the current requested interrupts */
 
-	ldr	r1, Ldisabled_mask
+	ldr	r1, .Ldisabled_mask
 	ldr	r0, [r1]
 	stmfd	sp!, {r0}
 	orr	r0, r0, r8
@@ -189,36 +182,35 @@ ASENTRY_NP(irq_entry)
 	 * This would benefit from a special ffs type routine
 	 */
 
-	mov	r9, #(_SPL_LEVELS - 1)
-	ldr	r7, Lspl_masks
+	mov	r9, #(NIPL - 1)
+	ldr	r5, .Lspl_masks
 
-Lfind_highest_ipl:
-	ldr	r2, [r7, r9, lsl #2]
+.Lfind_highest_ipl:
+	ldr	r2, [r5, r9, lsl #2]
 	tst	r8, r2
 	subeq	r9, r9, #1
-	beq	Lfind_highest_ipl
+	beq	.Lfind_highest_ipl
 
 	/* r9 = SPL level of highest priority interrupt */
 	add	r9, r9, #1
-	ldr	r2, [r7, r9, lsl #2]
+	ldr	r2, [r5, r9, lsl #2]
 	mvn	r2, r2
 	orr	r0, r0, r2
 
-	str	r0, [r1]	
+	str	r0, [r1]
 
-	ldr	r0, Lcurrent_spl_level
-	ldr	r1, [r0]
-	str	r9, [r0]
+	ldr	r1, [r4, #CI_CPL]
+	str	r9, [r4, #CI_CPL]
 	stmfd	sp!, {r1}
 
 	/* Update the IOMD irq masks */
 	bl	_C_LABEL(irq_setmasks)
 
-	mrs     r0, cpsr_all		/* Enable IRQ's */
+	mrs     r0, cpsr		/* Enable IRQ's */
 	bic	r0, r0, #I32_bit
 	msr	cpsr_all, r0
 
-	ldr	r7, Lirqhandlers
+	ldr	r5, .Lirqhandlers
 	mov	r9, #0x00000001
 
 irqloop:
@@ -226,16 +218,18 @@ irqloop:
 	tst	r8, r9			/* Is a bit set ? */
 	beq	nextirq			/* No ? try next bit */
 
-	ldr	r6, [r7]		/* Get address of first handler structure */
+	ldr	r6, [r5]		/* Get address of first handler structure */
 
 	teq	r6, #0x00000000		/* Do we have a handler */
 	moveq	r0, r8			/* IRQ requests as arg 0 */
 	beq	_C_LABEL(stray_irqhandler) /* call special handler */
 
-	ldr	r0, Lcnt
-	ldr	r1, [r0, #(V_INTR)]
-	add	r1, r1, #0x00000001
-	str	r1, [r0, #(V_INTR)]
+	ldr	r0, [r4, #(CI_CC_NINTR)]
+	ldr	r1, [r4, #(CI_CC_NINTR+4)]
+	adds	r0, r0, #0x00000001
+	adc	r1, r1, #0x00000000
+	str	r0, [r4, #(CI_CC_NINTR)]
+	ldr	r1, [r4, #(CI_CC_NINTR+4)]
 
 irqchainloop:
 	ldr	r0, [r6, #(IH_ARG)]	/* Get argument pointer */
@@ -261,18 +255,17 @@ irqdone:
 	stmia   r3, {r1-r2}		/* store ev_count */
 
 nextirq:
-	add	r7, r7, #0x00000004	/* update pointer to handlers */
+	add	r5, r5, #0x00000004	/* update pointer to handlers */
 	mov	r9, r9, lsl #1		/* move on to next bit */
 	teq	r9, #(1 << 16)		/* done the last bit ? */
 	bne	irqloop			/* no - loop back. */
 
 	ldmfd	sp!, {r2}
-	ldr	r1, Lcurrent_spl_level
-	str	r2, [r1]
+	str	r2, [r4, #CI_CPL]
 
 	/* Restore previous disabled mask */
 	ldmfd	sp!, {r2}
-	ldr	r1, Ldisabled_mask
+	ldr	r1, .Ldisabled_mask
 	str	r2, [r1]
 	bl	_C_LABEL(irq_setmasks)
 
@@ -281,15 +274,14 @@ nextirq:
 #endif
 
 	/* Kill IRQ's in preparation for exit */
-	mrs     r0, cpsr_all
+	mrs     r0, cpsr
 	orr     r0, r0, #(I32_bit)
 	msr     cpsr_all, r0
 
 	/* Decrement the nest count */
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	sub	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	LOCK_CAS_CHECK
 
@@ -299,8 +291,11 @@ nextirq:
 	/* NOT REACHED */
 	b	. - 8
 
-Lcurrent_mask:
+.Lcurrent_mask:
 	.word	_C_LABEL(current_mask)	/* irq's that are usable */
+
+.Lcpu_info_store:
+	.word	_C_LABEL(cpu_info_store)
 
 LOCK_CAS_CHECK_LOCALS
 
@@ -309,20 +304,20 @@ AST_ALIGNMENT_FAULT_LOCALS
 
 ENTRY(irq_setmasks)
 	/* Disable interrupts */
-	mrs	r3, cpsr_all
+	mrs	r3, cpsr
 	orr	r1, r3,  #(I32_bit)
 	msr	cpsr_all, r1
 
 	/* Calculate interrupt mask */
-	ldr	r1, Lcurrent_mask	/* All the enabled interrupts */
+	ldr	r1, .Lcurrent_mask	/* All the enabled interrupts */
 	ldrh	r1, [r1]		/* get hardware bits of mask */
 /*	.word	0xe0d110b0 */		/* hand-assembled ldrh r1, [r1] */
-	ldr	r0, Lspl_masks
-	ldr	r2, Lcurrent_spl_level
-	ldr	r2, [r2]
+	ldr	r0, .Lspl_masks
+	ldr	r2, .Lcpu_info_store
+	ldr	r2, [r2, #CI_CPL]
 	ldr	r2, [r0, r2, lsl #2]
 	and	r1, r1, r2
-	ldr	r2, Ldisabled_mask	/* Block due to active interrupts */
+	ldr	r2, .Ldisabled_mask	/* Block due to active interrupts */
 	ldr	r2, [r2]
 	bic	r1, r1, r2
 
@@ -330,7 +325,7 @@ ENTRY(irq_setmasks)
 	   possible to avoid them */
 
 	/* get current mask: these are the bits */
-	ldr	r0, Li8259_mask
+	ldr	r0, .Li8259_mask
 	ldr	r2, [r0]
 	/*       r2 = 0000.0000.0000.0000.ZZZZ.ZZZZ.ZZZZ.ZZZZ   */
 
@@ -366,27 +361,24 @@ ENTRY(irq_setmasks)
 
 	/* have to set at least one of the 8259's, store new mask */
 	str	r1, [r0]
-	ldr	r0, Lvam_io_data
+	ldr	r0, .Lvam_io_data
 	ldr	r0, [r0]
 
 	/* see if there's any change for 8259 #1 (master) */
 	tst	r2, #0x00FF               /* bottom 8 bits different? */
-	strneb	r1, [r0, #(IO_ICU1 + 1)]  /* icu1 / ocw1 */
+	strbne	r1, [r0, #(IO_ICU1 + 1)]  /* icu1 / ocw1 */
 
 	/* anything for 8259 #2? */
 	tst	r2, #0xFF00
 	mov	r1, r1, lsr #8            /* next byte */
-	strneb	r1, [r0, #(IO_ICU2 + 1)]  /* icu2 / ocw1 */
+	strbne	r1, [r0, #(IO_ICU2 + 1)]  /* icu2 / ocw1 */
 
 	/* Restore old cpsr and exit */
 	msr	cpsr_all, r3
 	mov	pc, lr
 
-Lcnt:
-	.word	_C_LABEL(uvmexp)
-
-Li8259_mask:
+.Li8259_mask:
 	.word	_C_LABEL(i8259_mask)
 
-Lirqhandlers:
+.Lirqhandlers:
 	.word	_C_LABEL(irqhandlers)	/* Pointer to array of irqhandlers */

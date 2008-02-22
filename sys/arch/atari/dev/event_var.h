@@ -1,4 +1,4 @@
-/*	$NetBSD: event_var.h,v 1.6 2007/03/04 05:59:40 christos Exp $	*/
+/*	$NetBSD: event_var.h,v 1.9 2014/03/29 16:46:19 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -64,20 +64,23 @@ struct evvar {
 #define	splev()	spltty()
 
 #define	EV_WAKEUP(ev) { \
-	selnotify(&(ev)->ev_sel, 0); \
+	selnotify(&(ev)->ev_sel, 0, 0); \
 	if ((ev)->ev_wanted) { \
 		(ev)->ev_wanted = 0; \
 		wakeup((void *)(ev)); \
 	} \
-	if ((ev)->ev_async) \
+	if ((ev)->ev_async) { \
+		mutex_enter(proc_lock); \
 		psignal((ev)->ev_io, SIGIO); \
+		mutex_exit(proc_lock); \
+	} \
 }
 
-void	ev_init __P((struct evvar *));
-void	ev_fini __P((struct evvar *));
-int	ev_read __P((struct evvar *, struct uio *, int));
-int	ev_poll __P((struct evvar *, int, struct lwp *));
-int	ev_kqfilter __P((struct evvar *, struct knote *));
+void	ev_init(struct evvar *);
+void	ev_fini(struct evvar *);
+int	ev_read(struct evvar *, struct uio *, int);
+int	ev_poll(struct evvar *, int, struct lwp *);
+int	ev_kqfilter(struct evvar *, struct knote *);
 
 /*
  * PEVENT is set just above PSOCK, which is just above TTIPRI, on the

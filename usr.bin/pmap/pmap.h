@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.6 2008/01/02 17:23:32 yamt Exp $ */
+/*	$NetBSD: pmap.h,v 1.10 2017/06/09 00:13:29 chs Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,6 +46,7 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
+#define __EXPOSE_MOUNT
 #include <sys/mount.h>
 #include <sys/uio.h>
 #include <sys/namei.h>
@@ -99,11 +93,11 @@
 
 /* suck the data from the kernel */
 #define _KDEREFOK(kd, addr, dst, sz) \
-	(kvm_read((kd), (addr), (dst), (sz)) == (sz))
+	((size_t)kvm_read((kd), (addr), (dst), (sz)) == (size_t)(sz))
 #define _KDEREF(kd, addr, dst, sz) do { \
 	if (!_KDEREFOK((kd), (addr), (dst), (sz))) \
-		errx(1, "trying to read %lu bytes from %lx: %s", \
-		    (unsigned long)(sz), (addr), kvm_geterr(kd)); \
+		errx(1, "trying to read %lu (%s) bytes from %lx: %s", \
+		    (unsigned long)(sz), #sz, (addr), kvm_geterr(kd)); \
 } while (0/*CONSTCOND*/)
 
 /* suck the data using the structure */

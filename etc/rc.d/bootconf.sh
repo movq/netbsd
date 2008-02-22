@@ -1,10 +1,17 @@
 #!/bin/sh
 #
-# $NetBSD: bootconf.sh,v 1.9 2006/04/23 23:26:26 hubertf Exp $
+# $NetBSD: bootconf.sh,v 1.15 2012/12/31 23:21:27 christos Exp $
 #
 
 # PROVIDE: bootconf
 # REQUIRE: mountcritlocal
+# KEYWORD: interactive
+
+$_rc_subr_loaded . /etc/rc.subr
+
+name="bootconf"
+start_cmd="bootconf_start"
+stop_cmd=":"
 
 bootconf_start()
 {
@@ -43,13 +50,12 @@ bootconf_start()
 		esac
 	done
 	echo
-	master=$$
 	_DUMMY=/etc/passwd
 	conf=${_DUMMY}
 	while [ ! -d /etc/etc.$conf/. ]; do
 		trap "conf=$default; echo; echo Using default of $default" ALRM
 		echo -n "Which configuration [$default] ? "
-		(sleep 30 && kill -ALRM $master) >/dev/null 2>&1 &
+		(sleep 30 && kill -ALRM $RC_PID) >/dev/null 2>&1 &
 		read conf
 		trap : ALRM
 		if [ -z $conf ] ; then
@@ -60,12 +66,15 @@ bootconf_start()
 		fi
 	done
 
+	print_rc_metadata "note:Using configuration \"${conf}\""
+
 	case  $conf in
 	current|default)
 		;;
 	*)
 		rm -f /etc/etc.current
 		ln -s etc.$conf /etc/etc.current
+		sync
 		;;
 	esac
 
@@ -74,8 +83,5 @@ bootconf_start()
 	fi
 }
 
-case "$1" in
-*start)
-	bootconf_start
-	;;
-esac
+load_rc_config $name
+run_rc_command "$1"

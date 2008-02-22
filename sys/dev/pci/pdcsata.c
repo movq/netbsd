@@ -1,4 +1,4 @@
-/*	$NetBSD: pdcsata.c,v 1.15 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: pdcsata.c,v 1.29 2017/10/20 07:06:08 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 2004, Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,10 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.15 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.29 2017/10/20 07:06:08 jdolecek Exp $");
 
 #include <sys/types.h>
-#include <sys/malloc.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 
@@ -61,7 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.15 2007/02/09 21:55:27 ad Exp $");
 #define	PDC205_SCONTROL(ch)	PDC205_REGADDR(0x408,ch)
 #define	PDC205_MULTIPLIER(ch)	PDC205_REGADDR(0x4e8,ch)
 
-static void pdcsata_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void pdcsata_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void pdc203xx_setup_channel(struct ata_channel *);
 static void pdc203xx_irqack(struct ata_channel *);
 static int  pdc203xx_dma_init(void *, int, int, void *, size_t, int);
@@ -71,11 +66,11 @@ static void pdc203xx_combo_probe(struct ata_channel *);
 static int  pdcsata_pci_intr(void *);
 static void pdcsata_do_reset(struct ata_channel *, int);
 
-static int  pdcsata_match(struct device *, struct cfdata *, void *);
-static void pdcsata_attach(struct device *, struct device *, void *);
+static int  pdcsata_match(device_t, cfdata_t, void *);
+static void pdcsata_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pdcsata, sizeof(struct pciide_softc),
-    pdcsata_match, pdcsata_attach, NULL, NULL);
+CFATTACH_DECL_NEW(pdcsata, sizeof(struct pciide_softc),
+    pdcsata_match, pdcsata_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_pdcsata_products[] =  {
 	{ PCI_PRODUCT_PROMISE_PDC20318,
@@ -201,8 +196,7 @@ static const struct pciide_product_desc pciide_pdcsata_products[] =  {
 };
 
 static int
-pdcsata_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pdcsata_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -214,57 +208,59 @@ pdcsata_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-pdcsata_attach(struct device *parent, struct device *self, void *aux)
+pdcsata_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_pdcsata_products));
 }
 
 static void
-pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+pdcsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	struct ata_channel *wdc_cp;
 	struct wdc_regs *wdr;
 	int channel, i;
-	bus_size_t dmasize;
 	pci_intr_handle_t intrhandle;
 	const char *intrstr;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	/*
 	 * Promise SATA controllers have 3 or 4 channels,
 	 * the usual IDE registers are mapped in I/O space, with offsets.
 	 */
 	if (pci_intr_map(pa, &intrhandle) != 0) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, intrhandle);
+	intrstr = pci_intr_string(pa->pa_pc, intrhandle, intrbuf, sizeof(intrbuf));
 	sc->sc_pci_ih = pci_intr_establish(pa->pa_pc,
 	    intrhandle, IPL_BIO, pdcsata_pci_intr, sc);
 
 	if (sc->sc_pci_ih == NULL) {
-		aprint_error("%s: couldn't establish native-PCI interrupt",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-		    aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+		    aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n",
-		sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-		intrstr ? intrstr : "unknown interrupt");
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "interrupting at %s\n",
+	    intrstr ? intrstr : "unknown interrupt");
 
 	sc->sc_dma_ok = (pci_mapreg_map(pa, PCIIDE_REG_BUS_MASTER_DMA,
 	    PCI_MAPREG_MEM_TYPE_32BIT, 0, &sc->sc_dma_iot,
-	    &sc->sc_dma_ioh, NULL, &dmasize) == 0);
+	    &sc->sc_dma_ioh, NULL, &sc->sc_dma_ios) == 0);
 	if (!sc->sc_dma_ok) {
-		aprint_error("%s: couldn't map bus-master DMA registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map bus-master DMA registers\n");
 		pci_intr_disestablish(pa->pa_pc, sc->sc_pci_ih);
 		return;
 	}
@@ -273,16 +269,16 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	if (pci_mapreg_map(pa, PDC203xx_BAR_IDEREGS,
 	    PCI_MAPREG_MEM_TYPE_32BIT, 0, &sc->sc_ba5_st,
-	    &sc->sc_ba5_sh, NULL, NULL) != 0) {
-		aprint_error("%s: couldn't map IDE registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
-		bus_space_unmap(sc->sc_dma_iot, sc->sc_dma_ioh, dmasize);
+	    &sc->sc_ba5_sh, NULL, &sc->sc_ba5_ss) != 0) {
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map IDE registers\n");
+		bus_space_unmap(sc->sc_dma_iot, sc->sc_dma_ioh, sc->sc_dma_ios);
 		pci_intr_disestablish(pa->pa_pc, sc->sc_pci_ih);
 		return;
 	}
 
-	aprint_verbose("%s: bus-master DMA support present\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16;
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA | ATAC_CAP_UDMA;
@@ -296,6 +292,7 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
 	sc->sc_wdcdev.sc_atac.atac_set_modes = pdc203xx_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	sc->sc_wdcdev.reset = pdcsata_do_reset;
 
@@ -306,6 +303,7 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    0x00ff0033);
 		sc->sc_wdcdev.sc_atac.atac_probe = wdc_sataprobe;
 		sc->sc_wdcdev.sc_atac.atac_nchannels = PDC203xx_SATA_NCHANNELS;
+		sc->sc_wdcdev.wdc_maxdrives = 1;
 		break;
 	case PCI_PRODUCT_PROMISE_PDC20371:
 	case PCI_PRODUCT_PROMISE_PDC20375:
@@ -328,6 +326,7 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    0x00ff00ff);
 		sc->sc_wdcdev.sc_atac.atac_nchannels = PDC40718_SATA_NCHANNELS;
 		sc->sc_wdcdev.sc_atac.atac_probe = wdc_sataprobe;
+		sc->sc_wdcdev.wdc_maxdrives = 1;
 		break;
 
 	case PCI_PRODUCT_PROMISE_PDC20571:
@@ -375,15 +374,7 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp->name = NULL;
 		cp->ata_channel.ch_channel = channel;
 		cp->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
-		cp->ata_channel.ch_queue =
-		    malloc(sizeof(struct ata_queue), M_DEVBUF, M_NOWAIT);
-		cp->ata_channel.ch_ndrive = 2;
-		if (cp->ata_channel.ch_queue == NULL) {
-			aprint_error("%s channel %d: "
-			    "can't allocate memory for command queue\n",
-			sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, channel);
-			goto next_channel;
-		}
+
 		wdc_cp = &cp->ata_channel;
 		wdr = CHAN_TO_WDC_REGS(wdc_cp);
 
@@ -392,23 +383,21 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 		if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 		    0x0238 + (channel << 7), 1, &wdr->ctl_ioh) != 0) {
-			aprint_error("%s: couldn't map channel %d ctl regs\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-			    channel);
+			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "couldn't map channel %d ctl regs\n", channel);
 			goto next_channel;
 		}
 		for (i = 0; i < WDC_NREG; i++) {
 			if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			    0x0200 + (i << 2) + (channel << 7), i == 0 ? 4 : 1,
 			    &wdr->cmd_iohs[i]) != 0) {
-				aprint_error("%s: couldn't map channel %d cmd "
-				    "regs\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+				aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+				    "couldn't map channel %d cmd regs\n",
 				    channel);
 				goto next_channel;
 			}
 		}
-		wdc_init_shadow_regs(wdc_cp);
+		wdc_init_shadow_regs(wdr);
 
 		/*
 		 * subregion de busmaster registers. They're spread all over
@@ -421,7 +410,8 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    &cp->dma_iohs[IDEDMA_CMD]) != 0) {
 			aprint_normal("%s channel %d: can't subregion DMA "
 			    "registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, channel);
+			    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
+			    channel);
 			goto next_channel;
 		}
 		if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
@@ -429,7 +419,8 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    &cp->dma_iohs[IDEDMA_TBL]) != 0) {
 			aprint_normal("%s channel %d: can't subregion DMA "
 			    "registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, channel);
+			    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
+			    channel);
 			goto next_channel;
 		}
 
@@ -442,27 +433,27 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			    PDC205_SSTATUS(channel), 1,
 			    &wdr->sata_status) != 0) {
-				aprint_error("%s: couldn't map channel %d "
-				    "sata_status regs\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-				    channel);
+				aprint_error_dev(
+				    sc->sc_wdcdev.sc_atac.atac_dev,
+				    "couldn't map channel %d "
+				    "sata_status regs\n", channel);
 				goto next_channel;
 			}
 			if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			    PDC205_SERROR(channel), 1, &wdr->sata_error) != 0) {
-				aprint_error("%s: couldn't map channel %d "
-				    "sata_error regs\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-				    channel);
+				aprint_error_dev(
+				    sc->sc_wdcdev.sc_atac.atac_dev,
+				    "couldn't map channel %d "
+				    "sata_error regs\n", channel);
 				goto next_channel;
 			}
 			if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			    PDC205_SCONTROL(channel), 1,
 			    &wdr->sata_control) != 0) {
-				aprint_error("%s: couldn't map channel %d "
-				    "sata_control regs\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-				    channel);
+				aprint_error_dev(
+				    sc->sc_wdcdev.sc_atac.atac_dev,
+				    "couldn't map channel %d "
+				    "sata_control regs\n", channel);
 				goto next_channel;
 			}
 		}
@@ -499,11 +490,11 @@ pdc203xx_setup_channel(struct ata_channel *chp)
 
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 		}
 	}
@@ -543,9 +534,9 @@ pdcsata_pci_intr(void *arg)
 			}
 			crv = wdcintr(wdc_cp);
 			if (crv == 0) {
-				printf("%s:%d: bogus intr (reg 0x%x)\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-				    i, scr);
+				aprint_error("%s:%d: bogus intr (reg 0x%x)\n",
+				    device_xname(
+				      sc->sc_wdcdev.sc_atac.atac_dev), i, scr);
 			} else
 				rv = 1;
 		}
@@ -637,5 +628,4 @@ pdcsata_do_reset(struct ata_channel *chp, int poll)
 	status = bus_space_read_4(sc->sc_ba5_st, sc->sc_ba5_sh, chanbase);
 
 	wdc_do_reset(chp, poll);
-
 }

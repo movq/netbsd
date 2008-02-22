@@ -1,11 +1,11 @@
-/*	$NetBSD: pcb.h,v 1.44 2008/01/05 21:59:33 yamt Exp $	*/
+/*	$NetBSD: pcb.h,v 1.57 2017/10/31 12:02:20 maxv Exp $	*/
 
-/*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+/*
+ * Copyright (c) 1998, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum.
+ * by Charles M. Hannum, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*-
+/*
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -81,42 +74,36 @@
 #include "opt_multiprocessor.h"
 #endif
 
-#include <sys/signal.h>
-
 #include <machine/segments.h>
-#include <machine/tss.h>
-#include <machine/npx.h>
-#include <machine/sysarch.h>
+#include <x86/cpu_extended_state.h>
 
 struct pcb {
 	int	pcb_esp0;		/* ring0 esp */
 	int	pcb_esp;		/* kernel esp */
 	int	pcb_ebp;		/* kernel ebp */
-	int	pcb_ldt_sel;
 	int	pcb_cr0;		/* saved image of CR0 */
 	int	pcb_cr2;		/* page fault address (CR2) */
 	int	pcb_cr3;		/* page directory pointer */
 	int	pcb_iopl;		/* i/o privilege level */
 
-	/* floating point state for FPU */
-	union	savefpu pcb_savefpu __aligned(16);
-
-	int	pcb_fsd[2];		/* %fs descriptor */
-	int	pcb_gsd[2];		/* %gs descriptor */
-	void *	pcb_onfault;		/* copyin/out fault recovery */
-	int	vm86_eflags;		/* virtual eflags for vm86 mode */
-	int	vm86_flagmask;		/* flag mask for vm86 mode */
-	void	*vm86_userp;		/* XXX performance hack */
-	struct cpu_info *pcb_fpcpu;	/* cpu holding our fp state. */
+	struct segment_descriptor pcb_fsd;	/* %fs descriptor */
+	struct segment_descriptor pcb_gsd; 	/* %gs descriptor */
+	void 	*pcb_onfault;		/* copyin/out fault recovery */
 	char	*pcb_iomap;		/* I/O permission bitmap */
-};
+	struct dbreg	*pcb_dbregs;	/* CPU Debug Registers */
+	uint16_t pcb_fpu_dflt_cw;
 
-/*    
- * The pcb is augmented with machine-dependent additional data for 
- * core dumps. For the i386, there is nothing to add.
- */     
-struct md_coredump {
-	long	md_pad[8];
-};    
+	int	not_used[16];
+
+	/* floating point state */
+	struct cpu_info	*pcb_fpcpu;	/* cpu holding our fp state. */
+	union savefpu	pcb_savefpu __aligned(64);
+	/* **** DO NOT ADD ANYTHING HERE **** */
+
+};
+#ifndef __lint__
+/* This doesn't really matter, but there is a lot of implied padding */
+__CTASSERT(sizeof(struct pcb) - sizeof (union savefpu) == 128);
+#endif
 
 #endif /* _I386_PCB_H_ */

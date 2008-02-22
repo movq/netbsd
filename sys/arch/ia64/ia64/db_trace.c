@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.3 2007/02/28 04:21:51 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.5 2016/07/31 19:10:54 dholland Exp $	*/
 
 /* Inspired by reading alpha/db_trace.c */
 
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -106,6 +99,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		struct unwind_frame *uwf = &current_frame;
 		debug_frame_dump_XXX(uwf);
 #endif
+		KASSERT(ip >= kernstart);
 		patchunwindframe(&current_frame, ip - kernstart, kernstart);
 #ifdef UNWIND_DIAGNOSTIC
 		debug_frame_dump_XXX(uwf);
@@ -193,6 +187,7 @@ rewindframe(struct unwind_frame *uwf, db_addr_t ip)
 
 	/* Stomp on rp and pfs 
 	 */
+	KASSERT(ip >= kernstart);
 	patchunwindframe(uwf, ip - kernstart, kernstart);
 
 #ifdef UNWIND_DIAGNOSTIC

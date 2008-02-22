@@ -1,11 +1,11 @@
-.\"	$NetBSD: afterboot.8,v 1.34 2007/12/14 21:16:01 pavel Exp $
+.\"	$NetBSD: afterboot.8,v 1.60 2017/09/10 19:08:17 maya Exp $
 .\"	$OpenBSD: afterboot.8,v 1.72 2002/02/22 02:02:33 miod Exp $
 .\"
 .\" Originally created by Marshall M. Midden -- 1997-10-20, m4@umn.edu
 .\" Adapted to NetBSD by Julio Merino -- 2002-05-10, jmmv@NetBSD.org
 .\"
 .\"
-.\" Copyright (c) 2002-2005 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2002-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -16,13 +16,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the NetBSD
-.\"	Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 19, 2007
+.Dd September 10, 2017
 .Dt AFTERBOOT 8
 .Os
 .Sh NAME
@@ -99,22 +92,37 @@ if they get used to using the manual pages.
 By the time that you have installed your system, it is quite likely that
 bugs in the release have been found.
 All significant and easily fixed problems will be reported at
-.Pa http://www.NetBSD.org/support/security/ .
+.Lk http://www.NetBSD.org/support/security/ .
 It is recommended that you check this page regularly.
+.Pp
+Additionally, you should set
+.Dq fetch_pkg_vulnerabilities=YES
+in
+.Pa /etc/daily.conf
+to allow your system to automatically update the local database of known
+vulnerable packages to the latest version available on-line.
+The system will later check, on a daily basis, if any of your installed
+packages are vulnerable based on the contents of this database.
+See
+.Xr daily.conf 5
+and
+.Xr security.conf 5
+for more details.
 .Ss Login
 Login as
 .Dq Ic root .
 You can do so on the console, or over the network using
 .Xr ssh 1 .
-If you have enabled the ssh daemon and wish to allow root logins over
-the network, edit the
+If you have enabled the SSH daemon (see
+.Xr sshd 8 )
+and wish to allow root logins over the network, edit the
 .Pa /etc/ssh/sshd_config
 file and set
-.Cm PermitRootLogin
+.Dq PermitRootLogin
 to
 .Dq yes
 (see
-.Xr sshd 8 ) .
+.Xr sshd_config 5 ) .
 The default is to not permit root logins over the network
 after fresh install in
 .Nx .
@@ -200,9 +208,16 @@ variable in
 or edit the
 .Pa /etc/myname
 file to have it stick around for the next reboot.
-Note that hostname is supposed include a domainname, and that this should
+Note that
+.Dq Va hostname
+is supposed include a domainname, and that this should
 not be confused with YP (NIS)
 .Xr domainname 1 .
+If you are using
+.Xr dhcpcd 8
+to configure network interfaces, it might override these local hostname
+settings if your DHCP server specifies client's hostname with other network
+configurations.
 .Ss Verify network interface configuration
 The first thing to do is an
 .Ic ifconfig -a
@@ -222,6 +237,23 @@ and then using
 to manually configure it
 if you do not wish to reboot.
 .Pp
+Alternatively, you can configure interfaces automatically via DHCP with
+.Xr dhcpcd 8
+if you have a DHCP server running somewhere on your network.
+To get
+.Xr dhcpcd 8
+to start automatically on boot,
+you will need to have this line in
+.Pa /etc/rc.conf :
+.Pp
+.Dl dhcpcd=YES
+.Pp
+See
+.Xr dhcpcd 8
+and
+.Xr dhcpcd.conf 5
+for more information on setting up a DHCP client.
+.Pp
 You can add new
 .Dq virtual interfaces
 by adding the required entries to
@@ -233,7 +265,7 @@ man page for more information on the format of
 files.
 The loopback interface will look something like:
 .Bd -literal -offset indent
-lo0: flags=8009\*[Lt]UP,LOOPBACK,MULTICAST\*[Gt] mtu 32972
+lo0: flags=8009<UP,LOOPBACK,MULTICAST> mtu 32972
 	inet 127.0.0.1 netmask 0xff000000
 	inet6 fe80::1%lo0 prefixlen 64 scopeid 0x3
 	inet6 ::1 prefixlen 128
@@ -241,24 +273,20 @@ lo0: flags=8009\*[Lt]UP,LOOPBACK,MULTICAST\*[Gt] mtu 32972
 .Pp
 an Ethernet interface something like:
 .Bd -literal -offset indent
-le0: flags=9863\*[Lt]UP,BROADCAST,NOTRAILERS,RUNNING,SIMPLEX,MULTICAST\*[Gt]
+le0: flags=9863<UP,BROADCAST,NOTRAILERS,RUNNING,SIMPLEX,MULTICAST>
 	inet 192.168.4.52 netmask 0xffffff00 broadcast 192.168.4.255
 	inet6 fe80::5ef0:f0f0%le0 prefixlen 64 scopeid 0x1
 .Ed
 .Pp
 and a PPP interface something like:
 .Bd -literal -offset indent
-ppp0: flags=8051\*[Lt]UP,POINTOPOINT,RUNNING,MULTICAST\*[Gt]
-        inet 203.3.131.108 --\*[Gt] 198.181.0.253 netmask 0xffff0000
+ppp0: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST>
+        inet 203.3.131.108 --> 198.181.0.253 netmask 0xffff0000
 .Ed
 .Pp
 See
 .Xr mrouted 8
 for instructions on configuring multicast routing.
-.Pp
-See
-.Xr dhcpd 8
-for instructions on configuring interfaces with DHCP.
 .Ss Check routing tables
 Issue a
 .Ic netstat -rn
@@ -278,7 +306,7 @@ default        192.168.4.254     UGS      0 11098028    -  le0
 
 Internet6:
 Destination        Gateway       Flags  Refs  Use     Mtu  Interface
-::/96              ::1           UGRS     0     0   32972  lo0 =\*[Gt]
+::/96              ::1           UGRS     0     0   32972  lo0 =>
 ::1                ::1           UH       4     0   32972  lo0
 ::ffff:0.0.0.0/96  ::1           UGRS     0     0   32972  lo0
 fc80::/10          ::1           UGRS     0     0   32972  lo0
@@ -299,7 +327,7 @@ or in the file
 If you need to edit this file, a painless way to reconfigure the network
 afterwards is to issue
 .Bd -literal -offset indent
-.Ic /etc/rc.d/network restart
+.Ic service network restart
 .Ed
 .Pp
 Or, you may prefer to manually configure using a series of
@@ -309,13 +337,13 @@ and
 commands (see
 .Xr route 8 ) .
 If you run
-.Xr dhclient 8
+.Xr dhcpcd 8
 you will have to kill it by running
 .Bd -literal -offset indent
-.Ic /etc/rc.d/dhclient stop
-.Pp
+.Ic service dhcpcd stop
 .Ed
-after you flush the routes.
+.Pp
+before you flush the routes.
 .Pp
 If you wish to route packets between interfaces, add one or both
 of the following directives (depending on whether IPv4 or IPv6 routing
@@ -326,60 +354,75 @@ is required) to
 .Dl net.inet6.ip6.forwarding=1
 .Pp
 As an alternative, compile a new kernel with the
-.Cm GATEWAY
+.Dq GATEWAY
 option.
 Packets are not forwarded by default, due to RFC requirements.
-.Ss Secure Shell (ssh)
+.Ss Secure Shell (SSH)
 By default, all services are disabled in a fresh
 .Nx
-installation, and ssh is no exception.
+installation, and SSH is no exception.
 You may wish to enable it so you can remotely control your system.
 Set
-.Dq Va sshd=yes
+.Dq Va sshd=YES
 in
 .Pa /etc/rc.conf
 and then starting the server with the command
 .Bd -literal -offset indent
-.Ic /etc/rc.d/sshd start
+.Ic service sshd start
 .Ed
 .Pp
 The first time the server is started, it will generate a new keypair,
 which will be stored inside the directory
 .Pa /etc/ssh .
-.Ss BIND Name Server (DNS)
-If you are using the BIND Name Server, check the
-.Pa /etc/resolv.conf
-file.
-It may look something like:
+.Ss Host names and DNS
+The system resolves host names according the rules for hosts in the
+name service switch configuration at
+.Pa /etc/nsswitch.conf .
+By default, it will query
+.Pa /etc/hosts
+first, and then the DNS resolver specified in
+.Pa /etc/resolv.conf .
+.Pp
+If your network does not have a usable DNS resolver, e.g. one provided
+by DHCP, you can run a local caching recursive resolver by setting
+.Dq named=YES
+in
+.Pa /etc/rc.conf
+and either rebooting or running the following command:
 .Bd -literal -offset indent
-domain some.thing.dom
-nameserver 192.168.0.1
-nameserver 192.168.4.55
-search some.thing.dom. thing.dom.
+.Ic service named start
 .Ed
 .Pp
-For further details, see
-.Xr resolv.conf 5 .
-Note the name service lookup order is set via
-.Xr nsswitch.conf 5
-mechanism.
-.Pp
-If using a caching name server add the line "nameserver 127.0.0.1" first.
-To get a local caching name server to run
-you will need to set "named=yes" in
-.Pa /etc/rc.conf
-and create the
-.Pa named.conf
-file in the appropriate place for
-.Xr named 8 ,
-usually in
-.Pa /etc/namedb .
-The same holds true if the machine is going to be a
-name server for your domain.
-In both these cases, make sure that
 .Xr named 8
-is running
-(otherwise there are long waits for resolver timeouts).
+is configured in
+.Pa /etc/named.conf
+by default to run as a local caching recursive resolver.
+Then, to make the system use it, put the following in
+.Pa /etc/resolv.conf :
+.Bd -literal -offset indent
+nameserver 127.0.0.1
+.Ed
+.Ss Wireless networking
+You can scan for nearby wireless networks using:
+.Bd -literal -offset indent
+.Ic ifconfig iwm0 up list scan
+.Ic ifconfig iwm0 down
+.Ed
+.Pp
+To connect to a wireless network using WPA and DHCP:
+.Bd -literal -offset indent
+.Ic wpa_passphrase networkname password > /etc/wpa_supplicant.conf
+.Ic wpa_supplicant -i iwm0 -c /etc/wpa_supplicant.conf &
+.Ic dhcpcd iwm0
+.Ed
+.Pp
+To automatically connect at boot, add the following flags to
+.Pa /etc/rc.conf :
+.Pp
+.Dl dhcpcd=YES
+.Dl dhcpcd_flags="-b"
+.Dl wpa_supplicant=YES
+.Dl wpa_supplicant_flags="-i iwm0 -c /etc/wpa_supplicant.conf"
 .Ss RPC-based network services
 Several services depend on the RPC portmapper
 .Xr rpcbind 8
@@ -430,8 +473,8 @@ add following entry to local passwd database via
 .Xr vipw 8 :
 .Bd -literal -offset indent
 .Li +:*::::::::
-.Pp
 .Ed
+.Pp
 Note this entry has to be the very last one.
 This traditional way works with the default
 .Xr nsswitch.conf 5
@@ -442,7 +485,7 @@ which is
 .Pp
 There are many more YP man pages available to help you.
 You can find more information by starting with
-.Xr yp 8 .
+.Xr nis 8 .
 .Ss Check disk mounts
 Check that the disks are mounted correctly by
 comparing the
@@ -531,8 +574,8 @@ make sure that
 .Pa /etc/rc.conf
 contains the following:
 .Pp
-.Dl ntpdate=yes
-.Dl ntpd=yes
+.Dl ntpdate=YES
+.Dl ntpd=YES
 .Pp
 See
 .Xr date 1 ,
@@ -564,7 +607,7 @@ at the top, or your message will be overwritten.
 To add new users and groups, there are
 .Xr useradd 8
 and
-.Xr groupadd 8 ,
+.Xr groupadd 8 ;
 see also
 .Xr user 8
 for further programs for user and group manipulation.
@@ -604,7 +647,7 @@ This script should not be changed by administrators.
 .Pp
 The directory
 .Pa /etc/rc.d
-contains a serie of scripts used at startup/shutdown, called by
+contains a series of scripts used at startup/shutdown, called by
 .Pa /etc/rc .
 .Pa /etc/rc
 is in turn influenced by the configuration variables present in
@@ -631,16 +674,14 @@ directly, edit only
 See
 .Xr rc.conf 5
 for further information.
-.Pp
+.Ss X Display Manager
 If you've installed X, you may want to turn on
 .Xr xdm 1 ,
 the X Display Manager.
-To do this, set the variable
-.Dq xdm
-to yes in
-.Pa /etc/rc.conf ,
-i.e.:
-.Dq xdm=yes
+To do this, set
+.Dq xdm=YES
+in
+.Pa /etc/rc.conf .
 .Ss Printers
 Edit
 .Pa /etc/printcap
@@ -675,23 +716,24 @@ from the master so that the remote commands work.
 Check
 .Pa /etc/mail/aliases
 and update appropriately if you want e-mail to be routed
-to non-local address or to different users.
+to non-local addresses or to different users.
 .Pp
 Run
 .Xr newaliases 1
 after changes.
 .Ss Postfix
 .Nx
-comes also with Postfix in the base system.
-You may wish to set it up in favor of sendmail.
-Take a look to
+uses Postfix as its MTA.
+Postfix is started by default, but its initial configuration does not
+cause it to listen on the network for incoming connections.
+To configure Postfix, see
 .Pa /etc/postfix/main.cf
-and enable the daemon in
-.Pa /etc/rc.conf
-using "postfix=yes".
-It is very important to configure
+and
+.Pa /etc/postfix/master.cf .
+If you wish to use a different MTA (e.g., sendmail), install your MTA of
+choice and edit
 .Pa /etc/mailer.conf
-to point to Postfix binaries.
+to point to the proper binaries.
 .Ss DHCP server
 If this is a
 DHCP
@@ -702,7 +744,8 @@ and
 as needed.
 You will have to make sure
 .Pa /etc/rc.conf
-has "dhcpd=yes"
+has
+.Dq dhcpd=YES
 or run
 .Xr dhcpd 8
 manually.
@@ -714,15 +757,16 @@ server, edit
 as needed.
 You will have to turn it on in
 .Pa /etc/rc.conf
-by adding "bootparamd=yes".
+by adding
+.Dq bootparamd=YES .
 .Ss NFS server
 If this is an NFS server, make sure
 .Pa /etc/rc.conf
 has:
 .Bd -literal -offset indent
-nfs_server=yes
-mountd=yes
-rpcbind=yes
+nfs_server=YES
+mountd=YES
+rpcbind=YES
 .Ed
 .Pp
 Edit
@@ -730,9 +774,9 @@ Edit
 and get it correct.
 After this, you can start the server by issuing:
 .Bd -literal -offset indent
-.Ic /etc/rc.d/rpcbind start
-.Ic /etc/rc.d/mountd start
-.Ic /etc/rc.d/nfsd start
+.Ic service rpcbind start
+.Ic service mountd start
+.Ic service nfsd start
 .Ed
 which will also start dependencies.
 .Ss HP remote boot server
@@ -783,9 +827,9 @@ the security scripts that are mailed internally, you can type
 .Ic crontab -e
 and change some of the lines to read:
 .Bd -literal -offset indent
-30  1  *  *  *   /bin/sh /etc/daily 2\*[Gt]\*[Am]1 \*[Gt] /var/log/daily.out
-30  3  *  *  6   /bin/sh /etc/weekly 2\*[Gt]\*[Am]1 \*[Gt] /var/log/weekly.out
-30  5  1  *  *   /bin/sh /etc/monthly 2\*[Gt]\*[Am]1 \*[Gt] /var/log/monthly.out
+30  1  *  *  *   /bin/sh /etc/daily 2>&1 > /var/log/daily.out
+30  3  *  *  6   /bin/sh /etc/weekly 2>&1 > /var/log/weekly.out
+30  5  1  *  *   /bin/sh /etc/monthly 2>&1 > /var/log/monthly.out
 .Ed
 .Pp
 See
@@ -793,7 +837,7 @@ See
 .Ss Next day cleanup
 After the first night's security run, change ownerships and permissions
 on files, directories, and devices; root should have received mail
-with subject: "\*[Lt]hostname\*[Gt] daily insecurity output.".
+with subject: "<hostname> daily insecurity output.".
 This mail contains
 a set of security recommendations, presented as a list looking like this:
 .Bd -literal -offset indent
@@ -822,11 +866,11 @@ The
 .Nx
 packages collection, pkgsrc, includes a large set of third-party software.
 A lot of it is available as binary packages that you can download from
-.Pa ftp://ftp.NetBSD.org/pub/NetBSD/packages/
+.Lk https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/
 or a mirror, and install using
 .Xr pkg_add 1 .
 See
-.Pa http://www.NetBSD.org/docs/pkgsrc/
+.Lk https://www.NetBSD.org/docs/pkgsrc/
 and
 .Pa pkgsrc/doc/pkgsrc.txt
 for more details.
@@ -925,44 +969,10 @@ $ ./build.sh kernel=SOMEFILE
 At this point, the system should be fully configured to your liking.
 It is now a good time to ensure that the system behaves according to
 its specifications and that it is stable on your hardware.
-You can easily do so by running the test suites available at
-.Pa /usr/tests/ ,
-assuming that you installed the
-.Pa tests.tgz
-set.
-If not, you can install it now by running:
-.Bd -literal -offset indent
-# cd /
-# tar xzpf /path/to/tests.tgz
-.Ed
-.Pp
-Once done, edit the
-.Pa /etc/atf/NetBSD.conf
-file to tune the configuration of the test suite, go to
-.Pa /usr/tests/
-hierarchy and use the
-.Xr atf-run 1
-and
-.Xr atf-report 1
-utilities to run all the tests in an automated way:
-.Bd -literal -offset indent
-# cd /usr/tests/
-# atf-run | atf-report
-.Ed
-.Pp
-Should any problems appear when running the test suite, please let the
-.Nx
-developers know by sending a message to the appropriate mailing list or
-by sending a problem report.  For more details see:
-.Bl -bullet -offset indent
-.It
-.Pa http://www.netbsd.org/mailinglists/
-.It
-.Pa http://www.netbsd.org/support/send-pr.html
-.El
+Please refer to
+.Xr tests 7
+for details on how to do so.
 .Sh SEE ALSO
-.Xr atf-report 1 ,
-.Xr atf-run 1 ,
 .Xr chgrp 1 ,
 .Xr chmod 1 ,
 .Xr config 1 ,
@@ -970,47 +980,75 @@ by sending a problem report.  For more details see:
 .Xr date 1 ,
 .Xr df 1 ,
 .Xr domainname 1 ,
+.Xr fstat 1 ,
 .Xr hostname 1 ,
 .Xr make 1 ,
 .Xr man 1 ,
 .Xr netstat 1 ,
 .Xr newaliases 1 ,
 .Xr passwd 1 ,
+.Xr pkg_add 1 ,
+.Xr ps 1 ,
+.Xr ssh 1 ,
 .Xr su 1 ,
+.Xr systat 1 ,
+.Xr top 1 ,
+.Xr xdm 1 ,
 .Xr ccd 4 ,
 .Xr aliases 5 ,
 .Xr crontab 5 ,
+.Xr dhcpcd.conf 5 ,
 .Xr exports 5 ,
 .Xr fstab 5 ,
 .Xr group 5 ,
-.Xr krb.conf 5 ,
-.Xr krb.realms 5 ,
+.Xr hosts 5 ,
+.Xr ifconfig.if 5 ,
 .Xr mailer.conf 5 ,
+.Xr named.conf 5 ,
+.Xr nsswitch.conf 5 ,
 .Xr passwd 5 ,
+.Xr printcap 5 ,
 .Xr rc.conf 5 ,
 .Xr resolv.conf 5 ,
+.Xr sshd_config 5 ,
+.Xr wpa_supplicant.conf 5 ,
+.Xr wscons.conf 5 ,
 .Xr hier 7 ,
 .Xr hostname 7 ,
 .Xr pkgsrc 7 ,
-.Xr adduser 8 ,
+.Xr tests 7 ,
 .Xr amd 8 ,
-.Xr bootparamd 8 ,
 .Xr ccdconfig 8 ,
 .Xr chown 8 ,
+.Xr dhcpcd 8 ,
 .Xr dhcpd 8 ,
+.Xr dmesg 8 ,
+.Xr groupadd 8 ,
 .Xr ifconfig 8 ,
 .Xr inetd 8 ,
 .Xr kerberos 8 ,
+.Xr lpd 8 ,
 .Xr mount 8 ,
 .Xr mrouted 8 ,
 .Xr mtree 8 ,
 .Xr named 8 ,
+.Xr nis 8 ,
+.Xr ntpd 8 ,
+.Xr ntpdate 8 ,
 .Xr rbootd 8 ,
 .Xr rc 8 ,
+.Xr rdate 8 ,
 .Xr rmt 8 ,
 .Xr route 8 ,
+.Xr rpc.bootparamd 8 ,
+.Xr rpcbind 8 ,
+.Xr sshd 8 ,
+.Xr timed 8 ,
 .Xr umount 8 ,
+.Xr useradd 8 ,
 .Xr vipw 8 ,
+.Xr wpa_supplicant 8 ,
+.Xr yp 8 ,
 .Xr ypbind 8
 .Sh HISTORY
 This document first appeared in

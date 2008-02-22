@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.25 2007/09/25 04:10:12 lukem Exp $	*/
+/*	$NetBSD: find.c,v 1.30 2016/06/13 00:04:40 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)find.c	8.5 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: find.c,v 1.25 2007/09/25 04:10:12 lukem Exp $");
+__RCSID("$NetBSD: find.c,v 1.30 2016/06/13 00:04:40 pgoyette Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,13 +51,12 @@ __RCSID("$NetBSD: find.c,v 1.25 2007/09/25 04:10:12 lukem Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
 
 #include "find.h"
 
 static int ftscompare(const FTSENT **, const FTSENT **);
-
-static void sig_lock(sigset_t *);
-static void sig_unlock(const sigset_t *);
 
 /*
  * find_formplan --
@@ -103,16 +102,16 @@ find_formplan(char **argv)
 	 */
 	if (!isoutput) {
 		if (plan == NULL) {
-			new = c_print(NULL, 0);
+			new = c_print(NULL, 0, NULL);
 			tail = plan = new;
 		} else {
-			new = c_openparen(NULL, 0);
+			new = c_openparen(NULL, 0, NULL);
 			new->next = plan;
 			plan = new;
-			new = c_closeparen(NULL, 0);
+			new = c_closeparen(NULL, 0, NULL);
 			tail->next = new;
 			tail = new;
-			new = c_print(NULL, 0);
+			new = c_print(NULL, 0, NULL);
 			tail->next = new;
 			tail = new;
 		}
@@ -154,20 +153,40 @@ ftscompare(const FTSENT **e1, const FTSENT **e2)
 	return (strcoll((*e1)->fts_name, (*e2)->fts_name));
 }
 
-static void
-sig_lock(sigset_t *s)
-{
-	sigset_t new;
+static sigset_t ss;
+static bool notty;
 
-	sigemptyset(&new);
-	sigaddset(&new, SIGINFO); /* block SIGINFO */
-	sigprocmask(SIG_BLOCK, &new, s);
+static __inline void
+sig_init(void)
+{
+	struct sigaction sa;
+	notty = !(isatty(STDIN_FILENO) || isatty(STDOUT_FILENO) ||
+	    isatty(STDERR_FILENO));
+	if (notty)
+		return;
+	sigemptyset(&ss);
+	sigaddset(&ss, SIGINFO); /* block SIGINFO */
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_flags = SA_RESTART;
+	sa.sa_handler = show_path;
+	(void)sigaction(SIGINFO, &sa, NULL);
+
 }
 
-static void
+static __inline void
+sig_lock(sigset_t *s)
+{
+	if (notty)
+		return;
+	sigprocmask(SIG_BLOCK, &ss, s);
+}
+
+static __inline void
 sig_unlock(const sigset_t *s)
 {
-
+	if (notty)
+		return;
 	sigprocmask(SIG_SETMASK, s, NULL);
 }
 
@@ -191,9 +210,9 @@ find_execute(PLAN *plan, char **paths)
 	if (!(tree = fts_open(paths, ftsoptions, issort ? ftscompare : NULL)))
 		err(1, "ftsopen");
 
+	sig_init();
 	sig_lock(&s);
-	for (rval = 0; cval && (g_entry = fts_read(tree)) != NULL; sig_lock(&s)) {
-		sig_unlock(&s);
+	for (rval = 0; cval && (g_entry = fts_read(tree)) != NULL;) {
 		switch (g_entry->fts_info) {
 		case FTS_D:
 			if (isdepth)
@@ -206,17 +225,21 @@ find_execute(PLAN *plan, char **paths)
 		case FTS_DNR:
 		case FTS_ERR:
 		case FTS_NS:
+			sig_unlock(&s);
 			(void)fflush(stdout);
 			warnx("%s: %s",
 			    g_entry->fts_path, strerror(g_entry->fts_errno));
 			rval = 1;
+			sig_lock(&s);
 			continue;
 		}
 #define	BADCH	" \t\n\\'\""
 		if (isxargs && strpbrk(g_entry->fts_path, BADCH)) {
+			sig_unlock(&s);
 			(void)fflush(stdout);
 			warnx("%s: illegal path", g_entry->fts_path);
 			rval = 1;
+			sig_lock(&s);
 			continue;
 		}
 
@@ -225,15 +248,17 @@ find_execute(PLAN *plan, char **paths)
 		 * false or all have been executed.  This is where we do all
 		 * the work specified by the user on the command line.
 		 */
+		sig_unlock(&s);
 		for (p = plan; p && (p->eval)(p, g_entry); p = p->next)
 			if (p->type == N_EXIT) {
 				rval = p->exit_val;
 				cval = 0;
 			}
+		sig_lock(&s);
 	}
 
 	sig_unlock(&s);
-	if (errno)
+	if (g_entry == NULL && errno)
 		err(1, "fts_read");
 	(void)fts_close(tree);
 
@@ -257,10 +282,7 @@ find_execute(PLAN *plan, char **paths)
  *	If any func() returns non-zero, then so will find_traverse().
  */
 int
-find_traverse(plan, func, arg)
-	PLAN *plan;
-	int (*func)(PLAN *, void *);
-	void *arg;
+find_traverse(PLAN *plan, int (*func)(PLAN *, void *), void *arg)
 {
 	PLAN *p;
 	int r, rval;

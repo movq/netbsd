@@ -1,4 +1,4 @@
-.\"	$NetBSD: strtol.3,v 1.22 2003/09/08 17:54:33 wiz Exp $
+.\"	$NetBSD: strtol.3,v 1.40 2017/07/03 21:32:50 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     from: @(#)strtol.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd August 11, 2002
+.Dd November 4, 2016
 .Dt STRTOL 3
 .Os
 .Sh NAME
@@ -41,7 +41,7 @@
 .Nm strtoll ,
 .Nm strtoimax ,
 .Nm strtoq
-.Nd "convert string value to a long, long long, intmax_t or quad_t integer"
+.Nd convert string value to a long, long long, intmax_t or quad_t integer
 .Sh LIBRARY
 .Lb libc
 .Sh SYNOPSIS
@@ -68,7 +68,7 @@ function
 converts the string in
 .Fa nptr
 to a
-.Em long int
+.Ft long int
 value.
 The
 .Fn strtoll
@@ -76,7 +76,7 @@ function
 converts the string in
 .Fa nptr
 to a
-.Em long long int
+.Ft long long int
 value.
 The
 .Fn strtoimax
@@ -84,7 +84,7 @@ function
 converts the string in
 .Fa nptr
 to an
-.Em intmax_t
+.Ft intmax_t
 value.
 The
 .Fn strtoq
@@ -92,8 +92,9 @@ function
 converts the string in
 .Fa nptr
 to a
-.Em quad_t
+.Ft quad_t
 value.
+.Pp
 The conversion is done according to the given
 .Fa base ,
 which must be between 2 and 36 inclusive,
@@ -112,18 +113,28 @@ If
 is zero or 16,
 the string may then include a
 .Ql 0x
+or
+.Ql 0X
 prefix,
-and the number will be read in base 16; otherwise, a zero
+and the number will be read in base 16; otherwise,
+.\" if the
+.\" .Fa base
+.\" is zero or 2,
+.\" the string may then include a
+.\" .Ql 0b
+.\" or
+.\" .Ql 0B
+.\" prefix,
+.\" and the number will be read in base 2; otherwise,
+a zero
 .Fa base
 is taken as 10 (decimal) unless the next character is
 .Ql 0 ,
 in which case it is taken as 8 (octal).
 .Pp
-The remainder of the string is converted to a
-.Em long
-value in the obvious manner,
-stopping at the first character which is not a valid digit
-in the given base.
+The remainder of the string is converted to an appropriate value
+in the obvious manner,
+stopping at the first character which is not a valid digit in the given base.
 (In bases above 10, the letter
 .Ql A
 in either upper or lower case
@@ -135,13 +146,10 @@ representing 35.)
 .Pp
 If
 .Fa endptr
-is non nil,
-.Fn strtol
-stores the address of the first invalid character in
+is non-nil, the functions store the address of the first invalid character in
 .Fa *endptr .
 If there were no digits at all, however,
-.Fn strtol
-stores the original value of
+the functions store the original value of
 .Fa nptr
 in
 .Fa *endptr .
@@ -186,17 +194,29 @@ In these cases,
 .Va errno
 is set to
 .Er ERANGE .
+If the
+.Fa base
+argument is not supported then
+.Va errno
+is set to
+.Er EINVAL
+and the functions return 0.
+.Pp
+If no error occurs,
+.Va errno
+is left unchanged.
+This behavior (which is unlike most library functions) is guaranteed
+by the pertinent standards.
 .Sh EXAMPLES
-Ensuring that a string is a valid number (i.e., in range and containing no
-trailing characters) requires clearing
-.Va errno
-beforehand explicitly since
-.Va errno
-is not changed on a successful call to
-.Fn strtol ,
-and the return value of
+Because the return value of
 .Fn strtol
-cannot be used unambiguously to signal an error:
+cannot be used unambiguously to detect an error,
+.Va errno
+is left unchanged after a successful call.
+To ensure that a string is a valid number (i.e., in range and containing no
+trailing characters), clear
+.Va errno
+beforehand explicitly, then check it afterwards:
 .Bd -literal -offset indent
 char *ep;
 long lval;
@@ -205,10 +225,15 @@ long lval;
 
 errno = 0;
 lval = strtol(buf, &ep, 10);
-if (buf[0] == '\e0' || *ep != '\e0')
+if (ep == buf)
 	goto not_a_number;
-if (errno == ERANGE && (lval == LONG_MAX || lval == LONG_MIN))
+if (*ep != '\e0')
+	goto trailing_garbage;
+if (errno) {
+	assert(errno == ERANGE);
+	assert(lval == LONG_MAX || lval == LONG_MIN);
 	goto out_of_range;
+}
 .Ed
 .Pp
 This example will accept
@@ -241,15 +266,23 @@ long lval;
 
 errno = 0;
 lval = strtol(buf, &ep, 10);
-if (buf[0] == '\e0' || *ep != '\e0')
+if (ep == buf)
 	goto not_a_number;
-if ((errno == ERANGE && (lval == LONG_MAX || lval == LONG_MIN)) ||
-    (lval > INT_MAX || lval < INT_MIN))
+if (*ep != '\e0')
+	goto trailing_garbage;
+if (errno == ERANGE || lval < INT_MIN || INT_MAX < lval)
 	goto out_of_range;
+assert(errno == 0);
+assert(INT_MIN <= lval);
+assert(lval <= INT_MAX);
 ival = lval;
 .Ed
 .Sh ERRORS
 .Bl -tag -width Er
+.It Bq Er EINVAL
+The
+.Ar base
+is not between 2 and 36 and does not contain the special value 0.
 .It Bq Er ERANGE
 The given string was out of range; the value converted has been clamped.
 .El
@@ -259,6 +292,7 @@ The given string was out of range; the value converted has been clamped.
 .Xr atol 3 ,
 .Xr atoll 3 ,
 .Xr strtod 3 ,
+.Xr strtou 3 ,
 .Xr strtoul 3 ,
 .Xr strtoull 3 ,
 .Xr strtoumax 3
@@ -274,5 +308,13 @@ and
 .Fn strtoimax
 functions conform to
 .St -isoC-99 .
+.Pp
+The
+.Fn strtoq
+function is a
+.Bx
+legacy function equivalent to
+.Fn strtoll
+and should not be used in a new code.
 .Sh BUGS
 Ignores the current locale.

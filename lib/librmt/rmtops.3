@@ -1,8 +1,8 @@
-.\"	$NetBSD: rmtops.3,v 1.9 2004/06/10 13:58:47 uebayasi Exp $
+.\"	$NetBSD: rmtops.3,v 1.15 2017/07/03 21:32:51 wiz Exp $
 .\"
 .Dd October 16, 2001
-.Os
 .Dt RMTOPS 3
+.Os
 .Sh NAME
 .Nm rmtops
 .Nd access tape drives on remote machines
@@ -54,9 +54,7 @@ allow the user to open up a tape drive on a remote system on which he
 or she has an account and the appropriate remote permissions.
 .Pp
 A remote tape drive file name has the form
-.sp
-	[user@]hostname:/dev/???
-.sp
+.Dl [user@]hostname:/dev/???
 where
 .Em system
 is the remote system,
@@ -79,9 +77,8 @@ the current user's login name.
 .\" is recognized.
 .Pp
 For transparency, the user should include the file
-.Pa \*[Lt]rmt.h\*[Gt] ,
+.In rmt.h ,
 which has the following defines in it:
-.Pp
 .Bd -literal
 #define access	rmtaccess
 #define close	rmtclose
@@ -110,7 +107,7 @@ routines taking care of differentiating between local and remote files.
 This file should be included
 .Em before
 including the file
-.Pa \*[Lt]sys/stat.h\*[Gt] ,
+.Pa <sys/stat.h> ,
 since it redefines the identifier ``stat'' which is used to declare
 objects of type
 .Em "struct stat" .
@@ -165,7 +162,7 @@ Fred Fish redid them into a general purpose library.
 .Pp
 Arnold Robbins added the ability to specify a user name on the remote
 system, the
-.Pa \*[Lt]rmt.h\*[Gt]
+.Pa <rmt.h>
 include file, this man page, cleaned up the library a little, and made
 the appropriate changes for
 .Bx 4.3 .

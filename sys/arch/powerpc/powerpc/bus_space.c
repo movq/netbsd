@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.17 2008/02/07 03:20:17 garbled Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.36 2013/07/09 20:33:03 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.17 2008/02/07 03:20:17 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.36 2013/07/09 20:33:03 matt Exp $");
+
+#define _POWERPC_BUS_SPACE_PRIVATE
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,21 +41,17 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.17 2008/02/07 03:20:17 garbled Exp $
 #include <sys/device.h>
 #include <sys/endian.h>
 #include <sys/extent.h>
-#include <sys/malloc.h>
+#include <sys/bus.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
-#define _POWERPC_BUS_SPACE_PRIVATE
-#include <machine/bus.h>
-
-#if !defined (PPC_IBM4XX)
-#include <powerpc/oea/bat.h>
-#include <powerpc/oea/pte.h>
-#include <powerpc/oea/sr_601.h>
-#include <powerpc/oea/cpufeat.h>
+#if defined (PPC_OEA) || defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 #include <powerpc/spr.h>
-
-extern unsigned long oeacpufeat;
+#include <powerpc/oea/bat.h>
+#include <powerpc/oea/cpufeat.h>
+#include <powerpc/oea/pte.h>
+#include <powerpc/oea/spr.h>
+#include <powerpc/oea/sr_601.h>
 #endif
 
 /* read_N */
@@ -407,9 +398,9 @@ int
 bus_space_init(struct powerpc_bus_space *t, const char *extent_name,
 	void *storage, size_t storage_size)
 {
-	if (t->pbs_extent == NULL) {
+	if (t->pbs_extent == NULL && extent_name != NULL) {
 		t->pbs_extent = extent_create(extent_name, t->pbs_base,
-		    t->pbs_limit-1, M_DEVBUF, storage, storage_size,
+		    t->pbs_limit, storage, storage_size,
 		    EX_NOCOALESCE|EX_NOWAIT);
 		if (t->pbs_extent == NULL)
 			return ENOMEM;
@@ -505,6 +496,7 @@ memio_mmap(bus_space_tag_t t, bus_addr_t bpa, off_t offset, int prot, int flags)
 	paddr_t ret;
 	/* XXX what about stride? */
 	ret = trunc_page(t->pbs_offset + bpa + offset);
+
 #ifdef DEBUG
 	if (ret == 0) {
 		printf("%s: [%08x, %08x %08x] mmaps to 0?!\n", __func__,
@@ -512,6 +504,14 @@ memio_mmap(bus_space_tag_t t, bus_addr_t bpa, off_t offset, int prot, int flags)
 		return -1;
 	}
 #endif
+
+#ifdef POWERPC_MMAP_FLAG_MASK
+	if (flags & BUS_SPACE_MAP_PREFETCHABLE)
+		ret |= POWERPC_MMAP_FLAG_PREFETCHABLE;
+	if (flags & BUS_SPACE_MAP_CACHEABLE)
+		ret |= POWERPC_MMAP_FLAG_CACHEABLE;
+#endif
+
 	return ret;
 }
 
@@ -525,11 +525,10 @@ memio_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 	size = _BUS_SPACE_STRIDE(t, size);
 	bpa = _BUS_SPACE_STRIDE(t, bpa);
 
-	if (bpa + size > t->pbs_limit) {
+	if (t->pbs_limit != 0 && bpa + size - 1 > t->pbs_limit) {
 #ifdef DEBUG
 		printf("bus_space_map(%p[%x:%x], %#x, %#x) failed: EINVAL\n",
 		    t, t->pbs_base, t->pbs_limit, bpa, size);
-		 
 #endif
 		return (EINVAL);
 	}
@@ -542,29 +541,33 @@ memio_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 		return (EOPNOTSUPP);
 	}
 
+	if (t->pbs_extent != NULL) {
 #ifdef PPC_IBM4XX
-	/*
-	 * XXX: Temporary kludge.
-	 * Don't bother checking the extent during very early bootstrap.
-	 */
-	if (extent_flags) {
+		/*
+		 * XXX: Temporary kludge.
+		 * Don't bother checking the extent during very early bootstrap.
+		 */
+		if (extent_flags) {
 #endif
-	/*
-	 * Before we go any further, let's make sure that this
-	 * region is available.
-	 */
-	error = extent_alloc_region(t->pbs_extent, bpa, size,
-	    EX_NOWAIT | extent_flags);
-	if (error) {
+			/*
+			 * Before we go any further, let's make sure that this
+			 * region is available.
+			 */
+			error = extent_alloc_region(t->pbs_extent, bpa, size,
+			    EX_NOWAIT | extent_flags);
+			if (error) {
 #ifdef DEBUG
-		printf("bus_space_map(%p[%x:%x], %#x, %#x) failed: %d\n",
-		    t, t->pbs_base, t->pbs_limit, bpa, size, error);
+				printf("bus_space_map(%p[%x:%x], %#x, %#x)"
+				    " failed: %d\n",
+				    t, t->pbs_base, t->pbs_limit,
+				    bpa, size, error);
 #endif
-		return (error);
-	}
+				return (error);
+			}
 #ifdef PPC_IBM4XX
-	}
+		}
 #endif
+	}
 
 	pa = t->pbs_offset + bpa;
 #if defined (PPC_OEA) || defined(PPC_OEA601)
@@ -584,8 +587,9 @@ memio_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 	if ((oeacpufeat & OEACPU_NOBAT) == 0) {
 		/*
 		 * Let's try to BAT map this address if possible
+		 * (note this assumes 1:1 VA:PA)
 		 */
-		register_t batu = battable[pa >> ADDR_SR_SHFT].batu;
+		register_t batu = battable[BAT_VA2IDX(pa)].batu;
 		if (BAT_VALID_P(batu, 0) && BAT_VA_MATCH_P(batu, pa) &&
 		    BAT_VA_MATCH_P(batu, pa + size - 1)) {
 			*bshp = pa;
@@ -594,22 +598,16 @@ memio_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 	}
 #endif /* defined (PPC_OEA) || defined(PPC_OEA601) */
 
-#ifndef PPC_IBM4XX
-	if (extent_flags == 0) {
-		extent_free(t->pbs_extent, bpa, size, EX_NOWAIT);
-#ifdef DEBUG
-		printf("bus_space_map(%p[%x:%x], %#x, %#x) failed: ENOMEM\n",
-		    t, t->pbs_base, t->pbs_limit, bpa, size);
-#endif
-		return (ENOMEM);
-	}
-#endif
 	/*
 	 * Map this into the kernel pmap.
 	 */
-	*bshp = (bus_space_handle_t) mapiodev(pa, size);
+	*bshp = (bus_space_handle_t) mapiodev(pa, size,
+	    (flags & BUS_SPACE_MAP_PREFETCHABLE) != 0);
 	if (*bshp == 0) {
-		extent_free(t->pbs_extent, bpa, size, EX_NOWAIT | extent_flags);
+		if (t->pbs_extent != NULL) {
+			extent_free(t->pbs_extent, bpa, size,
+			    EX_NOWAIT | extent_flags);
+		}
 #ifdef DEBUG
 		printf("bus_space_map(%p[%x:%x], %#x, %#x) failed: ENOMEM\n",
 		    t, t->pbs_base, t->pbs_limit, bpa, size);
@@ -641,8 +639,8 @@ memio_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 #ifdef PPC_OEA601
 	if ((mfpvr() >> 16) == MPC601) {
 		register_t sr = iosrtable[va >> ADDR_SR_SHFT];
-		if (SR601_VALID_P(sr) && ((pa >> ADDR_SR_SHFT) ==
-		    ((pa + size - 1) >> ADDR_SR_SHFT))) {
+		if (SR601_VALID_P(sr) && ((va >> ADDR_SR_SHFT) ==
+		    ((va + size - 1) >> ADDR_SR_SHFT))) {
 			pa = va;
 			va = 0;
 		} else {
@@ -651,7 +649,7 @@ memio_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 	} else
 #endif /* PPC_OEA601 */
 	if ((oeacpufeat & OEACPU_NOBAT) == 0) {
-		register_t batu = battable[va >> ADDR_SR_SHFT].batu;
+		register_t batu = battable[BAT_VA2IDX(va)].batu;
 		if (BAT_VALID_P(batu, 0) && BAT_VA_MATCH_P(batu, va) &&
 		    BAT_VA_MATCH_P(batu, va + size - 1)) {
 			pa = va;
@@ -666,14 +664,20 @@ memio_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 #endif /* defined (PPC_OEA) || defined(PPC_OEA601) */
 	bpa = pa - t->pbs_offset;
 
-	if (extent_free(t->pbs_extent, bpa, size, EX_NOWAIT | extent_flags)) {
+	if (t->pbs_extent != NULL
+#ifdef PPC_IBM4XX
+	    && extent_flags
+#endif
+	    && extent_free(t->pbs_extent, bpa, size,
+			   EX_NOWAIT | extent_flags)) {
 		printf("memio_unmap: %s 0x%lx, size 0x%lx\n",
 		    (t->pbs_flags & _BUS_SPACE_IO_TYPE) ? "port" : "mem",
 		    (unsigned long)bpa, (unsigned long)size);
 		printf("memio_unmap: can't free region\n");
 	}
 
-	unmapiodev(va, size);
+	if (va)
+		unmapiodev(va, size);
 }
 
 int
@@ -688,8 +692,16 @@ memio_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
 	size = _BUS_SPACE_STRIDE(t, size);
 	rstart = _BUS_SPACE_STRIDE(t, rstart);
 
-	if (rstart + size > t->pbs_limit)
+	if (t->pbs_extent == NULL)
+		return ENOMEM;
+
+	if (t->pbs_limit != 0 && rstart + size - 1 > t->pbs_limit) {
+#ifdef DEBUG
+		printf("%s(%p[%x:%x], %#x, %#x) failed: EINVAL\n",
+		   __func__, t, t->pbs_base, t->pbs_limit, rstart, size);
+#endif
 		return (EINVAL);
+	}
 
 	/*
 	 * Can't map I/O space as linear.
@@ -721,7 +733,7 @@ memio_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
 	} else
 #endif /* PPC_OEA601 */
 	if ((oeacpufeat & OEACPU_NOBAT) == 0) {
-		register_t batu = battable[pa >> ADDR_SR_SHFT].batu;
+		register_t batu = battable[BAT_VA2IDX(pa)].batu;
 		if (BAT_VALID_P(batu, 0) && BAT_VA_MATCH_P(batu, pa) &&
 		    BAT_VA_MATCH_P(batu, pa + size - 1)) {
 			*bshp = pa;
@@ -729,7 +741,7 @@ memio_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
 		}
 	}
 #endif /* defined (PPC_OEA) || defined(PPC_OEA601) */
-	*bshp = (bus_space_handle_t) mapiodev(pa, size);
+	*bshp = (bus_space_handle_t) mapiodev(pa, size, false);
 	if (*bshp == 0) {
 		extent_free(t->pbs_extent, bpa, size, EX_NOWAIT | extent_flags);
 		return (ENOMEM);
@@ -741,6 +753,9 @@ memio_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
 void
 memio_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
+	if (t->pbs_extent == NULL)
+		return;
+
 	/* memio_unmap() does all that we need to do. */
 	memio_unmap(t, bsh, size);
 }

@@ -1,13 +1,13 @@
-#	$NetBSD: INSTALL,v 1.105 2007/10/17 19:55:16 garbled Exp $
+#	$NetBSD: INSTALL,v 1.127 2018/05/11 22:51:33 macallan Exp $
 #
 # config file for INSTALL FLOPPY
 #
 
-include		"arch/macppc/conf/std.macppc"
+include 	"arch/macppc/conf/std.macppc"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-makeoptions	COPTS="-Os -mmultiple -pipe" # -Os -mmultiple to reduce size.
+makeoptions	COPTS="-Os" # Reduce size.
 
 maxusers	12
 
@@ -17,21 +17,15 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# Force root on ram-disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
-options 	MEMORY_DISK_ROOT_SIZE=4096	# 2 Megabytes
+options 	MEMORY_DISK_ROOT_SIZE=5120	# 2560 KiB
+options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Compatibility options
-#options 	COMPAT_13	# NetBSD 1.3,
-options 	COMPAT_14	# NetBSD 1.4,
-options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_43	# and 4.3BSD
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd13.config"
 
 # File systems
 file-system 	FFS		# UFS
@@ -45,6 +39,7 @@ file-system 	MSDOSFS		# MS-DOS file system
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	APPLE_UFS	# Apple UFS support in FFS
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
@@ -52,7 +47,10 @@ options 	INET6		# IPV6
 options 	NFS_BOOT_DHCP	# Support DHCP NFS root
 
 options 	WSEMUL_VT100	# VT100 / VT220 emulation
-options 	FONT_SONY8x16
+options 	WSDISPLAY_DEFAULTSCREENS=1
+#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	FONT_GALLANT12x22	# big, Sun-like font
+options 	FONT_QVSS8x15		# a smaller font for lower resolutions
 
 # Kernel root file system and dump configuration.
 config		netbsd	root on ? type ?
@@ -154,7 +152,7 @@ nvram*	at obio?			# nvram
 #adb*	at obio?			# Apple Desktop Bus
 #akbd*	at adb?				# ADB keyboard
 cuda*	at obio?			# Apple CUDA
-pmu*	at obio?			# Apple CUDA
+pmu*	at obio?			# Apple PMU
 nadb*	at cuda?			# new ADB Bus abstraction
 nadb*	at pmu?				# new ADB Bus abstraction
 adbkbd* at nadb?			# ADB keyboard
@@ -187,15 +185,15 @@ uhub*	at usb?
 uhub*	at uhub? port ?
 uhidev* 	at uhub? port ? configuration ? interface ?
 ukbd* 	at uhidev? reportid ?
+umass*	at uhub? port ? configuration ? interface ?	# USB Mass Storage
 
-pseudo-device	md		1	# memory disk
-#pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md			# memory disk
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	loop			# network loopback
-pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
+pseudo-device	pty			# pseudo-terminals
 
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	wsmux			# mouse and keyboard multiplexor
 pseudo-device	openfirm		# /dev/openfirm
 
-pseudo-device	raid		8	# RAIDframe disk driver
+pseudo-device	raid			# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components

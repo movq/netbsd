@@ -1,4 +1,4 @@
-/*	$NetBSD: ioccom.h,v 1.9 2007/05/29 21:32:30 christos Exp $	*/
+/*	$NetBSD: ioccom.h,v 1.12 2014/12/10 00:16:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -38,6 +38,11 @@
  * Ioctl's have the command encoded in the lower word, and the size of
  * any in or out parameters in the upper word.  The high 3 bits of the
  * upper word are used to encode the in/out status of the parameter.
+ *
+ *	 31 29 28                     16 15            8 7             0
+ *	+---------------------------------------------------------------+
+ *	| I/O | Parameter Length        | Command Group | Command       |
+ *	+---------------------------------------------------------------+
  */
 #define	IOCPARM_MASK	0x1fff		/* parameter length, at most 13 bits */
 #define	IOCPARM_SHIFT	16
@@ -58,12 +63,20 @@
 				/* mask for IN/OUT/VOID */
 #define	IOC_DIRMASK	(unsigned long)0xe0000000
 
-#define	_IOC(inout,group,num,len) \
-	(inout | ((len & IOCPARM_MASK) << 16) | ((group) << 8) | (num))
+#define	_IOC(inout, group, num, len) \
+    ((inout) | (((len) & IOCPARM_MASK) << IOCPARM_SHIFT) | \
+    ((group) << IOCGROUP_SHIFT) | (num))
 #define	_IO(g,n)	_IOC(IOC_VOID,	(g), (n), 0)
 #define	_IOR(g,n,t)	_IOC(IOC_OUT,	(g), (n), sizeof(t))
 #define	_IOW(g,n,t)	_IOC(IOC_IN,	(g), (n), sizeof(t))
 /* this should be _IORW, but stdio got there first */
 #define	_IOWR(g,n,t)	_IOC(IOC_INOUT,	(g), (n), sizeof(t))
+
+#define IOCSNPRINTF(buf, len, cmd) \
+    snprintf((buf), (len), "_IO%s%s('%c', %hhu)", \
+	(((cmd) >> 30) & 1) ? "W" : "", \
+	(((cmd) >> 30) & 2) ? "R" : "", \
+	(char)IOCGROUP(cmd), (unsigned char)(cmd))
+		
 
 #endif /* !_SYS_IOCCOM_H_ */

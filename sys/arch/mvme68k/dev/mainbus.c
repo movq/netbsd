@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.19 2008/01/12 09:54:21 tsutsui Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.21 2011/06/05 17:03:19 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	      This product includes software developed by the NetBSD
- *	      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.19 2008/01/12 09:54:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.21 2011/06/05 17:03:19 matt Exp $");
 
 #include "vmetwo.h"
 
@@ -67,11 +60,11 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.19 2008/01/12 09:54:21 tsutsui Exp $")
 #endif
 #endif
 
-void mainbus_attach(struct device *, struct device *, void *);
-int mainbus_match(struct device *, struct cfdata *, void *);
+void mainbus_attach(device_t, device_t, void *);
+int mainbus_match(device_t, cfdata_t, void *);
 int mainbus_print(void *, const char *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 
@@ -129,7 +122,7 @@ struct mvme68k_bus_space_tag _mainbus_space_tag = {
 
 /* ARGSUSED */
 int
-mainbus_match(struct device *parent, struct cfdata *cf, void *args)
+mainbus_match(device_t parent, cfdata_t cf, void *args)
 {
 	static int mainbus_matched;
 
@@ -141,7 +134,7 @@ mainbus_match(struct device *parent, struct cfdata *cf, void *args)
 
 /* ARGSUSED */
 void
-mainbus_attach(struct device *parent, struct device *self, void *args)
+mainbus_attach(device_t parent, device_t self, void *args)
 {
 	struct mainbus_attach_args ma;
 	struct mainbus_devices *devices;

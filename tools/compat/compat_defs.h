@@ -1,30 +1,71 @@
-/*	$NetBSD: compat_defs.h,v 1.65 2007/10/30 20:23:35 tls Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.112 2018/06/13 04:17:43 maya Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
 
-
-/* Work around some complete brain damage. */
 /*
- * Linux: <features.h> turns on _POSIX_SOURCE by default, even though the
- * program (not the OS) should do that.  Preload <features.h> to keep any
- * of this crap from being pulled in, and undefine _POSIX_SOURCE.
+ * On NetBSD, ensure that _NETBSD_SOURCE does not get defined, so that
+ * accidental attempts to use NetBSD-specific features instead of more
+ * portable features is likely to be noticed when the tools are built
+ * on NetBSD.  Define enough other feature test macros to expose the
+ * features we need.
  */
-
-#if defined(__linux__) && HAVE_FEATURES_H
-#include <features.h>
-#endif
-
-/* So _NETBSD_SOURCE doesn't end up defined. Define enough to pull in standard
-   defs. Other platforms may need similiar defines. */
 #ifdef __NetBSD__
 #define	_ISOC99_SOURCE
 #define _POSIX_SOURCE	1
 #define _POSIX_C_SOURCE	200112L
 #define _XOPEN_SOURCE 600
-#else
+#endif /* __NetBSD__ */
+
+/*
+ * Linux: <features.h> turns on _POSIX_SOURCE by default, even though the
+ * program (not the OS) should do that.  Preload <features.h> and
+ * then override some of the feature test macros.
+ */
+
+#if defined(__linux__) && HAVE_FEATURES_H
+#include <features.h>
 #undef _POSIX_SOURCE
 #undef _POSIX_C_SOURCE
+#define __USE_ISOC99 1
+#endif	/* __linux__ && HAVE_FEATURES_H */
+
+/*
+ * Type substitutes.
+ * These are controlled via HAVE_TYPE protections and some of them are needed
+ * in other header files (in the build tree not in the host). This is because
+ * we are mixing the header files (which don't need them) with extensions
+ * such as the Solaris headers which depend on types defined by the native
+ * system headers, and might be missing in the build host.
+ */
+
+#if !HAVE_ID_T
+typedef unsigned int id_t;
+#endif
+
+#if !HAVE_SOCKLEN_T
+/*
+ * This is defined as int for compatibility with legacy systems (and not
+ * unsigned int), since universally it was int in most systems that did not
+ * define it.
+ */
+typedef int socklen_t;
+#endif
+
+#if !HAVE_U_LONG
+typedef unsigned long u_long;
+#endif
+
+#if !HAVE_U_CHAR
+typedef unsigned char u_char;
+#endif
+
+#if !HAVE_U_INT
+typedef unsigned int u_int;
+#endif
+
+#if !HAVE_U_SHORT
+typedef unsigned short u_short;
 #endif
 
 /* System headers needed for (re)definitions below. */
@@ -37,13 +78,16 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <grp.h>
 #include <limits.h>
 #include <paths.h>
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if HAVE_ERR_H
+#include <err.h>
+#endif
 
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
@@ -61,6 +105,13 @@
 #if HAVE_STDDEF_H
 #include <stddef.h>
 #endif
+#if HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
+
+#if HAVE_RPC_TYPES_H
+#include <rpc/types.h>
+#endif
 
 #ifdef _NETBSD_SOURCE
 #error _NETBSD_SOURCE is *not* to be defined.
@@ -71,9 +122,22 @@
 #undef __UNCONST
 #endif
 #define __UNCONST(a)   ((void *)(unsigned long)(const void *)(a))
+#ifdef __UNVOLATILE
+#undef __UNVOLATILE
+#endif
+#define __UNVOLATILE(a)        ((void *)(unsigned long)(volatile void *)(a))
+
+
+#undef __predict_false
+#define __predict_false(x) (x)
+#undef __predict_true
+#define __predict_true(x) (x)
 
 /* We don't include <pwd.h> here, so that "compat_pwd.h" works. */
 struct passwd;
+
+/* We don't include <grp.h> either */
+struct group;
 
 /* Assume an ANSI compiler for the host. */
 
@@ -87,7 +151,7 @@ struct passwd;
 #define __END_DECLS
 #endif
 
-/* Some things usually in BSD <sys/cdefs.h>. */
+/* Some things in NetBSD <sys/cdefs.h>. */
 
 #ifndef __CONCAT
 #define	__CONCAT(x,y)	x ## y
@@ -97,6 +161,8 @@ struct passwd;
 #endif
 #if !defined(__packed)
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)
+#define __packed	__attribute__((__packed__))
+#elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590)
 #define __packed	__attribute__((__packed__))
 #else
 #define	__packed	error: no __packed for this compiler
@@ -109,10 +175,32 @@ struct passwd;
 #define __aconst
 #undef __dead
 #define __dead
+#undef __printflike
+#define __printflike(x,y)
+#undef __format_arg
+#define __format_arg(x)
 #undef __restrict
 #define __restrict
 #undef __unused
 #define __unused
+#undef __arraycount
+#define	__arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
+#undef __USE
+#define __USE(a) ((void)(a))
+#undef __type_min_s
+#define __type_min_s(t) ((t)((1ULL << (sizeof(t) * NBBY - 1))))
+#undef __type_max_s
+#define __type_max_s(t) ((t)~((1ULL << (sizeof(t) * NBBY - 1))))
+#undef __type_min_u
+#define __type_min_u(t) ((t)0ULL)
+#undef __type_max_u
+#define __type_max_u(t) ((t)~0ULL)
+#undef __type_is_signed
+#define __type_is_signed(t) (/*LINTED*/__type_min_s(t) + (t)1 < (t)1)
+#undef __type_min
+#define __type_min(t) (__type_is_signed(t) ? __type_min_s(t) : __type_min_u(t))
+#undef __type_max
+#define __type_max(t) (__type_is_signed(t) ? __type_max_s(t) : __type_max_u(t))
 
 /* Dirent support. */
 
@@ -143,47 +231,21 @@ struct passwd;
 # endif
 #endif
 
-/* Type substitutes. */
-
-#if !HAVE_ID_T
-typedef unsigned int id_t;
-#endif
-
-#if !HAVE_SOCKLEN_T
-typedef int socklen_t;
-#endif
-
-#if !HAVE_U_LONG
-typedef unsigned long u_long;
-#endif
-
-#if !HAVE_U_CHAR
-typedef unsigned char u_char;
-#endif
-
-#if !HAVE_U_INT
-typedef unsigned int u_int;
-#endif
-
-#if !HAVE_U_SHORT
-typedef unsigned short u_short;
-#endif
-
 /* Prototypes for replacement functions. */
 
-#if !HAVE_ATOLL
+#if !HAVE_DECL_ATOLL
 long long int atoll(const char *);
 #endif
 
-#if !HAVE_ASPRINTF
+#if !HAVE_DECL_ASPRINTF
 int asprintf(char **, const char *, ...);
 #endif
 
-#if !HAVE_ASNPRINTF
+#if !HAVE_DECL_ASNPRINTF
 int asnprintf(char **, size_t, const char *, ...);
 #endif
 
-#if !HAVE_BASENAME
+#if !HAVE_DECL_BASENAME
 char *basename(char *);
 #endif
 
@@ -193,8 +255,12 @@ extern char *optarg;
 extern int optind, opterr, optopt;
 #endif
 
-#if !HAVE_DIRNAME
+#if !HAVE_DECL_DIRNAME
 char *dirname(char *);
+#endif
+
+#if !HAVE_DECL_FPURGE
+int fpurge(FILE *);
 #endif
 
 #if !HAVE_DIRFD
@@ -224,12 +290,42 @@ struct _dirdesc {
 #endif
 #endif
 
-#if !HAVE_ERR_H
+#if !HAVE_DECL_ERR
 void err(int, const char *, ...);
+#endif
+#if !HAVE_DECL_ERRC
+void errc(int, int, const char *, ...);
+#endif
+#if !HAVE_DECL_ERRX
 void errx(int, const char *, ...);
+#endif
+#if !HAVE_DECL_VERRC
+void verrc(int, int, const char *, va_list);
+#endif
+#if !HAVE_DECL_VERRX
+void verrx(int, const char *, va_list);
+#endif
+#if !HAVE_DECL_WARN
 void warn(const char *, ...);
+#endif
+#if !HAVE_DECL_WARNC
+void warnc(int, const char *, ...);
+#endif
+#if !HAVE_DECL_WARNX
 void warnx(const char *, ...);
 #endif
+#if !HAVE_DECL_VWARNC
+void vwarnc(int, const char *, va_list);
+#endif
+#if !HAVE_DECL_VWARNX
+void vwarnx(const char *, va_list);
+#endif
+
+#if !HAVE_DECL_MI_VECTOR_HASH
+void     mi_vector_hash(const void * __restrict, size_t, uint32_t,
+    uint32_t[3]);
+#endif
+
 
 #if !HAVE_ESETFUNC
 void (*esetfunc(void (*)(int, const char *, ...)))(int, const char *, ...);
@@ -245,8 +341,11 @@ int easprintf(char **, const char *, ...);
 int evasprintf(char **, const char *, va_list);
 #endif
 
-#if !HAVE_FGETLN || defined(__NetBSD__)
+#if !HAVE_DECL_FGETLN
 char *fgetln(FILE *, size_t *);
+#endif
+#if !HAVE_DECL_DPRINTF
+int dprintf(int, const char *, ...);
 #endif
 
 #if !HAVE_FLOCK
@@ -257,7 +356,7 @@ char *fgetln(FILE *, size_t *);
 int flock(int, int);
 #endif
 
-#if !HAVE_FPARSELN || defined(__NetBSD__)
+#if !HAVE_DECL_FPARSELN || BROKEN_FPARSELN
 # define FPARSELN_UNESCESC	0x01
 # define FPARSELN_UNESCCONT	0x02
 # define FPARSELN_UNESCCOMM	0x04
@@ -266,11 +365,18 @@ int flock(int, int);
 char *fparseln(FILE *, size_t *, size_t *, const char [3], int);
 #endif
 
-#if !HAVE_ISSETUGID
+#if !HAVE_DECL_GETDELIM
+ssize_t getdelim(char **, size_t *, int, FILE *);
+#endif
+#if !HAVE_DECL_GETLINE
+ssize_t getline(char **, size_t *, FILE *);
+#endif
+
+#if !HAVE_DECL_ISSETUGID
 int issetugid(void);
 #endif
 
-#if !HAVE_ISBLANK && !defined(isblank)
+#if !HAVE_DECL_ISBLANK && !defined(isblank)
 #define isblank(x) ((x) == ' ' || (x) == '\t')
 #endif
 
@@ -303,28 +409,32 @@ int issetugid(void);
 #define bswap64(x)	__nbcompat_bswap64(x)
 #endif
 
-#if !HAVE_MKSTEMP
+#if !HAVE_DECL_MKSTEMP
 int mkstemp(char *);
 #endif
 
-#if !HAVE_MKDTEMP
+#if !HAVE_DECL_MKDTEMP
 char *mkdtemp(char *);
 #endif
 
 #if !HAVE_MKSTEMP || !HAVE_MKDTEMP
-/* This is a prototype for the internal function. */
-int gettemp(char *, int *, int);
+/* This is a prototype for the internal function defined in
+ * src/lib/lib/stdio/gettemp.c */
+int __nbcompat_gettemp(char *, int *, int);
 #endif
 
-#if !HAVE_PREAD
+#if !HAVE_DECL_PREAD
 ssize_t pread(int, void *, size_t, off_t);
 #endif
 
-#if !HAVE_HEAPSORT
+#if !HAVE_DECL_HEAPSORT
 int heapsort (void *, size_t, size_t, int (*)(const void *, const void *));
 #endif
 /* Make them use our version */
 #  define heapsort __nbcompat_heapsort
+
+char	       *flags_to_string(unsigned long, const char *);
+int		string_to_flags(char **, unsigned long *, unsigned long *);
 
 /*
  * HAVE_X_FROM_Y and HAVE_PWCACHE_FOODB go together, because we cannot
@@ -349,26 +459,40 @@ int heapsort (void *, size_t, size_t, int (*)(const void *, const void *));
 #if !HAVE_DECL_UID_FROM_USER
 int uid_from_user(const char *, uid_t *);
 #endif
+
 #if !HAVE_DECL_USER_FROM_UID
 const char *user_from_uid(uid_t, int);
 #endif
+
 #if !HAVE_DECL_PWCACHE_USERDB
 int pwcache_userdb(int (*)(int), void (*)(void),
                 struct passwd * (*)(const char *), struct passwd * (*)(uid_t));
 #endif
+
 #if !HAVE_DECL_GID_FROM_GROUP
 int gid_from_group(const char *, gid_t *);
 #endif
+
 #if !HAVE_DECL_GROUP_FROM_GID
 const char *group_from_gid(gid_t, int);
 #endif
+
 #if !HAVE_DECL_PWCACHE_GROUPDB
 int pwcache_groupdb(int (*)(int), void (*)(void),
-                struct group * (*)(const char *), struct group * (*)(gid_t));
+    struct group * (*)(const char *), struct group * (*)(gid_t));
 #endif
 
+#if !HAVE_DECL_STRLCAT
+size_t		strlcat(char *, const char *, size_t);
+#endif
+#if !HAVE_DECL_STRLCPY
+size_t		strlcpy(char *, const char *, size_t);
+#endif
 #if !HAVE_DECL_STRNDUP
 char		*strndup(const char *, size_t);
+#endif
+#if !HAVE_DECL_STRNLEN
+size_t		strnlen(const char *, size_t);
 #endif
 #if !HAVE_DECL_LCHFLAGS
 int		lchflags(const char *, unsigned long);
@@ -380,7 +504,7 @@ int		lchmod(const char *, mode_t);
 int		lchown(const char *, uid_t, gid_t);
 #endif
 
-#if !HAVE_PWRITE
+#if !HAVE_DECL_PWRITE
 ssize_t pwrite(int, const void *, size_t, off_t);
 #endif
 
@@ -388,7 +512,11 @@ ssize_t pwrite(int, const void *, size_t, off_t);
 int raise_default_signal(int);
 #endif
 
-#if !HAVE_SETENV
+#if !HAVE_DECL_REALLOCARR
+int reallocarr(void *, size_t, size_t);
+#endif
+
+#if !HAVE_DECL_SETENV
 int setenv(const char *, const char *, int);
 #endif
 
@@ -400,32 +528,31 @@ int setgroupent(int);
 int setpassent(int);
 #endif
 
-#if !HAVE_SETPROGNAME || defined(__NetBSD__)
+#if !HAVE_DECL_GETPROGNAME
 const char *getprogname(void);
+#endif
+#if !HAVE_DECL_SETPROGNAME
 void setprogname(const char *);
 #endif
 
-#if !HAVE_SNPRINTF
+#if !HAVE_SNPRINTB_M
+int snprintb(char *, size_t, const char *, uint64_t);
+int snprintb_m(char *, size_t, const char *, uint64_t, size_t);
+#endif
+
+#if !HAVE_DECL_SNPRINTF && !defined(snprintf)
 int snprintf(char *, size_t, const char *, ...);
 #endif
 
-#if !HAVE_STRLCAT
-size_t strlcat(char *, const char *, size_t);
-#endif
-
-#if !HAVE_STRLCPY
-size_t strlcpy(char *, const char *, size_t);
-#endif
-
-#if !HAVE_STRMODE
+#if !HAVE_DECL_STRMODE
 void strmode(mode_t, char *);
 #endif
 
-#if !HAVE_STRNDUP
+#if !HAVE_DECL_STRNDUP
 char *strndup(const char *, size_t);
 #endif
 
-#if !HAVE_STRSEP || defined(__NetBSD__)
+#if !HAVE_DECL_STRSEP
 char *strsep(char **, const char *);
 #endif
 
@@ -435,27 +562,37 @@ long long strsuftollx(const char *, const char *,
 			long long, long long, char *, size_t);
 #endif
 
-#if !HAVE_STRTOLL
+#if !HAVE_DECL_STRTOLL
 long long strtoll(const char *, char **, int);
 #endif
 
-#if !HAVE_USER_FROM_UID
+#if !HAVE_DECL_STRTOI
+intmax_t strtoi(const char * __restrict, char ** __restrict, int,
+    intmax_t, intmax_t, int *);
+#endif
+
+#if !HAVE_DECL_STRTOU
+uintmax_t strtou(const char * __restrict, char ** __restrict, int,
+    uintmax_t, uintmax_t, int *);
+#endif
+
+#if !HAVE_DECL_USER_FROM_UID
 const char *user_from_uid(uid_t, int);
 #endif
 
-#if !HAVE_GROUP_FROM_GID
+#if !HAVE_DECL_GROUP_FROM_GID
 const char *group_from_gid(gid_t, int);
 #endif
 
-#if !HAVE_VASPRINTF
+#if !HAVE_DECL_VASPRINTF
 int vasprintf(char **, const char *, va_list);
 #endif
 
-#if !HAVE_VASNPRINTF
+#if !HAVE_DECL_VASNPRINTF
 int vasnprintf(char **, size_t, const char *, va_list);
 #endif
 
-#if !HAVE_VSNPRINTF
+#if !HAVE_DECL_VSNPRINTF && !defined(vsnprintf)
 int vsnprintf(char *, size_t, const char *, va_list);
 #endif
 
@@ -479,11 +616,11 @@ void *setmode(const char *);
 
 /* Various sources use this */
 #undef	__RCSID
-#define	__RCSID(x)
+#define	__RCSID(x) struct XXXNETBSD_RCSID
 #undef	__SCCSID
 #define	__SCCSID(x)
 #undef	__COPYRIGHT
-#define	__COPYRIGHT(x)
+#define	__COPYRIGHT(x) struct XXXNETBSD_COPYRIGHT
 #undef	__KERNEL_RCSID
 #define	__KERNEL_RCSID(x,y)
 
@@ -493,6 +630,10 @@ void *setmode(const char *);
 #define RCSID(x)
 
 /* Some definitions not available on all systems. */
+
+#ifndef __inline
+#define __inline inline
+#endif
 
 /* <errno.h> */
 
@@ -507,6 +648,275 @@ void *setmode(const char *);
 #endif
 #ifndef O_SHLOCK
 #define O_SHLOCK 0
+#endif
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
+/* <inttypes.h> */
+
+#if UCHAR_MAX == 0xffU			/* char is an 8-bit type */
+#ifndef PRId8
+#define PRId8 "hhd"
+#endif
+#ifndef PRIi8
+#define PRIi8 "hhi"
+#endif
+#ifndef PRIo8
+#define PRIo8 "hho"
+#endif
+#ifndef PRIu8
+#define PRIu8 "hhu"
+#endif
+#ifndef PRIx8
+#define PRIx8 "hhx"
+#endif
+#ifndef PRIX8
+#define PRIX8 "hhX"
+#endif
+#ifndef SCNd8
+#define SCNd8 "hhd"
+#endif
+#ifndef SCNi8
+#define SCNi8 "hhi"
+#endif
+#ifndef SCNo8
+#define SCNo8 "hho"
+#endif
+#ifndef SCNu8
+#define SCNu8 "hhu"
+#endif
+#ifndef SCNx8
+#define SCNx8 "hhx"
+#endif
+#ifndef SCNX8
+#define SCNX8 "hhX"
+#endif
+#endif					/* char is an 8-bit type */
+#if ! (defined(PRId8) && defined(PRIi8) && defined(PRIo8) && \
+	defined(PRIu8) && defined(PRIx8) && defined(PRIX8))
+#error "Don't know how to define PRI[diouxX]8"
+#endif
+#if ! (defined(SCNd8) && defined(SCNi8) && defined(SCNo8) && \
+	defined(SCNu8) && defined(SCNx8) && defined(SCNX8))
+#error "Don't know how to define SCN[diouxX]8"
+#endif
+
+#if USHRT_MAX == 0xffffU		/* short is a 16-bit type */
+#ifndef PRId16
+#define PRId16 "hd"
+#endif
+#ifndef PRIi16
+#define PRIi16 "hi"
+#endif
+#ifndef PRIo16
+#define PRIo16 "ho"
+#endif
+#ifndef PRIu16
+#define PRIu16 "hu"
+#endif
+#ifndef PRIx16
+#define PRIx16 "hx"
+#endif
+#ifndef PRIX16
+#define PRIX16 "hX"
+#endif
+#ifndef SCNd16
+#define SCNd16 "hd"
+#endif
+#ifndef SCNi16
+#define SCNi16 "hi"
+#endif
+#ifndef SCNo16
+#define SCNo16 "ho"
+#endif
+#ifndef SCNu16
+#define SCNu16 "hu"
+#endif
+#ifndef SCNx16
+#define SCNx16 "hx"
+#endif
+#ifndef SCNX16
+#define SCNX16 "hX"
+#endif
+#endif					/* short is a 16-bit type */
+#if ! (defined(PRId16) && defined(PRIi16) && defined(PRIo16) && \
+	defined(PRIu16) && defined(PRIx16) && defined(PRIX16))
+#error "Don't know how to define PRI[diouxX]16"
+#endif
+#if ! (defined(SCNd16) && defined(SCNi16) && defined(SCNo16) && \
+	defined(SCNu16) && defined(SCNx16) && defined(SCNX16))
+#error "Don't know how to define SCN[diouxX]16"
+#endif
+
+#if UINT_MAX == 0xffffffffU		/* int is a 32-bit type */
+#ifndef PRId32
+#define PRId32 "d"
+#endif
+#ifndef PRIi32
+#define PRIi32 "i"
+#endif
+#ifndef PRIo32
+#define PRIo32 "o"
+#endif
+#ifndef PRIu32
+#define PRIu32 "u"
+#endif
+#ifndef PRIx32
+#define PRIx32 "x"
+#endif
+#ifndef PRIX32
+#define PRIX32 "X"
+#endif
+#ifndef SCNd32
+#define SCNd32 "d"
+#endif
+#ifndef SCNi32
+#define SCNi32 "i"
+#endif
+#ifndef SCNo32
+#define SCNo32 "o"
+#endif
+#ifndef SCNu32
+#define SCNu32 "u"
+#endif
+#ifndef SCNx32
+#define SCNx32 "x"
+#endif
+#ifndef SCNX32
+#define SCNX32 "X"
+#endif
+#endif					/* int is a 32-bit type */
+#if ULONG_MAX == 0xffffffffU		/* long is a 32-bit type */
+#ifndef PRId32
+#define PRId32 "ld"
+#endif
+#ifndef PRIi32
+#define PRIi32 "li"
+#endif
+#ifndef PRIo32
+#define PRIo32 "lo"
+#endif
+#ifndef PRIu32
+#define PRIu32 "lu"
+#endif
+#ifndef PRIx32
+#define PRIx32 "lx"
+#endif
+#ifndef PRIX32
+#define PRIX32 "lX"
+#endif
+#ifndef SCNd32
+#define SCNd32 "ld"
+#endif
+#ifndef SCNi32
+#define SCNi32 "li"
+#endif
+#ifndef SCNo32
+#define SCNo32 "lo"
+#endif
+#ifndef SCNu32
+#define SCNu32 "lu"
+#endif
+#ifndef SCNx32
+#define SCNx32 "lx"
+#endif
+#ifndef SCNX32
+#define SCNX32 "lX"
+#endif
+#endif					/* long is a 32-bit type */
+#if ! (defined(PRId32) && defined(PRIi32) && defined(PRIo32) && \
+	defined(PRIu32) && defined(PRIx32) && defined(PRIX32))
+#error "Don't know how to define PRI[diouxX]32"
+#endif
+#if ! (defined(SCNd32) && defined(SCNi32) && defined(SCNo32) && \
+	defined(SCNu32) && defined(SCNx32) && defined(SCNX32))
+#error "Don't know how to define SCN[diouxX]32"
+#endif
+
+#if ULONG_MAX == 0xffffffffffffffffU	/* long is a 64-bit type */
+#ifndef PRId64
+#define PRId64 "ld"
+#endif
+#ifndef PRIi64
+#define PRIi64 "li"
+#endif
+#ifndef PRIo64
+#define PRIo64 "lo"
+#endif
+#ifndef PRIu64
+#define PRIu64 "lu"
+#endif
+#ifndef PRIx64
+#define PRIx64 "lx"
+#endif
+#ifndef PRIX64
+#define PRIX64 "lX"
+#endif
+#ifndef SCNd64
+#define SCNd64 "ld"
+#endif
+#ifndef SCNi64
+#define SCNi64 "li"
+#endif
+#ifndef SCNo64
+#define SCNo64 "lo"
+#endif
+#ifndef SCNu64
+#define SCNu64 "lu"
+#endif
+#ifndef SCNx64
+#define SCNx64 "lx"
+#endif
+#ifndef SCNX64
+#define SCNX64 "lX"
+#endif
+#endif					/* long is a 64-bit type */
+#if ULLONG_MAX == 0xffffffffffffffffU	/* long long is a 64-bit type */
+#ifndef PRId64
+#define PRId64 "lld"
+#endif
+#ifndef PRIi64
+#define PRIi64 "lli"
+#endif
+#ifndef PRIo64
+#define PRIo64 "llo"
+#endif
+#ifndef PRIu64
+#define PRIu64 "llu"
+#endif
+#ifndef PRIx64
+#define PRIx64 "llx"
+#endif
+#ifndef PRIX64
+#define PRIX64 "llX"
+#endif
+#ifndef SCNd64
+#define SCNd64 "lld"
+#endif
+#ifndef SCNi64
+#define SCNi64 "lli"
+#endif
+#ifndef SCNo64
+#define SCNo64 "llo"
+#endif
+#ifndef SCNu64
+#define SCNu64 "llu"
+#endif
+#ifndef SCNx64
+#define SCNx64 "llx"
+#endif
+#ifndef SCNX64
+#define SCNX64 "llX"
+#endif
+#endif					/* long long is a 64-bit type */
+#if ! (defined(PRId64) && defined(PRIi64) && defined(PRIo64) && \
+	defined(PRIu64) && defined(PRIx64) && defined(PRIX64))
+#error "Don't know how to define PRI[diouxX]64"
+#endif
+#if ! (defined(SCNd64) && defined(SCNi64) && defined(SCNo64) && \
+	defined(SCNu64) && defined(SCNx64) && defined(SCNX64))
+#error "Don't know how to define SCN[diouxX]64"
 #endif
 
 /* <limits.h> */
@@ -537,6 +947,13 @@ void *setmode(const char *);
 #define LLONG_MIN ((long long)(~LLONG_MAX))
 #endif
 
+#ifndef MAXPATHLEN
+#define MAXPATHLEN	4096
+#endif
+#ifndef PATH_MAX
+#define PATH_MAX	MAXPATHLEN
+#endif
+
 /* <paths.h> */
 
 /* The host's _PATH_BSHELL might be broken, so override it. */
@@ -559,12 +976,6 @@ void *setmode(const char *);
 #endif
 #ifndef _PATH_VI
 #define _PATH_VI "/usr/bin/vi"
-#endif
-
-/* <stdarg.h> */
-
-#ifndef _BSD_VA_LIST_
-#define _BSD_VA_LIST_ va_list
 #endif
 
 /* <stdint.h> */
@@ -752,8 +1163,10 @@ __GEN_ENDIAN_DEC(64, le)
 
 #undef BIG_ENDIAN
 #undef LITTLE_ENDIAN
+#undef PDP_ENDIAN
 #define BIG_ENDIAN 4321
 #define LITTLE_ENDIAN 1234
+#define PDP_ENDIAN 3412
 
 #undef BYTE_ORDER
 #if WORDS_BIGENDIAN
@@ -762,9 +1175,9 @@ __GEN_ENDIAN_DEC(64, le)
 #define BYTE_ORDER LITTLE_ENDIAN
 #endif
 
-#ifndef DEV_BSIZE
+/* all references of DEV_BSIZE in tools are for NetBSD's file images */
+#undef DEV_BSIZE
 #define DEV_BSIZE (1 << 9)
-#endif
 
 #undef MIN
 #undef MAX
@@ -779,6 +1192,9 @@ __GEN_ENDIAN_DEC(64, le)
 #endif
 #ifndef MAXPHYS
 #define MAXPHYS (64 * 1024)
+#endif
+#ifndef MAXHOSTNAMELEN
+#define MAXHOSTNAMELEN	256
 #endif
 
 /* XXX needed by makefs; this should be done in a better way */
@@ -899,8 +1315,8 @@ __GEN_ENDIAN_DEC(64, le)
 
 /* Has quad_t but these prototypes don't get pulled into scope. w/o we lose */
 #ifdef __NetBSD__
-quad_t   strtoq __P((const char *, char **, int)); 
-u_quad_t strtouq __P((const char *, char **, int)); 
+quad_t   strtoq(const char *, char **, int);
+u_quad_t strtouq(const char *, char **, int);
 #endif
 
 #endif	/* !__NETBSD_COMPAT_DEFS_H__ */

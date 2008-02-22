@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.28 2007/02/15 22:23:11 dsl Exp $	*/
+/*	$NetBSD: installboot.c,v 1.39 2015/07/25 10:37:22 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,11 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: installboot.c,v 1.28 2007/02/15 22:23:11 dsl Exp $");
+#if !defined(__lint)
+__RCSID("$NetBSD: installboot.c,v 1.39 2015/07/25 10:37:22 mlelstv Exp $");
 #endif	/* !__lint */
 
+#include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/utsname.h>
 
@@ -57,14 +51,16 @@ __RCSID("$NetBSD: installboot.c,v 1.28 2007/02/15 22:23:11 dsl Exp $");
 #include <stddef.h>
 #include <string.h>
 #include <unistd.h>
+#if !HAVE_NBTOOL_CONFIG_H
+#include <util.h>
+#endif
 
 #include "installboot.h"
 
-int		main(int, char *[]);
 static	void	getmachine(ib_params *, const char *, const char *);
 static	void	getfstype(ib_params *, const char *, const char *);
 static	void	parseoptions(ib_params *, const char *);
-static	void	usage(void);
+__dead static	void	usage(void);
 static	void	options_usage(void);
 static	void	machine_usage(void);
 static	void	fstype_usage(void);
@@ -94,10 +90,14 @@ const struct option {
 	{ "speed",	IB_CONSPEED,	OPT_INT,	OFFSET(conspeed) },
 	{ "sunsum",	IB_SUNSUM,	OPT_BOOL,	0 },
 	{ "timeout",	IB_TIMEOUT,	OPT_INT,	OFFSET(timeout) },
+	{ "modules",	IB_MODULES,	OPT_BOOL,	0 },
+	{ "bootconf",	IB_BOOTCONF,	OPT_BOOL,	0 },
 	{ .name = NULL },
 };
 #undef OFFSET
 #define OPTION(params, type, opt) (*(type *)((char *)(params) + (opt)->offset))
+
+#define DFL_SECSIZE	512	/* Don't use DEV_BSIZE. It's host's value. */
 
 int
 main(int argc, char *argv[])
@@ -109,6 +109,11 @@ main(int argc, char *argv[])
 	char 		*p;
 	const char	*op;
 	ib_flags	unsupported_flags;
+#if !HAVE_NBTOOL_CONFIG_H
+	char		specname[MAXPATHLEN];
+	char		rawname[MAXPATHLEN];
+	const char	*special, *raw;
+#endif
 
 	setprogname(argv[0]);
 	params = &installboot_params;
@@ -195,13 +200,16 @@ main(int argc, char *argv[])
 
 	/* Check that options are supported by this system */
 	unsupported_flags = params->flags & ~params->machine->valid_flags;
-	unsupported_flags &= ~(IB_VERBOSE | IB_NOWRITE | IB_CLEAR | IB_EDIT);
+	unsupported_flags &= ~(IB_VERBOSE | IB_NOWRITE | IB_CLEAR | IB_EDIT
+				| IB_FORCE);
 	if (unsupported_flags != 0) {
 		int ndx;
 		for (ndx = 0; options[ndx].name != NULL; ndx++) {
-			if (unsupported_flags & options[ndx].flag)
+			if (unsupported_flags & options[ndx].flag) {
+				unsupported_flags &= ~options[ndx].flag;
 				warnx("`-o %s' is not supported for %s",
 				    options[ndx].name, params->machine->name);
+			}
 		}
 		if (unsupported_flags & IB_STAGE1START)
 			warnx("`-b bno' is not supported for %s",
@@ -209,6 +217,10 @@ main(int argc, char *argv[])
 		if (unsupported_flags & IB_STAGE2START)
 			warnx("`-B bno' is not supported for %s",
 			    params->machine->name);
+		unsupported_flags &= ~(IB_STAGE1START | IB_STAGE2START);
+		if (unsupported_flags != 0)
+			warnx("Unknown unsupported flag %#x (coding error!)",
+			    unsupported_flags);
 		exit(1);
 	}
 	/* and some illegal combinations */
@@ -226,7 +238,18 @@ main(int argc, char *argv[])
 		params->stage2 = argv[2];
 	}
 
+#if !HAVE_NBTOOL_CONFIG_H
+	special = getfsspecname(specname, sizeof(specname), argv[0]);
+	if (special == NULL)
+		err(1, "%s: %s", argv[0], specname);
+	raw = getdiskrawname(rawname, sizeof(rawname), special);
+	if (raw != NULL)
+		special = raw;
+	params->filesystem = special;
+#else
 	params->filesystem = argv[0];
+#endif
+
 	if (params->flags & IB_NOWRITE) {
 		op = "only";
 		mode = O_RDONLY;
@@ -234,6 +257,8 @@ main(int argc, char *argv[])
 		op = "write";
 		mode = O_RDWR;
 	}
+	/* XXX should be specified via option */
+	params->sectorsize = DFL_SECSIZE;
 	if ((params->fsfd = open(params->filesystem, mode, 0600)) == -1)
 		err(1, "Opening file system `%s' read-%s",
 		    params->filesystem, op);
@@ -370,10 +395,9 @@ parseoptions(ib_params *params, const char *option)
 			val = strtoul(option, &cp, 0);
 			if (cp > option + len || (*cp != 0 && *cp != ','))
 				break;
-			OPTION(params, int, opt) = val;
-			if (OPTION(params, int, opt) != val)
-				/* value got truncated on int convertion */
+			if (val > INT_MAX)
 				break;
+			OPTION(params, int, opt) = (int)val;
 			continue;
 		default:
 			errx(1, "Internal error: option `%s' has invalid type %d",
@@ -484,7 +508,7 @@ machine_usage(void)
 #ifdef TIOCGWINSZ
 	struct winsize win;
 
-	if (ioctl(fileno(stderr), TIOCGWINSZ, &win) == 0)
+	if (ioctl(fileno(stderr), TIOCGWINSZ, &win) == 0 && win.ws_col > 0)
 		wincol = win.ws_col;
 #endif
 
@@ -529,6 +553,7 @@ getfstype(ib_params *param, const char *fstype, const char *provider)
 static void
 fstype_usage(void)
 {
+#ifndef NO_STAGE2
 	const char *prefix;
 	int	i;
 
@@ -542,6 +567,7 @@ fstype_usage(void)
 		prefix=", ";
 	}
 	fputs("\n", stderr);
+#endif
 }
 
 static void

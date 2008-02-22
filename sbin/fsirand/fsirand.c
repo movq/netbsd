@@ -1,4 +1,4 @@
-/*	$NetBSD: fsirand.c,v 1.27 2007/02/08 21:36:58 drochner Exp $	*/
+/*	$NetBSD: fsirand.c,v 1.32 2013/10/19 01:09:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsirand.c,v 1.27 2007/02/08 21:36:58 drochner Exp $");
+__RCSID("$NetBSD: fsirand.c,v 1.32 2013/10/19 01:09:58 christos Exp $");
 #endif /* lint */
 
 #include <sys/param.h>
@@ -64,13 +57,13 @@ __RCSID("$NetBSD: fsirand.c,v 1.27 2007/02/08 21:36:58 drochner Exp $");
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
-static void usage(void);
+__dead static void usage(void);
 static void getsblock(int, const char *, struct fs *);
 static void fixinodes(int, struct fs *, struct disklabel *, int, long);
 static void statussig(int);
 
 int	needswap, ino, imax, is_ufs2;
-time_t	tstart;
+static time_t	tstart;
 
 static void
 usage(void)
@@ -137,7 +130,7 @@ getsblock(int fd, const char *name, struct fs *fs)
 static void
 fixinodes(int fd, struct fs *fs, struct disklabel *lab, int pflag, long xorval)
 {
-	int inopb = INOPB(fs);
+	int inopb = FFS_INOPB(fs);
 	int size;
 	caddr_t buf;
 	struct ufs1_dinode *dp1 = NULL;
@@ -157,7 +150,7 @@ fixinodes(int fd, struct fs *fs, struct disklabel *lab, int pflag, long xorval)
 
 	for (ino = 0, imax = fs->fs_ipg * fs->fs_ncg; ino < imax;) {
 		off_t sp;
-		sp = (off_t) fsbtodb(fs, ino_to_fsba(fs, ino)) *
+		sp = (off_t) FFS_FSBTODB(fs, ino_to_fsba(fs, ino)) *
 		     (off_t) lab->d_secsize;
 
 		if (lseek(fd, sp, SEEK_SET) == (off_t) -1)
@@ -206,15 +199,14 @@ fixinodes(int fd, struct fs *fs, struct disklabel *lab, int pflag, long xorval)
  * statussig():
  *	display current status
  */
-void
+static void
 statussig(int dummy)
 {
 	char	msgbuf[256];
 	int	len, deltat;
-	time_t	tnow, elapsed;
+	time_t	tnow;
 
 	(void)time(&tnow);
-	elapsed = tnow - tstart;
 	len = snprintf(msgbuf, sizeof(msgbuf),
 	    "fsirand: completed inode %d of %d (%3.2f%%)",
 	    ino, imax, (ino * 100.0) / imax);

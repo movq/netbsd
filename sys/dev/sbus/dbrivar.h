@@ -1,4 +1,4 @@
-/*	$NetBSD: dbrivar.h,v 1.8 2007/12/03 15:34:33 ad Exp $	*/
+/*	$NetBSD: dbrivar.h,v 1.15 2017/12/21 21:56:29 macallan Exp $	*/
 
 /*
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -19,25 +19,17 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Rudolf Koenig, Brent 
- *      Baccala, Jared D. McNeill.
- * 4. Neither the name of the author nor the names of any contributors may
- *    be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -122,9 +114,8 @@ struct dbri_dma {
 };
 
 struct dbri_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 
-	struct sbusdev	sc_sd;		/* sbus device */
 	bus_space_handle_t sc_ioh;
 	bus_space_tag_t	sc_iot;
 	/* DMA buffer for sending commands to the chip */
@@ -133,6 +124,7 @@ struct dbri_softc {
 	bus_dma_segment_t sc_dmaseg;
 	
 	int		sc_have_powerctl;
+	int		sc_init_done;
 	int		sc_powerstate;	/* DBRI's powered up or not */
 	int		sc_pmgrstate;	/* PWR_RESUME etc. */
 	int		sc_burst;	/* DVMA burst size in effect */
@@ -161,6 +153,7 @@ struct dbri_softc {
 	int		sc_linp, sc_rinp;	/* input volume */
 	int		sc_monitor;		/* monitor volume */
 	int		sc_input;		/* 0 - line, 1 - mic */
+	int		sc_whack_codec;	 /* 1 - codec needs control mode */
 
 	int		sc_ctl_mode;
 	
@@ -174,6 +167,12 @@ struct dbri_softc {
 	struct audio_params sc_params;
 
 	struct dbri_dma	*sc_dma;
+
+	kmutex_t	sc_lock;
+	kmutex_t	sc_intr_lock;
+#ifndef DBRI_SPIN
+	kcondvar_t	sc_cv;
+#endif
 };
 
 #define dbri_dma_off(member, elem)	\

@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.8 2007/10/28 18:01:55 jmmv Exp $	*/
+/*	$NetBSD: consinit.c,v 1.13 2013/11/06 02:35:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -27,13 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.8 2007/10/28 18:01:55 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.13 2013/11/06 02:35:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <dev/cons.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/isa/isavar.h>
 
 #include "vga.h"
@@ -71,7 +71,12 @@ static struct consdev ofcons = cons_init(ofcons_);
 #endif
 
 #include "igsfb_ofbus.h"
+#include "chipsfb_ofbus.h"
 #include <shark/ofw/igsfb_ofbusvar.h>
+
+#if (NCHIPSFB_OFBUS > 0)
+extern int chipsfb_ofbus_cnattach(bus_space_tag_t, bus_space_tag_t);
+#endif
 
 #if (NCOM > 0)
 #ifndef CONADDR
@@ -96,15 +101,13 @@ int comconsole = 0;
  * initialize the system console.
  */
 void
-consinit()
+consinit(void)
 {
-	struct consdev *cp;
 	static int initted;
 
 	if (initted)
 		return;
 	initted = 1;
-	cp = NULL;
 
 #if (NVGA > 0)
 	/* The font built into the VGA ROM is broken: all the characters
@@ -114,28 +117,38 @@ consinit()
 #endif
 
 	if (!comconsole) {
-#if (NVGA > 0) || (NIGSFB_OFBUS > 0)
+#if (NVGA > 0) || (NCHIPSFB_OFBUS > 0) || (NIGSFB_OFBUS > 0)
 #if (NIGSFB_OFBUS > 0)
 		if (!igsfb_ofbus_cnattach(&isa_io_bs_tag, &isa_mem_bs_tag)) {
 #if (NPCKBC > 0)
 			pckbc_cnattach(&isa_io_bs_tag, IO_KBD, KBCMDP,
-			    PCKBC_KBD_SLOT);
+			    PCKBC_KBD_SLOT, 0);
 #endif /* NPCKBC */
 			return;
 		}
 #endif /* NIGSFB_OFBUS */
+#if (NCHIPSFB_OFBUS > 0)
+		if (!chipsfb_ofbus_cnattach(&isa_io_bs_tag, &isa_mem_bs_tag)) {
+#if (NPCKBC > 0)
+			pckbc_cnattach(&isa_io_bs_tag, IO_KBD, KBCMDP,
+			    PCKBC_KBD_SLOT, 0);
+#endif /* NPCKBC */
+			return;
+		}
+#endif /* NCHIPSFB_OFBUS */
 #if (NVGA_OFBUS > 0)
 		if (!vga_ofbus_cnattach(&isa_io_bs_tag, &isa_mem_bs_tag)) {
 #if (NPCKBC > 0)
 			pckbc_cnattach(&isa_io_bs_tag, IO_KBD, KBCMDP,
-			    PCKBC_KBD_SLOT);
+			    PCKBC_KBD_SLOT, 0);
 #endif /* NPCKBC */
 			return;
 		}
 #endif /* NVGA_OFBUS */
+
 #else /* NVGA */
 #if (NOFCONS > 0)
-		cp = &ofcons;
+		struct consdev *cp = &ofcons;
 		ofcons_cnprobe(cp);
 		if (cp->cn_pri == CN_INTERNAL) {
 			ofcons_cninit(cp);

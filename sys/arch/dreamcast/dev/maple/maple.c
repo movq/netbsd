@@ -1,4 +1,4 @@
-/*	$NetBSD: maple.c,v 1.35 2007/10/17 19:54:10 garbled Exp $	*/
+/*	$NetBSD: maple.c,v 1.52 2015/12/06 02:04:10 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.35 2007/10/17 19:54:10 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.52 2015/12/06 02:04:10 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -82,11 +75,13 @@ __KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.35 2007/10/17 19:54:10 garbled Exp $");
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
+#include <sys/bus.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
 #include <machine/sysasicvar.h>
 #include <sh3/pmap.h>
 
@@ -96,6 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.35 2007/10/17 19:54:10 garbled Exp $");
 #include <dreamcast/dev/maple/maplereg.h>
 #include <dreamcast/dev/maple/mapleio.h>
 
+#include "ioconf.h"
 #include "locators.h"
 
 /* Internal macros, functions, and variables. */
@@ -109,14 +105,15 @@ __KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.35 2007/10/17 19:54:10 garbled Exp $");
 /* interrupt priority level */
 #define	IPL_MAPLE	IPL_BIO
 #define splmaple()	splbio()
+#define IRL_MAPLE       SYSASIC_IRL9
 
 /*
  * Function declarations.
  */
-static int	maplematch(struct device *, struct cfdata *, void *);
-static void	mapleattach(struct device *, struct device *, void *);
+static int	maplematch(device_t, cfdata_t, void *);
+static void	mapleattach(device_t, device_t, void *);
 static void	maple_scanbus(struct maple_softc *);
-static char *	maple_unit_name(char *, int port, int subunit);
+static char *	maple_unit_name(char *, size_t, int port, int subunit);
 static void	maple_begin_txbuf(struct maple_softc *);
 static int	maple_end_txbuf(struct maple_softc *);
 static void	maple_queue_command(struct maple_softc *, struct maple_unit *,
@@ -130,8 +127,7 @@ static void	maple_check_subunit_change(struct maple_softc *,
 static void	maple_check_unit_change(struct maple_softc *,
 		    struct maple_unit *);
 static void	maple_print_unit(void *, const char *);
-static int	maplesubmatch(struct device *, struct cfdata *,
-		    const int *, void *);
+static int	maplesubmatch(device_t, cfdata_t, const int *, void *);
 static int	mapleprint(void *, const char *);
 static void	maple_attach_unit(struct maple_softc *, struct maple_unit *);
 static void	maple_detach_unit_nofix(struct maple_softc *,
@@ -163,29 +159,37 @@ void	maple_free_dma(paddr_t, size_t);
  */
 int	maple_polling;		/* Are we polling?  (Debugger mode) */
 
-CFATTACH_DECL(maple, sizeof(struct maple_softc),
+CFATTACH_DECL_NEW(maple, sizeof(struct maple_softc),
     maplematch, mapleattach, NULL, NULL);
-
-extern struct cfdriver maple_cd;
 
 dev_type_open(mapleopen);
 dev_type_close(mapleclose);
 dev_type_ioctl(mapleioctl);
 
 const struct cdevsw maple_cdevsw = {
-	mapleopen, mapleclose, noread, nowrite, mapleioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	.d_open = mapleopen,
+	.d_close = mapleclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = mapleioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 static int
-maplematch(struct device *parent, struct cfdata *cf, void *aux)
+maplematch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-mapleattach(struct device *parent, struct device *self, void *aux)
+mapleattach(device_t parent, device_t self, void *aux)
 {
 	struct maple_softc *sc;
 	struct maple_unit *u;
@@ -194,13 +198,14 @@ mapleattach(struct device *parent, struct device *self, void *aux)
 	uint32_t *p;
 	int port, subunit, f;
 
-	sc = (struct maple_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 
-	printf(": %s\n", sysasic_intr_string(IPL_MAPLE));
+	printf(": %s\n", sysasic_intr_string(IRL_MAPLE));
 
 	if (maple_alloc_dma(MAPLE_DMABUF_SIZE, &dmabuffer, &dmabuffer_phys)) {
 		printf("%s: unable to allocate DMA buffers.\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 		return;
 	}
 
@@ -244,18 +249,23 @@ mapleattach(struct device *parent, struct device *self, void *aux)
 	maple_polling = 1;
 	maple_scanbus(sc);
 
+	mutex_init(&sc->sc_dma_lock, MUTEX_DEFAULT, IPL_MAPLE);
+	cv_init(&sc->sc_dma_cv, device_xname(self));
+	mutex_init(&sc->sc_event_lock, MUTEX_DEFAULT, IPL_SOFTCLOCK);
+	cv_init(&sc->sc_event_cv, device_xname(self));
+
 	callout_init(&sc->maple_callout_ch, 0);
 
 	sc->sc_intrhand = sysasic_intr_establish(SYSASIC_EVENT_MAPLE_DMADONE,
-	    IPL_MAPLE, SYSASIC_IRL9, maple_intr, sc);
+	    IPL_MAPLE, IRL_MAPLE, maple_intr, sc);
 
-	config_pending_incr();	/* create thread before mounting root */
+	config_pending_incr(self); /* create thread before mounting root */
 
 	if (kthread_create(PRI_NONE, 0, NULL, maple_event_thread, sc,
-	    &sc->event_thread, "%s", sc->sc_dev.dv_xname) == 0)
+	    &sc->event_thread, "%s", device_xname(self)) == 0)
 		return;
 
-	panic("%s: unable to create event thread", sc->sc_dev.dv_xname);
+	panic("%s: unable to create event thread", device_xname(self));
 }
 
 /*
@@ -278,7 +288,7 @@ maple_scanbus(struct maple_softc *sc)
 		{
 			char buf[16];
 			printf("%s: queued to probe 1\n",
-			    maple_unit_name(buf, u->port, u->subunit));
+			    maple_unit_name(buf, sizeof(buf), u->port, u->subunit));
 		}
 #endif
 		TAILQ_INSERT_TAIL(&sc->sc_probeq, u, u_q);
@@ -310,13 +320,13 @@ maple_scanbus(struct maple_softc *sc)
 }
 
 void
-maple_run_polling(struct device *dev)
+maple_run_polling(device_t dev)
 {
 	struct maple_softc *sc;
 	int port, subunit;
 	int i;
 
-	sc = (struct maple_softc *)dev;
+	sc = device_private(dev);
 
 	/*
 	 * first, make sure polling works
@@ -349,12 +359,13 @@ maple_run_polling(struct device *dev)
 }
 
 static char *
-maple_unit_name(char *buf, int port, int subunit)
+maple_unit_name(char *buf, size_t len, int port, int subunit)
 {
-
-	sprintf(buf, "maple%c", port + 'A');
+	size_t l = snprintf(buf, len, "maple%c", port + 'A');
+	if (l > len)
+		l = len;
 	if (subunit)
-		sprintf(buf+6, "%d", subunit);
+		snprintf(buf + l, len - l, "%d", subunit);
 
 	return buf;
 }
@@ -392,7 +403,7 @@ maple_free_dma(paddr_t paddr, size_t size)
 	TAILQ_INIT(&mlist);
 	for (addr = paddr; addr < paddr + size; addr += PAGE_SIZE) {
 		m = PHYS_TO_VM_PAGE(addr);
-		TAILQ_INSERT_TAIL(&mlist, m, pageq);
+		TAILQ_INSERT_TAIL(&mlist, m, pageq.queue);
 	}
 	uvm_pglistfree(&mlist);
 }
@@ -470,8 +481,8 @@ maple_write_command(struct maple_softc *sc, struct maple_unit *u, int command,
 	char buf[16];
 
 	if (u->u_retrycnt)
-		printf("%s: retrycnt %d\n",
-		    maple_unit_name(buf, u->port, u->subunit), u->u_retrycnt);
+		printf("%s: retrycnt %d\n", maple_unit_name(buf, sizeof(buf),
+		    u->port, u->subunit), u->u_retrycnt);
 #endif
 	u->u_retrycnt = 0;
 	u->u_command = command;
@@ -522,7 +533,7 @@ maple_check_subunit_change(struct maple_softc *sc, struct maple_unit *u)
 	{
 		char buf[16];
 		printf("%s: unit_map 0x%x -> 0x%x (units 0x%x)\n",
-		    maple_unit_name(buf, u->port, u->subunit),
+		    maple_unit_name(buf, sizeof(buf), u->port, u->subunit),
 		    sc->sc_port_unit_map[port], unit_map, units);
 	}
 #endif
@@ -548,7 +559,8 @@ maple_check_subunit_change(struct maple_softc *sc, struct maple_unit *u)
 			{
 				char buf[16];
 				printf("%s: queued to probe 2\n",
-				    maple_unit_name(buf, u1->port, u1->subunit));
+				    maple_unit_name(buf, sizeof(buf),
+				    u1->port, u1->subunit));
 			}
 #endif
 			TAILQ_INSERT_HEAD(&sc->sc_probeq, u1, u_q);
@@ -561,10 +573,7 @@ static void
 maple_check_unit_change(struct maple_softc *sc, struct maple_unit *u)
 {
 	struct maple_devinfo *newinfo = (void *) (u->u_rxbuf + 1);
-	int port, subunit;
 
-	port = u->port;
-	subunit = u->subunit;
 	if (memcmp(&u->devinfo, newinfo, sizeof(struct maple_devinfo)) == 0)
 		goto out;	/* no change */
 
@@ -580,7 +589,7 @@ out:
 	{
 		char buf[16];
 		printf("%s: queued to ping\n",
-		    maple_unit_name(buf, u->port, u->subunit));
+		    maple_unit_name(buf, sizeof(buf), u->port, u->subunit));
 	}
 #endif
 	TAILQ_INSERT_TAIL(&sc->sc_pingq, u, u_q);
@@ -599,7 +608,8 @@ maple_print_unit(void *aux, const char *pnp)
 	subunit = ma->ma_unit->subunit;
 
 	if (pnp != NULL)
-		printf("%s at %s", maple_unit_name(buf, port, subunit), pnp);
+		printf("%s at %s", maple_unit_name(buf, sizeof(buf), port,
+		    subunit), pnp);
 
 	printf(" port %d", port);
 
@@ -630,8 +640,7 @@ maple_print_unit(void *aux, const char *pnp)
 }
 
 static int
-maplesubmatch(struct device *parent, struct cfdata *match,
-	      const int *ldesc, void *aux)
+maplesubmatch(device_t parent, cfdata_t match, const int *ldesc, void *aux)
 {
 	struct maple_attach_args *ma = aux;
 
@@ -678,10 +687,11 @@ maple_attach_unit(struct maple_softc *sc, struct maple_unit *u)
 	ma.ma_basedevinfo = &sc->sc_unit[u->port][0].devinfo;
 	func = be32toh(ma.ma_devinfo->di_func);
 
-	maple_print_unit(&ma, sc->sc_dev.dv_xname);
+	maple_print_unit(&ma, device_xname(sc->sc_dev));
 	printf("\n");
-	strcpy(oldxname, sc->sc_dev.dv_xname);
-	maple_unit_name(sc->sc_dev.dv_xname, u->port, u->subunit);
+	strcpy(oldxname, device_xname(sc->sc_dev));
+	maple_unit_name(sc->sc_dev->dv_xname, sizeof(sc->sc_dev->dv_xname),
+	    u->port, u->subunit);
 
 	for (f = 0; f < MAPLE_NFUNC; f++) {
 		u->u_func[f].f_callback = NULL;
@@ -690,7 +700,7 @@ maple_attach_unit(struct maple_softc *sc, struct maple_unit *u)
 		u->u_func[f].f_dev = NULL;
 		if (func & MAPLE_FUNC(f)) {
 			ma.ma_function = f;
-			u->u_func[f].f_dev = config_found_sm_loc(&sc->sc_dev,
+			u->u_func[f].f_dev = config_found_sm_loc(sc->sc_dev,
 			    "maple", NULL, &ma, mapleprint, maplesubmatch);
 			u->u_ping_func = f;	/* XXX using largest func */
 		}
@@ -708,7 +718,7 @@ maple_attach_unit(struct maple_softc *sc, struct maple_unit *u)
 		u->u_ping_stat = MAPLE_PING_NORMAL;
 	}
 #endif
-	strcpy(sc->sc_dev.dv_xname, oldxname);
+	strcpy(sc->sc_dev->dv_xname, oldxname);
 
 	sc->sc_port_units[u->port] |= 1 << u->subunit;
 }
@@ -717,7 +727,7 @@ static void
 maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 {
 	struct maple_func *fn;
-	struct device *dev;
+	device_t dev;
 	struct maple_unit *u1;
 	int port;
 	int error;
@@ -725,7 +735,7 @@ maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 	char buf[16];
 
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
-	printf("%s: remove\n", maple_unit_name(buf, u->port, u->subunit));
+	printf("%s: remove\n", maple_unit_name(buf, sizeof(buf), u->port, u->subunit));
 #endif
 	maple_remove_from_queues(sc, u);
 	port = u->port;
@@ -740,7 +750,7 @@ maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 		if ((dev = fn->f_dev) != NULL) {
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 			printf("%s: detaching func %d\n",
-			    maple_unit_name(buf, port, u->subunit),
+			    maple_unit_name(buf, sizeof(buf), port, u->subunit),
 			    fn->f_funcno);
 #endif
 
@@ -765,12 +775,12 @@ maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 			 */
 			if ((error = config_detach(fn->f_dev, DETACH_FORCE))) {
 				printf("%s: failed to detach %s (func %d), errno %d\n",
-				    maple_unit_name(buf, port, u->subunit),
-				    fn->f_dev->dv_xname, fn->f_funcno, error);
+				    maple_unit_name(buf, sizeof(buf), port, u->subunit),
+				    device_xname(fn->f_dev), fn->f_funcno, error);
 			}
 		}
 
-		maple_enable_periodic(&sc->sc_dev, u, fn->f_funcno, 0);
+		maple_enable_periodic(sc->sc_dev, u, fn->f_funcno, 0);
 
 		fn->f_dev = NULL;
 		fn->f_callback = NULL;
@@ -783,7 +793,7 @@ maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 			if (u1 == u) {
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 				printf("%s: abort retry\n",
-				    maple_unit_name(buf, port, u->subunit));
+				    maple_unit_name(buf, sizeof(buf), port, u->subunit));
 #endif
 				SIMPLEQ_REMOVE(&sc->sc_retryq, u, maple_unit,
 				    u_dmaq);
@@ -801,9 +811,9 @@ maple_detach_unit_nofix(struct maple_softc *sc, struct maple_unit *u)
 		sc->sc_port_unit_map[port] = 0;
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 2
 		{
-			char buf[16];
+			char buf2[16];
 			printf("%s: queued to probe 3\n",
-			    maple_unit_name(buf, port, u->subunit));
+			    maple_unit_name(buf2, sizeof(buf2), port, u->subunit));
 		}
 #endif
 		TAILQ_INSERT_TAIL(&sc->sc_probeq, u, u_q);
@@ -827,25 +837,24 @@ maple_detach_unit(struct maple_softc *sc, struct maple_unit *u)
  * Only one command (per function) is valid at a time.
  */
 void
-maple_command(struct device *dev, struct maple_unit *u, int func,
+maple_command(device_t dev, struct maple_unit *u, int func,
 	int command, int datalen, const void *dataaddr, int flags)
 {
-	struct maple_softc *sc = (void *) dev;
+	struct maple_softc *sc = device_private(dev);
 	struct maple_func *fn;
-	int s;
 
 	KASSERT(func >= 0 && func < 32);
 	KASSERT(command);
 	KASSERT((flags & ~MAPLE_FLAG_CMD_PERIODIC_TIMING) == 0);
 
-	s = splsoftclock();
+	mutex_enter(&sc->sc_event_lock);
 
 	fn = &u->u_func[func];
 #if 1 /*def DIAGNOSTIC*/
 	{char buf[16];
 	if (fn->f_cmdstat != MAPLE_CMDSTAT_NONE)
 		panic("maple_command: %s func %d: requesting more than one commands",
-		    maple_unit_name(buf, u->port, u->subunit), func);
+		    maple_unit_name(buf, sizeof(buf), u->port, u->subunit), func);
 	}
 #endif
 	fn->f_command = command;
@@ -857,9 +866,9 @@ maple_command(struct device *dev, struct maple_unit *u, int func,
 	} else {
 		fn->f_cmdstat = MAPLE_CMDSTAT_ASYNC;
 		TAILQ_INSERT_TAIL(&sc->sc_acmdq, fn, f_cmdq);
-		wakeup(&sc->sc_event);	/* wake for async event */
+		cv_broadcast(&sc->sc_event_cv);	/* wake for async event */
 	}
-	splx(s);
+	mutex_exit(&sc->sc_event_lock);
 }
 
 static void
@@ -949,11 +958,10 @@ maple_unit_probe(struct maple_softc *sc)
  */
 /* ARGSUSED */
 void
-maple_enable_unit_ping(struct device *dev, struct maple_unit *u,
-	int func, int enable)
+maple_enable_unit_ping(device_t dev, struct maple_unit *u, int func, int enable)
 {
 #if 0	/* currently unused */
-	struct maple_softc *sc = (void *) dev;
+	struct maple_softc *sc = device_private(dev);
 #endif
 
 	if (enable)
@@ -1008,10 +1016,9 @@ maple_unit_ping(struct maple_softc *sc)
  * Enable/disable periodic GETCOND (called by drivers)
  */
 void
-maple_enable_periodic(struct device *dev, struct maple_unit *u,
-	int func, int on)
+maple_enable_periodic(device_t dev, struct maple_unit *u, int func, int on)
 {
-	struct maple_softc *sc = (void *) dev;
+	struct maple_softc *sc = device_private(dev);
 	struct maple_func *fn;
 
 	KASSERT(func >= 0 && func < 32);
@@ -1133,7 +1140,7 @@ maple_remove_from_queues(struct maple_softc *sc, struct maple_unit *u)
 	if (u->u_queuestat != MAPLE_QUEUE_NONE) {
 		char buf[16];
 		printf("%s: dequeued\n",
-		    maple_unit_name(buf, u->port, u->subunit));
+		    maple_unit_name(buf, sizeof(buf), u->port, u->subunit));
 	}
 #endif
 
@@ -1154,7 +1161,7 @@ maple_retry(struct maple_softc *sc, struct maple_unit *u,
 	if (u->u_retrycnt == 0) {
 		char buf[16];
 		printf("%s: retrying: %#x, %#x, %p\n",
-		    maple_unit_name(buf, u->port, u->subunit),
+		    maple_unit_name(buf, sizeof(buf), u->port, u->subunit),
 		    u->u_command, u->u_datalen, u->u_dataaddr);
 	}
 #endif
@@ -1257,7 +1264,7 @@ maple_check_responses(struct maple_softc *sc)
 				/* detach */
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 2
 				printf("%s: func: %d: periodic response %d\n",
-				    maple_unit_name(buf, u->port, u->subunit),
+				    maple_unit_name(buf, sizeof(buf), u->port, u->subunit),
 				    u->u_dma_func,
 				    response);
 #endif
@@ -1283,13 +1290,13 @@ maple_check_responses(struct maple_softc *sc)
 				if (u->subunit != 0 &&
 				    ++u->u_proberetry > MAPLE_PROBERETRY_MAX) {
 					printf("%s: no response\n",
-					    maple_unit_name(buf,
+					    maple_unit_name(buf, sizeof(buf),
 						u->port, u->subunit));
 				} else {
 					/* probe again */
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 2
 					printf("%s: queued to probe 4\n",
-					    maple_unit_name(buf, u->port, u->subunit));
+					    maple_unit_name(buf, sizeof(buf), u->port, u->subunit));
 #endif
 					TAILQ_INSERT_TAIL(&sc->sc_probeq, u,
 					    u_q);
@@ -1316,7 +1323,7 @@ maple_check_responses(struct maple_softc *sc)
 					/* detach */
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 					printf("%s: ping response %d\n",
-					    maple_unit_name(buf, u->port,
+					    maple_unit_name(buf, sizeof(buf), u->port,
 						u->subunit),
 					    response);
 #endif
@@ -1333,7 +1340,7 @@ maple_check_responses(struct maple_softc *sc)
 						 */
 #ifdef MAPLE_DEBUG
 						printf("%s: switching ping method\n",
-						    maple_unit_name(buf,
+						    maple_unit_name(buf, sizeof(buf),
 							u->port, u->subunit));
 #endif
 						u->u_ping_stat
@@ -1373,7 +1380,7 @@ maple_check_responses(struct maple_softc *sc)
 					/* detach */
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 					printf("%s: command response %d\n",
-					    maple_unit_name(buf, u->port,
+					    maple_unit_name(buf, sizeof(buf), u->port,
 						u->subunit),
 					    response);
 #endif
@@ -1392,7 +1399,7 @@ maple_check_responses(struct maple_softc *sc)
 				/* detached right now */
 #ifdef MAPLE_DEBUG
 				printf("%s: unknown function: function %d, response %d\n",
-				    maple_unit_name(buf, u->port, u->subunit),
+				    maple_unit_name(buf, sizeof(buf), u->port, u->subunit),
 				    func_code, response);
 #endif
 				continue;
@@ -1421,14 +1428,13 @@ maple_event_thread(void *arg)
 {
 	struct maple_softc *sc = arg;
 	unsigned cnt = 1;	/* timing counter */
-	int s;
 #if defined(MAPLE_DEBUG) && MAPLE_DEBUG > 1
 	int noreq = 0;
 #endif
 
 #ifdef MAPLE_DEBUG
 	printf("%s: forked event thread, pid %d\n",
-	    sc->sc_dev.dv_xname, sc->event_thread->p_pid);
+	    device_xname(sc->sc_dev), sc->event_thread->l_proc->p_pid);
 #endif
 
 	/* begin first DMA cycle */
@@ -1438,7 +1444,7 @@ maple_event_thread(void *arg)
 
 	/* OK, continue booting system */
 	maple_polling = 0;
-	config_pending_decr();
+	config_pending_decr(sc->sc_dev);
 
 	for (;;) {
 		/*
@@ -1484,18 +1490,19 @@ maple_event_thread(void *arg)
 			/*
 			 * start DMA
 			 */
-			s = splmaple();
+			mutex_enter(&sc->sc_dma_lock);
 			maple_start(sc);
 
 			/*
 			 * wait until DMA done
 			 */
-			if (tsleep(&sc->sc_dmadone, PWAIT, "mdma", hz)
+			if (cv_timedwait(&sc->sc_dma_cv, &sc->sc_dma_lock, hz)
 			    == EWOULDBLOCK) {
 				/* was DDB active? */
-				printf("%s: timed out\n", sc->sc_dev.dv_xname);
+				printf("%s: timed out\n",
+				    device_xname(sc->sc_dev));
 			}
-			splx(s);
+			mutex_exit(&sc->sc_dma_lock);
 
 			/*
 			 * call handlers
@@ -1512,7 +1519,7 @@ maple_event_thread(void *arg)
 			if (noreq)	/* ignore first time */
 #endif
 				printf("%s: no request %d\n",
-				    sc->sc_dev.dv_xname, noreq);
+				    device_xname(sc->sc_dev), noreq);
 			noreq++;
 		}
 #endif
@@ -1520,17 +1527,17 @@ maple_event_thread(void *arg)
 		/*
 		 * wait for an event
 		 */
-		s = splsoftclock();
+		mutex_enter(&sc->sc_event_lock);
 		if (TAILQ_EMPTY(&sc->sc_acmdq) && sc->sc_event == 0 &&
 		    TAILQ_EMPTY(&sc->sc_periodicdeferq)) {
-			if (tsleep(&sc->sc_event, PWAIT, "mslp", hz)
-			    == EWOULDBLOCK) {
+			if (cv_timedwait(&sc->sc_event_cv, &sc->sc_event_lock,
+			    hz) == EWOULDBLOCK) {
 				printf("%s: event timed out\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			}
 
 		}
-		splx(s);
+		mutex_exit(&sc->sc_event_lock);
 
 	}
 
@@ -1545,7 +1552,9 @@ maple_intr(void *arg)
 {
 	struct maple_softc *sc = arg;
 
-	wakeup(&sc->sc_dmadone);
+	mutex_enter(&sc->sc_dma_lock);
+	cv_broadcast(&sc->sc_dma_cv);
+	mutex_exit(&sc->sc_dma_lock);
 
 	return 1;
 }
@@ -1555,8 +1564,10 @@ maple_callout(void *ctx)
 {
 	struct maple_softc *sc = ctx;
 
+	mutex_enter(&sc->sc_event_lock);
 	sc->sc_event = 1;	/* mark as periodic event */
-	wakeup(&sc->sc_event);
+	cv_broadcast(&sc->sc_event_cv);
+	mutex_exit(&sc->sc_event_lock);
 }
 
 /*
@@ -1564,11 +1575,11 @@ maple_callout(void *ctx)
  */
 /* ARGSUSED */
 void
-maple_set_callback(struct device *dev, struct maple_unit *u, int func,
+maple_set_callback(device_t dev, struct maple_unit *u, int func,
 	void (*callback)(void *, struct maple_response *, int, int), void *arg)
 {
 #if 0	/* currently unused */
-	struct maple_softc *sc = (void *) dev;
+	struct maple_softc *sc = device_private(dev);
 #endif
 	struct maple_func *fn;
 
@@ -1609,7 +1620,7 @@ mapleopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct maple_softc *sc;
 
-	sc = device_lookup(&maple_cd, MAPLEBUSUNIT(dev));
+	sc = device_lookup_private(&maple_cd, MAPLEBUSUNIT(dev));
 	if (sc == NULL)			/* make sure it was attached */
 		return ENXIO;
 
@@ -1632,7 +1643,7 @@ mapleclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct maple_softc *sc;
 
-	sc = device_lookup(&maple_cd, MAPLEBUSUNIT(dev));
+	sc = device_lookup_private(&maple_cd, MAPLEBUSUNIT(dev));
 
 	sc->sc_port_units_open[MAPLEPORT(dev)] &= ~(1 << MAPLESUBUNIT(dev));
 
@@ -1640,10 +1651,10 @@ mapleclose(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-maple_unit_ioctl(struct device *dev, struct maple_unit *u, u_long cmd,
+maple_unit_ioctl(device_t dev, struct maple_unit *u, u_long cmd,
     void *data, int flag, struct lwp *l)
 {
-	struct maple_softc *sc = (struct maple_softc *)dev;
+	struct maple_softc *sc = device_private(dev);
 
 	if (!(sc->sc_port_units[u->port] & (1 << u->subunit)))
 		return ENXIO;
@@ -1665,8 +1676,8 @@ mapleioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	struct maple_softc *sc;
 	struct maple_unit *u;
 
-	sc = device_lookup(&maple_cd, MAPLEBUSUNIT(dev));
+	sc = device_lookup_private(&maple_cd, MAPLEBUSUNIT(dev));
 	u = &sc->sc_unit[MAPLEPORT(dev)][MAPLESUBUNIT(dev)];
 
-	return maple_unit_ioctl(&sc->sc_dev, u, cmd, data, flag, l);
+	return maple_unit_ioctl(sc->sc_dev, u, cmd, data, flag, l);
 }

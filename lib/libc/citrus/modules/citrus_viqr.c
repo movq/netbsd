@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_viqr.c,v 1.3 2006/11/22 20:11:03 tnozaki Exp $ */
+/* $NetBSD: citrus_viqr.c,v 1.6 2013/05/28 16:57:56 joerg Exp $ */
 
 /*-
  * Copyright (c)2006 Citrus Project,
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_viqr.c,v 1.3 2006/11/22 20:11:03 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_viqr.c,v 1.6 2013/05/28 16:57:56 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/queue.h>
@@ -40,7 +40,6 @@ __RCSID("$NetBSD: citrus_viqr.c,v 1.3 2006/11/22 20:11:03 tnozaki Exp $");
 #include <stdint.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <limits.h>
 
@@ -235,8 +234,10 @@ typedef struct {
 		_VIQRState	s_mbrtowc;
 		_VIQRState	s_mbtowc;
 		_VIQRState	s_mbsrtowcs;
+		_VIQRState	s_mbsnrtowcs;
 		_VIQRState	s_wcrtomb;
 		_VIQRState	s_wcsrtombs;
+		_VIQRState	s_wcsnrtombs;
 		_VIQRState	s_wctomb;
 	} states;
 } _VIQRCTypeInfo;
@@ -361,7 +362,7 @@ _citrus_VIQR_wcrtomb_priv(_VIQREncodingInfo * __restrict ei,
 	_VIQRState * __restrict psenc, size_t * __restrict nresult)
 {
 	mnemonic_t *m;
-	int ch, escape;
+	int ch;
 	const char *p;
 
 	_DIAGASSERT(ei != NULL);

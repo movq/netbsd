@@ -1,4 +1,4 @@
-/*	$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $ */
+/*	$NetBSD: msiiep.c,v 1.46 2015/10/04 08:17:43 joerg Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.46 2015/10/04 08:17:43 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $")
 #include <uvm/uvm.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/promlib.h>
 
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $")
 
 #include <sparc/sparc/msiiepreg.h>
 #include <sparc/sparc/msiiepvar.h>
-
+#include <sparc/sparc/pci_fixup.h>
 
 /*
  * Autoconfiguration.
@@ -65,11 +65,10 @@ __KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $")
 /*
  * "Stub" ms-IIep parent that knows how to attach various functions.
  */
-static int	msiiep_match(struct device *, struct cfdata *, void *);
-static void	msiiep_attach(struct device *, struct device *, void *);
+static int	msiiep_match(device_t, cfdata_t, void *);
+static void	msiiep_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(msiiep, sizeof(struct device),
-    msiiep_match, msiiep_attach, NULL, NULL);
+CFATTACH_DECL_NEW(msiiep, 0, msiiep_match, msiiep_attach, NULL, NULL);
 
 
 /* sleep in idle spin */
@@ -80,11 +79,11 @@ volatile uint32_t *msiiep_mid = NULL;
 /*
  * The real thing.
  */
-static int	mspcic_match(struct device *, struct cfdata *, void *);
-static void	mspcic_attach(struct device *, struct device *, void *);
+static int	mspcic_match(device_t, cfdata_t, void *);
+static void	mspcic_attach(device_t, device_t, void *);
 static int	mspcic_print(void *, const char *);
 
-CFATTACH_DECL(mspcic, sizeof(struct mspcic_softc),
+CFATTACH_DECL_NEW(mspcic, sizeof(struct mspcic_softc),
     mspcic_match, mspcic_attach, NULL, NULL);
 
 
@@ -99,23 +98,13 @@ CFATTACH_DECL(mspcic, sizeof(struct mspcic_softc),
 static struct sparc_pci_chipset mspcic_pc_tag = { NULL };
 
 
-/*
- * Bus space tags for memory and i/o.
- */
-
-struct mspcic_pci_map {
-	uint32_t sysbase;
-	uint32_t pcibase;
-	uint32_t size;
-};
-
 /* fixed i/o and one set of i/o cycle translation registers */
-static struct mspcic_pci_map mspcic_pci_iomap[2] = {
+struct mspcic_pci_map mspcic_pci_iomap[IOMAP_SIZE] = {
 	{ 0x30000000, 0x0, 0x00010000 }		/* fixed i/o (decoded bits) */
 };
 
 /* fixed mem and two sets of mem cycle translation registers */
-static struct mspcic_pci_map mspcic_pci_memmap[3] = {
+struct mspcic_pci_map mspcic_pci_memmap[MEMMAP_SIZE] = {
 	{ 0x30100000, 0x00100000, 0x00f00000 }	/* fixed mem (pass through) */
 };
 
@@ -192,7 +181,7 @@ static struct sparc_bus_dma_tag mspcic_dma_tag = {
 
 
 static int
-msiiep_match(struct device *parent, struct cfdata *cf, void *aux)
+msiiep_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	pcireg_t id;
@@ -216,19 +205,20 @@ msiiep_match(struct device *parent, struct cfdata *cf, void *aux)
 
 
 static void
-msiiep_attach(struct device *parent, struct device *self, void *aux)
+msiiep_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	struct msiiep_attach_args msa;
 	bus_space_handle_t hmid;
 	struct cpu_info *cur;
-	uint32_t mid;
 
 	aprint_normal("\n");
 
 	if (bus_space_map(ma->ma_bustag, MSIIEP_MID_PA, 4, 0, &hmid) == 0) {
-		mid = bus_space_read_4(ma->ma_bustag, hmid, 0);
 #ifdef DIAGNOSTICS
+		uint32_t mid;
+
+		mid = bus_space_read_4(ma->ma_bustag, hmid, 0);
 		printf("MID: %08x\n", mid);
 #endif
 		msiiep_mid = (volatile uint32_t *)bus_space_vaddr(ma->ma_bustag,
@@ -268,7 +258,7 @@ msiiep_cpu_sleep(struct cpu_info *ci)
  */
 
 static int
-mspcic_match(struct device *parent, struct cfdata *cf, void *aux)
+mspcic_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct msiiep_attach_args *msa = aux;
 
@@ -277,13 +267,13 @@ mspcic_match(struct device *parent, struct cfdata *cf, void *aux)
 
 
 static void
-mspcic_attach(struct device *parent, struct device *self, void *aux)
+mspcic_attach(device_t parent, device_t self, void *aux)
 {
-	struct mspcic_softc *sc = (struct mspcic_softc *)self;
+	struct mspcic_softc *sc = device_private(self);
 	struct msiiep_attach_args *msa = aux;
 	struct mainbus_attach_args *ma = msa->msa_ma;
 	int node = ma->ma_node;
-	char devinfo[256];
+	char devinfo[256], buf[32], *model;
 
 	struct pcibus_attach_args pba;
 
@@ -300,6 +290,22 @@ mspcic_attach(struct device *parent, struct device *self, void *aux)
 	       clockfreq(prom_getpropint(node, "clock-frequency", 33333333)));
 
 	mspcic_init_maps();
+
+	/*
+	 * On Espresso, we need to adjust the interrupt mapping on
+	 * lines 4-7, as onboard devices and cards in the PCI slots use
+	 * those lines.  Note, that enabling line 5 (onboard ide) causes
+	 * a continuous interrupt stream, so leave that unmapped (0).
+	 * Any other device using line 5 can't be used.
+	 * Interrupt line wiring for slots is set in pci_machdep.c.
+	 * Set the PCI Trdy and Retry Counters to non-zero values, otherwise
+	 * we'll lock up when using devices behind a PCI-PCI bridge.
+	 */
+	model = prom_getpropstringA(prom_findroot(), "model", buf, sizeof(buf));
+	if (model != NULL && !strcmp(model, "SUNW,375-0059")) {
+		mspcic_write_2(pcic_intr_asgn_sel_hi, (uint16_t) 0x7502);
+		mspcic_write_4(pcic_cntrs, (uint32_t) 0x00808000);
+	}
 
 	/* init cookies/parents in our statically allocated tags */
 	mspcic_io_tag = *sc->sc_bustag;
@@ -352,7 +358,9 @@ mspcic_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat = sc->sc_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &mspcic_pc_tag;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
+
+	mspcic_pci_scan(sc->sc_node);
 
 	config_found_ia(self, "pcibus", &pba, mspcic_print);
 }
@@ -499,7 +507,7 @@ mspcic_pci_map_find(struct mspcic_pci_map *m, int nmaps,
 
 	for (i = 0; i < nmaps; ++i, ++m) {
 		offset = pciaddr - m->pcibase;
-		if (offset >= 0 && offset + size <= m->size)
+		if (offset + size <= m->size)
 			return (m->sysbase + offset);
 	}
 	return (0);
@@ -563,7 +571,7 @@ mspcic_intr_establish(bus_space_tag_t t, int line, int ipl,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, ipl, ih, fastvec);
+	intr_establish(pil, ipl, ih, fastvec, false);
 
 	return(ih);
 }
@@ -657,10 +665,12 @@ mspcic_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map,
 }
 
 static void
-mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t dmam)
+mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 
-	panic("mspcic_dmamap_unload: not implemented");
+	/* Mark the mappings as invalid. */
+	map->dm_mapsize = 0;
+	map->dm_nsegs = 0;
 }
 
 
@@ -692,14 +702,15 @@ mspcic_dmamem_map(bus_dma_tag_t tag, bus_dma_segment_t *segs, int nsegs,
 	 * to the kernel virtual address space.
 	 */
 	mlist = segs[0]._ds_mlist;
-	TAILQ_FOREACH(m, mlist, pageq) {
+	TAILQ_FOREACH(m, mlist, pageq.queue) {
 		paddr_t pa;
 
 		if (size == 0)
 			panic("mspcic_dmamem_map: size botch");
 
 		pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va,
+		    pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE, 0);
 		va += pagesz;
 		size -= pagesz;
 	}

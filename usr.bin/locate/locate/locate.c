@@ -1,4 +1,4 @@
-/*	$NetBSD: locate.c,v 1.15 2007/04/29 20:23:37 msaitoh Exp $	*/
+/*	$NetBSD: locate.c,v 1.19 2018/05/14 05:17:10 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)locate.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: locate.c,v 1.15 2007/04/29 20:23:37 msaitoh Exp $");
+__RCSID("$NetBSD: locate.c,v 1.19 2018/05/14 05:17:10 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -103,9 +103,6 @@ static void add_db(const char *);
 static int fastfind(FILE *, char *);
 static char *patprep(const char *);
 
-int	main(int, char **);
-
-
 static void
 add_db(const char *path)
 {
@@ -134,7 +131,7 @@ int
 main(int argc, char *argv[])
 {
 	struct locate_db *dbp;
-	char *locate_path = getenv("LOCATE_PATH");
+	const char *locate_path = getenv("LOCATE_PATH");
 	char *cp;
 	int c;
 	int rc;
@@ -156,14 +153,15 @@ main(int argc, char *argv[])
 	}
 	if (!locate_path)
 		locate_path = _PATH_FCODES;
-	if ((cp = strrchr(locate_path, ':'))) {
-		locate_path = strdup(locate_path);
-		while ((cp = strrchr(locate_path, ':'))) {
-			*cp++ = '\0';
-			add_db(cp);
-		}
+
+	char *lp = strdup(locate_path);
+	while ((cp = strrchr(lp, ':'))) {
+		*cp++ = '\0';
+		add_db(cp);
 	}
-	add_db(locate_path);
+	add_db(lp);
+	free(lp);
+
 	if (LIST_EMPTY(&db_list))
 		exit(1);
 	for (; optind < argc; ++optind) {
@@ -213,7 +211,7 @@ fastfind(FILE *fp, char *pathpart)
 			else {		/* bigrams are parity-marked */
 				c &= PARITY - 1;
 				/* sanity check */
-				if (c < 0 || c >= sizeof(bigram1)) 
+				if (c < 0 || c >= (int)sizeof(bigram1)) 
 					return -1;	/* invalid database file */
 				*p++ = bigram1[c], *p++ = bigram2[c];
 			}

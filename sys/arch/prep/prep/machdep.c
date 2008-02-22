@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.75 2014/04/03 23:49:47 mrg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,17 +32,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.75 2014/04/03 23:49:47 mrg Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_openpic.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -53,29 +55,24 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $")
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
+#include <sys/sysctl.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/sysctl.h>
-
-#include <net/netisr.h>
-
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/platform.h>
 #include <machine/powerpc.h>
 #include <machine/residual.h>
-#include <machine/trap.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
 #include <powerpc/openpic.h>
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 #ifdef MULTIPROCESSOR
-#include <arch/powerpc/pic/ipivar.h>
+#include <powerpc/pic/ipivar.h>
 #endif
 
 #include <dev/cons.h>
@@ -275,6 +272,8 @@ cpu_reboot(int howto, char *what)
 halt_sys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
                 printf("\n");
                 printf("The operating system has halted.\n");
@@ -314,7 +313,6 @@ prep_setup_openpic(PPC_DEVICE *dev)
 {
 	uint32_t l;
 	uint8_t *p;
-	void *v;
 	int tag, size, item, i;
 	unsigned char *baseaddr = NULL;
 
@@ -330,7 +328,6 @@ prep_setup_openpic(PPC_DEVICE *dev)
 		struct _L4_PPCPack *pa = &pack->L4_Data.L4_PPCPack;
 
 		tag = *p;
-		v = p;
 		if (tag_type(p[0]) == PNP_SMALL) {
 			size = tag_small_count(tag) + 1;
 			continue;
@@ -343,11 +340,11 @@ prep_setup_openpic(PPC_DEVICE *dev)
 		if (pa->PPCData[0] == 1)
 			baseaddr = (unsigned char *)mapiodev(
 			    le64dec(&pa->PPCData[4]) | PREP_BUS_SPACE_IO,
-			    le64dec(&pa->PPCData[12]));
+			    le64dec(&pa->PPCData[12]), false);
 		else if (pa->PPCData[0] == 2)
 			baseaddr = (unsigned char *)mapiodev(
 			    le64dec(&pa->PPCData[4]) | PREP_BUS_SPACE_MEM,
-			    le64dec(&pa->PPCData[12]));
+			    le64dec(&pa->PPCData[12]), false);
 		if (baseaddr == NULL)
 			return 0;
 		pic_init();
@@ -362,7 +359,7 @@ prep_setup_openpic(PPC_DEVICE *dev)
 		openpic_write(OPENPIC_TIMER_FREQ, busfreq/8);
 		primary_pic = 1;
 		/* set up the IVR as a cascade on openpic 0 */
-		intr_establish(16, IST_LEVEL, IPL_NONE, pic_handle_intr,
+		intr_establish(16, IST_LEVEL, IPL_HIGH, pic_handle_intr,
 		    isa_pic);
 		oea_install_extint(pic_ext_intr);
 #ifdef MULTIPROCESSOR
@@ -384,7 +381,6 @@ setup_ivr(PPC_DEVICE *dev)
 {
 	uint32_t l, addr;
 	uint8_t *p;
-	void *v;
 	int tag, size, item;
 
 	l = be32toh(dev->AllocatedOffset);
@@ -396,7 +392,6 @@ setup_ivr(PPC_DEVICE *dev)
 		struct _L4_PPCPack *pa = &pack->L4_Data.L4_PPCPack;
 
 		tag = *p;
-		v = p;
 		if (tag_type(p[0]) == PNP_SMALL) {
 			size = tag_small_count(tag) + 1;
 			continue;
@@ -408,7 +403,7 @@ setup_ivr(PPC_DEVICE *dev)
 		/* otherwise we have a memory packet */
 		addr = le64dec(&pa->PPCData[4]) & ~(PAGE_SIZE-1);
 		prep_intr_reg_off = le64dec(&pa->PPCData[4]) & (PAGE_SIZE-1); 
-		prep_intr_reg = (vaddr_t)mapiodev(addr, PAGE_SIZE);
+		prep_intr_reg = (vaddr_t)mapiodev(addr, PAGE_SIZE, false);
 		if (!prep_intr_reg)
 			panic("startup: no room for interrupt register");
 		return;
@@ -424,7 +419,7 @@ setup_ivr(PPC_DEVICE *dev)
  */
 
 static void
-prep_init()
+prep_init(void)
 {
 	PPC_DEVICE *ppc_dev;
 	int i, foundmpic;
@@ -442,8 +437,6 @@ prep_init()
 		if (ppc_dev[i].DeviceId.DevId == 0x244d000d) { /* MPIC */
 			foundmpic = prep_setup_openpic(&ppc_dev[i]);
 		}
-#else
-		;
 #endif
 
 	}
@@ -453,7 +446,7 @@ prep_init()
 		 * occur on certain motorola VME boards.  Instead we need
 		 * to just hardcode it.
 		 */
-		prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE);
+		prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE, false);
 		if (!prep_intr_reg)
 			panic("startup: no room for interrupt register");
 		prep_intr_reg_off = INTR_VECTOR_REG;
@@ -466,7 +459,10 @@ static void
 init_intr(void)
 {
         int i;
+
+#if defined(PIC_OPENPIC)
         openpic_base = 0;
+#endif
 
 	pic_init();
         i = find_platform_quirk(res->VitalProductData.PrintableModel);

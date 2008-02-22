@@ -1,4 +1,4 @@
-/* 	$NetBSD: rasops2.c,v 1.11 2005/12/11 12:23:43 christos Exp $	*/
+/* 	$NetBSD: rasops2.c,v 1.18 2013/04/21 04:28:05 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rasops2.c,v 1.11 2005/12/11 12:23:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rasops2.c,v 1.18 2013/04/21 04:28:05 kiyohara Exp $");
 
 #include "opt_rasops.h"
 
@@ -73,8 +66,7 @@ static int	stamp_mutex;	/* XXX see note in README */
  * Initialize rasops_info struct for this colordepth.
  */
 void
-rasops2_init(ri)
-	struct rasops_info *ri;
+rasops2_init(struct rasops_info *ri)
 {
 
 	switch (ri->ri_font->fontwidth) {
@@ -107,18 +99,13 @@ rasops2_init(ri)
  * Paint a single character. This is the generic version, this is ugly.
  */
 static void
-rasops2_putchar(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops2_putchar(void *cookie, int row, int col, u_int uc, long attr)
 {
 	int height, width, fs, rs, fb, bg, fg, lmask, rmask;
-	struct rasops_info *ri;
+	struct rasops_info *ri = (struct rasops_info *)cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	int32_t *rp;
 	u_char *fr;
-
-	ri = (struct rasops_info *)cookie;
 
 #ifdef RASOPS_CLIPPING
 	/* Catches 'row < 0' case too */
@@ -129,8 +116,8 @@ rasops2_putchar(cookie, row, col, uc, attr)
 		return;
 #endif
 
-	width = ri->ri_font->fontwidth << 1;
-	height = ri->ri_font->fontheight;
+	width = font->fontwidth << 1;
+	height = font->fontheight;
 	col *= width;
 	rp = (int32_t *)(ri->ri_bits + row * ri->ri_yscale + ((col >> 3) & ~3));
 	col = col & 31;
@@ -145,9 +132,9 @@ rasops2_putchar(cookie, row, col, uc, attr)
 		fr = 0;		/* shutup gcc */
 		fs = 0;		/* shutup gcc */
 	} else {
-		uc -= ri->ri_font->firstchar;
-		fr = (u_char *)ri->ri_font->data + uc * ri->ri_fontscale;
-		fs = ri->ri_font->stride;
+		uc -= font->firstchar;
+		fr = (u_char *)font->data + uc * ri->ri_fontscale;
+		fs = font->stride;
 	}
 
 	/* Single word, one mask */
@@ -222,11 +209,7 @@ rasops2_putchar(cookie, row, col, uc, attr)
  * Put a single character. This is the generic version.
  */
 static void
-rasops2_putchar(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops2_putchar(void *cookie, int row, int col, u_int uc, long attr)
 {
 
 	/* XXX punt */
@@ -237,9 +220,7 @@ rasops2_putchar(cookie, row, col, uc, attr)
  * Recompute the blitting stamp.
  */
 static void
-rasops2_makestamp(ri, attr)
-	struct rasops_info *ri;
-	long attr;
+rasops2_makestamp(struct rasops_info *ri, long attr)
 {
 	int i, fg, bg;
 
@@ -248,10 +229,24 @@ rasops2_makestamp(ri, attr)
 	stamp_attr = attr;
 
 	for (i = 0; i < 16; i++) {
-		stamp[i] = (i & 1 ? fg : bg);
-		stamp[i] |= (i & 2 ? fg : bg) << 2;
-		stamp[i] |= (i & 4 ? fg : bg) << 4;
-		stamp[i] |= (i & 8 ? fg : bg) << 6;
+#if BYTE_ORDER == BIG_ENDIAN
+#define NEED_LITTLE_ENDIAN_STAMP RI_BSWAP
+#else
+#define NEED_LITTLE_ENDIAN_STAMP 0
+#endif
+		if ((ri->ri_flg & RI_BSWAP) == NEED_LITTLE_ENDIAN_STAMP) {
+			/* littel endian */
+			stamp[i] = (i & 8 ? fg : bg);
+			stamp[i] |= (i & 4 ? fg : bg) << 2;
+			stamp[i] |= (i & 2 ? fg : bg) << 4;
+			stamp[i] |= (i & 1 ? fg : bg) << 6;
+		} else {
+			/* big endian */
+			stamp[i] = (i & 1 ? fg : bg);
+			stamp[i] |= (i & 2 ? fg : bg) << 2;
+			stamp[i] |= (i & 4 ? fg : bg) << 4;
+			stamp[i] |= (i & 8 ? fg : bg) << 6;
+		}
 	}
 }
 
@@ -259,13 +254,10 @@ rasops2_makestamp(ri, attr)
  * Put a single character. This is for 8-pixel wide fonts.
  */
 static void
-rasops2_putchar8(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops2_putchar8(void *cookie, int row, int col, u_int uc, long attr)
 {
-	struct rasops_info *ri;
+	struct rasops_info *ri = (struct rasops_info *)cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	int height, fs, rs;
 	u_char *fr, *rp;
 
@@ -275,8 +267,6 @@ rasops2_putchar8(cookie, row, col, uc, attr)
 		rasops2_putchar(cookie, row, col, uc, attr);
 		return;
 	}
-
-	ri = (struct rasops_info *)cookie;
 
 #ifdef RASOPS_CLIPPING
 	/* Catches 'row < 0' case too */
@@ -292,7 +282,7 @@ rasops2_putchar8(cookie, row, col, uc, attr)
 #endif
 
 	rp = ri->ri_bits + row * ri->ri_yscale + col * ri->ri_xscale;
-	height = ri->ri_font->fontheight;
+	height = font->fontheight;
 	rs = ri->ri_stride;
 
 	/* Recompute stamp? */
@@ -306,9 +296,9 @@ rasops2_putchar8(cookie, row, col, uc, attr)
 			rp += rs;
 		}
 	} else {
-		uc -= ri->ri_font->firstchar;
-		fr = (u_char *)ri->ri_font->data + uc * ri->ri_fontscale;
-		fs = ri->ri_font->stride;
+		uc -= font->firstchar;
+		fr = (u_char *)font->data + uc * ri->ri_fontscale;
+		fs = font->stride;
 
 		while (height--) {
 			rp[0] = stamp[(*fr >> 4) & 0xf];
@@ -329,13 +319,10 @@ rasops2_putchar8(cookie, row, col, uc, attr)
  * Put a single character. This is for 12-pixel wide fonts.
  */
 static void
-rasops2_putchar12(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops2_putchar12(void *cookie, int row, int col, u_int uc, long attr)
 {
-	struct rasops_info *ri;
+	struct rasops_info *ri = (struct rasops_info *)cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	int height, fs, rs;
 	u_char *fr, *rp;
 
@@ -345,8 +332,6 @@ rasops2_putchar12(cookie, row, col, uc, attr)
 		rasops2_putchar(cookie, row, col, uc, attr);
 		return;
 	}
-
-	ri = (struct rasops_info *)cookie;
 
 #ifdef RASOPS_CLIPPING
 	/* Catches 'row < 0' case too */
@@ -362,7 +347,7 @@ rasops2_putchar12(cookie, row, col, uc, attr)
 #endif
 
 	rp = ri->ri_bits + row * ri->ri_yscale + col * ri->ri_xscale;
-	height = ri->ri_font->fontheight;
+	height = font->fontheight;
 	rs = ri->ri_stride;
 
 	/* Recompute stamp? */
@@ -376,9 +361,9 @@ rasops2_putchar12(cookie, row, col, uc, attr)
 			rp += rs;
 		}
 	} else {
-		uc -= ri->ri_font->firstchar;
-		fr = (u_char *)ri->ri_font->data + uc * ri->ri_fontscale;
-		fs = ri->ri_font->stride;
+		uc -= font->firstchar;
+		fr = (u_char *)font->data + uc * ri->ri_fontscale;
+		fs = font->stride;
 
 		while (height--) {
 			rp[0] = stamp[(fr[0] >> 4) & 0xf];
@@ -402,13 +387,10 @@ rasops2_putchar12(cookie, row, col, uc, attr)
  * Put a single character. This is for 16-pixel wide fonts.
  */
 static void
-rasops2_putchar16(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops2_putchar16(void *cookie, int row, int col, u_int uc, long attr)
 {
-	struct rasops_info *ri;
+	struct rasops_info *ri = (struct rasops_info *)cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	int height, fs, rs;
 	u_char *fr, *rp;
 
@@ -418,8 +400,6 @@ rasops2_putchar16(cookie, row, col, uc, attr)
 		rasops2_putchar(cookie, row, col, uc, attr);
 		return;
 	}
-
-	ri = (struct rasops_info *)cookie;
 
 #ifdef RASOPS_CLIPPING
 	/* Catches 'row < 0' case too */
@@ -435,7 +415,7 @@ rasops2_putchar16(cookie, row, col, uc, attr)
 #endif
 
 	rp = ri->ri_bits + row * ri->ri_yscale + col * ri->ri_xscale;
-	height = ri->ri_font->fontheight;
+	height = font->fontheight;
 	rs = ri->ri_stride;
 
 	/* Recompute stamp? */
@@ -449,9 +429,9 @@ rasops2_putchar16(cookie, row, col, uc, attr)
 			rp += rs;
 		}
 	} else {
-		uc -= ri->ri_font->firstchar;
-		fr = (u_char *)ri->ri_font->data + uc * ri->ri_fontscale;
-		fs = ri->ri_font->stride;
+		uc -= font->firstchar;
+		fr = (u_char *)font->data + uc * ri->ri_fontscale;
+		fs = font->stride;
 
 		while (height--) {
 			rp[0] = stamp[(fr[0] >> 4) & 0xf];

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.22 2007/11/06 19:27:07 martin Exp $
+# $NetBSD: Makefile.inc,v 1.27 2017/06/18 03:56:39 manu Exp $
 #
 # Include this fragment to build libhack.o
 # It is .o and not .a to make sure these are the
@@ -17,18 +17,25 @@
 #			
 
 CPPFLAGS+=	-DSMALL
+CPPFLAGS+=	-DLIBHACK
 HACKOBJS+=	getcap.o getgrent.o getnet.o getnetgr.o getpwent.o \
 		localeconv.o multibyte.o perror.o runetable.o setlocale.o \
 		strerror.o strsignal.o syslog.o utmp.o yplib.o
 
-CPPFLAGS.runetable.c+=	-I ${HACKSRC}/../../../lib/libc -DALL_80_TO_FF_SW1
+CPPFLAGS.runetable.c+= -I${HACKSRC}/../../../lib/libc/citrus \
+			-DALL_80_TO_FF_SW1
+
+CPPFLAGS.syslog.c+= -I${HACKSRC}/../../../lib/libc/include
+CPPFLAGS.gethost.c+= -I${HACKSRC}/../../../lib/libc/net
 
 libhack.o: ${HACKOBJS}
-	${LD} -r -o $@ ${HACKOBJS}
+	${LD} -r -o $@ ${.ALLSRC}
 
 
+.if 1
+.PATH.c: ${HACKSRC} ${HACKSRC}/../../../lib/libc/gen ${HACKSRC}/../../../lib/libc/locale
+.else
 # XXX .PATH won't work here, because of crunchgen used by various builds
-
 getcap.o:	${HACKSRC}/../../../lib/libc/gen/getcap.c
 getgrent.o:	${HACKSRC}/getgrent.c
 gethost.o:	${HACKSRC}/gethost.c
@@ -45,3 +52,4 @@ strsignal.o:	${HACKSRC}/strsignal.c
 syslog.o:	${HACKSRC}/syslog.c
 utmp.o:		${HACKSRC}/utmp.c
 yplib.o:	${HACKSRC}/yplib.c
+.endif

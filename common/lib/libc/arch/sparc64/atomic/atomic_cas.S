@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_cas.S,v 1.4 2008/02/10 13:40:31 ad Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.7 2015/10/18 02:28:07 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_cas_32)
+ENTRY(_atomic_cas_32)
 	cas	[%o0], %o1, %o2
 	retl
 	 mov	%o2, %o0
@@ -54,10 +47,18 @@ STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_uint_ni,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_32)
 
-ENTRY_NOPROFILE(_atomic_cas_64)
+ENTRY(_atomic_cas_64)
+#ifndef __arch64__
+	COMBINE(%o1, %o2, %o1)
+	COMBINE(%o3, %o4, %o2)
+#endif
 	casx	[%o0], %o1, %o2
+#ifdef __arch64__
 	retl
 	 mov	%o2, %o0
+#else
+	SPLIT_RETL(%o2, %o0, %o1)
+#endif
 
 ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
 ATOMIC_OP_ALIAS_SIZE(atomic_cas_ulong,_atomic_cas)
@@ -71,3 +72,7 @@ ATOMIC_OP_ALIAS_SIZE(atomic_cas_ulong_ni,_atomic_cas)
 STRONG_ALIAS_SIZE(_atomic_cas_ulong_ni,_atomic_cas)
 ATOMIC_OP_ALIAS_SIZE(atomic_cas_ptr_ni,_atomic_cas)
 STRONG_ALIAS_SIZE(_atomic_cas_ptr_ni,_atomic_cas)
+
+#if !defined(__arch64__) && defined(CRT_ALIAS)
+CRT_ALIAS(__sync_val_compare_and_swap_8,_atomic_cas_64)
+#endif

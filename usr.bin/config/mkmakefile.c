@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmakefile.c,v 1.6 2007/01/13 23:47:36 christos Exp $	*/
+/*	$NetBSD: mkmakefile.c,v 1.70 2017/06/16 02:01:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,6 +44,9 @@
 #include "nbtool_config.h"
 #endif
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mkmakefile.c,v 1.70 2017/06/16 02:01:10 christos Exp $");
+
 #include <sys/param.h>
 #include <ctype.h>
 #include <errno.h>
@@ -51,6 +54,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
+#include <util.h>
 #include "defs.h"
 #include "sem.h"
 
@@ -58,22 +62,26 @@
  * Make the Makefile.
  */
 
-static const char *srcpath(struct files *); 
-
-static const char *prefix_prologue(const char *);
-static const char *filetype_prologue(struct filetype *);
-
-
 static void emitdefs(FILE *);
-static void emitfiles(FILE *, int, int);
+static void emitallfiles(FILE *);
 
-static void emitobjs(FILE *);
+static void emitofiles(FILE *);
+static void emitallkobjs(FILE *);
+static int emitallkobjscb(const char *, void *, void *);
+static void emitattrkobjs(FILE *);
+static int emitattrkobjscb(const char *, void *, void *);
+static void emitkobjs(FILE *);
 static void emitcfiles(FILE *);
 static void emitsfiles(FILE *);
 static void emitrules(FILE *);
 static void emitload(FILE *);
 static void emitincludes(FILE *);
 static void emitappmkoptions(FILE *);
+static void emitmkoption(FILE *, const char *, const struct nvlist *);
+static void emitsubs(FILE *, const char *, const char *, int);
+static int  selectopt(const char *, void *);
+
+int has_build_kernel;
 
 int
 mkmakefile(void)
@@ -81,21 +89,41 @@ mkmakefile(void)
 	FILE *ifp, *ofp;
 	int lineno;
 	void (*fn)(FILE *);
-	char *ifname;
-	char line[BUFSIZ], buf[200];
+	char line[BUFSIZ], ifname[200];
 
-	/* Try a makefile for the port first.
+	/*
+	 * Check if conf/Makefile.kern.inc defines "build_kernel".
+	 *
+	 * (This is usually done by checking "version" in sys/conf/files;
+	 * unfortunately the "build_kernel" change done around 2014 Aug didn't
+	 * bump that version.  Thus this hack.)
 	 */
-	(void)snprintf(buf, sizeof(buf), "arch/%s/conf/Makefile.%s",
-	    machine, machine);
-	ifname = sourcepath(buf);
+	(void)snprintf(ifname, sizeof(ifname), "%s/conf/Makefile.kern.inc",
+	    srcdir);
 	if ((ifp = fopen(ifname, "r")) == NULL) {
-		/* Try a makefile for the architecture second.
+		warn("cannot read %s", ifname);
+		goto bad2;
+	}
+	while (fgets(line, sizeof(line), ifp) != NULL) {
+		if (strncmp(line, "build_kernel:", 13) == 0) {
+			has_build_kernel = 1;
+			break;
+		}
+	}
+	(void)fclose(ifp);
+
+	/*
+	 * Try a makefile for the port first.
+	 */
+	(void)snprintf(ifname, sizeof(ifname), "%s/arch/%s/conf/Makefile.%s",
+	    srcdir, machine, machine);
+	if ((ifp = fopen(ifname, "r")) == NULL) {
+		/*
+		 * Try a makefile for the architecture second.
 		 */
-		(void)snprintf(buf, sizeof(buf), "arch/%s/conf/Makefile.%s",
-		    machinearch, machinearch);
-		free(ifname);
-		ifname = sourcepath(buf);
+		(void)snprintf(ifname, sizeof(ifname),
+		    "%s/arch/%s/conf/Makefile.%s",
+		    srcdir, machinearch, machinearch);
 		ifp = fopen(ifname, "r");
 	}
 	if (ifp == NULL) {
@@ -113,12 +141,12 @@ mkmakefile(void)
 	lineno = 0;
 	while (fgets(line, sizeof(line), ifp) != NULL) {
 		lineno++;
-		if (line[0] != '%') {
+		if ((version < 20090214 && line[0] != '%') || line[0] == '#') {
 			fputs(line, ofp);
 			continue;
 		}
 		if (strcmp(line, "%OBJS\n") == 0)
-			fn = emitobjs;
+			fn = Mflag ? emitkobjs : emitofiles;
 		else if (strcmp(line, "%CFILES\n") == 0)
 			fn = emitcfiles;
 		else if (strcmp(line, "%SFILES\n") == 0)
@@ -131,9 +159,20 @@ mkmakefile(void)
 			fn = emitincludes;
 		else if (strcmp(line, "%MAKEOPTIONSAPPEND\n") == 0)
 			fn = emitappmkoptions;
-		else {
-			cfgxerror(ifname, lineno,
-			    "unknown %% construct ignored: %s", line);
+		else if (strncmp(line, "%VERSION ", sizeof("%VERSION ")-1) == 0) {
+			int newvers;
+			if (sscanf(line, "%%VERSION %d\n", &newvers) != 1) {
+				cfgxerror(ifname, lineno, "syntax error for "
+				    "%%VERSION");
+			} else
+				setversion(newvers);
+			continue;
+		} else {
+			if (version < 20090214)
+				cfgxerror(ifname, lineno,
+				    "unknown %% construct ignored: %s", line);
+			else
+				emitsubs(ofp, line, ifname, lineno);
 			continue;
 		}
 		(*fn)(ofp);
@@ -158,7 +197,6 @@ mkmakefile(void)
 		warn("error renaming Makefile");
 		goto bad2;
 	}
-	free(ifname);
 	return (0);
 
  wrerror:
@@ -170,232 +208,297 @@ mkmakefile(void)
 	(void)fclose(ifp);
 	/* (void)unlink("Makefile.tmp"); */
  bad2:
-	free(ifname);
 	return (1);
 }
 
-/*
- * Return (possibly in a static buffer) the name of the `source' for a
- * file.  If we have `options source', or if the file is marked `always
- * source', this is always the path from the `file' line; otherwise we
- * get the .o from the obj-directory.
- */
-static const char *
-srcpath(struct files *fi)
+static void
+emitmkoption(FILE *fp, const char *ass, const struct nvlist *nv)
 {
-#if 1
-	/* Always have source, don't support object dirs for kernel builds. */
-	return (fi->fi_path);
-#else
-	static char buf[MAXPATHLEN];
+	const char *p;
 
-	if (have_source || (fi->fi_flags & FI_ALWAYSSRC) != 0)
-		return (fi->fi_path);
-	if (objpath == NULL) {
-		cfgerror("obj-directory not set");
-		return (NULL);
+	fprintf(fp, "%s%s", nv->nv_name, ass);
+	for (p = nv->nv_str; *p; p++) {
+		if (*p == '\n')
+			fputs(" \\", fp);
+		fputc(*p, fp);
 	}
-	(void)snprintf(buf, sizeof buf, "%s/%s.o", objpath, fi->fi_base);
-	return (buf);
-#endif
+	fputc('\n', fp);
 }
 
-static const char *
-filetype_prologue(struct filetype *fit)
+static void
+emitsubs(FILE *fp, const char *line, const char *file, int lineno)
 {
-	if (fit->fit_flags & FIT_NOPROLOGUE || *fit->fit_path == '/')
-		return ("");
-	else
-		return ("$S/");
-}
+	char *nextpct;
+	const char *optname;
+	struct nvlist *option;
 
-static const char *
-prefix_prologue(const char *path)
-{
-	if (*path == '/')
-		return ("");
-	else
-		return ("$S/");
+	while (*line != '\0') {
+		if (*line != '%') {
+			fputc(*line++, fp);
+			continue;
+		}
+
+		line++;
+		nextpct = strchr(line, '%');
+		if (nextpct == NULL) {
+			cfgxerror(file, lineno, "unbalanced %% or "
+			    "unknown construct");
+			return;
+		}
+		*nextpct = '\0';
+
+		if (*line == '\0')
+			fputc('%', fp);
+		else {
+			optname = intern(line);
+			if (!DEFINED_OPTION(optname)) {
+				cfgxerror(file, lineno, "unknown option %s",
+				    optname);
+				return;
+			}
+
+			if ((option = ht_lookup(opttab, optname)) == NULL)
+				option = ht_lookup(fsopttab, optname);
+			if (option != NULL)
+				fputs(option->nv_str ? option->nv_str : "1",
+				    fp);
+			/*
+			 * Otherwise it's not a selected option and we don't
+			 * output anything.
+			 */
+		}
+
+		line = nextpct + 1;
+	}
 }
 
 static void
 emitdefs(FILE *fp)
 {
 	struct nvlist *nv;
-	char *sp;
 
 	fprintf(fp, "KERNEL_BUILD=%s\n", conffile);
-	fputs("IDENT=", fp);
-	sp = "";
+	fputs("IDENT= \\\n", fp);
 	for (nv = options; nv != NULL; nv = nv->nv_next) {
 
-		/* skip any options output to a header file */
+		/* Skip any options output to a header file */
 		if (DEFINED_OPTION(nv->nv_name))
 			continue;
-		fprintf(fp, "%s-D%s", sp, nv->nv_name);
-		if (nv->nv_str)
-		    fprintf(fp, "=\"%s\"", nv->nv_str);
-		sp = " ";
+		const char *s = nv->nv_str;
+		fprintf(fp, "\t-D%s%s%s%s \\\n", nv->nv_name,
+		    s ? "=\"" : "",
+		    s ? s : "",
+		    s ? "\"" : "");
 	}
 	putc('\n', fp);
-	fprintf(fp, "PARAM=-DMAXUSERS=%d\n", maxusers);
 	fprintf(fp, "MACHINE=%s\n", machine);
-	if (*srcdir == '/' || *srcdir == '.') {
-		fprintf(fp, "S=\t%s\n", srcdir);
-	} else {
+
+	const char *subdir = "";
+	if (*srcdir != '/' && *srcdir != '.') {
 		/*
 		 * libkern and libcompat "Makefile.inc"s want relative S
 		 * specification to begin with '.'.
 		 */
-		fprintf(fp, "S=\t./%s\n", srcdir);
+		subdir = "./";
+	}
+	fprintf(fp, "S=\t%s%s\n", subdir, srcdir);
+	if (Sflag) {
+		fprintf(fp, ".PATH: $S\n");
+		fprintf(fp, "___USE_SUFFIX_RULES___=1\n");
 	}
 	for (nv = mkoptions; nv != NULL; nv = nv->nv_next)
-		fprintf(fp, "%s=%s\n", nv->nv_name, nv->nv_str);
+		emitmkoption(fp, "=", nv);
 }
 
 static void
-emitobjs(FILE *fp)
+emitfile(FILE *fp, struct files *fi)
 {
-	struct files *fi;
-	struct objects *oi;
-	int lpos, len, sp;
+	const char *defprologue = "$S/";
+	const char *prologue, *prefix, *sep;
 
-	fputs("OBJS=", fp);
-	sp = '\t';
-	lpos = 7;
-	TAILQ_FOREACH(fi, &allfiles, fi_next) {
-		if ((fi->fi_flags & FI_SEL) == 0)
-			continue;
-		len = strlen(fi->fi_base) + 2;
-		if (lpos + len > 72) {
-			fputs(" \\\n", fp);
-			sp = '\t';
-			lpos = 7;
+	if (Sflag)
+		defprologue = "";
+	prologue = prefix = sep = "";
+	if (*fi->fi_path != '/') {
+		prologue = defprologue;
+		if (fi->fi_prefix != NULL) {
+			if (*fi->fi_prefix == '/')
+				prologue = "";
+			prefix = fi->fi_prefix;
+			sep = "/";
 		}
-		fprintf(fp, "%c%s.o", sp, fi->fi_base);
-		lpos += len + 1;
-		sp = ' ';
 	}
-	TAILQ_FOREACH(oi, &allobjects, oi_next) {
-		if ((oi->oi_flags & OI_SEL) == 0)
-			continue;
-		len = strlen(oi->oi_path);
-		if (*oi->oi_path != '/')
-		{
-			/* e.g. "$S/" */
- 			if (oi->oi_prefix != NULL)
-				len += strlen(prefix_prologue(oi->oi_path)) +
-				       strlen(oi->oi_prefix) + 1;
-			else
-				len += strlen(filetype_prologue(&oi->oi_fit));
+	fprintf(fp, "%s%s%s%s", prologue, prefix, sep, fi->fi_path);
+}
+
+static void
+emitfilerel(FILE *fp, struct files *fi)
+{
+	const char *prefix, *sep;
+
+	prefix = sep = "";
+	if (*fi->fi_path != '/') {
+		if (fi->fi_prefix != NULL) {
+			prefix = fi->fi_prefix;
+			sep = "/";
 		}
-		if (lpos + len > 72) {
-			fputs(" \\\n", fp);
-			sp = '\t';
-			lpos = 7;
-		}
-		if (*oi->oi_path == '/') {
-			fprintf(fp, "%c%s", sp, oi->oi_path);
-		} else {
-			if (oi->oi_prefix != NULL) {
-				fprintf(fp, "%c%s%s/%s", sp,
-					    prefix_prologue(oi->oi_path),
-					    oi->oi_prefix, oi->oi_path);
-			} else {
-				fprintf(fp, "%c%s%s", sp,
-				            filetype_prologue(&oi->oi_fit),
-				            oi->oi_path);
-			}
-		}
-		lpos += len + 1;
-		sp = ' ';
 	}
+	fprintf(fp, "%s%s%s", prefix, sep, fi->fi_path);
+}
+
+static void
+emitofiles(FILE *fp)
+{
+
+	emitallfiles(fp);
+	fprintf(fp, "#%%OFILES\n");
+}
+
+static void
+emitkobjs(FILE *fp)
+{
+	emitallkobjs(fp);
+	emitattrkobjs(fp);
+}
+
+static int emitallkobjsweighcb(const char *name, void *v, void *arg);
+static void weighattr(struct attr *a);
+static int attrcmp(const void *l, const void *r);
+
+struct attr **attrbuf;
+size_t attridx;
+
+static void
+emitallkobjs(FILE *fp)
+{
+	size_t i;
+
+	attrbuf = emalloc(nattrs * sizeof(*attrbuf));
+
+	ht_enumerate(attrtab, emitallkobjsweighcb, NULL);
+	ht_enumerate(attrtab, emitallkobjscb, NULL);
+	qsort(attrbuf, attridx, sizeof(struct attr *), attrcmp);
+
+	fputs("OBJS= \\\n", fp);
+	for (i = 0; i < attridx; i++)
+		fprintf(fp, "\t%s.ko \\\n", attrbuf[i]->a_name);
 	putc('\n', fp);
+
+	free(attrbuf);
+}
+
+static int
+emitallkobjscb(const char *name, void *v, void *arg)
+{
+	struct attr *a = v;
+
+	if (ht_lookup(selecttab, name) == NULL)
+		return 0;
+	if (TAILQ_EMPTY(&a->a_files))
+		return 0;
+	attrbuf[attridx++] = a;
+	/* XXX nattrs tracking is not exact yet */
+	if (attridx == nattrs) {
+		nattrs *= 2;
+		attrbuf = erealloc(attrbuf, nattrs * sizeof(*attrbuf));
+	}
+	return 0;
+}
+
+static int
+emitallkobjsweighcb(const char *name, void *v, void *arg)
+{
+	struct attr *a = v;
+
+	weighattr(a);
+	return 0;
+}
+
+static void
+weighattr(struct attr *a)
+{
+	struct attrlist *al;
+
+	for (al = a->a_deps; al != NULL; al = al->al_next) {
+		weighattr(al->al_this);
+	}
+	a->a_weight++;
+}
+
+static int
+attrcmp(const void *l, const void *r)
+{
+	const struct attr * const *a = l, * const *b = r;
+	const int wa = (*a)->a_weight, wb = (*b)->a_weight;
+	return (wa > wb) ? -1 : (wa < wb) ? 1 : 0;
+}
+
+static void
+emitattrkobjs(FILE *fp)
+{
+	extern struct	hashtab *attrtab;
+
+	ht_enumerate(attrtab, emitattrkobjscb, fp);
+}
+
+static int
+emitattrkobjscb(const char *name, void *v, void *arg)
+{
+	struct attr *a = v;
+	struct files *fi;
+	FILE *fp = arg;
+
+	if (ht_lookup(selecttab, name) == NULL)
+		return 0;
+	if (TAILQ_EMPTY(&a->a_files))
+		return 0;
+	fputc('\n', fp);
+	fprintf(fp, "# %s (%d)\n", name, a->a_weight);
+	fprintf(fp, "OBJS.%s= \\\n", name);
+	TAILQ_FOREACH(fi, &a->a_files, fi_anext) {
+		fprintf(fp, "\t%s.o \\\n", fi->fi_base);
+	}
+	fputc('\n', fp);
+	fprintf(fp, "%s.ko: ${OBJS.%s}\n", name, name);
+	fprintf(fp, "\t${LINK_O}\n");
+	return 0;
 }
 
 static void
 emitcfiles(FILE *fp)
 {
 
-	emitfiles(fp, 'c', 0);
+	emitallfiles(fp);
+	fprintf(fp, "#%%CFILES\n");
 }
 
 static void
 emitsfiles(FILE *fp)
 {
 
-	emitfiles(fp, 's', 'S');
+	emitallfiles(fp);
+	fprintf(fp, "#%%SFILES\n");
 }
 
 static void
-emitfiles(FILE *fp, int suffix, int upper_suffix)
+emitallfiles(FILE *fp)
 {
 	struct files *fi;
-	int lpos, len, sp;
-	const char *fpath;
- 	struct config *cf;
- 	char swapname[100];
+	static int called;
+	int i;
+	int found = 0;
 
-	fprintf(fp, "%cFILES=", toupper(suffix));
-	sp = '\t';
-	lpos = 7;
-	TAILQ_FOREACH(fi, &allfiles, fi_next) {
-		if ((fi->fi_flags & FI_SEL) == 0)
-			continue;
-		fpath = srcpath(fi);
-		len = strlen(fpath);
-		if (fpath[len - 1] != suffix && fpath[len - 1] != upper_suffix)
-			continue;
-		if (*fpath != '/') {
-			/* "$S/" */
- 			if (fi->fi_prefix != NULL)
-				len += strlen(prefix_prologue(fi->fi_prefix)) +
-				       strlen(fi->fi_prefix) + 1;
-			else
-				len += strlen(filetype_prologue(&fi->fi_fit));
-		}
-		if (lpos + len > 72) {
-			fputs(" \\\n", fp);
-			sp = '\t';
-			lpos = 7;
-		}
-		if (*fi->fi_path == '/') {
-			fprintf(fp, "%c%s", sp, fpath);
-		} else {
-			if (fi->fi_prefix != NULL) {
-				fprintf(fp, "%c%s%s/%s", sp,
-					    prefix_prologue(fi->fi_prefix),
-					    fi->fi_prefix, fpath);
-			} else {
-				fprintf(fp, "%c%s%s", sp,
-				            filetype_prologue(&fi->fi_fit),
-				            fpath);
-			}
-		}
-		lpos += len + 1;
-		sp = ' ';
+	if (called++ != 0)
+		return;
+	for (i = 0; i < (int)nselfiles; i++) {
+		fi = selfiles[i];
+		if (found++ == 0)
+			fprintf(fp, "ALLFILES= \\\n");
+		putc('\t', fp);
+		emitfilerel(fp, fi);
+		fputs(" \\\n", fp);
 	}
- 	/*
- 	 * The allfiles list does not include the configuration-specific
- 	 * C source files.  These files should be eliminated someday, but
- 	 * for now, we have to add them to ${CFILES} (and only ${CFILES}).
- 	 */
- 	if (suffix == 'c') {
- 		TAILQ_FOREACH(cf, &allcf, cf_next) {
- 			(void)snprintf(swapname, sizeof(swapname), "swap%s.c",
- 			    cf->cf_name);
- 			len = strlen(swapname);
- 			if (lpos + len > 72) {
- 				fputs(" \\\n", fp);
- 				sp = '\t';
- 				lpos = 7;
- 			}
- 			fprintf(fp, "%c%s", sp, swapname);
- 			lpos += len + 1;
- 			sp = ' ';
- 		}
- 	}
-	putc('\n', fp);
+	fputc('\n', fp);
 }
 
 /*
@@ -405,38 +508,21 @@ static void
 emitrules(FILE *fp)
 {
 	struct files *fi;
-	const char *cp, *fpath;
-	int ch;
-	char buf[200];
+	int i;
+	int found = 0;
 
-	TAILQ_FOREACH(fi, &allfiles, fi_next) {
-		if ((fi->fi_flags & FI_SEL) == 0)
+	for (i = 0; i < (int)nselfiles; i++) {
+		fi = selfiles[i];
+		if (fi->fi_mkrule == NULL)
 			continue;
-		fpath = srcpath(fi);
-		if (*fpath == '/') {
-			fprintf(fp, "%s.o: %s\n", fi->fi_base, fpath);
-		} else {
-			if (fi->fi_prefix != NULL) {
-				fprintf(fp, "%s.o: %s%s/%s\n", fi->fi_base,
-					    prefix_prologue(fi->fi_prefix),
-					    fi->fi_prefix, fpath);
-			} else {
-				fprintf(fp, "%s.o: %s%s\n",
-				            fi->fi_base,
-				            filetype_prologue(&fi->fi_fit),
-				            fpath);
-			}
-		}
-		if ((cp = fi->fi_mkrule) == NULL) {
-			cp = "NORMAL";
-			ch = fpath[strlen(fpath) - 1];
-			if (islower(ch))
-				ch = toupper(ch);
-			(void)snprintf(buf, sizeof(buf), "${%s_%c}", cp, ch);
-			cp = buf;
-		}
-		fprintf(fp, "\t%s\n\n", cp);
+		fprintf(fp, "%s.o: ", fi->fi_base);
+		emitfile(fp, fi);
+		putc('\n', fp);
+		fprintf(fp, "\t%s\n\n", fi->fi_mkrule);
+		found++;
 	}
+	if (found == 0)
+		fprintf(fp, "#%%RULES\n");
 }
 
 /*
@@ -448,27 +534,37 @@ static void
 emitload(FILE *fp)
 {
 	struct config *cf;
-	const char *nm, *swname;
+	int found = 0;
 
-	fputs(".MAIN: all\nall:", fp);
-	TAILQ_FOREACH(cf, &allcf, cf_next) {
-		fprintf(fp, " %s", cf->cf_name);
+	/*
+	 * Generate the backward-compatible "build_kernel" rule if
+	 * sys/conf/Makefile.kern.inc doesn't define any (pre-2014 Aug).
+	 */
+	if (has_build_kernel == 0) {
+		fprintf(fp, "build_kernel: .USE\n"
+		    "\t${SYSTEM_LD_HEAD}\n"
+		    "\t${SYSTEM_LD}%s\n"
+		    "\t${SYSTEM_LD_TAIL}\n"
+		    "\n",
+		    Sflag ? "" : " swap${.TARGET}.o");
 	}
-	fputs("\n\n", fp);
+	/*
+	 * Generate per-kernel rules.
+	 */
 	TAILQ_FOREACH(cf, &allcf, cf_next) {
-		nm = cf->cf_name;
-		swname =
-		    cf->cf_root != NULL ? cf->cf_name : "generic";
-		fprintf(fp, "KERNELS+=%s\n", nm);
-		fprintf(fp, "%s: ${SYSTEM_DEP} swap${.TARGET}.o vers.o", nm);
-		fprintf(fp, "\n"
-			    "\t${SYSTEM_LD_HEAD}\n"
-			    "\t${SYSTEM_LD} swap${.TARGET}.o\n"
-			    "\t${SYSTEM_LD_TAIL}\n"
-			    "\n"
-			    "swap%s.o: swap%s.c\n"
-			    "\t${NORMAL_C}\n\n", swname, swname);
+		char swapobj[100];
+
+		if (Sflag) {
+			swapobj[0] = '\0';
+		} else {
+			(void)snprintf(swapobj, sizeof(swapobj), " swap%s.o",
+	 		    cf->cf_name);
+		}
+		fprintf(fp, "KERNELS+=%s\n", cf->cf_name);
+		found = 1;
 	}
+	if (found == 0)
+		fprintf(fp, "#%%LOAD\n");
 }
 
 /*
@@ -480,24 +576,11 @@ emitincludes(FILE *fp)
 	struct prefix *pf;
 
 	SLIST_FOREACH(pf, &allprefixes, pf_next) {
+		const char *prologue = (*pf->pf_prefix == '/') ? "" : "$S/";
+
 		fprintf(fp, "EXTRA_INCLUDES+=\t-I%s%s\n",
-		    prefix_prologue(pf->pf_prefix), pf->pf_prefix);
+		    prologue, pf->pf_prefix);
 	}
-}
-
-static int
-print_condmkopts(const char *name, void *value, void *arg)
-{
-	struct nvlist *nv;
-	FILE *fp = arg;
-
-	if (ht_lookup(selecttab, name) == 0)
-		return (0);
-
-	for (nv = value; nv != NULL; nv = nv->nv_next)
-		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
-
-	return (0);
 }
 
 /*
@@ -507,9 +590,24 @@ static void
 emitappmkoptions(FILE *fp)
 {
 	struct nvlist *nv;
+	struct condexpr *cond;
 
 	for (nv = appmkoptions; nv != NULL; nv = nv->nv_next)
 		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
 
-	ht_enumerate(condmkopttab, print_condmkopts, fp);
+	for (nv = condmkoptions; nv != NULL; nv = nv->nv_next) {
+		cond = nv->nv_ptr;
+		if (expr_eval(cond, selectopt, NULL))
+			emitmkoption(fp, "+=", nv);
+		condexpr_destroy(cond);
+		nv->nv_ptr = NULL;
+	}
+}
+
+static int
+/*ARGSUSED*/
+selectopt(const char *name, void *context)
+{
+
+	return (ht_lookup(selecttab, strtolower(name)) != NULL);
 }

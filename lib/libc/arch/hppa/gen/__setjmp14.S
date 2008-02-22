@@ -1,4 +1,4 @@
-/*	$NetBSD: __setjmp14.S,v 1.4 2004/07/18 22:38:33 chs Exp $	*/
+/*	$NetBSD: __setjmp14.S,v 1.6 2016/07/16 09:51:13 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 #include <machine/psl.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: __setjmp14.S,v 1.4 2004/07/18 22:38:33 chs Exp $")
+	RCSID("$NetBSD: __setjmp14.S,v 1.6 2016/07/16 09:51:13 skrll Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -73,7 +66,6 @@ ENTRY(__setjmp14,0)
 	stw	%r1, 28(%arg0)		; sc.sc_pcsqh = %sr0
 	ldo	4(%rp), %r1
 	stw	%r1, 32(%arg0)		; sc.sc_pcoqt = %rp + 4
-#define PSW_MBS (PSW_C|PSW_Q|PSW_P|PSW_D|PSW_I)
 	ldil	L%PSW_MBS, %r1
 	ldo	R%PSW_MBS(%r1), %r1
 	stw	%r1, 36(%arg0)		; set sc.sc_ps

@@ -1,4 +1,4 @@
-/*	$NetBSD: creds.c,v 1.14 2007/12/08 19:57:02 pooka Exp $	*/
+/*	$NetBSD: creds.c,v 1.16 2012/03/15 12:49:36 njoly Exp $	*/
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: creds.c,v 1.14 2007/12/08 19:57:02 pooka Exp $");
+__RCSID("$NetBSD: creds.c,v 1.16 2012/03/15 12:49:36 njoly Exp $");
 #endif /* !lint */
 
 /*
@@ -85,10 +85,11 @@ puffs_cred_getgroups(const struct puffs_cred *pcr, gid_t *rgids, short *ngids)
 
 	if (!UUCCRED(pkcr)) {
 		errno = EOPNOTSUPP;
+		*ngids = 0;
 		return -1;
 	}
 
-	ncopy = MIN(*ngids, NGROUPS);
+	ncopy = MIN(*ngids, pkcr->pkcr_uuc.cr_ngroups);
 	(void)memcpy(rgids, pkcr->pkcr_uuc.cr_groups, sizeof(gid_t) * ncopy);
 	*ngids = (short)ncopy;
 
@@ -249,10 +250,11 @@ puffs_access_times(uid_t uid, gid_t gid, mode_t mode, int va_utimes_null,
 	const struct puffs_cred *pcr)
 {
 
-	if (!puffs_cred_isuid(pcr, uid) && !puffs_cred_isjuggernaut(pcr)
-	    && (va_utimes_null == 0
-	      || puffs_access(VNON, mode, uid, gid, PUFFS_VWRITE, pcr) != 0))
+	if (puffs_cred_isuid(pcr, uid) || puffs_cred_isjuggernaut(pcr))
+		return 0;
+
+	if (va_utimes_null == 0)
 		return EPERM;
 
-	return 0;
+	return puffs_access(VNON, mode, uid, gid, PUFFS_VWRITE, pcr);
 }

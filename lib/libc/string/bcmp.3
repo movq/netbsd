@@ -28,9 +28,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)bcmp.3	8.1 (Berkeley) 6/4/93
-.\"	$NetBSD: bcmp.3,v 1.12 2003/08/07 16:43:46 agc Exp $
+.\"	$NetBSD: bcmp.3,v 1.14 2012/05/05 21:24:19 dholland Exp $
 .\"
-.Dd June 4, 1993
+.Dd May 5, 2012
 .Dt BCMP 3
 .Os
 .Sh NAME
@@ -57,12 +57,32 @@ bytes long.
 Zero-length strings are always identical.
 .Pp
 The strings may overlap.
+.Pp
+This function is obsolete.
+The equivalent function
+.Xr memcmp 3
+should be used instead.
 .Sh SEE ALSO
 .Xr memcmp 3 ,
 .Xr strcasecmp 3 ,
 .Xr strcmp 3 ,
 .Xr strcoll 3 ,
 .Xr strxfrm 3
+.Sh STANDARDS
+The
+.Fn bcmp
+function conforms to
+.St -p1003.1-2001 .
+The
+.St -p1003.1-2004
+revision marked it as legacy and recommended the use of
+.Xr memcmp 3
+instead.
+The
+.St -p1003.1-2008
+revision removed
+.Fn bcmp
+from the specification.
 .Sh HISTORY
 A
 .Fn bcmp

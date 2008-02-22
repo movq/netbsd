@@ -1,4 +1,4 @@
-/* $NetBSD: crunchide.c,v 1.12 2004/08/24 12:25:26 wiz Exp $ */
+/* $NetBSD: crunchide.c,v 1.14 2011/08/30 23:15:14 joerg Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 /*
- * crunchide.c - tiptoes through an a.out symbol table, hiding all defined
+ * crunchide.c - tiptoes through a symbol table, hiding all defined
  *	global symbols.  Allows the user to supply a "keep list" of symbols
  *	that are not to be hidden.  This program relies on the use of the
  * 	linker's -dc flag to actually put global bss data into the file's
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: crunchide.c,v 1.12 2004/08/24 12:25:26 wiz Exp $");
+__RCSID("$NetBSD: crunchide.c,v 1.14 2011/08/30 23:15:14 joerg Exp $");
 #endif
 
 #include <unistd.h>
@@ -72,20 +72,19 @@ __RCSID("$NetBSD: crunchide.c,v 1.12 2004/08/24 12:25:26 wiz Exp $");
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <a.out.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include "extern.h"
 
-void usage(void);
+__dead static void usage(void);
 
-void add_to_keep_list(char *symbol);
-void add_file_to_keep_list(char *filename);
+static void add_to_keep_list(char *symbol);
+static void add_file_to_keep_list(char *filename);
 
-int hide_syms(const char *filename);
+static int hide_syms(const char *filename);
 
-int verbose;
+static int verbose;
 
 int
 main(int argc, char *argv[])
@@ -125,7 +124,7 @@ main(int argc, char *argv[])
 	return errors;
 }
 
-void
+static void
 usage(void)
 {
 	fprintf(stderr,
@@ -137,12 +136,12 @@ usage(void)
 
 /* ---------------------------- */
 
-struct keep {
+static struct keep {
 	struct keep *next;
 	char *sym;
 } *keep_list;
 
-void
+static void
 add_to_keep_list(char *symbol)
 {
 	struct keep *newp, *prevp, *curp;
@@ -187,7 +186,7 @@ in_keep_list(const char *symbol)
 	return curp && cmp == 0;
 }
 
-void
+static void
 add_file_to_keep_list(char *filename)
 {
 	FILE *keepf;
@@ -211,7 +210,7 @@ add_file_to_keep_list(char *filename)
 
 /* ---------------------------- */
 
-struct {
+static struct {
 	const char *name;
 	int	(*check)(int, const char *);	/* 1 if match, zero if not */
 	int	(*hide)(int, const char *);	/* non-zero if error */
@@ -233,7 +232,7 @@ struct {
 #endif
 };
 
-int
+static int
 hide_syms(const char *filename)
 {
 	int fd, i, n, rv;

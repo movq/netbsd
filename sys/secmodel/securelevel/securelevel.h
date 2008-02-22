@@ -1,4 +1,4 @@
-/* $NetBSD: securelevel.h,v 1.1 2007/11/21 22:49:09 elad Exp $ */
+/* $NetBSD: securelevel.h,v 1.4 2011/12/04 19:25:00 jym Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -29,15 +29,16 @@
 #ifndef _SECMODEL_SECURELEVEL_SECURELEVEL_H_
 #define	_SECMODEL_SECURELEVEL_SECURELEVEL_H_
 
+#define SECMODEL_SECURELEVEL_ID   "org.netbsd.secmodel.securelevel"
+#define SECMODEL_SECURELEVEL_NAME "Traditional NetBSD: Securelevel"
+
 int secmodel_securelevel_sysctl(SYSCTLFN_PROTO);
 
 void secmodel_securelevel_init(void);
 void secmodel_securelevel_start(void);
-
-#if defined(_LKM)
 void secmodel_securelevel_stop(void);
-SYSCTL_SETUP_PROTO(sysctl_security_securelevel_setup);
-#endif /* _LKM */
+
+void sysctl_security_securelevel_setup(struct sysctllog **);
 
 int secmodel_securelevel_system_cb(kauth_cred_t, kauth_action_t, void *,
     void *, void *, void *, void *);
@@ -48,6 +49,8 @@ int secmodel_securelevel_network_cb(kauth_cred_t, kauth_action_t, void *,
 int secmodel_securelevel_machdep_cb(kauth_cred_t, kauth_action_t, void *,
     void *, void *, void *, void *);
 int secmodel_securelevel_device_cb(kauth_cred_t, kauth_action_t, void *,
+    void *, void *, void *, void *);
+int secmodel_securelevel_vnode_cb(kauth_cred_t, kauth_action_t, void *,
     void *, void *, void *, void *);
 
 #endif /* !_SECMODEL_SECURELEVEL_SECURELEVEL_H_ */

@@ -1,7 +1,7 @@
-/*	$NetBSD: swapctl.c,v 1.32 2006/08/27 21:07:39 martin Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.40 2015/10/11 23:58:16 mrg Exp $	*/
 
 /*
- * Copyright (c) 1996, 1997, 1999 Matthew R. Green
+ * Copyright (c) 1996, 1997, 1999, 2015 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -66,11 +64,12 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.32 2006/08/27 21:07:39 martin Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.40 2015/10/11 23:58:16 mrg Exp $");
 #endif
 
 
 #include <sys/param.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/swap.h>
 #include <sys/sysctl.h>
@@ -90,7 +89,7 @@ __RCSID("$NetBSD: swapctl.c,v 1.32 2006/08/27 21:07:39 martin Exp $");
 
 #include "swapctl.h"
 
-int	command;
+static int	command;
 
 /*
  * Commands for swapctl(8).  These are mutually exclusive.
@@ -123,45 +122,46 @@ do { \
 /*
  * Option flags, and the commands with which they are valid.
  */
-int	kflag;		/* display in 1K^x blocks */
+static int	kflag;		/* display in 1K^x blocks */
 #define	KFLAG_CMDS	(CMD_l | CMD_s)
 #define MFLAG_CMDS	(CMD_l | CMD_s)
 #define GFLAG_CMDS	(CMD_l | CMD_s)
 
-int	hflag;		/* display with humanize_number */
+static int	hflag;		/* display with humanize_number */
 #define HFLAG_CMDS	(CMD_l | CMD_s)
 
-int	pflag;		/* priority was specified */
+static int	pflag;		/* priority was specified */
 #define	PFLAG_CMDS	(CMD_A | CMD_a | CMD_c)
 
-char	*tflag;		/* swap device type (blk, noblk, auto) */
-int	autoflag;	/* 1, if tflag is "auto" */
+static char	*tflag;		/* swap device type (blk, noblk, auto) */
+static int	autoflag;	/* 1, if tflag is "auto" */
 #define	TFLAG_CMDS	(CMD_A | CMD_U)
 
-int	fflag;		/* first swap becomes dump */
+static int	fflag;		/* first swap becomes dump */
 #define	FFLAG_CMDS	(CMD_A)
 
-int	oflag;		/* only autoset dump device */
+static int	oflag;		/* only autoset dump device */
 #define	OFLAG_CMDS	(CMD_A)
 
-int	nflag;		/* no execute, just print actions */
+static int	nflag;		/* no execute, just print actions */
 #define	NFLAG_CMDS	(CMD_A | CMD_U)
 
-int	pri;		/* uses 0 as default pri */
+static int	pri;		/* uses 0 as default pri */
 
 static	void change_priority(char *);
 static	int  add_swap(char *, int);
 static	int  delete_swap(char *);
+static	int set_dumpdev1(char *);
 static	void set_dumpdev(char *);
 static	int get_dumpdev(void);
-static	void do_fstab(int);
+__dead static	void do_fstab(int);
 static	int check_fstab(void);
 static	void do_localdevs(int);
 static	void do_localdisk(const char *, int);
 static	int do_wedgesofdisk(int fd, int);
 static	int do_partitionsofdisk(const char *, int fd, int);
-static	void usage(void);
-static	void swapon_command(int, char **);
+__dead static	void usage(void);
+__dead static	void swapon_command(int, char **);
 #if 0
 static	void swapoff_command(int, char **);
 #endif
@@ -447,8 +447,14 @@ static int
 add_swap(char *path, int priority)
 {
 	struct stat sb;
+	char buf[MAXPATHLEN];
+	char *spec;
 
-	if (stat(path, &sb) < 0)
+	if (getfsspecname(buf, sizeof(buf), path) == NULL)
+		goto oops;
+	spec = buf;
+
+	if (stat(spec, &sb) < 0)
 		goto oops;
 
 	if (sb.st_mode & S_IROTH) 
@@ -457,7 +463,7 @@ add_swap(char *path, int priority)
 		warnx("WARNING: %s is writable by the world", path);
 
 	if (fflag || oflag) {
-		set_dumpdev(path);
+		set_dumpdev1(spec);
 		if (oflag)
 			exit(0);
 		else
@@ -467,11 +473,12 @@ add_swap(char *path, int priority)
 	if (nflag)
 		return 1;
 
-	if (swapctl(SWAP_ON, path, priority) < 0) {
+	if (swapctl(SWAP_ON, spec, priority) < 0) {
 oops:
-		err(1, "%s", path);
+		warn("%s", path);
+		return 0;
 	}
-	return (1);
+	return 1;
 }
 
 /*
@@ -480,31 +487,57 @@ oops:
 static int
 delete_swap(char *path)
 {
+	char buf[MAXPATHLEN];
+	char *spec;
+
+	if (getfsspecname(buf, sizeof(buf), path) == NULL) {
+		warn("%s", path);
+		return 0;
+	}
+	spec = buf;
 
 	if (nflag)
 		return 1;
 
-	if (swapctl(SWAP_OFF, path, pri) < 0) 
-		err(1, "%s", path);
-	return (1);
+	if (swapctl(SWAP_OFF, spec, pri) < 0) {
+		warn("%s", path);
+		return 0;
+	}
+	return 1;
+}
+
+static int
+set_dumpdev1(char *spec)
+{
+	int rv = 0;
+
+	if (!nflag) {
+		if (strcmp(spec, "none") == 0) 
+			rv = swapctl(SWAP_DUMPOFF, NULL, 0);
+		else
+			rv = swapctl(SWAP_DUMPDEV, spec, 0);
+	}
+
+	if (rv == -1)
+		warn("could not set dump device to %s", spec);
+	else
+		printf("%s: setting dump device to %s\n", getprogname(), spec);
+
+	return rv == -1 ? 0 : 1;
 }
 
 static void
 set_dumpdev(char *path)
 {
-	int rv = 0;
+	char buf[MAXPATHLEN];
+	char *spec;
 
-	if (!nflag) {
-		if (strcmp(path, "none") == 0) 
-			rv = swapctl(SWAP_DUMPOFF, NULL, 0);
-		else
-			rv = swapctl(SWAP_DUMPDEV, path, 0);
-	}
+	if (getfsspecname(buf, sizeof(buf), path) == NULL)
+		err(1, "%s", path);
+	spec = buf;
 
-	if (rv == -1)
-		err(1, "could not set dump device to %s", path);
-	else
-		printf("%s: setting dump device to %s\n", getprogname(), path);
+	if (! set_dumpdev1(spec))
+		exit(1);
 }
 
 static int
@@ -525,7 +558,9 @@ get_dumpdev(void)
 		if (name)
 			printf("%s\n", name);
 		else
-			printf("major %d minor %d\n", major(dev), minor(dev));
+			printf("major %llu minor %llu\n",
+			    (unsigned long long)major(dev),
+			    (unsigned long long)minor(dev));
 	}
 	return 1;
 }
@@ -679,7 +714,8 @@ do_fstab(int add)
 	long	priority;
 	struct	stat st;
 	int	isblk;
-	int	gotone = 0;
+	int	success = 0;	/* set to 1 after a successful operation */
+	int	error = 0;	/* set to 1 after an error */
 
 #ifdef RESCUEDIR
 #define PATH_MOUNT	RESCUEDIR "/mount_nfs"
@@ -694,13 +730,18 @@ do_fstab(int add)
 #define PRIORITYEQ	"priority="
 #define NFSMNTPT	"nfsmntpt="
 	while ((fp = getfsent()) != NULL) {
-		char *spec;
+		char buf[MAXPATHLEN];
+		char *spec, *fsspec;
 
-		spec = fp->fs_spec;
+		if (getfsspecname(buf, sizeof(buf), fp->fs_spec) == NULL) {
+			warn("%s", buf);
+			continue;
+		}
+		fsspec = spec = buf;
 		cmd[0] = '\0';
 
 		if (strcmp(fp->fs_type, "dp") == 0 && add) {
-			set_dumpdev(spec);
+			set_dumpdev1(spec);
 			continue;
 		}
 
@@ -709,7 +750,7 @@ do_fstab(int add)
 
 		/* handle dp as mnt option */
 		if (strstr(fp->fs_mntops, "dp") && add)
-			set_dumpdev(spec);
+			set_dumpdev1(spec);
 
 		isblk = 0;
 
@@ -746,14 +787,14 @@ do_fstab(int add)
 			}
 			if (add) {
 				snprintf(cmd, sizeof(cmd), "%s %s %s",
-					PATH_MOUNT, fp->fs_spec, spec);
+					PATH_MOUNT, fsspec, spec);
 				if (system(cmd) != 0) {
-					warnx("%s: mount failed", fp->fs_spec);
+					warnx("%s: mount failed", fsspec);
 					continue;
 				}
 			} else {
 				snprintf(cmd, sizeof(cmd), "%s %s",
-					PATH_UMOUNT, fp->fs_spec);
+					PATH_UMOUNT, fsspec);
 			}
 		} else {
 			/*
@@ -779,31 +820,46 @@ do_fstab(int add)
 
 		if (add) {
 			if (add_swap(spec, (int)priority)) {
-				gotone = 1;
+				success = 1;
 				printf(
 			    	"%s: adding %s as swap device at priority %d\n",
-				    getprogname(), fp->fs_spec, (int)priority);
+				    getprogname(), fsspec, (int)priority);
+			} else {
+				error = 1;
+				fprintf(stderr,
+				    "%s: failed to add %s as swap device\n",
+				    getprogname(), fsspec);
 			}
 		} else {
 			if (delete_swap(spec)) {
-				gotone = 1;
+				success = 1;
 				printf(
 				    "%s: removing %s as swap device\n",
-				    getprogname(), fp->fs_spec);
+				    getprogname(), fsspec);
+			} else {
+				error = 1;
+				fprintf(stderr,
+				    "%s: failed to remove %s as swap device\n",
+				    getprogname(), fsspec);
 			}
 			if (cmd[0]) {
 				if (system(cmd) != 0) {
-					warnx("%s: umount failed", fp->fs_spec);
+					warnx("%s: umount failed", fsspec);
+					error = 1;
 					continue;
 				}
 			}
 		}
 
-		if (spec != fp->fs_spec)
+		if (spec != fsspec)
 			free(spec);
 	}
-	if (gotone == 0)
+	if (error)
 		exit(1);
+	else if (success)
+		exit(0);
+	else
+		exit(2); /* not really an error, but no swap devices found */
 }
 
 static void

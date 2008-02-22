@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 2007/12/03 15:33:32 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.21 2017/10/23 07:05:23 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2007/12/03 15:33:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.21 2017/10/23 07:05:23 skrll Exp $");
 
 #include "opt_md.h"
 
@@ -48,12 +41,105 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2007/12/03 15:33:32 ad Exp $");
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
+#include <machine/bootconfig.h>
 
-void	(*evbarm_device_register)(struct device *, void *);
+void	(*evbarm_device_register)(device_t, void *);
+void	(*evbarm_device_register_post_config)(device_t, void *);
+
+extern struct cfdata cfdata[];
+
+#ifndef MEMORY_DISK_IS_ROOT
+static int get_device(char *name, device_t *, int *);
+static void set_root_device(void);
+#endif
+
+#ifndef MEMORY_DISK_IS_ROOT
+/* Decode a device name to a major and minor number */
+
+static int
+get_device(char *name, device_t *dvp, int *partp)
+{
+	int unit, part;
+	char devname[16], *cp;
+	device_t dv;
+
+	if (strncmp(name, "/dev/", 5) == 0)
+		name += 5;
+
+	if (devsw_name2blk(name, devname, sizeof(devname)) == -1)
+		return 0;
+
+	name += strlen(devname);
+	unit = part = 0;
+
+	cp = name;
+	while (*cp >= '0' && *cp <= '9')
+		unit = (unit * 10) + (*cp++ - '0');
+	if (cp == name)
+		return 0;
+
+	if (*cp >= 'a' && *cp < ('a' + MAXPARTITIONS))
+		part = *cp - 'a';
+	else if (*cp != '\0' && *cp != ' ')
+		return 0;
+	if ((dv = device_find_by_driver_unit(devname, unit)) != NULL) {
+		*dvp = dv;
+		*partp = part;
+		return 1;
+	}
+
+	return 0;
+}
+
+/* Set the rootdev variable from the root specifier in the boot args */
+
+static char *bootspec_buf = NULL;
+static size_t bootspec_buflen = 0;
+
+static void
+set_root_device(void)
+{
+	char *ptr, *end, *buf;
+	size_t len;
+
+	if (boot_args == NULL)
+		return;
+
+	if (!get_bootconf_option(boot_args, "root", BOOTOPT_TYPE_STRING, &ptr))
+		return;
+
+	if (get_device(ptr, &booted_device, &booted_partition))
+		return;
+
+	/* NUL-terminate string, get_bootconf_option doesn't */
+	for (end=ptr; *end != '\0'; ++end) {
+		if (*end == ' ' || *end == '\t') {
+			break;
+		}
+	}
+
+	if (end == ptr)
+		return;
+
+	len = end - ptr;
+
+	buf = kmem_alloc(len + 1, KM_SLEEP);
+	memcpy(buf, ptr, len);
+	buf[len] = '\0';
+
+	if (bootspec_buf != NULL)
+		kmem_free(bootspec_buf, bootspec_buflen + 1);
+
+	bootspec_buf = buf;
+	bootspec_buflen = len;
+
+	bootspec = bootspec_buf;
+}
+#endif
 
 /*
  * Set up the root device from the boot args
@@ -61,9 +147,12 @@ void	(*evbarm_device_register)(struct device *, void *);
 void
 cpu_rootconf(void)
 {
+#ifndef MEMORY_DISK_IS_ROOT
+	set_root_device();
+#endif
 	aprint_normal("boot device: %s\n",
-	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
-	setroot(booted_device, booted_partition);
+	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	rootconf();
 }
 
 
@@ -77,22 +166,34 @@ void
 cpu_configure(void)
 {
 	struct mainbus_attach_args maa;
+	struct cfdata *cf;
 
 	(void) splhigh();
-	(void) splserial();	/* XXX need an splextreme() */
 
-	maa.ma_name = "mainbus";
-
-	config_rootfound("mainbus", &maa);
+	for (cf = &cfdata[0]; cf->cf_name; cf++) {
+		if (cf->cf_pspec == NULL) {
+			maa.ma_name = cf->cf_name;
+			if (config_rootfound(cf->cf_name, &maa) != NULL)
+				break;
+		}
+	}
 
 	/* Time to start taking interrupts so lets open the flood gates .... */
 	spl0();
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
-
 	if (evbarm_device_register != NULL)
 		(*evbarm_device_register)(dev, aux);
 }
+
+
+void
+device_register_post_config(device_t dev, void *aux)
+{
+	if (evbarm_device_register_post_config != NULL)
+		(*evbarm_device_register_post_config)(dev, aux);
+}
+

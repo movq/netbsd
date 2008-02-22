@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bswap.h,v 1.18 2006/01/29 21:42:42 dsl Exp $	*/
+/*	$NetBSD: ufs_bswap.h,v 1.23 2018/04/19 21:50:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -45,34 +40,48 @@
 #define UFS_FSNEEDSWAP(fs)	((fs)->fs_flags & FS_SWAPPED)
 #define	UFS_IPNEEDSWAP(ip)	UFS_MPNEEDSWAP((ip)->i_ump)
 #else
-#define	UFS_MPNEEDSWAP(ump)	(0)
-#define UFS_FSNEEDSWAP(fs)	(0)
-#define	UFS_IPNEEDSWAP(ip)	(0)
+#define	UFS_MPNEEDSWAP(ump)	((void)(ump), 0)
+#define UFS_FSNEEDSWAP(fs)	((void)(fs), 0)
+#define	UFS_IPNEEDSWAP(ip)	((void)(ip), 0)
 #endif
 
-#if !defined(_KERNEL) || defined(FFS_EI)
+#if (!defined(_KERNEL) && !defined(NO_FFS_EI)) || defined(FFS_EI)
 /* inlines for access to swapped data */
-static inline u_int16_t
+static __inline u_int16_t
 ufs_rw16(uint16_t a, int ns)
 {
 	return ((ns) ? bswap16(a) : (a));
 }
 
-static inline u_int32_t
+static __inline u_int32_t
 ufs_rw32(uint32_t a, int ns)
 {
 	return ((ns) ? bswap32(a) : (a));
 }
 
-static inline u_int64_t
+static __inline u_int64_t
 ufs_rw64(uint64_t a, int ns)
 {
 	return ((ns) ? bswap64(a) : (a));
 }
 #else
-#define ufs_rw16(a, ns) ((uint16_t)(a))
-#define ufs_rw32(a, ns) ((uint32_t)(a))
-#define ufs_rw64(a, ns) ((uint64_t)(a))
+static __inline u_int16_t
+ufs_rw16(uint16_t a, int ns)
+{
+	return a;
+}
+
+static __inline u_int32_t
+ufs_rw32(uint32_t a, int ns)
+{
+	return a;
+}
+
+static __inline u_int64_t
+ufs_rw64(uint64_t a, int ns)
+{
+	return a;
+}
 #endif
 
 #define ufs_add16(a, b, ns) \

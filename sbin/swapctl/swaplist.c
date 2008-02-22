@@ -1,4 +1,4 @@
-/*	$NetBSD: swaplist.c,v 1.14 2006/08/22 14:08:36 martin Exp $	*/
+/*	$NetBSD: swaplist.c,v 1.18 2016/05/31 09:34:25 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1997 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +28,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swaplist.c,v 1.14 2006/08/22 14:08:36 martin Exp $");
+__RCSID("$NetBSD: swaplist.c,v 1.18 2016/05/31 09:34:25 pgoyette Exp $");
 #endif
 
 
@@ -113,7 +111,7 @@ list_swap(int pri, int kflag, int pflag, int tflag, int dolong, int hflag)
 
 	if (dolong && tflag == 0) {
 		for (i = rnswap; i-- > 0; sep++)
-			if (pathmax < (l = strlen(sep->se_path)))
+			if ((size_t)pathmax < (l = strlen(sep->se_path)))
 				pathmax = l;
 		sep = fsep;
 		(void)printf("%-*s %*s %8s %8s %8s  %s\n",
@@ -186,10 +184,10 @@ list_swap(int pri, int kflag, int pflag, int tflag, int dolong, int hflag)
 			if ((humanize_number(avbuf, sizeof(avbuf), (dbtoqb(totalsize-totalinuse)),
 				"", HN_AUTOSCALE, (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
 				err(1, "humanize_number");
-			(void)printf("total: %s allocated = %s used, %s available.\n",
+			(void)printf("total: %s allocated, %s used, %s available.\n",
 				szbuf, usbuf, avbuf);
 		} else {
-		    printf("total: %ld %s allocated = %ld %s used, "
+		    printf("total: %ld %s allocated, %ld %s used, "
 			   "%ld %s available\n",
 		    (long)(dbtoqb(totalsize) / blocksize), suff,
 		    (long)(dbtoqb(totalinuse) / blocksize), suff,

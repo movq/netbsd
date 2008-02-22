@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.15 2007/10/17 19:57:07 garbled Exp $	*/
+/*	$NetBSD: locore.h,v 1.22 2011/02/04 04:13:52 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,21 @@
 
 #ifdef _LOCORE
 
+#ifdef __STDC__
+#if defined(SH3) && defined(SH4)
+#define	MOV(x, r)	mov.l .L_ ## x, r; mov.l @r, r
+#define	REG_SYMBOL(x)	.L_ ## x:	.long	_C_LABEL(__sh_ ## x)
+#define	FUNC_SYMBOL(x)	.L_ ## x:	.long	_C_LABEL(__sh_ ## x)
+#elif defined(SH3)
+#define	MOV(x, r)	mov.l .L_ ## x, r
+#define	REG_SYMBOL(x)	.L_ ## x:	.long	SH3_ ## x
+#define	FUNC_SYMBOL(x)	.L_ ## x:	.long	_C_LABEL(sh3_ ## x)
+#elif defined(SH4)
+#define	MOV(x, r)	mov.l .L_ ## x, r
+#define	REG_SYMBOL(x)	.L_ ## x:	.long	SH4_ ## x
+#define	FUNC_SYMBOL(x)	.L_ ## x:	.long	_C_LABEL(sh4_ ## x)
+#endif /* SH3 && SH4 */
+#else /* !__STDC__ */
 #if defined(SH3) && defined(SH4)
 #define	MOV(x, r)	mov.l .L_/**/x, r; mov.l @r, r
 #define	REG_SYMBOL(x)	.L_/**/x:	.long	_C_LABEL(__sh_/**/x)
@@ -48,6 +56,7 @@
 #define	REG_SYMBOL(x)	.L_/**/x:	.long	SH4_/**/x
 #define	FUNC_SYMBOL(x)	.L_/**/x:	.long	_C_LABEL(sh4_/**/x)
 #endif /* SH3 && SH4 */
+#endif /* __STDC__ */
 
 /*
  * BANK1 r6 contains current trapframe pointer.
@@ -59,26 +68,24 @@
  *	+ save all registers to trapframe.
  *	+ setup kernel stack.
  *	+ change bank from 1 to 0
- *	+ set BANK0 (r4, r5, r6) = (ssr, spc, ssp)
+ *	+ NB: interrupt vector "knows" that r0_bank1 = ssp
  */
 #define	__EXCEPTION_ENTRY						;\
 	/* Check kernel/user mode. */					;\
 	mov	#0x40,	r3						;\
+	stc	ssr,	r2	/* r2 = SSR */				;\
 	swap.b	r3,	r3						;\
-	stc	ssr,	r2						;\
-	swap.w	r3,	r3	/* r3 = 0x40000000 */			;\
-	mov	r2,	r0	/* r2 = r0 = SSR */			;\
-	and	r3,	r0						;\
-	tst	r0,	r0	/* if (SSR.MD == 0) T = 1 */		;\
 	mov	r14,	r1						;\
-	mov	r6,	r14	/* frame pointer */			;\
+	swap.w	r3,	r3	/* r3 = PSL_MD */			;\
+	mov	r6,	r14	/* trapframe pointer */			;\
+	tst	r3,	r2	/* if (SSR.MD == 0) T = 1 */		;\
+	mov.l	r1,	@-r14	/* save tf_r14 */			;\
 	bf/s	1f		/* T==0 ...Exception from kernel mode */;\
 	 mov	r15,	r0						;\
 	/* Exception from user mode */					;\
 	mov	r7,	r15	/* change to kernel stack */		;\
 1:									;\
-	/* Save registers */						;\
-	mov.l	r1,	@-r14	/* tf_r14 */				;\
+	/* Save remaining registers */					;\
 	mov.l	r0,	@-r14	/* tf_r15 */				;\
 	stc.l	r0_bank,@-r14	/* tf_r0  */				;\
 	stc.l	r1_bank,@-r14	/* tf_r1  */				;\
@@ -97,19 +104,18 @@
 	sts.l	pr,	@-r14	/* tf_pr  */				;\
 	sts.l	mach,	@-r14	/* tf_mach*/				;\
 	sts.l	macl,	@-r14	/* tf_macl*/				;\
+	stc.l	gbr,	@-r14	/* tf_gbr */				;\
 	mov.l	r2,	@-r14	/* tf_ssr */				;\
 	stc.l	spc,	@-r14	/* tf_spc */				;\
 	add	#-8,	r14	/* skip tf_ubc, tf_expevt */		;\
 	mov	r14,	r6	/* store frame pointer */		;\
 	/* Change register bank to 0 */					;\
-	shlr	r3		/* r3 = 0x20000000 */			;\
+	shlr	r3		/* r3 = PSL_RB */			;\
 	stc	sr,	r1	/* r1 = SR */				;\
 	not	r3,	r3						;\
 	and	r1,	r3						;\
-	ldc	r3,	sr	/* SR.RB = 0 */				;\
-	/* Set up arguments. r4 = ssr, r5 = spc */			;\
-	stc	r2_bank,r4						;\
-	stc	spc,	r5
+	ldc	r3,	sr	/* SR.RB = 0 */
+
 
 /*
  * __EXCEPTION_RETURN:
@@ -129,10 +135,9 @@
 	add	#TF_SIZE, r0						;\
 	ldc	r0,	r6_bank	/* roll up frame pointer */		;\
 	add	#8,	r14	/* skip tf_expevt, tf_ubc */		;\
-	mov.l	@r14+,	r0	/* tf_spc */				;\
-	ldc	r0,	spc						;\
-	mov.l	@r14+,	r0	/* tf_ssr */				;\
-	ldc	r0,	ssr						;\
+	ldc.l	@r14+,	spc	/* tf_spc */				;\
+	ldc.l	@r14+,	ssr	/* tf_ssr */				;\
+	ldc.l	@r14+,	gbr	/* tf_gbr */				;\
 	lds.l	@r14+,	macl	/* tf_macl*/				;\
 	lds.l	@r14+,	mach	/* tf_mach*/				;\
 	lds.l	@r14+,	pr	/* tf_pr  */				;\
@@ -166,8 +171,8 @@
 	swap.b	Rn,	Rn						;\
 	swap.w	Rn,	Rn	/* Rn = 0x10000000 */			;\
 	stc	sr,	Rm						;\
-	or	Rn,	Rm						;\
-	ldc	Rm,	sr	/* block exceptions */
+	or	Rm,	Rn						;\
+	ldc	Rn,	sr	/* block exceptions */
 
 #define	__EXCEPTION_UNBLOCK(Rn, Rm)					;\
 	mov	#0xef,	Rn	/* ~0x10 */				;\
@@ -195,6 +200,23 @@
 	stc	sr,	Rm						;\
 	and	Rn,	Rm						;\
 	ldc	Rm,	sr	/* unmask all interrupts */
+
+
+/*
+ * Since __INTR_MASK + __EXCEPTION_UNBLOCK is common sequence, provide
+ * this combo version that does stc/ldc just once.
+ */
+#define __INTR_MASK_EXCEPTION_UNBLOCK(Rs, Ri, Rb)			 \
+	mov	#0x78, Ri	/* 0xf0 >> 1 */				;\
+	mov	#0xef, Rb	/* ~0x10 */				;\
+	shll	Ri		/* Ri = PSL_IMASK */			;\
+	swap.b	Rb, Rb							;\
+	stc	sr, Rs							;\
+	swap.w	Rb, Rb		/* Rb = ~PSL_BL */			;\
+	or	Ri, Rs		/* SR |= PSL_IMASK */			;\
+	and	Rb, Rs		/* SR &= ~PSL_BL */			;\
+	ldc	Rs, sr
+
 
 #else /* !_LOCORE */
 

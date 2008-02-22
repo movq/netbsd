@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_lock.c,v 1.134 2008/01/30 14:54:26 ad Exp $	*/
+/*	$NetBSD: kern_lock.c,v 1.161 2017/12/25 09:13:40 ozaki-r Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,9 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.134 2008/01/30 14:54:26 ad Exp $");
-
-#include "opt_multiprocessor.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.161 2017/12/25 09:13:40 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -51,8 +42,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.134 2008/01/30 14:54:26 ad Exp $");
 #include <sys/cpu.h>
 #include <sys/syslog.h>
 #include <sys/atomic.h>
+#include <sys/lwp.h>
+#include <sys/pserialize.h>
 
-#include <machine/stdarg.h>
 #include <machine/lock.h>
 
 #include <dev/lockstat.h>
@@ -62,37 +54,58 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.134 2008/01/30 14:54:26 ad Exp $");
 bool	kernel_lock_dodebug;
 
 __cpu_simple_lock_t kernel_lock[CACHE_LINE_SIZE / sizeof(__cpu_simple_lock_t)]
-    __aligned(CACHE_LINE_SIZE);
+    __cacheline_aligned;
 
-#if defined(LOCKDEBUG)
 void
-assert_sleepable(struct simplelock *interlock, const char *msg)
+assert_sleepable(void)
 {
+	const char *reason;
+	uint64_t pctr;
+	bool idle;
 
-	if (panicstr != NULL)
+	if (panicstr != NULL) {
 		return;
+	}
+
 	LOCKDEBUG_BARRIER(kernel_lock, 1);
-	if (CURCPU_IDLE_P() && !cold) {
-		panic("assert_sleepable: idle");
+
+	/*
+	 * Avoid disabling/re-enabling preemption here since this
+	 * routine may be called in delicate situations.
+	 */
+	do {
+		pctr = lwp_pctr();
+		idle = CURCPU_IDLE_P();
+	} while (pctr != lwp_pctr());
+
+	reason = NULL;
+	if (idle && !cold &&
+	    kcpuset_isset(kcpuset_running, cpu_index(curcpu()))) {
+		reason = "idle";
+	}
+	if (cpu_intr_p()) {
+		reason = "interrupt";
+	}
+	if (cpu_softintr_p()) {
+		reason = "softint";
+	}
+	if (!pserialize_not_in_read_section()) {
+		reason = "pserialize";
+	}
+
+	if (reason) {
+		panic("%s: %s caller=%p", __func__, reason,
+		    (void *)RETURN_ADDRESS);
 	}
 }
-#endif
 
-/*
- * rump doesn't need the kernel lock so force it out.  We cannot
- * currently easily include it for compilation because of
- * a) SPINLOCK_* b) membar_producer().  They are defined in different
- * places / way for each arch, so just simply do not bother to
- * fight a lot for no gain (i.e. pain but still no gain).
- */
-#ifndef _RUMPKERNEL
 /*
  * Functions for manipulating the kernel_lock.  We put them here
  * so that they show up in profiles.
  */
 
 #define	_KERNEL_LOCK_ABORT(msg)						\
-    LOCKDEBUG_ABORT(kernel_lock, &_kernel_lock_ops, __func__, msg)
+    LOCKDEBUG_ABORT(__func__, __LINE__, kernel_lock, &_kernel_lock_ops, msg)
 
 #ifdef LOCKDEBUG
 #define	_KERNEL_LOCK_ASSERT(cond)					\
@@ -104,12 +117,12 @@ do {									\
 #define	_KERNEL_LOCK_ASSERT(cond)	/* nothing */
 #endif
 
-void	_kernel_lock_dump(volatile void *);
+void	_kernel_lock_dump(const volatile void *);
 
 lockops_t _kernel_lock_ops = {
-	"Kernel lock",
-	0,
-	_kernel_lock_dump
+	.lo_name = "Kernel lock",
+	.lo_type = LOCKOPS_SPIN,
+	.lo_dump = _kernel_lock_dump,
 };
 
 /*
@@ -119,17 +132,17 @@ void
 kernel_lock_init(void)
 {
 
-	KASSERT(CACHE_LINE_SIZE >= sizeof(__cpu_simple_lock_t));
 	__cpu_simple_lock_init(kernel_lock);
 	kernel_lock_dodebug = LOCKDEBUG_ALLOC(kernel_lock, &_kernel_lock_ops,
 	    RETURN_ADDRESS);
 }
+CTASSERT(CACHE_LINE_SIZE >= sizeof(__cpu_simple_lock_t));
 
 /*
  * Print debugging information about the kernel lock.
  */
 void
-_kernel_lock_dump(volatile void *junk)
+_kernel_lock_dump(const volatile void *junk)
 {
 	struct cpu_info *ci = curcpu();
 
@@ -140,29 +153,28 @@ _kernel_lock_dump(volatile void *junk)
 }
 
 /*
- * Acquire 'nlocks' holds on the kernel lock.  If 'l' is non-null, the
- * acquisition is from process context.
+ * Acquire 'nlocks' holds on the kernel lock.
  */
 void
-_kernel_lock(int nlocks, struct lwp *l)
+_kernel_lock(int nlocks)
 {
-	struct cpu_info *ci = curcpu();
+	struct cpu_info *ci;
 	LOCKSTAT_TIMER(spintime);
 	LOCKSTAT_FLAG(lsflag);
 	struct lwp *owant;
 	u_int spins;
 	int s;
+	struct lwp *l = curlwp;
 
-	if (nlocks == 0)
-		return;
 	_KERNEL_LOCK_ASSERT(nlocks > 0);
 
-	l = curlwp;
-
+	s = splvm();
+	ci = curcpu();
 	if (ci->ci_biglock_count != 0) {
 		_KERNEL_LOCK_ASSERT(__SIMPLELOCK_LOCKED_P(kernel_lock));
 		ci->ci_biglock_count += nlocks;
 		l->l_blcnt += nlocks;
+		splx(s);
 		return;
 	}
 
@@ -170,11 +182,10 @@ _kernel_lock(int nlocks, struct lwp *l)
 	LOCKDEBUG_WANTLOCK(kernel_lock_dodebug, kernel_lock, RETURN_ADDRESS,
 	    0);
 
-	s = splvm();
 	if (__cpu_simple_lock_try(kernel_lock)) {
 		ci->ci_biglock_count = nlocks;
 		l->l_blcnt = nlocks;
-		LOCKDEBUG_LOCKED(kernel_lock_dodebug, kernel_lock,
+		LOCKDEBUG_LOCKED(kernel_lock_dodebug, kernel_lock, NULL,
 		    RETURN_ADDRESS, 0);
 		splx(s);
 		return;
@@ -204,7 +215,9 @@ _kernel_lock(int nlocks, struct lwp *l)
 		splx(s);
 		while (__SIMPLELOCK_LOCKED_P(kernel_lock)) {
 			if (SPINLOCK_SPINOUT(spins)) {
-				_KERNEL_LOCK_ABORT("spinout");
+				extern int start_init_exec;
+				if (!start_init_exec)
+					_KERNEL_LOCK_ABORT("spinout");
 			}
 			SPINLOCK_BACKOFF_HOOK;
 			SPINLOCK_SPIN_HOOK;
@@ -215,7 +228,8 @@ _kernel_lock(int nlocks, struct lwp *l)
 	ci->ci_biglock_count = nlocks;
 	l->l_blcnt = nlocks;
 	LOCKSTAT_STOP_TIMER(lsflag, spintime);
-	LOCKDEBUG_LOCKED(kernel_lock_dodebug, kernel_lock, RETURN_ADDRESS, 0);
+	LOCKDEBUG_LOCKED(kernel_lock_dodebug, kernel_lock, NULL,
+	    RETURN_ADDRESS, 0);
 	if (owant == NULL) {
 		LOCKSTAT_EVENT_RA(lsflag, kernel_lock,
 		    LB_KERNEL_LOCK | LB_SPIN, 1, spintime, RETURN_ADDRESS);
@@ -226,7 +240,7 @@ _kernel_lock(int nlocks, struct lwp *l)
 	/*
 	 * Now that we have kernel_lock, reset ci_biglock_wanted.  This
 	 * store must be unbuffered (immediately visible on the bus) in
-	 * order for non-interlocked mutex release to work correctly. 
+	 * order for non-interlocked mutex release to work correctly.
 	 * It must be visible before a mutex_exit() can execute on this
 	 * processor.
 	 *
@@ -246,16 +260,15 @@ _kernel_lock(int nlocks, struct lwp *l)
 
 /*
  * Release 'nlocks' holds on the kernel lock.  If 'nlocks' is zero, release
- * all holds.  If 'l' is non-null, the release is from process context.
+ * all holds.
  */
 void
-_kernel_unlock(int nlocks, struct lwp *l, int *countp)
+_kernel_unlock(int nlocks, int *countp)
 {
-	struct cpu_info *ci = curcpu();
+	struct cpu_info *ci;
 	u_int olocks;
 	int s;
-
-	l = curlwp;
+	struct lwp *l = curlwp;
 
 	_KERNEL_LOCK_ASSERT(nlocks < 2);
 
@@ -276,21 +289,30 @@ _kernel_unlock(int nlocks, struct lwp *l, int *countp)
 		nlocks = 1;
 		_KERNEL_LOCK_ASSERT(olocks == 1);
 	}
-
+	s = splvm();
+	ci = curcpu();
 	_KERNEL_LOCK_ASSERT(ci->ci_biglock_count >= l->l_blcnt);
-
-	l->l_blcnt -= nlocks;
 	if (ci->ci_biglock_count == nlocks) {
-		s = splvm();
 		LOCKDEBUG_UNLOCKED(kernel_lock_dodebug, kernel_lock,
 		    RETURN_ADDRESS, 0);
 		ci->ci_biglock_count = 0;
 		__cpu_simple_unlock(kernel_lock);
+		l->l_blcnt -= nlocks;
 		splx(s);
-	} else
+		if (l->l_dopreempt)
+			kpreempt(0);
+	} else {
 		ci->ci_biglock_count -= nlocks;
+		l->l_blcnt -= nlocks;
+		splx(s);
+	}
 
 	if (countp != NULL)
 		*countp = olocks;
 }
-#endif /* !_RUMPKERNEL */
+
+bool
+_kernel_locked_p(void)
+{
+	return __SIMPLELOCK_LOCKED_P(kernel_lock);
+}

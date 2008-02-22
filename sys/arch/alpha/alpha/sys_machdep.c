@@ -1,4 +1,4 @@
-/* $NetBSD: sys_machdep.c,v 1.17 2007/12/20 23:02:38 dsl Exp $ */
+/* $NetBSD: sys_machdep.c,v 1.21 2012/02/06 02:14:12 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,17 +34,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -65,12 +58,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.17 2007/12/20 23:02:38 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.21 2012/02/06 02:14:12 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/cpu.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -107,7 +101,7 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	case ALPHA_FPSETSTICKY:
 	    {
 		fp_except m;
-		u_int64_t md_flags;
+		uint64_t md_flags;
 		struct alpha_fp_except_args args;
 
 		error = copyin(SCARG(uap, parms), &args, sizeof args);
@@ -235,4 +229,16 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	}
 
 	return (error);
+}
+
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+	struct pcb *pcb;
+
+	pcb = lwp_getpcb(l);
+	pcb->pcb_hw.apcb_unique = (unsigned long)addr;
+	if (l == curlwp)
+		alpha_pal_wrunique(pcb->pcb_hw.apcb_unique);
+	return 0;
 }

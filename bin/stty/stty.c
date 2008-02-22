@@ -1,4 +1,4 @@
-/* $NetBSD: stty.c,v 1.19 2003/08/07 09:05:42 agc Exp $ */
+/* $NetBSD: stty.c,v 1.23 2013/09/12 19:47:23 christos Exp $ */
 
 /*-
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)stty.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: stty.c,v 1.19 2003/08/07 09:05:42 agc Exp $");
+__RCSID("$NetBSD: stty.c,v 1.23 2013/09/12 19:47:23 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,6 +49,7 @@ __RCSID("$NetBSD: stty.c,v 1.19 2003/08/07 09:05:42 agc Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,16 +58,15 @@ __RCSID("$NetBSD: stty.c,v 1.19 2003/08/07 09:05:42 agc Exp $");
 #include "stty.h"
 #include "extern.h"
 
-int main(int, char *[]);
-
 int
-main(int argc, char *argv[]) 
+main(int argc, char *argv[])
 {
 	struct info i;
 	enum FMT fmt;
 	int ch;
 
 	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	fmt = STTY_NOTSET;
 	i.fd = STDIN_FILENO;
@@ -97,12 +97,14 @@ main(int argc, char *argv[])
 args:	argc -= optind;
 	argv += optind;
 
-	if (ioctl(i.fd, TIOCGETD, &i.ldisc) < 0)
-		err(1, "TIOCGETD");
+	if (ioctl(i.fd, TIOCGLINED, i.ldisc) < 0)
+		err(1, "TIOCGLINED");
 	if (tcgetattr(i.fd, &i.t) < 0)
 		err(1, "tcgetattr");
 	if (ioctl(i.fd, TIOCGWINSZ, &i.win) < 0)
 		warn("TIOCGWINSZ");
+	if (ioctl(i.fd, TIOCGQSIZE, &i.queue) < 0)
+		warn("TIOCGQSIZE");
 
 	switch(fmt) {
 	case STTY_NOTSET:
@@ -111,13 +113,13 @@ args:	argc -= optind;
 		/* FALLTHROUGH */
 	case STTY_BSD:
 	case STTY_POSIX:
-		print(&i.t, &i.win, i.ldisc, fmt);
+		print(&i.t, &i.win, i.queue, i.ldisc, fmt);
 		break;
 	case STTY_GFLAG:
 		gprint(&i.t);
 		break;
 	}
-	
+
 	for (i.set = i.wset = 0; *argv; ++argv) {
 		if (ksearch(&argv, &i))
 			continue;
@@ -160,7 +162,7 @@ void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage: %s [-a|-e|-g] [-f file] [options]\n", getprogname());
+	(void)fprintf(stderr, "usage: %s [-a|-e|-g] [-f file] [operand ...]\n", getprogname());
 	exit(1);
 	/* NOTREACHED */
 }

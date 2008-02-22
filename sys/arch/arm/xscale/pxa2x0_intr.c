@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_intr.c,v 1.13 2007/12/11 17:12:27 ad Exp $	*/
+/*	$NetBSD: pxa2x0_intr.c,v 1.21 2013/12/17 01:28:04 joerg Exp $	*/
 
 /*
  * Copyright (c) 2002  Genetec Corporation.  All rights reserved.
@@ -39,13 +39,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.13 2007/12/11 17:12:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.21 2013/12/17 01:28:04 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/lock.h>
 
@@ -58,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_intr.c,v 1.13 2007/12/11 17:12:27 ad Exp $");
 /*
  * INTC autoconf glue
  */
-static int	pxaintc_match(struct device *, struct cfdata *, void *);
-static void	pxaintc_attach(struct device *, struct device *, void *);
+static int	pxaintc_match(device_t, cfdata_t, void *);
+static void	pxaintc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pxaintc, sizeof(struct device),
+CFATTACH_DECL_NEW(pxaintc, 0,
     pxaintc_match, pxaintc_attach, NULL, NULL);
 
 static int pxaintc_attached;
@@ -90,8 +90,8 @@ static struct intrhandler {
 	/* struct evbnt ev; */
 } handler[ICU_LEN];
 
+vaddr_t pxaic_base;
 volatile int softint_pending;
-volatile int current_spl_level;
 volatile int intr_mask;
 /* interrupt masks for each level */
 int pxa2x0_imask[NIPL];
@@ -99,7 +99,7 @@ static int extirq_level[ICU_LEN];
 
 
 static int
-pxaintc_match(struct device *parent, struct cfdata *cf, void *aux)
+pxaintc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 
@@ -110,7 +110,7 @@ pxaintc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-pxaintc_attach(struct device *parent, struct device *self, void *args)
+pxaintc_attach(device_t parent, device_t self, void *args)
 {
 	int i;
 
@@ -146,25 +146,6 @@ pxa2x0_intr_bootstrap(vaddr_t addr)
 	pxaic_base = addr;
 }
 
-static inline void
-__raise(int ipl)
-{
-
-	if (current_spl_level < ipl)
-		pxa2x0_setipl(ipl);
-}
-
-
-/*
- * Map a software interrupt queue to an interrupt priority level.
- */
-static const int si_to_ipl[SI_NQUEUES] = {
-	IPL_SOFTCLOCK,		/* SI_SOFTCLOCK */
-	IPL_SOFTBIO,		/* SI_SOFTBIO */
-	IPL_SOFTNET,		/* SI_SOFTNET */
-	IPL_SOFTSERIAL,		/* SI_SOFTSERIAL */
-};
-
 /*
  * called from irq_entry.
  */
@@ -175,11 +156,8 @@ pxa2x0_irq_handler(void *arg)
 	uint32_t irqbits;
 	int irqno;
 	int saved_spl_level;
-	struct cpu_info *ci;
 
-	ci = curcpu();
-	ci->ci_idepth++;
-	saved_spl_level = current_spl_level;
+	saved_spl_level = curcpu()->ci_cpl;
 
 	/* get pending IRQs */
 	irqbits = read_icu(SAIPIC_IP);
@@ -213,19 +191,20 @@ pxa2x0_irq_handler(void *arg)
 	/* restore spl to that was when this interrupt happen */
 	pxa2x0_setipl(saved_spl_level);
 
-	ci->ci_idepth--;
-			
-	if(softint_pending & intr_mask)
-		pxa2x0_do_pending();
+#ifdef __HAVE_FAST_SOFTINTS
+	cpu_dosoftints();
+#endif
 }
 
 static int
 stray_interrupt(void *cookie)
 {
 	int irqno = (int)cookie;
+	int irqmin = CPU_IS_PXA250 ? PXA250_IRQ_MIN : PXA270_IRQ_MIN;
+
 	printf("stray interrupt %d\n", irqno);
 
-	if (PXA270_IRQ_MIN <= irqno && irqno < ICU_LEN){
+	if (irqmin <= irqno && irqno < ICU_LEN){
 		int save = disable_interrupts(I32_bit);
 		write_icu(SAIPIC_MR,
 		    read_icu(SAIPIC_MR) & ~(1U<<irqno));
@@ -252,21 +231,17 @@ pxa2x0_update_intr_masks(int irqno, int level)
 		pxa2x0_imask[i] |= mask; /* Enable interrupt at lower level */
 
 	for( ; i < NIPL-1; ++i)
-		pxa2x0_imask[i] &= ~mask; /* Disable itnerrupt at upper level */
+		pxa2x0_imask[i] &= ~mask; /* Disable interrupt at upper level */
 
 	/*
 	 * Enforce a hierarchy that gives "slow" device (or devices with
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */
-	pxa2x0_imask[IPL_SOFTBIO] &= pxa2x0_imask[IPL_SOFTCLOCK];
-	pxa2x0_imask[IPL_SOFTNET] &= pxa2x0_imask[IPL_SOFTBIO];
-	pxa2x0_imask[IPL_SOFTSERIAL] &= pxa2x0_imask[IPL_SOFTNET];
-	pxa2x0_imask[IPL_VM] &= pxa2x0_imask[IPL_SOFTSERIAL];
 	pxa2x0_imask[IPL_SCHED] &= pxa2x0_imask[IPL_VM];
 	pxa2x0_imask[IPL_HIGH] &= pxa2x0_imask[IPL_SCHED];
 
-	write_icu(SAIPIC_MR, pxa2x0_imask[current_spl_level]);
+	write_icu(SAIPIC_MR, pxa2x0_imask[curcpu()->ci_cpl]);
 
 	restore_interrupts(psw);
 }
@@ -276,86 +251,17 @@ static void
 init_interrupt_masks(void)
 {
 
+	/*
+	 * disable all interrups until handlers are installed.
+	 */
 	memset(pxa2x0_imask, 0, sizeof(pxa2x0_imask));
 
-	/*
-	 * IPL_NONE has soft interrupts enabled only, at least until
-	 * hardware handlers are installed.
-	 */
-	pxa2x0_imask[IPL_NONE] =
-	    SI_TO_IRQBIT(SI_SOFTCLOCK) |
-	    SI_TO_IRQBIT(SI_SOFTBIO) |
-	    SI_TO_IRQBIT(SI_SOFTNET) |
-	    SI_TO_IRQBIT(SI_SOFTSERIAL);
-
-	/*
-	 * Initialize the soft interrupt masks to block themselves.
-	 */
-	pxa2x0_imask[IPL_SOFTCLOCK] = ~SI_TO_IRQBIT(SI_SOFTCLOCK);
-	pxa2x0_imask[IPL_SOFTBIO] = ~SI_TO_IRQBIT(SI_SOFTBIO);
-	pxa2x0_imask[IPL_SOFTNET] = ~SI_TO_IRQBIT(SI_SOFTNET);
-	pxa2x0_imask[IPL_SOFTSERIAL] = ~SI_TO_IRQBIT(SI_SOFTSERIAL);
-
-	pxa2x0_imask[IPL_SOFTCLOCK] &= pxa2x0_imask[IPL_NONE];
-	pxa2x0_imask[IPL_SOFTBIO] &= pxa2x0_imask[IPL_SOFTCLOCK];
-	pxa2x0_imask[IPL_SOFTNET] &= pxa2x0_imask[IPL_SOFTBIO];
-	pxa2x0_imask[IPL_SOFTSERIAL] &= pxa2x0_imask[IPL_SOFTNET];
 }
-
-void
-pxa2x0_do_pending(void)
-{
-#ifdef __HAVE_FAST_SOFTINTS
-	static __cpu_simple_lock_t processing = __SIMPLELOCK_UNLOCKED;
-	int oldirqstate, spl_save;
-
-	if (__cpu_simple_lock_try(&processing) == 0)
-		return;
-
-	spl_save = current_spl_level;
-
-	oldirqstate = disable_interrupts(I32_bit);
-
-#if 1
-#define	DO_SOFTINT(si,ipl)						\
-	if ((softint_pending & intr_mask) & SI_TO_IRQBIT(si)) {		\
-		softint_pending &= ~SI_TO_IRQBIT(si);			\
-		__raise(ipl);						\
-		restore_interrupts(oldirqstate);			\
-		softintr_dispatch(si);					\
-		oldirqstate = disable_interrupts(I32_bit);		\
-		pxa2x0_setipl(spl_save);				\
-	}
-
-	do {
-		DO_SOFTINT(SI_SOFTSERIAL,IPL_SOFTSERIAL);
-		DO_SOFTINT(SI_SOFTNET, IPL_SOFTNET);
-		DO_SOFTINT(SI_SOFTCLOCK, IPL_SOFTCLOCK);
-		DO_SOFTINT(SI_SOFT, IPL_SOFT);
-	} while( softint_pending & intr_mask );
-#else
-	while( (si = find_first_bit(softint_pending & intr_mask)) >= 0 ){
-		softint_pending &= ~SI_TO_IRQBIT(si);
-		__raise(si_to_ipl(si));
-		restore_interrupts(oldirqstate);
-		softintr_dispatch(si);
-		oldirqstate = disable_interrupts(I32_bit);
-		pxa2x0_setipl(spl_save);
-	}
-#endif
-
-	__cpu_simple_unlock(&processing);
-
-	restore_interrupts(oldirqstate);
-#endif
-}
-
 
 #undef splx
 void
 splx(int ipl)
 {
-
 	pxa2x0_splx(ipl);
 }
 
@@ -363,7 +269,6 @@ splx(int ipl)
 int
 _splraise(int ipl)
 {
-
 	return pxa2x0_splraise(ipl);
 }
 
@@ -371,16 +276,7 @@ _splraise(int ipl)
 int
 _spllower(int ipl)
 {
-
 	return pxa2x0_spllower(ipl);
-}
-
-#undef _setsoftintr
-void
-_setsoftintr(int si)
-{
-
-	return pxa2x0_setsoftintr(si);
 }
 
 void *
@@ -400,7 +296,7 @@ pxa2x0_intr_establish(int irqno, int level,
 	extirq_level[irqno] = level;
 	pxa2x0_update_intr_masks(irqno, level);
 
-	intr_mask = pxa2x0_imask[current_spl_level];
+	intr_mask = pxa2x0_imask[curcpu()->ci_cpl];
 
 	restore_interrupts(psw);
 

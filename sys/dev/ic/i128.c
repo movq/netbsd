@@ -1,4 +1,4 @@
-/*	$NetBSD: i128.c,v 1.2 2007/10/19 11:59:52 ad Exp $ */
+/*	$NetBSD: i128.c,v 1.4 2012/10/20 13:31:09 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i128.c,v 1.2 2007/10/19 11:59:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i128.c,v 1.4 2012/10/20 13:31:09 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +102,6 @@ i128_bitblt(bus_space_tag_t tag, bus_space_handle_t regh, int xs, int ys,
 	bus_space_write_4(tag, regh, XY2_WH, (wi << 16) | he);
 	bus_space_write_4(tag, regh, XY0_SRC, (xs << 16) | ys);
 	bus_space_write_4(tag, regh, XY1_DST, (xd << 16) | yd);
-	I128_DONE(tag, regh);
 }
 
 void
@@ -121,5 +117,17 @@ i128_rectfill(bus_space_tag_t tag, bus_space_handle_t regh, int x, int y,
 	bus_space_write_4(tag, regh, XY2_WH, (wi << 16) | he);
 	bus_space_write_4(tag, regh, XY0_SRC, 0);
 	bus_space_write_4(tag, regh, XY1_DST, (x << 16) | y);
-	I128_DONE(tag, regh);
 }
+
+void
+i128_ready(bus_space_tag_t t, bus_space_handle_t h)
+{
+    I128_READY(t, h);
+}
+
+void
+i128_sync(bus_space_tag_t t, bus_space_handle_t h)
+{
+    I128_DONE(t, h);
+}
+ 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.5 2007/10/25 13:03:05 yamt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.11 2017/02/13 09:46:30 skrll Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -65,13 +65,6 @@
 #endif
 
 /*
- * Size of shared memory map
- */
-#ifndef	SHMMAXPGS
-#define	SHMMAXPGS	1024
-#endif
-
-/*
  * Size of User Raw I/O map
  */
 #define	USRIOSIZE	1024
@@ -85,7 +78,7 @@
 #define	VM_MAXUSER_ADDRESS	((vaddr_t)0xffff0000-PAGE_SIZE)
 #define	VM_MAX_ADDRESS		VM_MAXUSER_ADDRESS
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)0x80000000)
-#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)0xff000000)
+#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)0xef000000)	/* before I/O periphs */
 #else
 /*
  * Would like to have MAX addresses = 0, but this doesn't (currently) work
@@ -97,16 +90,6 @@
 #define	VM_MAX_KERNEL_ADDRESS	(VM_MIN_KERNEL_ADDRESS + SEGMENT_LENGTH - 1)
 #endif
 
-/* XXX max. amount of KVM to be used by buffers. */
-#ifndef VM_MAX_KERNEL_BUF
-#define VM_MAX_KERNEL_BUF	(0x10000000 * 7 / 10)
-
-/*
- * Override the default pager_map size, there's not enough KVA.
- */
-#define PAGER_MAP_DEFAULT_SIZE		(4 * 1024 * 1024)
-#endif
-
 #define	VM_PHYS_SIZE		(USRIOSIZE * PAGE_SIZE)
 
 #define	__HAVE_PMAP_PHYSSEG
@@ -116,11 +99,6 @@ struct pmap_physseg {
 	char *attrs;
 };
 
-#define VM_PHYSSEG_MAX		16	/* 1? */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
-#define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
-
-#define	VM_NFREELIST		1
-#define	VM_FREELIST_DEFAULT	0
 
 #endif /* _MACHINE_VMPARAM_H_ */

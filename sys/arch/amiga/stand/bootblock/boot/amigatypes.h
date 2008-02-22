@@ -1,4 +1,4 @@
-/* $NetBSD: amigatypes.h,v 1.6 2007/03/04 05:59:31 christos Exp $ */
+/* $NetBSD: amigatypes.h,v 1.8 2016/01/04 14:10:15 phx Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@ struct Library {
 struct MemHead {
 	struct MemHead *next;
 	u_int8_t Dmy1[  9-  4];
-	u_int8_t Pri;
+	int8_t Pri;
 	u_int8_t Dmy2[ 14- 10];
 	u_int16_t Attribs;
 	u_int32_t First, Lower, Upper, Free;

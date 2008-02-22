@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw.h,v 1.2 2006/10/26 22:49:36 bjh21 Exp $	*/
+/*	$NetBSD: ofw.h,v 1.5 2014/09/13 17:41:03 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -33,8 +33,8 @@
  *    even if advised of the possibility of such damage.
  */
 
-#ifndef _MACHINE_OFW_H_
-#define _MACHINE_OFW_H_
+#ifndef _ARM_OFW_H_
+#define _ARM_OFW_H_
 
 
 /* Virtual address range reserved for OFW. */
@@ -48,23 +48,22 @@ typedef int (*ofw_handle_t)(void *);
 
 
 /* Implemented in <ofw/ofw.c> */
-void ofw_init __P((ofw_handle_t));
-void ofw_boot __P((int, char *));
-void ofw_getbootinfo __P((char **, char **));
-void ofw_configmem __P((void));
-void ofw_configisa __P((vm_offset_t *, vm_offset_t *));
-void ofw_configisadma __P((vm_offset_t *));
-int  ofw_isadmarangeintersect __P((vm_offset_t, vm_offset_t,
-				   vm_offset_t *, vm_offset_t *));
-vm_offset_t ofw_gettranslation __P((vm_offset_t));
-vm_offset_t ofw_map __P((vm_offset_t, vm_size_t, int));
-vm_offset_t ofw_getcleaninfo __P((void));
+void ofw_init(ofw_handle_t);
+void ofw_boot(int, char *);
+void ofw_getbootinfo(char **, char **);
+void ofw_configmem(void);
+void ofw_configisa(vaddr_t *, vaddr_t *);
+void ofw_configisadma(vaddr_t *);
+int  ofw_isadmarangeintersect(vaddr_t, vaddr_t, vaddr_t *, vaddr_t *);
+vaddr_t ofw_gettranslation(vaddr_t);
+vaddr_t ofw_map(vaddr_t, vsize_t, int);
+vaddr_t ofw_getcleaninfo(void);
 
 #ifdef	OFWGENCFG
 /* Implemented in <ofw/ofwgencfg_machdep.c> */
 extern int ofw_handleticks;
-extern void cpu_reboot		__P((int, char *));
-extern void ofrootfound		__P((void));
+extern void cpu_reboot(int, char *);
+extern void ofrootfound(void);
 #endif
 
-#endif /* !_MACHINE_OFW_H_ */
+#endif /* !_ARM_OFW_H_ */

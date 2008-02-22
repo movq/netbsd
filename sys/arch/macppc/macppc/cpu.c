@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $	*/
+/*	$NetBSD: cpu.c,v 1.67 2018/05/17 19:08:51 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2001 Tsubai Masanari.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.67 2018/05/17 19:08:51 macallan Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -45,15 +45,13 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
 #include <sys/device.h>
 #include <sys/types.h>
 #include <sys/lwp.h>
-#include <sys/user.h>
 
-#include <uvm/uvm_extern.h>
 #include <dev/ofw/openfirm.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/openpic.h>
-#include <powerpc/atomic.h>
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #ifdef ALTIVEC
 #include <powerpc/altivec.h>
 #endif
@@ -70,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
 #include <machine/trap.h>
 
 #include "pic_openpic.h"
+#include "pic_u3_ht.h"
 
 #ifndef OPENPIC
 #if NPIC_OPENPIC > 0
@@ -77,13 +76,13 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
 #endif /* NOPENPIC > 0 */
 #endif /* OPENPIC */
 
-int cpumatch(struct device *, struct cfdata *, void *);
-void cpuattach(struct device *, struct device *, void *);
+int cpumatch(device_t, cfdata_t, void *);
+void cpuattach(device_t, device_t, void *);
 
 void identifycpu(char *);
 static void ohare_init(void);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
@@ -98,10 +97,7 @@ extern void openpic_set_priority(int, int);
 #endif
 
 int
-cpumatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cpumatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
@@ -133,10 +129,10 @@ cpumatch(parent, cf, aux)
 	return 0;
 }
 
-void cpu_OFgetspeed(struct device *, struct cpu_info *);
+void cpu_OFgetspeed(device_t, struct cpu_info *);
 
 void
-cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
+cpu_OFgetspeed(device_t self, struct cpu_info *ci)
 {
 	int	node;
 
@@ -159,9 +155,7 @@ cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
 }
 
 void
-cpuattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cpuattach(device_t parent, device_t self, void *aux)
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -183,7 +177,7 @@ cpuattach(parent, self, aux)
 	}
 
 	if (OF_finddevice("/bandit/ohare") != -1) {
-		printf("%s", self->dv_xname);
+		printf("%s", device_xname(self));
 		ohare_init();
 	}
 }
@@ -191,12 +185,12 @@ cpuattach(parent, self, aux)
 #define CACHE_REG 0xf8000000
 
 void
-ohare_init()
+ohare_init(void)
 {
 	volatile uint32_t *cache_reg, x;
 
 	/* enable L2 cache */
-	cache_reg = mapiodev(CACHE_REG, PAGE_SIZE);
+	cache_reg = mapiodev(CACHE_REG, PAGE_SIZE, false);
 	if (((cache_reg[2] >> 24) & 0x0f) >= 3) {
 		x = cache_reg[4];
 		if ((x & 0x10) == 0)
@@ -211,12 +205,20 @@ ohare_init()
 
 #ifdef MULTIPROCESSOR
 
+#if NPIC_U3_HT > 0
+extern int have_u3_ht(void);
+extern void __u3_ht_set_priority(int, int);
+#else
+#define have_u3_ht() 0
+#define __u3_ht_set_priority(a, b)
+#endif
+
 int
 md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 {
 #ifdef OPENPIC
-	if (openpic_base) {
-		uint32_t kl_base = 0x80000000;	/* XXX */
+	if ((openpic_base != NULL) || have_u3_ht()) {
+		uint32_t kl_base = (uint32_t)oea_mapiodev(0x80000000, 0x1000);
 		uint32_t gpio = kl_base + 0x5c;	/* XXX */
 		u_int node, off;
 		char cpupath[32];
@@ -225,10 +227,10 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 		*(u_int *)EXC_RST =		/* ba cpu_spinup_trampoline */
 		    0x48000002 | (u_int)cpu_spinup_trampoline;
 		__syncicache((void *)EXC_RST, 0x100);
-		h->running = -1;
+		h->hatch_running = -1;
 
 		/* see if there's an OF property for the reset register */
-		sprintf(cpupath, "/cpus/@%x", ci->ci_cpuid);
+		snprintf(cpupath, sizeof(cpupath), "/cpus/@%x", ci->ci_cpuid);
 		node = OF_finddevice(cpupath);
 		if (node == -1) {
 			printf(": no OF node for CPU %d?\n", ci->ci_cpuid);
@@ -249,7 +251,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 #endif /* OPENPIC */
 		/* Start secondary CPU and stop timebase. */
 		out32(0xf2800000, (int)cpu_spinup_trampoline);
-		ppc_send_ipi(1, PPC_IPI_NOMESG);
+		cpu_send_ipi(1, IPI_NOMESG);
 #ifdef OPENPIC
 	}
 #endif
@@ -260,21 +262,21 @@ void
 md_presync_timebase(volatile struct cpu_hatch_data *h)
 {
 #ifdef OPENPIC
-	if (openpic_base) {
+	if ((openpic_base != NULL) || have_u3_ht()) {
 		uint64_t tb;
 
 		/* Sync timebase. */
 		tb = mftb();
 		tb += 100000;  /* 3ms @ 33MHz */
 
-		h->tbu = tb >> 32;
-		h->tbl = tb & 0xffffffff;
+		h->hatch_tbu = tb >> 32;
+		h->hatch_tbl = tb & 0xffffffff;
 
 		while (tb > mftb())
 			;
 
 		__asm volatile ("sync; isync");
-		h->running = 0;
+		h->hatch_running = 0;
 
 		delay(500000);
 	} else
@@ -290,7 +292,7 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 {
 	int i;
 #ifdef OPENPIC
-	if (!openpic_base) {
+	if (!((openpic_base != NULL) || have_u3_ht())) {
 #endif
 		/*
 		 * wait for secondary spin up (1.5ms @ 604/200MHz)
@@ -298,12 +300,12 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 		 * running.
 		 */
 		for (i = 0; i < 100000; i++)
-			if (h->running)
+			if (h->hatch_running)
 				break;
 
 		/* Start timebase. */
 		out32(0xf2800000, 0x100);
-		ppc_send_ipi(1, PPC_IPI_NOMESG);
+		cpu_send_ipi(1, IPI_NOMESG);
 #ifdef OPENPIC
 	}
 #endif
@@ -313,11 +315,11 @@ void
 md_sync_timebase(volatile struct cpu_hatch_data *h)
 {
 #ifdef OPENPIC
-	if (openpic_base) {
+	if ((openpic_base != NULL) || have_u3_ht()) {
 		/* Sync timebase. */
-		u_int tbu = h->tbu;
-		u_int tbl = h->tbl;
-		while (h->running == -1)
+		u_int tbu = h->hatch_tbu;
+		u_int tbl = h->hatch_tbl;
+		while (h->hatch_running == -1)
 			;
 		__asm volatile ("sync; isync");
 		__asm volatile ("mttbl %0" :: "r"(0));
@@ -331,9 +333,11 @@ void
 md_setup_interrupts(void)
 {
 #ifdef OPENPIC
-	if (openpic_base)
+	if (openpic_base) {
 		openpic_set_priority(cpu_number(), 0);
-	else
+	} else if (have_u3_ht()) {
+		__u3_ht_set_priority(cpu_number(), 0);		
+	} else
 #endif /* OPENPIC */
 		out32(HH_INTR_SECONDARY, ~0);	/* Reset interrupt. */
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: wseventvar.h,v 1.11 2006/10/09 11:03:43 peter Exp $ */
+/* $NetBSD: wseventvar.h,v 1.16 2015/09/06 06:01:01 dholland Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -70,6 +70,8 @@
  *	@(#)event_var.h	8.1 (Berkeley) 6/11/93
  */
 
+#include <sys/ioccom.h>
+
 /*
  * Internal "wscons_event" queue interface for the keyboard and mouse drivers.
  * The drivers are expected not to place events in the queue above spltty(),
@@ -81,9 +83,11 @@ struct wseventvar {
 	volatile u_int put;	/* put (write) index (modified by interrupt) */
 	struct selinfo sel;	/* process selecting */
 	struct proc *io;	/* process that opened queue (can get SIGIO) */
+	void	*sih;		/* soft interrupt handle for signals */
 	int	wanted;		/* wake up on input ready */
 	int	async;		/* send SIGIO on input ready */
 	struct wscons_event *q;	/* circular buffer (queue) of events */
+	int	version;	/* event version */
 };
 
 void	wsevent_init(struct wseventvar *, struct proc *);
@@ -93,3 +97,18 @@ int	wsevent_poll(struct wseventvar *, int, struct lwp *);
 int	wsevent_kqfilter(struct wseventvar *, struct knote *);
 void	wsevent_wakeup(struct wseventvar *);
 int	wsevent_inject(struct wseventvar *, struct wscons_event *, size_t);
+int	wsevent_setversion(struct wseventvar *, int);
+
+/*
+ * COMPAT_50
+ */
+#include <compat/sys/time.h>
+
+struct owscons_event {
+	u_int type;
+	int value;
+	struct timespec50 time;
+};
+
+#define	WSMUXIO_OINJECTEVENT	_IOW('W', 96, struct owscons_event)
+

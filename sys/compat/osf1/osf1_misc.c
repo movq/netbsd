@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_misc.c,v 1.81 2007/12/20 23:03:03 dsl Exp $ */
+/* $NetBSD: osf1_misc.c,v 1.87 2016/11/10 17:00:51 christos Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.81 2007/12/20 23:03:03 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.87 2016/11/10 17:00:51 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -72,7 +72,6 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.81 2007/12/20 23:03:03 dsl Exp $");
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/signal.h>
@@ -84,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.81 2007/12/20 23:03:03 dsl Exp $");
 #include <sys/socketvar.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
-#include <sys/user.h>
 #include <sys/wait.h>
 
 #include <machine/alpha.h>
@@ -96,10 +94,6 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_misc.c,v 1.81 2007/12/20 23:03:03 dsl Exp $");
 #include <compat/osf1/osf1_syscallargs.h>
 #include <compat/common/compat_util.h>
 #include <compat/osf1/osf1_cvt.h>
-
-#ifdef SYSCALL_DEBUG
-extern int scdebug;
-#endif
 
 int
 osf1_sys_classcntl(struct lwp *l, const struct osf1_sys_classcntl_args *uap, register_t *retval)
@@ -140,6 +134,7 @@ osf1_sys_set_program_attributes(struct lwp *l, const struct osf1_sys_set_program
 	if (tsize > MAXTSIZ)
 		return (ENOMEM);
 
+	/* XXXSMP unlocked */
 	p->p_vmspace->vm_taddr = SCARG(uap, taddr);
 	p->p_vmspace->vm_tsize = tsize;
 	p->p_vmspace->vm_daddr = SCARG(uap, daddr);
@@ -401,7 +396,7 @@ osf1_sys_wait4(struct lwp *l, const struct osf1_sys_wait4_args *uap, register_t 
 	struct osf1_rusage osf1_rusage;
 	struct rusage netbsd_rusage;
 	unsigned long leftovers;
-	int error, status, was_zombie;
+	int error, status;
 	int options = SCARG(uap, options);
 	int pid = SCARG(uap, pid);
 
@@ -411,8 +406,8 @@ osf1_sys_wait4(struct lwp *l, const struct osf1_sys_wait4_args *uap, register_t 
 	if (leftovers != 0)
 		return (EINVAL);
 
-	error = do_sys_wait(l, & pid, &status, options | WOPTSCHECKED,
-	    SCARG(uap, rusage) != NULL ? &netbsd_rusage : NULL, &was_zombie);
+	error = do_sys_wait(&pid, &status, options,
+	    SCARG(uap, rusage) != NULL ? &netbsd_rusage : NULL);
 
 	retval[0] = pid;
 	if (pid == 0)

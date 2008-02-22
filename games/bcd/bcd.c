@@ -1,4 +1,4 @@
-/*	$NetBSD: bcd.c,v 1.14 2005/07/01 06:04:46 jmc Exp $	*/
+/*	$NetBSD: bcd.c,v 1.17 2009/08/12 05:21:28 dholland Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)bcd.c	8.2 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: bcd.c,v 1.14 2005/07/01 06:04:46 jmc Exp $");
+__RCSID("$NetBSD: bcd.c,v 1.17 2009/08/12 05:21:28 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,7 @@ __RCSID("$NetBSD: bcd.c,v 1.14 2005/07/01 06:04:46 jmc Exp $");
 #include <ctype.h>
 #include <unistd.h>
 
-const u_short holes[256] = {
+static const u_short holes[256] = {
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
     0x0,	 0x0,	  0x0,	   0x0,	    0x0,     0x0,     0x0,     0x0,
@@ -124,7 +124,7 @@ const u_short holes[256] = {
  */
 #define	bit(w,i)	((w)&(1<<(i)))
 
-void	printcard(char *);
+static void printcard(char *);
 
 int
 main(int argc, char **argv)
@@ -150,12 +150,12 @@ main(int argc, char **argv)
 
 #define	COLUMNS	48
 
-void
+static void
 printcard(char *str)
 {
 	static const char rowchars[] = "   123456789";
 	int i, row;
-	unsigned char *p;
+	char *p;
 
 	/* ruthlessly remove newlines and truncate at 48 characters. */
 	if ((p = strchr(str, '\n')))
@@ -166,8 +166,8 @@ printcard(char *str)
 
 	/* make string upper case. */
 	for (p = str; *p; ++p)
-		if (isascii(*p) && islower(*p))
-			*p = toupper(*p);
+		if (isascii((unsigned char)*p) && islower((unsigned char)*p))
+			*p = toupper((unsigned char) *p);
 
 	 /* top of card */
 	putchar(' ');
@@ -182,7 +182,7 @@ printcard(char *str)
 	p = str;
 	putchar('/');
 	for (i = 1; *p; i++, p++)
-		if (holes[(int)*p])
+		if (holes[(unsigned char)*p])
 			putchar(*p);
 		else
 			putchar(' ');
@@ -200,7 +200,7 @@ printcard(char *str)
 	for (row = 0; row <= 11; ++row) {
 		putchar('|');
 		for (i = 0, p = str; *p; i++, p++) {
-			if (bit(holes[(int)*p], 11 - row))
+			if (bit(holes[(unsigned char)*p], 11 - row))
 				putchar(']');
 			else
 				putchar(rowchars[row]);

@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.h,v 1.20 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: dir.h,v 1.25 2015/09/01 06:16:03 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -40,19 +40,19 @@
 #define	_UFS_UFS_DIR_H_
 
 /*
- * Theoretically, directories can be more than 2Gb in length, however, in
+ * Theoretically, directories can be more than 2Gb in length; however, in
  * practice this seems unlikely. So, we define the type doff_t as a 32-bit
  * quantity to keep down the cost of doing lookup on a 32-bit machine.
  */
 #define	doff_t		int32_t
-#define	MAXDIRSIZE	(0x7fffffff)
+#define	UFS_MAXDIRSIZE	(0x7fffffff)
 
 /*
- * A directory consists of some number of blocks of DIRBLKSIZ
- * bytes, where DIRBLKSIZ is chosen such that it can be transferred
+ * A directory consists of some number of blocks of UFS_DIRBLKSIZ
+ * bytes, where UFS_DIRBLKSIZ is chosen such that it can be transferred
  * to disk in a single atomic operation (e.g. 512 bytes on most machines).
  *
- * Each DIRBLKSIZ byte block contains some number of directory entry
+ * Each UFS_DIRBLKSIZ byte block contains some number of directory entry
  * structures, which are of variable length.  Each directory entry has
  * a struct direct at the front of it, containing its inode number,
  * the length of the entry, and the length of the name contained in
@@ -60,9 +60,9 @@
  * All names are guaranteed null terminated.
  * The maximum length of a name in a directory is FFS_MAXNAMLEN.
  *
- * The macro DIRSIZ(fmt, dp) gives the amount of space required to represent
+ * The macro UFS_DIRSIZ(fmt, dp) gives the amount of space required to represent
  * a directory entry.  Free space in a directory is represented by
- * entries which have dp->d_reclen > DIRSIZ(fmt, dp).  All DIRBLKSIZ bytes
+ * entries which have dp->d_reclen > DIRSIZ(fmt, dp).  All UFS_DIRBLKSIZ bytes
  * in a directory block are claimed by the directory entries.  This
  * usually results in the last entry in a directory having a large
  * dp->d_reclen.  When entries are deleted from a directory, the
@@ -72,8 +72,8 @@
  * Entries other than the first in a directory do not normally have
  * dp->d_ino set to 0.
  */
-#undef	DIRBLKSIZ
-#define	DIRBLKSIZ	DEV_BSIZE
+#undef	UFS_DIRBLKSIZ
+#define	UFS_DIRBLKSIZ	DEV_BSIZE
 #define	FFS_MAXNAMLEN	255
 #define APPLEUFS_DIRBLKSIZ 1024
 
@@ -106,26 +106,70 @@ struct	direct {
 #define	DTTOIF(dirtype)	((dirtype) << 12)
 
 /*
- * The DIRSIZ macro gives the minimum record length which will hold
+ * The UFS_DIRSIZ macro gives the minimum record length which will hold
  * the directory entry.  This requires the amount of space in struct direct
  * without the d_name field, plus enough space for the name with a terminating
  * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
  */
-#define	DIRECTSIZ(namlen) \
+#define	UFS_DIRECTSIZ(namlen) \
 	((sizeof(struct direct) - (FFS_MAXNAMLEN+1)) + (((namlen)+1 + 3) &~ 3))
 
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-#define DIRSIZ(oldfmt, dp, needswap)	\
-    (((oldfmt) && !(needswap)) ?	\
-    DIRECTSIZ((dp)->d_type) : DIRECTSIZ((dp)->d_namlen))
+#define UFS_DIRSIZ(oldfmt, dp, needswap)	\
+    (((oldfmt) && !(needswap)) ?		\
+    UFS_DIRECTSIZ((dp)->d_type) : UFS_DIRECTSIZ((dp)->d_namlen))
 #else
-#define DIRSIZ(oldfmt, dp, needswap)	\
-    (((oldfmt) && (needswap)) ?		\
-    DIRECTSIZ((dp)->d_type) : DIRECTSIZ((dp)->d_namlen))
+#define UFS_DIRSIZ(oldfmt, dp, needswap)	\
+    (((oldfmt) && (needswap)) ?			\
+    UFS_DIRECTSIZ((dp)->d_type) : UFS_DIRECTSIZ((dp)->d_namlen))
 #endif
 
-#define OLDDIRFMT	1
-#define NEWDIRFMT	0
+/*
+ * UFS_OLDDIRFMT and UFS_NEWDIRFMT are code numbers for a directory
+ * format change that happened in ffs a long time ago. (Back in the
+ * 80s, if I'm not mistaken.)
+ *
+ * These code numbers do not appear on disk. They're generated from
+ * runtime logic that is cued by other things, which is why
+ * UFS_OLDDIRFMT is confusingly 1 and UFS_NEWDIRFMT is confusingly 0.
+ *
+ * Relatedly, the FFS_EI byte swapping logic for directories is a
+ * horrible mess. For example, to access the namlen field, one
+ * currently does the following:
+ *
+ * #if (BYTE_ORDER == LITTLE_ENDIAN)
+ *         swap = (UFS_IPNEEDSWAP(VTOI(vp)) == 0);
+ * #else
+ *         swap = (UFS_IPNEEDSWAP(VTOI(vp)) != 0);
+ * #endif
+ *         return ((FSFMT(vp) && swap) ? dp->d_type : dp->d_namlen);
+ *
+ * UFS_IPNEEDSWAP() returns true if the volume is opposite-endian. This
+ * horrible "swap" logic is cutpasted all over everywhere but amounts
+ * to the following:
+ *
+ *    running code      volume          lfs_dobyteswap  "swap"
+ *    ----------------------------------------------------------
+ *    LITTLE_ENDIAN     LITTLE_ENDIAN   false           true
+ *    LITTLE_ENDIAN     BIG_ENDIAN      true            false
+ *    BIG_ENDIAN        LITTLE_ENDIAN   true            true
+ *    BIG_ENDIAN        BIG_ENDIAN      false           false
+ *
+ * which you'll note boils down to "volume is little-endian".
+ *
+ * Meanwhile, FSFMT(vp) yields UFS_OLDDIRFMT or UFS_NEWDIRFMT via
+ * perverted logic of its own. Since UFS_OLDDIRFMT is 1 (contrary to
+ * what one might expect approaching this cold) what this mess means
+ * is: on OLDDIRFMT volumes that are little-endian, we read the
+ * namlen value out of the type field. This is because on OLDDIRFMT
+ * volumes there is no d_type field, just a 16-bit d_namlen; so if
+ * the 16-bit d_namlen is little-endian, the useful part of it is
+ * in the first byte, which in the NEWDIRFMT structure is the d_type
+ * field.
+ */
+
+#define UFS_OLDDIRFMT	1
+#define UFS_NEWDIRFMT	0
 
 /*
  * Template for manipulating directories.  Should use struct direct's,
@@ -145,7 +189,7 @@ struct dirtemplate {
 };
 
 /*
- * This is the old format of directories, sanz type element.
+ * This is the old format of directories, sans type element.
  */
 struct odirtemplate {
 	u_int32_t	dot_ino;

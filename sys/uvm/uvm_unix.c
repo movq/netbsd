@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_unix.c,v 1.40 2008/01/02 11:49:21 ad Exp $	*/
+/*	$NetBSD: uvm_unix.c,v 1.50 2018/01/06 16:41:24 kamil Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -19,12 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor,
- *	Washington University, the University of California, Berkeley and
- *	its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.40 2008/01/02 11:49:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.50 2018/01/06 16:41:24 kamil Exp $");
 
 #include "opt_pax.h"
 
@@ -61,10 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.40 2008/01/02 11:49:21 ad Exp $");
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
-
-#ifdef PAX_MPROTECT
 #include <sys/pax.h>
-#endif /* PAX_MPROTECT */
 
 #include <uvm/uvm.h>
 
@@ -80,20 +72,22 @@ sys_obreak(struct lwp *l, const struct sys_obreak_args *uap, register_t *retval)
 	} */
 	struct proc *p = l->l_proc;
 	struct vmspace *vm = p->p_vmspace;
-	vaddr_t new, old;
+	vaddr_t nbreak, obreak;
 	int error;
 
 	mutex_enter(&p->p_auxlock);
-	old = (vaddr_t)vm->vm_daddr;
-	new = round_page((vaddr_t)SCARG(uap, nsize));
-	if ((new - old) > p->p_rlimit[RLIMIT_DATA].rlim_cur && new > old) {
+	obreak = (vaddr_t)vm->vm_daddr;
+	nbreak = round_page((vaddr_t)SCARG(uap, nsize));
+	if (nbreak == 0
+	    || ((nbreak - obreak) > p->p_rlimit[RLIMIT_DATA].rlim_cur
+		&& nbreak > obreak)) {
 		mutex_exit(&p->p_auxlock);
 		return (ENOMEM);
 	}
 
-	old = round_page(old + ptoa(vm->vm_dsize));
+	obreak = round_page(obreak + ptoa(vm->vm_dsize));
 
-	if (new == old) {
+	if (nbreak == obreak) {
 		mutex_exit(&p->p_auxlock);
 		return (0);
 	}
@@ -102,30 +96,30 @@ sys_obreak(struct lwp *l, const struct sys_obreak_args *uap, register_t *retval)
 	 * grow or shrink?
 	 */
 
-	if (new > old) {
-		vm_prot_t prot = UVM_PROT_READ | UVM_PROT_WRITE;
-		vm_prot_t maxprot = UVM_PROT_ALL;
+	if (nbreak > obreak) {
+		vm_prot_t prot = UVM_PROT_RW;
+		vm_prot_t maxprot;
+		
+		maxprot = PAX_MPROTECT_MAXPROTECT(l, prot, 0, UVM_PROT_ALL);
 
-#ifdef PAX_MPROTECT
-		pax_mprotect(l, &prot, &maxprot);
-#endif /* PAX_MPROTECT */
-
-		error = uvm_map(&vm->vm_map, &old, new - old, NULL,
+		error = uvm_map(&vm->vm_map, &obreak, nbreak - obreak, NULL,
 		    UVM_UNKNOWN_OFFSET, 0,
 		    UVM_MAPFLAG(prot, maxprot,
 				UVM_INH_COPY,
 				UVM_ADV_NORMAL, UVM_FLAG_AMAPPAD|UVM_FLAG_FIXED|
 				UVM_FLAG_OVERLAY|UVM_FLAG_COPYONW));
 		if (error) {
-			uprintf("sbrk: grow %ld failed, error = %d\n",
-				new - old, error);
+#ifdef DEBUG
+			uprintf("sbrk: grow %#"PRIxVADDR" failed, error = %d\n",
+			    nbreak - obreak, error);
+#endif
 			mutex_exit(&p->p_auxlock);
 			return (error);
 		}
-		vm->vm_dsize += atop(new - old);
+		vm->vm_dsize += atop(nbreak - obreak);
 	} else {
-		uvm_deallocate(&vm->vm_map, new, old - new);
-		vm->vm_dsize -= atop(old - new);
+		uvm_deallocate(&vm->vm_map, nbreak, obreak - nbreak);
+		vm->vm_dsize -= atop(obreak - nbreak);
 	}
 	mutex_exit(&p->p_auxlock);
 

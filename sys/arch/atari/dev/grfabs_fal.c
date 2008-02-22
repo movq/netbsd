@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_fal.c,v 1.18 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: grfabs_fal.c,v 1.27 2010/04/13 11:31:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Thomas Gerner.
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grfabs_fal.c,v 1.18 2005/12/11 12:16:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grfabs_fal.c,v 1.27 2010/04/13 11:31:11 tsutsui Exp $");
 
 #ifdef FALCON_VIDEO
 /*
@@ -57,18 +52,18 @@ __KERNEL_RCSID(0, "$NetBSD: grfabs_fal.c,v 1.18 2005/12/11 12:16:54 christos Exp
 /*
  * Function decls
  */
-static void       init_view __P((view_t *, bmap_t *, dmode_t *, box_t *));
-static bmap_t	  *alloc_bitmap __P((u_long, u_long, u_char));
-static colormap_t *alloc_colormap __P((dmode_t *));
-static void 	  free_bitmap __P((bmap_t *));
-static void	  falcon_display_view __P((view_t *));
-static view_t	  *falcon_alloc_view __P((dmode_t *, dimen_t *, u_char));
-static void	  falcon_free_view __P((view_t *));
-static void	  falcon_remove_view __P((view_t *));
-static void	  falcon_save_view __P((view_t *));
-static int	  falcon_use_colormap __P((view_t *, colormap_t *));
-static void	  falcon_detect __P((dmode_t *));
-static struct videl *falcon_getreg __P((u_short));
+static void       init_view(view_t *, bmap_t *, dmode_t *, box_t *);
+static bmap_t	  *alloc_bitmap(u_long, u_long, u_char);
+static colormap_t *alloc_colormap(dmode_t *);
+static void 	  free_bitmap(bmap_t *);
+static void	  falcon_display_view(view_t *);
+static view_t	  *falcon_alloc_view(dmode_t *, dimen_t *, u_char);
+static void	  falcon_free_view(view_t *);
+static void	  falcon_remove_view(view_t *);
+static void	  falcon_save_view(view_t *);
+static int	  falcon_use_colormap(view_t *, colormap_t *);
+static void	  falcon_detect(dmode_t *);
+static struct videl *falcon_getreg(u_short);
 
 /*
  * Our function switch table
@@ -185,8 +180,7 @@ static u_short mon_type;
  * Initialize list of possible video modes.
  */
 void
-falcon_probe_video(modelp)
-MODES	*modelp;
+falcon_probe_video(MODES *modelp)
 {
 	dmode_t	*dm;
 	struct videl *vregs;
@@ -222,8 +216,7 @@ MODES	*modelp;
 }
 
 static struct videl *
-falcon_getreg(mode)
-u_short mode;
+falcon_getreg(u_short mode)
 {
 	int i;
 	struct videl *vregs;
@@ -236,8 +229,7 @@ u_short mode;
 }
 
 static void
-falcon_detect(dm)
-dmode_t *dm;
+falcon_detect(dmode_t *dm)
 {
 	u_short	falshift, stshift;
 	struct videl *vregs = vm_regs(dm);
@@ -286,7 +278,8 @@ dmode_t *dm;
 		dm->depth = 4;
 	else if (stshift == 1)		/* 4 color */
 		dm->depth = 2;
-	else dm->depth = 1;		/* 2 color */
+	else
+		dm->depth = 1;		/* 2 color */
 
 	/*
 	 * Now calculate the screen hight
@@ -307,11 +300,10 @@ dmode_t *dm;
 }
 
 u_long	falcon_needs_vbl;
-void falcon_display_switch __P((void));
+void falcon_display_switch(void);
 
 static void
-falcon_display_view(v)
-view_t *v;
+falcon_display_view(view_t *v)
 {
 	dmode_t	*dm = v->mode;
 	bmap_t		*bm;
@@ -356,13 +348,14 @@ view_t *v;
 }
 
 void
-falcon_display_switch()
+falcon_display_switch(void)
 {
 	view_t		*v;
 	struct videl	*vregs;
 	static int vbl_count = 1;
 
-	if(vbl_count--) return;
+	if (vbl_count--)
+		return;
 
 	v = (view_t*)falcon_needs_vbl;
 
@@ -373,7 +366,8 @@ falcon_display_switch()
 	 * Write to videl registers only on VGA displays
 	 * This is only a hack. Must be fixed soon. XXX -- Thomas
 	 */
-	if(mon_type != FAL_VGA) return;
+	if (mon_type != FAL_VGA)
+		return;
 
 	vregs = vm_regs(v->mode);
 
@@ -408,8 +402,7 @@ falcon_display_switch()
 }
 
 static void
-falcon_remove_view(v)
-view_t *v;
+falcon_remove_view(view_t *v)
 {
 	dmode_t *mode = v->mode;
 
@@ -424,14 +417,12 @@ view_t *v;
 }
 
 void
-falcon_save_view(v)
-view_t *v;
+falcon_save_view(view_t *v)
 {
 }
 
 static void
-falcon_free_view(v)
-view_t *v;
+falcon_free_view(view_t *v)
 {
 	if (v) {
 		falcon_remove_view(v);
@@ -444,9 +435,7 @@ view_t *v;
 }
 
 static int
-falcon_use_colormap(v, cm)
-view_t		*v;
-colormap_t	*cm;
+falcon_use_colormap(view_t *v, colormap_t *cm)
 {
 	dmode_t			*dm;
 	volatile u_short	*creg;
@@ -518,17 +507,15 @@ colormap_t	*cm;
 }
 
 static view_t *
-falcon_alloc_view(mode, dim, depth)
-dmode_t	*mode;
-dimen_t	*dim;
-u_char   depth;
+falcon_alloc_view(dmode_t *mode, dimen_t *dim, u_char depth)
 {
 	view_t *v;
 	bmap_t *bm;
 
 	if (!atari_realconfig)
 		v = &gra_con_view;
-	else v = malloc(sizeof(*v), M_DEVBUF, M_NOWAIT);
+	else
+		v = malloc(sizeof(*v), M_DEVBUF, M_NOWAIT);
 	if (v == NULL)
 		return(NULL);
 	
@@ -550,24 +537,18 @@ u_char   depth;
 }
 
 static void
-init_view(v, bm, mode, dbox)
-view_t	*v;
-bmap_t	*bm;
-dmode_t	*mode;
-box_t	*dbox;
+init_view(view_t *v, bmap_t *bm, dmode_t *mode, box_t *dbox)
 {
 	v->bitmap = bm;
 	v->mode   = mode;
 	v->flags  = 0;
-	bcopy(dbox, &v->display, sizeof(box_t));
+	memcpy(&v->display, dbox, sizeof(box_t));
 }
 
 /* bitmap functions */
 
 static bmap_t *
-alloc_bitmap(width, height, depth)
-u_long	width, height;
-u_char	depth;
+alloc_bitmap(u_long width, u_long height, u_char depth)
 {
 	u_long  total_size, bm_size;
 	void	*hw_address;
@@ -607,21 +588,19 @@ u_char	depth;
 	bm->lin_base      = 0;
 	bm->vga_base      = 0;
 
-	bzero(bm->plane, bm_size);
+	memset(bm->plane, 0, bm_size);
 	return (bm);
 }
 
 static void
-free_bitmap(bm)
-bmap_t *bm;
+free_bitmap(bmap_t *bm)
 {
 	if (bm)
 		free_stmem(bm);
 }
 
 static colormap_t *
-alloc_colormap(dm)
-dmode_t		*dm;
+alloc_colormap(dmode_t *dm)
 {
 	int		nentries, i;
 	colormap_t	*cm;
@@ -636,8 +615,7 @@ dmode_t		*dm;
 	if (!atari_realconfig) {
 		cm = &gra_con_cmap;
 		cm->entry = gra_con_colors;
-	}
-	else {
+	} else {
 		int size;
 
 		size = sizeof(*cm) + (nentries * sizeof(cm->entry[0]));

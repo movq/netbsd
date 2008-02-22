@@ -1,4 +1,4 @@
-#	$NetBSD: COMPUTEXEVB,v 1.27 2006/09/20 00:41:12 uwe Exp $
+#	$NetBSD: COMPUTEXEVB,v 1.33 2017/09/14 07:58:40 mrg Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -7,6 +7,7 @@
 include "arch/evbsh3/conf/std.evbsh3.eb"
 # for little endian
 #include "arch/evbsh3/conf/std.evbsh3.el"
+include "arch/evbsh3/conf/std.computexevb"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -15,6 +16,7 @@ options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
 options 	MEMORY_DISK_ROOT_SIZE=3074	# size of memory disk, in blocks
+options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 maxusers	32		# estimated number of users
 
@@ -46,8 +48,7 @@ options 	HZ=50		# clock interrupt generates every 1/HZ sec
 options 	USERCONF	# userconf(4) support
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-options 	COMPAT_43	# and 4.3BSD
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd20.config"
 
 # Executable format options
 options 	EXEC_COFF	# 32-bit COFF executables (sh-compiler)
@@ -55,6 +56,7 @@ options 	EXEC_COFF	# 32-bit COFF executables (sh-compiler)
 # File systems
 file-system 	FFS		# UFS
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support
 
 # Kernel root file system and dump configuration.
 config		netbsd	root on ? type ?
@@ -71,6 +73,6 @@ options 	SCIFCONSOLE,SCIFCN_SPEED=115200
 scif0 at shb?
 
 # disk/mass storage pseudo-devices
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	clockctl		# user control of clock subsystem

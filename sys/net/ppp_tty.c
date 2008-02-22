@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp_tty.c,v 1.52 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: ppp_tty.c,v 1.64 2018/02/07 06:19:43 mrg Exp $	*/
 /*	Id: ppp_tty.c,v 1.3 1996/07/01 01:04:11 paulus Exp 	*/
 
 /*
@@ -93,11 +93,12 @@
 /* from NetBSD: if_ppp.c,v 1.15.2.2 1994/07/28 05:17:58 cgd Exp */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.52 2008/02/20 17:05:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.64 2018/02/07 06:19:43 mrg Exp $");
 
+#ifdef _KERNEL_OPT
 #include "ppp.h"
-
 #include "opt_ppp.h"
+#endif
 #define VJC
 #define PPP_COMPRESS
 
@@ -125,10 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.52 2008/02/20 17:05:53 matt Exp $");
 #include <net/slcompress.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0 || defined(PPP_FILTER)
 #include <net/bpf.h>
-#endif
 #include <net/ppp_defs.h>
 #include <net/if_ppp.h>
 #include <net/if_pppvar.h>
@@ -208,8 +206,9 @@ pppopen(dev_t dev, struct tty *tp)
     struct ppp_softc *sc;
     int error, s;
 
-    if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	NULL)) != 0)
+    error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE_PPP,
+	KAUTH_REQ_NETWORK_INTERFACE_PPP_ADD, NULL, NULL, NULL);
+    if (error)
 	return (error);
 
     s = spltty();
@@ -230,10 +229,8 @@ pppopen(dev_t dev, struct tty *tp)
     if (sc->sc_relinq)
 	(*sc->sc_relinq)(sc);	/* get previous owner to relinquish the unit */
 
-#if NBPFILTER > 0
     /* Switch DLT to PPP-over-serial. */
     bpf_change_type(&sc->sc_if, DLT_PPP_SERIAL, PPP_HDRLEN);
-#endif
 
     sc->sc_ilen = 0;
     sc->sc_m = NULL;
@@ -297,10 +294,8 @@ pppasyncrelinq(struct ppp_softc *sc)
 {
     int s;
 
-#if NBPFILTER > 0
     /* Change DLT to back none. */
     bpf_change_type(&sc->sc_if, DLT_NULL, 0);
-#endif
 
     s = spltty();
     if (sc->sc_outm) {
@@ -352,7 +347,7 @@ pppread(struct tty *tp, struct uio *uio, int flag)
 	    mutex_spin_exit(&tty_lock);
 	    return (EWOULDBLOCK);
 	}
-	error = ttysleep(tp, &tp->t_rawq.c_cv, true, 0);
+	error = ttysleep(tp, &tp->t_rawcv, true, 0);
 	if (error) {
 	    mutex_spin_exit(&tty_lock);
 	    return error;
@@ -400,7 +395,7 @@ pppwrite(struct tty *tp, struct uio *uio, int flag)
 
     m0->m_len = 0;
     m0->m_pkthdr.len = uio->uio_resid;
-    m0->m_pkthdr.rcvif = NULL;
+    m_reset_rcvif(m0);
 
     if (uio->uio_resid >= MCLBYTES / 2)
 	MCLGET(m0, M_DONTWAIT);
@@ -429,7 +424,7 @@ pppwrite(struct tty *tp, struct uio *uio, int flag)
     dst.sa_family = AF_UNSPEC;
     bcopy(mtod(m0, u_char *), dst.sa_data, PPP_HDRLEN);
     m_adj(m0, PPP_HDRLEN);
-    return ((*sc->sc_if.if_output)(&sc->sc_if, m0, &dst, (struct rtentry *)0));
+    return if_output_lock(&sc->sc_if, &sc->sc_if, m0, &dst, (struct rtentry *)0);
 }
 
 /*
@@ -454,8 +449,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
- 	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+ 	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	sc->sc_asyncmap[0] = *(u_int *)data;
 	break;
@@ -465,8 +460,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSRASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
-	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	sc->sc_rasyncmap = *(u_int *)data;
 	break;
@@ -476,8 +471,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSXASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
-	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	s = spltty();
 	bcopy(data, sc->sc_asyncmap, sizeof(sc->sc_asyncmap));
@@ -535,8 +530,8 @@ ppprcvframe(struct ppp_softc *sc, struct mbuf *m)
 				printf(
 				    "%s: garbage received: 0x%x (need 0xFF)\n",
 				    sc->sc_if.if_xname, hdr[0]);
-				goto bail;
-			}
+			goto bail;
+		}
 		M_PREPEND(m,2,M_DONTWAIT);
 		if (m==NULL) {
 			splx(s);
@@ -567,7 +562,7 @@ ppprcvframe(struct ppp_softc *sc, struct mbuf *m)
 		if (sc->sc_flags & SC_DEBUG)
 			printf("%s: bad protocol %x\n", sc->sc_if.if_xname,
 				(hdr[2] << 8) + hdr[3]);
-			goto bail;
+		goto bail;
 	}
 
 	/* packet beyond configured mru? */
@@ -838,8 +833,7 @@ pppasyncstart(struct ppp_softc *sc)
 	    }
 
 	    /* Finished with this mbuf; free it and move on. */
-	    MFREE(m, m2);
-	    m = m2;
+	    m = m2 = m_free(m);
 	    if (m == NULL) {
 		/* Finished a packet */
 		break;
@@ -984,8 +978,8 @@ pppinput(int c, struct tty *tp)
 {
     struct ppp_softc *sc;
     struct mbuf *m;
-    const struct cdevsw *cdev;
     int ilen, s;
+    int result;
 
     sc = (struct ppp_softc *) tp->t_sc;
     if (sc == NULL || tp != (struct tty *) sc->sc_devp)
@@ -1006,26 +1000,12 @@ pppinput(int c, struct tty *tp)
     /*
      * Handle software flow control of output.
      */
-    if (tp->t_iflag & IXON) {
-	if (c == tp->t_cc[VSTOP] && tp->t_cc[VSTOP] != _POSIX_VDISABLE) {
-	    if ((tp->t_state & TS_TTSTOP) == 0) {
-		tp->t_state |= TS_TTSTOP;
-		cdev = cdevsw_lookup(tp->t_dev);
-		if (cdev != NULL)
-			(*cdev->d_stop)(tp, 0);
-	    }
+    result = tty_try_xonxoff(tp, c);
+    if (result == 0) {
+	    /* Character was recognized and consumed. */
 	    return 0;
-	}
-	if (c == tp->t_cc[VSTART] && tp->t_cc[VSTART] != _POSIX_VDISABLE) {
-	    tp->t_state &= ~TS_TTSTOP;
-	    if (tp->t_oproc != NULL) {
-	        mutex_spin_enter(&tty_lock);	/* XXX */
-		(*tp->t_oproc)(tp);
-	        mutex_spin_exit(&tty_lock);	/* XXX */
-	    }
-	    return 0;
-	}
     }
+    /* Character wasn't consumed, continue processing it. */
 
     s = spltty();
     if (c & 0x80)

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.5 2005/12/11 12:18:16 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.10 2012/10/27 17:18:03 chs Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,30 +27,98 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2005/12/11 12:18:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2012/10/27 17:18:03 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#if defined(SH7750R)
+#include <sys/callout.h>
+#include <sys/kernel.h>
+#include <machine/mmeye.h>
+#endif
+#include <machine/bootinfo.h>
+
+static void findroot(void);
+
+static int bootunit;
 
 void
-cpu_configure()
+cpu_configure(void)
 {
 	/* Start configuration */
 	splhigh();
+
+	findroot();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
 	/* Configuration is finished, turn on interrupts. */
 	spl0();
+
+#if defined(MMEYE_EPC_WDT)
+	callout_init(&epc_wdtc, 0);
+	callout_setfunc(&epc_wdtc, epc_watchdog_timer_reset, NULL);
+	epc_watchdog_timer_reset(NULL);
+#endif
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 
-	/* No boot information */
-	setroot(0, 0);
+	printf("boot device: %s\n",
+	    booted_device ? device_xname(booted_device) : "<unknown>");
+
+	rootconf();
+}
+
+void
+device_register(device_t dev, void *aux)
+{
+
+	if (booted_device != NULL)
+		return;
+
+	/* check wd drive */
+	if (device_class(dev) == DV_DISK &&
+	    device_is_a(dev, "wd")) {
+		device_t bdev, cdev;
+
+		bdev = device_parent(dev);
+		if (!device_is_a(bdev, "atabus"))
+			return;
+		cdev = device_parent(bdev);
+		if (!device_is_a(cdev, "wdc"))
+			return;
+
+		if (device_unit(dev) == bootunit)
+			booted_device = dev;
+	}
+}
+
+/*
+ * Attempt to find the device from which we were booted.
+ * If we can do so, and not instructed not to do so,
+ * change rootdev to correspond to the load device.
+ */
+static void
+findroot(void)
+{
+	struct btinfo_bootdev *bi;
+	int x, p;
+
+	bi = (struct btinfo_bootdev *)lookup_bootinfo(BTINFO_BOOTDEV);
+	if (bi == NULL)
+		return;
+	x = strlen(bi->bootdev) - 2;
+	p = strlen(bi->bootdev) - 1;
+	if (!isdigit(bi->bootdev[x]) ||
+	    !isalpha(bi->bootdev[p]))
+		return;			/* bad format */
+
+	bootunit = bi->bootdev[x] - '0';
+	booted_partition = bi->bootdev[p] - 'a';
 }

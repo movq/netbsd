@@ -1,13 +1,14 @@
-/*	 $NetBSD: i82093var.h,v 1.1 2006/09/28 18:53:15 bouyer Exp $ */
+/*	 $NetBSD: i82093var.h,v 1.5 2017/11/04 09:31:08 cherry Exp $ */
+
+#ifndef _XEN_I82093VAR_H_
+#define _XEN_I82093VAR_H_
 
 #include "opt_xen.h"
 #define _IOAPIC_CUSTOM_RW
 #include <x86/i82093var.h>
 #include <hypervisor.h>
 
-#ifdef XEN3
-
-static inline  u_int32_t
+static inline  uint32_t
 ioapic_read_ul(struct ioapic_softc *sc, int regid)
 {
 	physdev_op_t op;
@@ -25,7 +26,7 @@ ioapic_read_ul(struct ioapic_softc *sc, int regid)
 }
 
 static inline void
-ioapic_write_ul(struct ioapic_softc *sc, int regid, u_int32_t val)
+ioapic_write_ul(struct ioapic_softc *sc, int regid, uint32_t val)
 {
 	physdev_op_t op;
 	int ret;
@@ -35,10 +36,8 @@ ioapic_write_ul(struct ioapic_softc *sc, int regid, u_int32_t val)
 	op.u.apic_op.reg = regid;
 	op.u.apic_op.value = val;
 	ret = HYPERVISOR_physdev_op(&op);
-	if (ret) {
+	if (ret)
 		printf("PHYSDEVOP_APIC_WRITE ret %d\n", ret);
-		panic("PHYSDEVOP_APIC_WRITE");
-	}
 }
 
-#endif
+#endif /* !_XEN_I82093VAR_H_ */

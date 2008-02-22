@@ -1,4 +1,4 @@
-/* $NetBSD: gcscehci.c,v 1.1 2007/07/08 01:13:26 jmcneill Exp $ */
+/* $NetBSD: gcscehci.c,v 1.13 2018/04/09 16:21:10 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.1 2007/07/08 01:13:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.13 2018/04/09 16:21:10 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: gcscehci.c,v 1.1 2007/07/08 01:13:26 jmcneill Exp $"
 #include <sys/proc.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpufunc.h>
 
 #include <dev/pci/pcidevs.h>
@@ -80,7 +73,7 @@ struct gcscehci_softc {
 };
 
 static int
-gcscehci_match(struct device *parent, struct cfdata *match, void *aux)
+gcscehci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -89,27 +82,29 @@ gcscehci_match(struct device *parent, struct cfdata *match, void *aux)
 	    PCI_INTERFACE(pa->pa_class) == PCI_INTERFACE_EHCI &&
 	    PCI_VENDOR(pa->pa_id) == PCI_VENDOR_AMD &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_CS5536_EHCI)
-		return (10);	/* beat ehci_pci */
+		return 10;	/* beat ehci_pci */
 
-	return (0);
+	return 0;
 }
 
 static void
-gcscehci_attach(struct device *parent, struct device *self, void *aux)
+gcscehci_attach(device_t parent, device_t self, void *aux)
 {
-	struct gcscehci_softc *sc = (struct gcscehci_softc *)self;
+	struct gcscehci_softc *sc = device_private(self);
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t tag = pa->pa_tag;
 	char const *intrstr;
 	pci_intr_handle_t ih;
-	const char *vendor;
-	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
+	const char *devname = device_xname(self);
 	char devinfo[256];
-	usbd_status r;
 	bus_addr_t ehcibase;
 	int ncomp;
 	struct usb_pci *up;
+	char buf[PCI_INTRSTR_LEN];
+
+	sc->sc.sc_dev = self;
+	sc->sc.sc_bus.ub_hcpriv = sc;
 
 	aprint_naive(": USB controller\n");
 
@@ -128,7 +123,7 @@ gcscehci_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_pc = pc;
 	sc->sc_tag = tag;
-	sc->sc.sc_bus.dmatag = pa->pa_dmat;
+	sc->sc.sc_bus.ub_dmatag = pa->pa_dmat;
 
 	/* Disable interrupts, so we don't get any spurious ones. */
 	sc->sc.sc_offs = EREAD1(&sc->sc, EHCI_CAPLENGTH);
@@ -140,27 +135,18 @@ gcscehci_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error("%s: couldn't map interrupt\n", devname);
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, buf, sizeof(buf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, ehci_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("%s: couldn't establish interrupt", devname);
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal("%s: interrupting at %s\n", devname, intrstr);
 
-	sc->sc.sc_bus.usbrev = USBREV_2_0;
-
-	/* Figure out vendor for root hub descriptor. */
-	vendor = pci_findvendor(pa->pa_id);
-	sc->sc.sc_id_vendor = PCI_VENDOR(pa->pa_id);
-	if (vendor)
-		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
-	else
-		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+	sc->sc.sc_bus.ub_revision = USBREV_2_0;
 
 	/*
 	 * Find companion controllers.  According to the spec they always
@@ -170,7 +156,7 @@ gcscehci_attach(struct device *parent, struct device *self, void *aux)
 	TAILQ_FOREACH(up, &ehci_pci_alldevs, next) {
 		if (up->bus == pa->pa_bus && up->device == pa->pa_device) {
 			DPRINTF(("gcscehci_attach: companion %s\n",
-				 USBDEVNAME(up->usb->bdev)));
+				 device_xname(up->usb)));
 			sc->sc.sc_comps[ncomp++] = up->usb;
 			if (ncomp >= EHCI_COMPANION_MAX)
 				break;
@@ -178,16 +164,15 @@ gcscehci_attach(struct device *parent, struct device *self, void *aux)
 	}
 	sc->sc.sc_ncomp = ncomp;
 
-	r = ehci_init(&sc->sc);
-	if (r != USBD_NORMAL_COMPLETION) {
-		aprint_error("%s: init failed, error=%d\n", devname, r);
+	int err = ehci_init(&sc->sc);
+	if (err) {
+		aprint_error("%s: init failed, error=%d\n", devname, err);
 		return;
 	}
 
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found((void *)sc, &sc->sc.sc_bus,
-				       usbctlprint);
+	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
 }
 
-CFATTACH_DECL(gcscehci, sizeof(struct gcscehci_softc),
+CFATTACH_DECL_NEW(gcscehci, sizeof(struct gcscehci_softc),
     gcscehci_match, gcscehci_attach, NULL, ehci_activate);

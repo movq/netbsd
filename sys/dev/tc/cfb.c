@@ -1,7 +1,11 @@
-/* $NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $ */
+/* $NetBSD: cfb.c,v 1.62 2018/01/24 05:35:58 riastradh Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.62 2018/01/24 05:35:58 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $");
 #include <dev/tc/tcvar.h>
 #include <dev/ic/bt459reg.h>
 
-#include <uvm/uvm_extern.h>
-
 #if defined(pmax)
 #define	machine_btop(x) mips_btop(MIPS_KSEG1_TO_PHYS(x))
 #endif
@@ -69,18 +66,18 @@ __KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $");
  * adjacent each other in a word, i.e.,
  *	struct bt459triplet {
  * 		struct {
- *			u_int8_t u0;
- *			u_int8_t u1;
- *			u_int8_t u2;
+ *			uint8_t u0;
+ *			uint8_t u1;
+ *			uint8_t u2;
  *			unsigned :8;
  *		} bt_lo;
  *		...
  * Although CX has single Bt459, 32bit R/W can be done w/o any trouble.
  *	struct bt459reg {
- *		   u_int32_t	   bt_lo;
- *		   u_int32_t	   bt_hi;
- *		   u_int32_t	   bt_reg;
- *		   u_int32_t	   bt_cmap;
+ *		   uint32_t	   bt_lo;
+ *		   uint32_t	   bt_hi;
+ *		   uint32_t	   bt_reg;
+ *		   uint32_t	   bt_cmap;
  *	};
  */
 
@@ -91,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $");
 #define	bt_cmap 0xc
 
 #define	REGWRITE32(p,i,v) do {					\
-	*(volatile u_int32_t *)((p) + (i)) = (v); tc_wmb();	\
+	*(volatile uint32_t *)((p) + (i)) = (v); tc_wmb();	\
     } while (0)
 #define	VDACSELECT(p,r) do {					\
 	REGWRITE32(p, bt_lo, 0xff & (r));			\
@@ -100,9 +97,9 @@ __KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.53 2007/10/19 12:01:19 ad Exp $");
 
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* 256 R/G/B entries */
-	u_int8_t r[CMAP_SIZE];
-	u_int8_t g[CMAP_SIZE];
-	u_int8_t b[CMAP_SIZE];
+	uint8_t r[CMAP_SIZE];
+	uint8_t g[CMAP_SIZE];
+	uint8_t b[CMAP_SIZE];
 };
 
 struct hwcursor64 {
@@ -111,13 +108,12 @@ struct hwcursor64 {
 	struct wsdisplay_curpos cc_size;
 	struct wsdisplay_curpos cc_magic;
 #define	CURSOR_MAX_SIZE	64
-	u_int8_t cc_color[6];
-	u_int64_t cc_image[CURSOR_MAX_SIZE];
-	u_int64_t cc_mask[CURSOR_MAX_SIZE];
+	uint8_t cc_color[6];
+	uint64_t cc_image[CURSOR_MAX_SIZE];
+	uint64_t cc_mask[CURSOR_MAX_SIZE];
 };
 
 struct cfb_softc {
-	struct device sc_dev;
 	vaddr_t sc_vaddr;
 	size_t sc_size;
 	struct rasops_info *sc_ri;
@@ -138,10 +134,10 @@ struct cfb_softc {
 #define	CX_BT459_OFFSET	0x200000
 #define	CX_OFFSET_IREQ	0x300000	/* Interrupt req. control */
 
-static int  cfbmatch(struct device *, struct cfdata *, void *);
-static void cfbattach(struct device *, struct device *, void *);
+static int  cfbmatch(device_t, cfdata_t, void *);
+static void cfbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(cfb, sizeof(struct cfb_softc),
+CFATTACH_DECL_NEW(cfb, sizeof(struct cfb_softc),
     cfbmatch, cfbattach, NULL, NULL);
 
 static void cfb_common_init(struct rasops_info *);
@@ -199,7 +195,7 @@ static void set_curpos(struct cfb_softc *, struct wsdisplay_curpos *);
  *   3 2 1 0 3 2 1 0		0 0 1 1 2 2 3 3
  *   7 6 5 4 7 6 5 4		4 4 5 5 6 6 7 7
  */
-static const u_int8_t shuffle[256] = {
+static const uint8_t shuffle[256] = {
 	0x00, 0x40, 0x10, 0x50, 0x04, 0x44, 0x14, 0x54,
 	0x01, 0x41, 0x11, 0x51, 0x05, 0x45, 0x15, 0x55,
 	0x80, 0xc0, 0x90, 0xd0, 0x84, 0xc4, 0x94, 0xd4,
@@ -235,7 +231,7 @@ static const u_int8_t shuffle[256] = {
 };
 
 static int
-cfbmatch(struct device *parent, struct cfdata *match, void *aux)
+cfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -246,7 +242,7 @@ cfbmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-cfbattach(struct device *parent, struct device *self, void *aux)
+cfbattach(device_t parent, device_t self, void *aux)
 {
 	struct cfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -257,16 +253,16 @@ cfbattach(struct device *parent, struct device *self, void *aux)
 	console = (ta->ta_addr == cfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &cfb_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
-		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
-			M_DEVBUF, M_NOWAIT);
+		ri = malloc(sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT|M_ZERO);
 		if (ri == NULL) {
 			printf(": can't alloc memory\n");
 			return;
 		}
-		memset(ri, 0, sizeof(struct rasops_info));
 
 		ri->ri_hw = (void *)ta->ta_addr;
 		cfb_common_init(ri);
@@ -284,7 +280,7 @@ cfbattach(struct device *parent, struct device *self, void *aux)
 	tc_intr_establish(parent, ta->ta_cookie, IPL_TTY, cfbintr, sc);
 
 	/* clear any pending interrupts */
-	*(volatile u_int8_t *)((char *)ri->ri_hw + CX_OFFSET_IREQ) = 0;
+	*(volatile uint8_t *)((char *)ri->ri_hw + CX_OFFSET_IREQ) = 0;
 
 	waa.console = console;
 	waa.scrdata = &cfb_screenlist;
@@ -298,7 +294,7 @@ static void
 cfb_cmap_init(struct cfb_softc *sc)
 {
 	struct hwcmap256 *cm;
-	const u_int8_t *p;
+	const uint8_t *p;
 	int index;
 
 	cm = &sc->sc_cmap;
@@ -322,6 +318,8 @@ cfb_common_init(struct rasops_info *ri)
 	cfbhwinit(base);
 
 	ri->ri_flg = RI_CENTER;
+	if (ri == &cfb_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = 1024;
 	ri->ri_height = 864;
@@ -334,10 +332,10 @@ cfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("cfb: font table is empty\n");
 		return;
@@ -507,7 +505,7 @@ cfbintr(void *arg)
 	int v;
 
 	base = (void *)sc->sc_ri->ri_hw;
-	*(u_int8_t *)(base + CX_OFFSET_IREQ) = 0;
+	*(uint8_t *)(base + CX_OFFSET_IREQ) = 0;
 	if (sc->sc_changed == 0)
 		return (1);
 
@@ -533,7 +531,7 @@ cfbintr(void *arg)
 		REGWRITE32(vdac, bt_reg, y >> 8);
 	}
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
-		u_int8_t *cp = sc->sc_cursor.cc_color;
+		uint8_t *cp = sc->sc_cursor.cc_color;
 
 		VDACSELECT(vdac, BT459_IREG_CCOLOR_2);
 		REGWRITE32(vdac, bt_reg, cp[1]);
@@ -545,12 +543,12 @@ cfbintr(void *arg)
 		REGWRITE32(vdac, bt_reg, cp[4]);
 	}
 	if (v & WSDISPLAY_CURSOR_DOSHAPE) {
-		u_int8_t *ip, *mp, img, msk;
-		u_int8_t u;
+		uint8_t *ip, *mp, img, msk;
+		uint8_t u;
 		int bcnt;
 
-		ip = (u_int8_t *)sc->sc_cursor.cc_image;
-		mp = (u_int8_t *)sc->sc_cursor.cc_mask;
+		ip = (uint8_t *)sc->sc_cursor.cc_image;
+		mp = (uint8_t *)sc->sc_cursor.cc_mask;
 
 		bcnt = 0;
 		VDACSELECT(vdac, BT459_IREG_CRAM_BASE+0);
@@ -598,7 +596,7 @@ static void
 cfbhwinit(void *cfbbase)
 {
 	char *vdac = (char *)cfbbase + CX_BT459_OFFSET;
-	const u_int8_t *p;
+	const uint8_t *p;
 	int i;
 
 	VDACSELECT(vdac, BT459_IREG_COMMAND_0);
@@ -721,7 +719,7 @@ set_cursor(struct cfb_softc *sc, struct wsdisplay_cursor *p)
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
 		index = p->cmap.index;
 		count = p->cmap.count;
-		if (index >= 2 || (index + count) > 2)
+		if (index >= 2 || count > 2 - index)
 			return (EINVAL);
 		error = copyin(p->cmap.red, &r[index], count);
 		if (error)

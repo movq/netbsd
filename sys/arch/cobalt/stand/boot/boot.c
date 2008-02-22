@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.10 2007/10/30 15:07:07 tsutsui Exp $	*/
+/*	$NetBSD: boot.c,v 1.20 2011/01/22 19:19:16 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,9 +63,6 @@
  *	@(#)boot.c	8.1 (Berkeley) 6/10/93
  */
 
-#include <machine/cpu.h>
-#include <machine/leds.h>
-
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libsa/dev_net.h>
@@ -82,6 +72,10 @@
 #include <sys/boot_flag.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
+
+#include <machine/cpu.h>
+
+#include <cobalt/dev/gtreg.h>
 
 #include "boot.h"
 #include "cons.h"
@@ -104,6 +98,17 @@ char *kernelnames[] = {
 	NULL
 };
 
+u_int cobalt_id;
+static const char * const cobalt_model[] =
+{
+	[0]                  = "Unknown Cobalt",
+	[COBALT_ID_QUBE2700] = "Cobalt Qube 2700",
+	[COBALT_ID_RAQ]      = "Cobalt RaQ",
+	[COBALT_ID_QUBE2]    = "Cobalt Qube 2",
+	[COBALT_ID_RAQ2]     = "Cobalt RaQ 2"
+};
+#define COBALT_MODELS	__arraycount(cobalt_model)
+
 extern u_long end;		/* Boot loader code end address */
 void start(void);
 
@@ -114,6 +119,7 @@ static int get_bsdbootname(char **, char **, int *);
 static int parse_bootname(char *, int, char **, char **);
 static void prominit(unsigned int memsize);
 static void print_banner(unsigned int memsize);
+static u_int read_board_id(void);
 
 void cpu_reboot(void);
 
@@ -366,12 +372,32 @@ void
 print_banner(unsigned int memsize)
 {
 
+	lcd_banner();
+
 	printf("\n");
 	printf(">> %s " NETBSD_VERS " Bootloader, Revision %s [@%p]\n",
 			bootprog_name, bootprog_rev, (void*)&start);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
-	printf(">> Memory:\t\t%u k\n", (memsize - MIPS_KSEG0_START) / 1024);
+	printf(">> Model:\t\t%s\n", cobalt_model[cobalt_id]);
+	printf(">> Memory:\t\t%lu k\n", (memsize - MIPS_KSEG0_START) / 1024);
 	printf(">> PROM boot string:\t%s\n", bootstring);
+}
+
+u_int
+read_board_id(void)
+{
+	uint32_t tag, reg;
+
+#define PCIB_PCI_BUS		0
+#define PCIB_PCI_DEV		9
+#define PCIB_PCI_FUNC		0
+#define PCIB_BOARD_ID_REG	0x94
+#define COBALT_BOARD_ID(reg)	((reg & 0x000000f0) >> 4)
+
+	tag = (PCIB_PCI_BUS << 16) | (PCIB_PCI_DEV << 11) |
+	    (PCIB_PCI_FUNC << 8);
+	reg = pcicfgread(tag, PCIB_BOARD_ID_REG);
+
+	return COBALT_BOARD_ID(reg);
 }
 
 /*
@@ -396,10 +422,14 @@ main(unsigned int memsize)
 	try_bootp = 1;
 
 	/* Initialize boot info early */
+	dev = NULL;
+	kernel = NULL;
 	howto = 0x0;
 	bi_flags.bi_flags = 0x0;
 	bi_addr = bi_init();
 
+	lcd_init();
+	cobalt_id = read_board_id();
 	prominit(memsize);
 	if (cninit(&addr, &speed) != NULL)
 		bi_flags.bi_flags |= BI_SERIAL_CONSOLE;
@@ -428,6 +458,7 @@ main(unsigned int memsize)
 		strcat(bootpath, ":");
 		strcat(bootpath, kernel);
 
+		lcd_loadfile(bootpath);
 		printf("Loading: %s", bootpath);
 		if (howto)
 			printf(" (howto 0x%x)", howto);
@@ -453,11 +484,13 @@ main(unsigned int memsize)
 
 		entry = (void *)marks[MARK_ENTRY];
 
-		DPRINTF(("Bootinfo @ 0x%x\n", bi_addr));
-		printf("Starting at 0x%x\n\n", (u_int)entry);
+		DPRINTF(("Bootinfo @ 0x%lx\n", (u_long)bi_addr));
+		printf("Starting at 0x%lx\n\n", (u_long)entry);
 		(*entry)(memsize, BOOTINFO_MAGIC, bi_addr);
 	}
 
+	delay(20000);
+	lcd_failed();
 	(void)printf("Boot failed! Rebooting...\n");
 	return 0;
 }

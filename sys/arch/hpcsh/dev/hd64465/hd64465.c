@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64465.c,v 1.12 2006/03/04 02:26:33 uwe Exp $	*/
+/*	$NetBSD: hd64465.c,v 1.17 2012/10/27 17:17:56 chs Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64465.c,v 1.12 2006/03/04 02:26:33 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64465.c,v 1.17 2012/10/27 17:17:56 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/boot_flag.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/debug.h>
 
@@ -69,21 +62,19 @@ STATIC const struct hd64465_module {
 	[HD64465_MODULE_OHCI]		= { "hd64465ohci" },
 	[HD64465_MODULE_ADC]		= { "hd64465adc" }
 };
-#define HD64465_NMODULE							\
-	(sizeof hd64465_modules / sizeof(struct hd64465_module))
 
-STATIC int hd64465_match(struct device *, struct cfdata *, void *);
-STATIC void hd64465_attach(struct device *, struct device *, void *);
+STATIC int hd64465_match(device_t, cfdata_t, void *);
+STATIC void hd64465_attach(device_t, device_t, void *);
 STATIC int hd64465_print(void *, const char *);
 #ifdef DEBUG
 STATIC void hd64465_info(void);
 #endif
 
-CFATTACH_DECL(hd64465if, sizeof(struct device),
+CFATTACH_DECL_NEW(hd64465if, 0,
     hd64465_match, hd64465_attach, NULL, NULL);
 
 int
-hd64465_match(struct device *parent, struct cfdata *cf, void *aux)
+hd64465_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (strcmp("hd64465if", cf->cf_name))
@@ -98,12 +89,12 @@ hd64465_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-hd64465_attach(struct device *parent, struct device *self, void *aux)
+hd64465_attach(device_t parent, device_t self, void *aux)
 {
 	const struct hd64465_module *module;
 	struct hd64465_attach_args ha;
 	uint16_t r;
-	int i;
+	size_t i;
 
 	printf("\n");
 #ifdef DEBUG
@@ -112,7 +103,7 @@ hd64465_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	r = hd64465_reg_read_2(HD64465_SRR);
-	printf("%s: HITACHI HD64465 rev. %d.%d\n", self->dv_xname,
+	printf("%s: HITACHI HD64465 rev. %d.%d\n", device_xname(self),
 	    (r >> 8) & 0xff, r & 0xff);
 
 	/* Mask all interrupt */
@@ -123,7 +114,8 @@ hd64465_attach(struct device *parent, struct device *self, void *aux)
 	hd64465_reg_write_2(HD64465_NIRR, 0x0000);
 
 	/* Attach all sub modules */
-	for (i = 0, module = hd64465_modules; i < HD64465_NMODULE;
+	for (i = 0, module = hd64465_modules;
+	    i < __arraycount(hd64465_modules);
 	    i++, module++) {
 		if (module->name == 0)
 			continue;
@@ -181,7 +173,7 @@ hd64465_intr_disestablish(void *handle)
 
 /* For the sake of Windows CE reboot clearly. */
 void
-hd64465_shutdown()
+hd64465_shutdown(void)
 {
 
 	/* Enable all interrupt */
@@ -192,7 +184,7 @@ hd64465_shutdown()
 }
 
 void
-hd64465_info()
+hd64465_info(void)
 {
 	uint16_t r;
 

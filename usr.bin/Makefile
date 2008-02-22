@@ -1,46 +1,68 @@
-#	$NetBSD: Makefile,v 1.162 2008/02/10 08:21:25 jmmv Exp $
+#	$NetBSD: Makefile,v 1.229 2017/05/21 15:28:42 riastradh Exp $
 #	from: @(#)Makefile	8.3 (Berkeley) 1/7/94
 
 .include <bsd.own.mk>
 
-SUBDIR= apply apropos asa at atf-compile atf-config atf-report atf-run \
-	atf-version audio awk \
+SUBDIR= apply asa at audio audiocfg \
 	banner basename biff bthset btkey btpin \
-	bzip2 bzip2recover cal calendar cap_mkdb cdplay \
-	checknr chflags chpass cksum cmp col colcrt colrm \
-	column comm compress config crontab crunch csplit ctags cut \
-	deroff db dirname du \
+	bzip2 bzip2recover c11 c89 c99 cal calendar cap_mkdb cdplay \
+	checknr chflags chpass cksum cmp cleantags col colcrt colrm \
+	column comm compress config crunch csplit ctags cut cvslatest \
+	dc deroff db dirname du \
 	eject elf2aout elf2ecoff env error expand extattr \
-	false fdformat fgen file find finger fmt fold fpr from \
-	fsplit fstat ftp gcore genassym gencat getconf getent getopt gprof \
-	gzip head hexdump iconv id indent innetgr ipcrm ipcs join jot \
-	kdump ktrace ktruss lam last lastcomm ldd leave less \
-	lex locale locate lock logger login logname look lorder m4 \
-	machine mail make man menuc mesg midiplay mixerctl mkcsmapper \
-	mkdep mkesdb mkfifo mklocale mkstr mktemp moduli msgc msgs \
-	netgroup netstat newgrp newsyslog nfsstat nice nl nohup \
+	false fdformat fgen fincore find finger flock fmt fold fpr from \
+	fsplit fstat ftp gcore genassym gencat getaddrinfo getconf getent \
+	getopt gettext gprof \
+	head hexdump iconv id indent infocmp innetgr ipcrm ipcs join jot \
+	kdump ktrace ktruss lam last lastcomm ldd leave \
+	locale locate lock logger login logname look lorder m4 \
+	machine mail make man menuc mesg midiplay midirecord mixerctl \
+	mkcsmapper mkdep mkesdb mkfifo mklocale mkstr mktemp mkubootimage \
+	moduli msgc msgs \
+	nbperf nc netgroup netstat newgrp newsyslog nfsstat nice nl nohup \
 	pagesize passwd paste patch pathchk pkill pmap pmc pr \
-	printenv printf progress pwhash qsubst quota radioctl rdist \
-	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh rup \
-	ruptime rusers rwall rwho script sdiff sdpquery sed seq shar shlock \
-	showmount shuffle sockstat soelim sort spell split stat su systat \
-	tail talk tcopy tee telnet tftp time tip tn3270 top touch tput \
+	printenv printf progress pwait pwhash qsubst quota radioctl rdist \
+	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh \
+	rup ruptime rusers rwall rwho \
+	script sdiff sdpquery sed seq shar shlock \
+	showmount shuffle sockstat sort sortinfo \
+	spell split stat su sys_info systat \
+	tabs tail talk tcopy tee telnet tftp tic time timeout tip touch \
+	tpfmt tput \
 	tr true tset tsort tty ul uname unexpand unifdef \
-	uniq units unvis usbhidaction usbhidctl users utoppya \
-	uudecode uuencode uuidgen vacation vgrind vi vis vmstat vndcompress w \
-	wall wc what whatis whereis who whois window \
-	write xargs xinstall xlint xstr yacc yes
+	uniq units unvis unzip usbhidaction usbhidctl users utoppya \
+	uudecode uuencode uuidgen vacation vgrind videoctl vis \
+	vmstat vndcompress w \
+	wall wc what whereis who whois \
+	write xargs xinstall xlint xstr yes
+
+SUBDIR+= ../external/zlib/pigz/bin/pigz
+
+.if (${MKGROFF} == "no")
+SUBDIR+= soelim
+.endif
+
+.if (${MKMAKEMANDB} == "no")
+SUBDIR+= apropos whatis
+.endif
+
+.if (${MKRUMP} != "no")
+SUBDIR+= rump_allserver rump_dhcpclient rump_halt rump_server shmif_dumpbus \
+	rump_wmd
+.endif
+
+.if (${MKBSDGREP} != "no")
+SUBDIR+= grep
+.endif
+
+.if (${MKPIGZGZIP} != "no")
+# nothing
+.else
+SUBDIR+= gzip 
+.endif
 
 .if (${MKHESIOD} != "no")
 SUBDIR+= hesinfo
-.endif
-
-.if (${MKKERBEROS} != "no")
-SUBDIR+= compile_et kdestroy kgetcred kinit klist mk_cmds string2key
-.endif
-
-.if (!(${MKMODULAR} != "no"))
-SUBDIR+= modstat
 .endif
 
 .if (${MKSKEY} != "no")
@@ -51,10 +73,7 @@ SUBDIR+= skey skeyinfo skeyinit
 SUBDIR+= ypcat ypmatch ypwhich
 .endif
 
-.if (${MKCRYPTO} != "no")
-SUBDIR+= openssl
 SUBDIR+= bdes
-SUBDIR+= ssh
-.endif
+SUBDIR+= nbsvtool
 
 .include <bsd.subdir.mk>

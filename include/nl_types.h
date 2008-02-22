@@ -1,4 +1,4 @@
-/*	$NetBSD: nl_types.h,v 1.11 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: nl_types.h,v 1.13 2013/08/19 08:03:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -90,9 +83,18 @@ typedef long	nl_item;
 
 __BEGIN_DECLS
 nl_catd  catopen(const char *, int);
-char    *catgets(nl_catd, int, int, const char *)
-	__attribute__((__format_arg__(4)));
+char    *catgets(nl_catd, int, int, const char *) __format_arg(4);
 int	 catclose(nl_catd);
 __END_DECLS
+
+#if defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
+__BEGIN_DECLS
+nl_catd  catopen_l(const char *, int, locale_t);
+__END_DECLS
+#endif
 
 #endif	/* _NL_TYPES_H_ */

@@ -1,4 +1,4 @@
-/* $NetBSD: nlist_private.h,v 1.17 2003/07/26 19:24:43 salo Exp $ */
+/* $NetBSD: nlist_private.h,v 1.25 2016/01/29 21:38:35 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -41,9 +41,11 @@
 #  define	NLIST_ELF64
 #  define	NLIST_ELF32
 #elif defined(__mips__)
-#  define	NLIST_AOUT
 #  define	NLIST_ECOFF
 #  define	NLIST_ELF32
+#  ifndef __mips_o32
+#    define	NLIST_ELF64
+#  endif
 #elif defined(__arm__) || defined(__i386__) || defined (__m68k__) || \
     defined(__powerpc__) || defined(__vax__)
 #  define	NLIST_AOUT
@@ -60,6 +62,17 @@
 #  define	NLIST_ELF32
 #elif defined(__hppa__)
 #  define	NLIST_ELF32
+#elif defined(__riscv__)
+#  define	NLIST_ELF32
+#  ifdef __riscv64
+#    define	NLIST_ELF64
+#  endif
+#elif defined(__aarch64__)
+#  define	NLIST_ELF64
+#elif defined(__ia64__)
+#  define	NLIST_ELF64
+#elif defined(__or1k__)
+#  define	NLIST_ELF32
 #else
 #  define	NLIST_AOUT
 /* #define	NLIST_ECOFF */
@@ -67,20 +80,22 @@
 /* #define	NLIST_ELF64 */
 #endif
 
-#define	ISLAST(p)	(p->n_un.n_name == 0 || p->n_un.n_name[0] == 0)
+#define	ISLAST(p)	(N_NAME(p) == 0 || N_NAME(p)[0] == 0)
+
+struct nlist;
 
 #ifdef NLIST_AOUT
-int	__fdnlist_aout __P((int, struct nlist *));
+int	__fdnlist_aout(int, struct nlist *);
 #endif
 #ifdef NLIST_COFF
-int	__fdnlist_coff __P((int, struct nlist *));
+int	__fdnlist_coff(int, struct nlist *);
 #endif
 #ifdef NLIST_ECOFF
-int	__fdnlist_ecoff __P((int, struct nlist *));
+int	__fdnlist_ecoff(int, struct nlist *);
 #endif
 #ifdef NLIST_ELF32
-int	__fdnlist_elf32 __P((int, struct nlist *));
+int	__fdnlist_elf32(int, struct nlist *);
 #endif
 #ifdef NLIST_ELF64
-int	__fdnlist_elf64 __P((int, struct nlist *));
+int	__fdnlist_elf64(int, struct nlist *);
 #endif

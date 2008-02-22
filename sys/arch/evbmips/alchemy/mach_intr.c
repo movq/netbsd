@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_intr.c,v 1.2 2006/02/09 18:03:12 gdamore Exp $	*/
+/*	$NetBSD: mach_intr.c,v 1.7 2016/08/26 15:45:47 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,19 +38,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.2 2006/02/09 18:03:12 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.7 2016/08/26 15:45:47 skrll Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
-#include <sys/queue.h>
+#include <sys/bus.h>
+#include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
 
 #include <mips/locore.h>
 #include <mips/alchemy/include/auvar.h>
@@ -70,8 +61,8 @@ evbmips_intr_init(void)
 }
 
 void
-evbmips_iointr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+evbmips_iointr(int ipl, uint32_t ipending, struct clockframe *cf)
 {
 
-	au_iointr(status, cause, pc, ipending);
+	au_iointr(ipl, cf->pc, ipending);
 }

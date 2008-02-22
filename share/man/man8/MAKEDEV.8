@@ -6,9 +6,9 @@
 .\" *** DO NOT EDIT - any changes will be lost!!!
 .\" *** ------------------------------------------------------------------
 .\"
-.\" $NetBSD: MAKEDEV.8,v 1.28 2008/01/09 11:26:13 simonb Exp $
+.\" $NetBSD: MAKEDEV.8,v 1.48 2018/05/20 14:08:33 thorpej Exp $
 .\"
-.\" Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2001, 2003, 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -22,13 +22,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,17 +35,19 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 31, 2007
+.Dd May 11, 2018
 .Dt MAKEDEV 8
 .Os
 .Sh NAME
 .Nm MAKEDEV
 .Nd create system and device special files
 .Sh SYNOPSIS
+.\" Please keep this in sync with MAKEDEV.local.8
 .Nm
-.Op Fl fMs
+.Op Fl fMsu
 .Op Fl m Ar mknod
 .Op Fl p Ar pax
+.Op Fl t Ar mtree
 .Bro Ar special | device Brc Op Ar ...
 .Sh DESCRIPTION
 .Nm
@@ -73,85 +68,157 @@ with the
 argument.
 .Pp
 The script is in
-.Pa /dev/MAKEDEV
-and must be called from the
+.Pa /dev/MAKEDEV .
+Devices are created in the current working directory;
+in normal use,
+.Nm
+should be invoked with
 .Pa /dev
-directory.
-For the creation of the devices,
-.Xr mknod 8
-is used, which can only be used for creating devices by the
-super-user.
-The
-.Xr mknod 8
-used can be overridden by the
-.Fl m
-flag.
+as the current working directory.
 .Pp
 Supported options are:
 .Bl -tag -width XmXmknodXX
 .It Fl f
 Force permissions to be updated on existing devices.
 This works only if
-.Xr mknod 8
-is used; it is not compatible with the
-.Fl p
+.Nm
+invokes
+.Xr mknod 8 ;
+it is not compatible with the
+.Fl p ,
+.Fl s ,
 or
-.Fl s
+.Fl t
 options.
 .It Fl M
 Create a memory file system, union mounted over the current directory,
 to contain the device special files.
-The memory file system is created using either
+The memory file system is created using
 .Xr mount_tmpfs 8
 or
-.Xr mount_mfs 8 .
+.Xr mount_mfs 8 ,
+in that order of preference.
 .Pp
 If the
 .Fl M
 flag is specified more than once, then
 .Nm
 assumes that it is being invoked from
-.Xr init 1
+.Xr init 8
 to populate a memory file system for
 .Pa /dev .
 In this case,
 .Nm
 will also redirect its output to the system console.
 .It Fl m Ar mknod
-Name of
+Force the use of
+.Xr mknod 8 ,
+and specify the name or path to the
 .Xr mknod 8
 program.
 [Usually, $TOOL_MKNOD or mknod.]
 .It Fl p Ar pax
-Name of
+Force the use of
+.Xr pax 1 ,
+and specify the name or path to the
 .Xr pax 1
 program.
-[Usually, $TOOL_PAX or mknod.]
-If this is specified, then instead of creating device nodes
-one by one using
-.Xr mknod 8 ,
-.Nm
-will create device nodes all at once using
-.Xr pax 1 .
-This is more efficient when many device nodes are involved.
+[Usually, $TOOL_PAX or pax.]
 .It Fl s
-Generate
+Generate an
 .Xr mtree 8
 specfile instead of creating devices.
+.It Fl t Ar mtree
+Force the use of
+.Xr mtree 8 ,
+and specify the name or path to the
+.Xr mtree 8
+program.
+[Usually, $TOOL_MTREE or mtree.]
+.It Fl u
+Don't re-create devices that already exist.
+.El
+.Pp
+.Nm
+has several possible methods of creating device nodes:
+.Bl -bullet
+.It
+By invoking the
+.Xr mknod 8
+command once for each device node.
+This is the traditional method, but it is slow because each device node
+is created using a new process.
+.Pp
+The
+.Fl m
+option forces
+.Nm
+to use the
+.Xr mknod 8
+method.
+.It
+By internally creating a specfile in a format usable by
+.Xr mtree 8 ,
+and providing the specfile on standard input to a
+.Xr pax 1
+or
+.Xr mtree 8
+command, invoked with options that request it to create the device nodes
+as well as any necessary subdirectories.
+This is much faster than creating device nodes with
+.Xr mknod 8 ,
+because it requires much fewer processes;
+however, it's not compatible with the
+.Fl f
+option.
+.Pp
+The
+.Fl p
+or
+.Fl t
+options force
+.Nm
+to use the
+.Xr pax 1
+or
+.Xr mtree 8
+methods.
+.It
+If the
+.Fl s
+option is specified, then
+.Nm
+will not create device nodes at all, but will output
+a specfile in a format usable by
+.Xr mtree 8 .
 .El
 .Pp
 The
-.Fl m , Fl p ,
+.Fl m , Fl p , Fl s ,
 and
-.Fl s
+.Fl t
 flags are mutually exclusive.
 If none of these flags is specified, then
 .Nm
-will use the
+will use
+.Xr mtree 8 ,
+.Xr pax 1 ,
+or
+.Xr mknod 8 ,
+in that order of preference, depending on which commands
+appear to be available and usable.
+In normal use, it's expected that
+.Xr mtree 8
+will be available, so it will be chosen.
+If
+.Nm
+is invoked by
+.Xr init 8 ,
+it's expected that
+.Xr mtree 8
+will not be available, but
 .Xr pax 1
-command if it appears to be usable, falling back to the
-.Xr mknod 8
-command if necessary.
+may be available.
 .Pp
 The special targets supported on
 .Nx
@@ -171,6 +238,8 @@ Devices to be put into INSTALL kernel ramdisks.
 Standard devices
 .It Ar local
 Configuration specific devices
+.It Ar lua
+Lua device
 .It Ar wscons
 Make wscons devices
 .It Ar usbs
@@ -216,6 +285,9 @@ TU58 cassettes on DL11 controller, see
 . El
 .It Disks :
 . Bl -tag -width 0123456789 -compact
+. It Ar dk#
+Wedge disk slices, see
+.Xr \&dk 4
 . It Ar ccd#
 Concatenated disk devices, see
 .Xr \&ccd 4
@@ -243,8 +315,8 @@ IBM PS/2 ESDI disk devices, see
 . It Ar fd#
 ``floppy'' disk drives (3 1/2", 5 1/4"), see
 .Xr \&amiga/fdc 4 ,
-.Xr \&i386/fdc 4 ,
-.Xr \&sparc64/fdc 4
+.Xr \&sparc64/fdc 4 ,
+.Xr \&x86/fdc 4
 . It Ar fss#
 Files system snapshot devices, see
 .Xr \&fss 4
@@ -287,7 +359,8 @@ Other UNIBUS devices (e.g. on Emulex SC-21V controller), see
 ``file'' pseudo-disks, see
 .Xr \&vnd 4
 . It Ar xbd#
-Xen virtual disks
+Xen virtual disks, see
+.Xr \&xbd 4
 . It Ar xd#
 Xylogic 753/7053 disks, see
 .Xr \&sparc/xd 4
@@ -346,8 +419,7 @@ Cyclom-Y multiport serial boards. Each ``unit'' makes 32 ports., see
 .Xr \&cy 4
 . It Ar ttye#
 ITE bitmapped consoles, see
-.Xr \&amiga/ite 4 ,
-.Xr \&hp300/ite 4
+.Xr \&amiga/ite 4
 . It Ar ttyv0
 pccons
 . It Ar ttyC?
@@ -357,8 +429,7 @@ SA1110 serial port (hpcarm)
 . It Ar ttyTX?
 TX39 internal serial ports (hpcmips)
 . It Ar ttyB?
-DEC 3000 ZS8530 (``scc'') serial ports (alpha), see
-.Xr \&scc 4
+DEC 3000 ZS8530 (``scc'') serial ports (alpha)
 . It Ar ttyA#
 Mfc serial ports (amiga)
 . It Ar ttyB#
@@ -375,6 +446,10 @@ UART on first 68901 (formerly mdm01) (atari)
 IXP12x0 COM ports
 . It Ar epcom
 EP93xx COM ports
+. It Ar plcom
+ARM PL01[01] serial ports
+. It Ar wmcom
+EPOC Windermere COM ports
 . It Ar ttyM?
 HP200/300 4 port serial mux interface (hp300)
 . It Ar ttya
@@ -387,8 +462,7 @@ Onboard serial ports (mvme68k) On the mvme147 these are: ttyZ1, ttyZ2 and ttyZ3.
 . It Ar dc#
 PMAX 4 channel serial interface (kbd, mouse, modem, printer)
 . It Ar scc#
-82530 serial interface (pmax), see
-.Xr \&scc 4
+82530 serial interface (pmax)
 . It Ar ttyZ#
 Zilog 8530 (``zstty'') serial ports, see
 .Xr \&zstty 4
@@ -406,6 +480,7 @@ Built-in serial ports (sun2, sun3)
 pccons (arc)
 . It Ar dz#
 UNIBUS DZ11 and DZ32 (vax), see
+.Xr \&emips/dz 4 ,
 .Xr \&vax/dz 4
 . It Ar dh#
 UNIBUS DH11 and emulations (e.g. Able DMAX, Emulex CS-11) (vax), see
@@ -446,10 +521,10 @@ UNIBUS DMZ32, see
 .Xr \&vax/dmz 4
 . It Ar dz#
 UNIBUS DZ11 and DZ32, see
+.Xr \&emips/dz 4 ,
 .Xr \&vax/dz 4
 . It Ar scc#
-82530 serial interface, see
-.Xr \&scc 4
+82530 serial interface
 . El
 .It Call units :
 . Bl -tag -width 0123456789 -compact
@@ -460,7 +535,7 @@ UNIBUS DN11 and emulations (e.g. Able Quadracall), see
 .It Pseudo terminals :
 . Bl -tag -width 0123456789 -compact
 . It Ar ptm
-Pty multiplexor device., see
+Pty multiplexor device, and pts directory, see
 .Xr \&ptm 4
 . It Ar pty#
 Set of 16 master and slave pseudo terminals, see
@@ -478,12 +553,15 @@ Archimedes parallel port
 Stock lp, see
 .Xr \&lpt 4 ,
 .Xr \&acorn32/lpt 4 ,
-.Xr \&i386/lpt 4 ,
-.Xr \&mvme68k/lpt 4
+.Xr \&mvme68k/lpt 4 ,
+.Xr \&x86/lpt 4
 . It Ar lpa#
 Interruptless lp
 . It Ar par#
 Amiga motherboard parallel port
+. It Ar cpi#
+Macintosh Nubus CSI parallel printer card, see
+.Xr \&mac68k/cpi 4
 . El
 .It USB devices :
 . Bl -tag -width 0123456789 -compact
@@ -505,6 +583,8 @@ USB Diamond Rio 500 devices, see
 . It Ar uscanner#
 USB scanners, see
 .Xr \&uscanner 4
+. It Ar ttyHS#
+USB Option N.V. modems
 . It Ar ttyU#
 USB modems, see
 .Xr \&ucom 4
@@ -599,7 +679,8 @@ UNIBUS interface to Data Translation A/D converter, see
 AGP GART devices, see
 .Xr \&agp 4
 . It Ar altq
-ALTQ control interface
+ALTQ control interface, see
+.Xr \&altq 4
 . It Ar amr#
 AMI MegaRaid control device, see
 .Xr \&amr 4
@@ -645,25 +726,39 @@ DPT/Adaptec EATA RAID management interface, see
 . It Ar dpti#
 DPT/Adaptec I2O RAID management interface, see
 .Xr \&dpti 4
+. It Ar drm#
+Direct Rendering Manager interface, see
+.Xr \&drm 4
+. It Ar dtv#
+Digital TV interface, see
+.Xr \&dtv 4
 . It Ar fb#
 PMAX generic framebuffer pseudo-device
 . It Ar fd
 File descriptors
+. It Ar gpiopps#
+1PPS signals on GPIO pins, see
+.Xr \&gpiopps 4
 . It Ar grf#
 Graphics frame buffer device, see
-.Xr \&amiga/grf 4 ,
-.Xr \&hp300/grf 4
+.Xr \&amiga/grf 4
+. It Ar hdaudio#
+High Definition audio control device, see
+.Xr \&hdaudio 4
+. It Ar hdmicec#
+HDMI CEC devices
 . It Ar hil
 HP300 HIL input devices, see
-.Xr \&hp300/hil 4
+.Xr \&hil 4
 . It Ar icp
 ICP-Vortex/Intel RAID control interface, see
 .Xr \&icp 4
 . It Ar iic#
-IIC bus device
+IIC bus device, see
+.Xr \&iic 4
 . It Ar io
 X86 IOPL access for COMPAT_10, COMPAT_FREEBSD, see
-.Xr \&hp700/io 4 ,
+.Xr \&hppa/io 4 ,
 .Xr \&i386/io 4
 . It Ar iop#
 I2O IOP control interface, see
@@ -675,17 +770,13 @@ IrDA physical frame, see
 .Xr \&irframe 4
 . It Ar ite#
 Terminal emulator interface to HP300 graphics devices, see
-.Xr \&amiga/ite 4 ,
-.Xr \&hp300/ite 4
+.Xr \&amiga/ite 4
 . It Ar joy#
 Joystick device, see
 .Xr \&joy 4
 . It Ar kttcp
 Kernel ttcp helper device, see
 .Xr \&kttcp 4
-. It Ar lkm
-Loadable kernel modules interface, see
-.Xr \&lkm 4
 . It Ar lockstat
 Kernel locking statistics
 . It Ar magma#
@@ -694,6 +785,9 @@ Magma multiport serial/parallel cards, see
 . It Ar midi#
 MIDI, see
 .Xr \&midi 4
+. It Ar mfi#
+LSI MegaRAID/MegaSAS control interface, see
+.Xr \&mfi 4
 . It Ar mlx#
 Mylex DAC960 control interface, see
 .Xr \&mlx 4
@@ -703,9 +797,16 @@ Mylex AcceleRAID/eXtremeRAID control interface, see
 . It Ar np#
 UNIBUS Ethernet co-processor interface, for downloading., see
 .Xr \&vax/np 4
+. It Ar npf
+NPF packet filter
 . It Ar nsmb#
 SMB requester, see
 .Xr \&nsmb 4
+. It Ar nvme#
+Non-Volatile Memory Host Controller Interface device driver, see
+.Xr \&nvme 4
+. It Ar nvme#ns*
+Non-Volatile Memory namespace
 . It Ar openfirm
 OpenFirmware accessor
 . It Ar pad#
@@ -716,9 +817,6 @@ PCI bus access devices, see
 .Xr \&pci 4
 . It Ar pf
 PF packet filter
-. It Ar pow#
-Power management device (x68k), see
-.Xr \&x68k/pow 4
 . It Ar putter
 Pass-to-Userspace Transporter
 . It Ar px#
@@ -775,10 +873,11 @@ Network tunnel driver, see
 Unknown SCSI device, see
 .Xr \&uk 4
 . It Ar veriexec
-Verified executable fingerprint loader, see
+Veriexec fingerprint loader, see
 .Xr \&veriexec 4
-. It Ar vmegen#
-Generic VME access
+. It Ar video#
+Video capture devices, see
+.Xr \&video 4
 . It Ar view#
 Generic interface to graphic displays (Amiga)
 . It Ar wsfont#
@@ -789,6 +888,22 @@ wscons event multiplexor, see
 .Xr \&wsmux 4
 . It Ar xenevt
 Xen event interface
+. El
+.It iSCSI communication devices
+. Bl -tag -width 0123456789 -compact
+. It Ar iscsi#
+ISCSI driver and /sbin/iscsid communication
+. El
+.It Trusted Computing devices
+. Bl -tag -width 0123456789 -compact
+. It Ar tpm
+Trusted Platform Module, see
+.Xr \&tpm 4
+. El
+.It Debugging and tracing
+. Bl -tag -width 0123456789 -compact
+. It Ar dtrace
+Dynamic tracing framework
 . El
 .El
 .Sh ENVIRONMENT
@@ -821,11 +936,11 @@ you can get more debugging output by using
 .Dl Ic sh Fl x Ar MAKEDEV Ar argument .
 .Sh SEE ALSO
 .Xr config 1 ,
-.Xr init 1 ,
 .Xr pax 1 ,
 .Xr intro 4 ,
-.Xr MAKEDEV.local 8 ,
 .Xr diskless 8 ,
+.Xr init 8 ,
+.Xr MAKEDEV.local 8 ,
 .Xr mknod 8 ,
 .Xr mount_mfs 8 ,
 .Xr mount_tmpfs 8 ,
@@ -835,8 +950,29 @@ The
 .Nm
 command appeared in
 .Bx 4.2 .
+The
+.Fl f ,
+.Fl m ,
+and
+.Fl s
+options were added in
+.Nx 2.0 .
+The
+.Fl p ,
+.Fl t ,
+and
+.Fl M
+options were added in
+.Nx 5.0 .
 The ability to be used as a function library was added in
 .Nx 5.0 .
+.Sh BUGS
+The
+.Fl f
+option is not compatible with the use of
+.Xr mtree 8
+or
+.Xr pax 1 .
 .Sh NOTES
 Not all devices listed in this manpage are supported on all platforms.
 .Pp
@@ -891,6 +1027,6 @@ this can be done on a
 .Nx
 host, or can be done in a cross-build environment using
 .Sy TOOLDIR Ns Pa /bin/nbpax .
-Finally, use apropriate tools on the foreign server
+Finally, use appropriate tools on the foreign server
 to unpack the archive and create the device nodes.
 .El

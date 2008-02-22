@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_file.c,v 1.92 2008/02/02 21:54:01 dsl Exp $	*/
+/*	$NetBSD: linux_file.c,v 1.115 2015/03/01 13:19:39 njoly Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,19 +35,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.92 2008/02/02 21:54:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.115 2015/03/01 13:19:39 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/file.h>
+#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
 #include <sys/mount.h>
-#include <sys/malloc.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/tty.h>
@@ -75,7 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.92 2008/02/02 21:54:01 dsl Exp $");
 
 #include <compat/linux/linux_syscallargs.h>
 
-static int linux_to_bsd_ioflags(int);
 static int bsd_to_linux_ioflags(int);
 #ifndef __amd64__
 static void bsd_to_linux_stat(struct stat *, struct linux_stat *);
@@ -92,7 +84,7 @@ conv_linux_flock(linux, flock)
  * The next two functions convert between the Linux and NetBSD values
  * of the flags used in open(2) and fcntl(2).
  */
-static int
+int
 linux_to_bsd_ioflags(int lflags)
 {
 	int res = 0;
@@ -100,14 +92,20 @@ linux_to_bsd_ioflags(int lflags)
 	res |= cvtto_bsd_mask(lflags, LINUX_O_WRONLY, O_WRONLY);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_RDONLY, O_RDONLY);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_RDWR, O_RDWR);
+
 	res |= cvtto_bsd_mask(lflags, LINUX_O_CREAT, O_CREAT);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_EXCL, O_EXCL);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_NOCTTY, O_NOCTTY);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_TRUNC, O_TRUNC);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_APPEND, O_APPEND);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_NONBLOCK, O_NONBLOCK);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_NDELAY, O_NDELAY);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_SYNC, O_FSYNC);
 	res |= cvtto_bsd_mask(lflags, LINUX_FASYNC, O_ASYNC);
-	res |= cvtto_bsd_mask(lflags, LINUX_O_APPEND, O_APPEND);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_DIRECT, O_DIRECT);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_DIRECTORY, O_DIRECTORY);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_NOFOLLOW, O_NOFOLLOW);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_CLOEXEC, O_CLOEXEC);
 
 	return res;
 }
@@ -120,14 +118,20 @@ bsd_to_linux_ioflags(int bflags)
 	res |= cvtto_linux_mask(bflags, O_WRONLY, LINUX_O_WRONLY);
 	res |= cvtto_linux_mask(bflags, O_RDONLY, LINUX_O_RDONLY);
 	res |= cvtto_linux_mask(bflags, O_RDWR, LINUX_O_RDWR);
+
 	res |= cvtto_linux_mask(bflags, O_CREAT, LINUX_O_CREAT);
 	res |= cvtto_linux_mask(bflags, O_EXCL, LINUX_O_EXCL);
 	res |= cvtto_linux_mask(bflags, O_NOCTTY, LINUX_O_NOCTTY);
 	res |= cvtto_linux_mask(bflags, O_TRUNC, LINUX_O_TRUNC);
+	res |= cvtto_linux_mask(bflags, O_APPEND, LINUX_O_APPEND);
+	res |= cvtto_linux_mask(bflags, O_NONBLOCK, LINUX_O_NONBLOCK);
 	res |= cvtto_linux_mask(bflags, O_NDELAY, LINUX_O_NDELAY);
 	res |= cvtto_linux_mask(bflags, O_FSYNC, LINUX_O_SYNC);
 	res |= cvtto_linux_mask(bflags, O_ASYNC, LINUX_FASYNC);
-	res |= cvtto_linux_mask(bflags, O_APPEND, LINUX_O_APPEND);
+	res |= cvtto_linux_mask(bflags, O_DIRECT, LINUX_O_DIRECT);
+	res |= cvtto_linux_mask(bflags, O_DIRECTORY, LINUX_O_DIRECTORY);
+	res |= cvtto_linux_mask(bflags, O_NOFOLLOW, LINUX_O_NOFOLLOW);
+	res |= cvtto_linux_mask(bflags, O_CLOEXEC, LINUX_O_CLOEXEC);
 
 	return res;
 }
@@ -146,7 +150,7 @@ linux_sys_creat(struct lwp *l, const struct linux_sys_creat_args *uap, register_
 {
 	/* {
 		syscallarg(const char *) path;
-		syscallarg(int) mode;
+		syscallarg(linux_umode_t) mode;
 	} */
 	struct sys_open_args oa;
 
@@ -155,6 +159,32 @@ linux_sys_creat(struct lwp *l, const struct linux_sys_creat_args *uap, register_
 	SCARG(&oa, mode) = SCARG(uap, mode);
 
 	return sys_open(l, &oa, retval);
+}
+
+static void
+linux_open_ctty(struct lwp *l, int flags, int fd)
+{
+	struct proc *p = l->l_proc;
+
+	/*
+	 * this bit from sunos_misc.c (and svr4_fcntl.c).
+	 * If we are a session leader, and we don't have a controlling
+	 * terminal yet, and the O_NOCTTY flag is not set, try to make
+	 * this the controlling terminal.
+	 */
+        if (!(flags & O_NOCTTY) && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
+                file_t *fp;
+
+		fp = fd_getfile(fd);
+
+                /* ignore any error, just give it a try */
+                if (fp != NULL) {
+			if (fp->f_type == DTYPE_VNODE) {
+				(fp->f_ops->fo_ioctl) (fp, TIOCSCTTY, NULL);
+			}
+			fd_putfile(fd);
+		}
+        }
 }
 
 /*
@@ -169,9 +199,8 @@ linux_sys_open(struct lwp *l, const struct linux_sys_open_args *uap, register_t 
 	/* {
 		syscallarg(const char *) path;
 		syscallarg(int) flags;
-		syscallarg(int) mode;
+		syscallarg(linux_umode_t) mode;
 	} */
-	struct proc *p = l->l_proc;
 	int error, fl;
 	struct sys_open_args boa;
 
@@ -182,30 +211,35 @@ linux_sys_open(struct lwp *l, const struct linux_sys_open_args *uap, register_t 
 	SCARG(&boa, mode) = SCARG(uap, mode);
 
 	if ((error = sys_open(l, &boa, retval)))
-		return error;
+		return (error == EFTYPE) ? ELOOP : error;
 
-	/*
-	 * this bit from sunos_misc.c (and svr4_fcntl.c).
-	 * If we are a session leader, and we don't have a controlling
-	 * terminal yet, and the O_NOCTTY flag is not set, try to make
-	 * this the controlling terminal.
-	 */
-        if (!(fl & O_NOCTTY) && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
-                struct filedesc *fdp = p->p_fd;
-                struct file     *fp;
+	linux_open_ctty(l, fl, *retval);
+	return 0;
+}
 
-		fp = fd_getfile(fdp, *retval);
+int
+linux_sys_openat(struct lwp *l, const struct linux_sys_openat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(int) flags;
+		syscallarg(linux_umode_t) mode;
+	} */
+	int error, fl;
+	struct sys_openat_args boa;
 
-                /* ignore any error, just give it a try */
-                if (fp != NULL) {
-			FILE_USE(fp);
-			if (fp->f_type == DTYPE_VNODE) {
-				(fp->f_ops->fo_ioctl) (fp, TIOCSCTTY,
-				    (void *) 0, l);
-			}
-			FILE_UNUSE(fp, l);
-		}
-        }
+	fl = linux_to_bsd_ioflags(SCARG(uap, flags));
+
+	SCARG(&boa, fd) = SCARG(uap, fd);
+	SCARG(&boa, path) = SCARG(uap, path);
+	SCARG(&boa, oflags) = fl;
+	SCARG(&boa, mode) = SCARG(uap, mode);
+
+	if ((error = sys_openat(l, &boa, retval)))
+		return (error == EFTYPE) ? ELOOP : error;
+
+	linux_open_ctty(l, fl, *retval);
 	return 0;
 }
 
@@ -228,14 +262,12 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 	u_long val;
 	void *arg;
 	struct sys_fcntl_args fca;
-	struct filedesc *fdp;
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	struct vattr va;
-	const struct cdevsw *cdev;
 	long pgid;
 	struct pgrp *pgrp;
-	struct tty *tp, *(*d_tty)(dev_t);
+	struct tty *tp;
 
 	fd = SCARG(uap, fd);
 	cmd = SCARG(uap, cmd);
@@ -265,7 +297,7 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		return 0;
 
 	case LINUX_F_SETFL: {
-		struct file	*fp1 = NULL;
+		file_t	*fp1 = NULL;
 
 		val = linux_to_bsd_ioflags((unsigned long)SCARG(uap, arg));
 		/*
@@ -285,18 +317,15 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		 * so that F_GETFL would report the ASYNC i/o is on.
 		 */
 		if (val & O_ASYNC) {
-			if (((fp1 = fd_getfile(p->p_fd, fd)) == NULL))
+			if (((fp1 = fd_getfile(fd)) == NULL))
 			    return (EBADF);
-
-			FILE_USE(fp1);
-
 			if (((fp1->f_type == DTYPE_SOCKET) && fp1->f_data
 			      && ((struct socket *)fp1->f_data)->so_state & SS_ISAPIPE)
 			    || (fp1->f_type == DTYPE_PIPE))
 				val &= ~O_ASYNC;
 			else {
 				/* not a pipe, do not modify anything */
-				FILE_UNUSE(fp1, l);
+				fd_putfile(fd);
 				fp1 = NULL;
 			}
 		}
@@ -309,9 +338,12 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 
 		/* Now set the FASYNC flag for pipes */
 		if (fp1) {
-			if (!error)
+			if (!error) {
+				mutex_enter(&fp1->f_lock);
 				fp1->f_flag |= FASYNC;
-			FILE_UNUSE(fp1, l);
+				mutex_exit(&fp1->f_lock);
+			}
+			fd_putfile(fd);
 		}
 
 		return (error);
@@ -332,16 +364,14 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		 * restrictive for Linux F_{G,S}ETOWN. For non-tty descriptors,
 		 * this is not a problem.
 		 */
-		fdp = p->p_fd;
-		if ((fp = fd_getfile(fdp, fd)) == NULL)
+		if ((fp = fd_getfile(fd)) == NULL)
 			return EBADF;
-		FILE_USE(fp);
 
 		/* Check it's a character device vnode */
 		if (fp->f_type != DTYPE_VNODE
 		    || (vp = (struct vnode *)fp->f_data) == NULL
 		    || vp->v_type != VCHR) {
-			FILE_UNUSE(fp, l);
+			fd_putfile(fd);
 
 	    not_tty:
 			/* Not a tty, proceed with common fcntl() */
@@ -349,42 +379,47 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 			break;
 		}
 
+		vn_lock(vp, LK_SHARED | LK_RETRY);
 		error = VOP_GETATTR(vp, &va, l->l_cred);
+		VOP_UNLOCK(vp);
 
-		FILE_UNUSE(fp, l);
+		fd_putfile(fd);
 
 		if (error)
 			return error;
 
-		cdev = cdevsw_lookup(va.va_rdev);
-		if (cdev == NULL)
-			return (ENXIO);
-		d_tty = cdev->d_tty;
-		if (!d_tty || (!(tp = (*d_tty)(va.va_rdev))))
+		if ((tp = cdev_tty(va.va_rdev)) == NULL)
 			goto not_tty;
 
 		/* set tty pg_id appropriately */
+		mutex_enter(proc_lock);
 		if (cmd == LINUX_F_GETOWN) {
 			retval[0] = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
+			mutex_exit(proc_lock);
 			return 0;
 		}
-		mutex_enter(&proclist_lock);
 		if ((long)arg <= 0) {
 			pgid = -(long)arg;
 		} else {
-			struct proc *p1 = p_find((long)arg, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
-			if (p1 == NULL)
+			struct proc *p1 = proc_find((long)arg);
+			if (p1 == NULL) {
+				mutex_exit(proc_lock);
 				return (ESRCH);
+			}
 			pgid = (long)p1->p_pgrp->pg_id;
 		}
-		pgrp = pg_find(pgid, PFIND_LOCKED);
+		pgrp = pgrp_find(pgid);
 		if (pgrp == NULL || pgrp->pg_session != p->p_session) {
-			mutex_exit(&proclist_lock);
+			mutex_exit(proc_lock);
 			return EPERM;
 		}
 		tp->t_pgrp = pgrp;
-		mutex_exit(&proclist_lock);
+		mutex_exit(proc_lock);
 		return 0;
+
+	case LINUX_F_DUPFD_CLOEXEC:
+		cmd = F_DUPFD_CLOEXEC;
+		break;
 
 	default:
 		return EOPNOTSUPP;
@@ -448,7 +483,7 @@ linux_sys_fstat(struct lwp *l, const struct linux_sys_fstat_args *uap, register_
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &tmpst);
+	error = do_sys_fstat(SCARG(uap, fd), &tmpst);
 	if (error != 0)
 		return error;
 	bsd_to_linux_stat(&tmpst, &tmplst);
@@ -457,13 +492,13 @@ linux_sys_fstat(struct lwp *l, const struct linux_sys_fstat_args *uap, register_
 }
 
 static int
-linux_stat1(struct lwp *l, const struct linux_sys_stat_args *uap, register_t *retval, int flags)
+linux_stat1(const struct linux_sys_stat_args *uap, register_t *retval, int flags)
 {
 	struct linux_stat tmplst;
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), flags, &tmpst);
+	error = do_sys_stat(SCARG(uap, path), flags, &tmpst);
 	if (error != 0)
 		return error;
 
@@ -480,7 +515,7 @@ linux_sys_stat(struct lwp *l, const struct linux_sys_stat_args *uap, register_t 
 		syscallarg(struct linux_stat *) sp;
 	} */
 
-	return linux_stat1(l, uap, retval, FOLLOW);
+	return linux_stat1(uap, retval, FOLLOW);
 }
 
 /* Note: this is "newlstat" in the Linux sources */
@@ -493,13 +528,68 @@ linux_sys_lstat(struct lwp *l, const struct linux_sys_lstat_args *uap, register_
 		syscallarg(struct linux_stat *) sp;
 	} */
 
-	return linux_stat1(l, (const void *)uap, retval, NOFOLLOW);
+	return linux_stat1((const void *)uap, retval, NOFOLLOW);
 }
 #endif /* !__amd64__ */
 
 /*
  * The following syscalls are mostly here because of the alternate path check.
  */
+
+int
+linux_sys_linkat(struct lwp *l, const struct linux_sys_linkat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd1;
+		syscallarg(const char *) name1;
+		syscallarg(int) fd2;
+		syscallarg(const char *) name2;
+		syscallarg(int) flags;
+	} */
+	int fd1 = SCARG(uap, fd1);
+	const char *name1 = SCARG(uap, name1);
+	int fd2 = SCARG(uap, fd2);
+	const char *name2 = SCARG(uap, name2);
+	int follow;
+
+	follow = SCARG(uap, flags) & LINUX_AT_SYMLINK_FOLLOW;
+
+	return do_sys_linkat(l, fd1, name1, fd2, name2, follow, retval);
+}
+
+static int
+linux_unlink_dircheck(const char *path)
+{
+	struct nameidata nd;
+	struct pathbuf *pb;
+	int error;
+
+	/*
+	 * Linux returns EISDIR if unlink(2) is called on a directory.
+	 * We return EPERM in such cases. To emulate correct behaviour,
+	 * check if the path points to directory and return EISDIR if this
+	 * is the case.
+	 *
+	 * XXX this should really not copy in the path buffer twice...
+	 */
+	error = pathbuf_copyin(path, &pb);
+	if (error) {
+		return error;
+	}
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, pb);
+	if (namei(&nd) == 0) {
+		struct stat sb;
+
+		if (vn_stat(nd.ni_vp, &sb) == 0
+		    && S_ISDIR(sb.st_mode))
+			error = EISDIR;
+
+		vput(nd.ni_vp);
+	}
+	pathbuf_destroy(pb);
+	return error ? error : EPERM;
+}
+
 int
 linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, register_t *retval)
 {
@@ -507,31 +597,34 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 		syscallarg(const char *) path;
 	} */
 	int error;
-	struct nameidata nd;
 
 	error = sys_unlink(l, (const void *)uap, retval);
-	if (error != EPERM)
-		return (error);
+	if (error == EPERM)
+		error = linux_unlink_dircheck(SCARG(uap, path));
 
-	/*
-	 * Linux returns EISDIR if unlink(2) is called on a directory.
-	 * We return EPERM in such cases. To emulate correct behaviour,
-	 * check if the path points to directory and return EISDIR if this
-	 * is the case.
-	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if (namei(&nd) == 0) {
-		struct stat sb;
+	return error;
+}
 
-		if (vn_stat(nd.ni_vp, &sb, l) == 0
-		    && S_ISDIR(sb.st_mode))
-			error = EISDIR;
+int
+linux_sys_unlinkat(struct lwp *l, const struct linux_sys_unlinkat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(int) flag;
+	} */
+	struct sys_unlinkat_args ua;
+	int error;
 
-		vput(nd.ni_vp);
-	}
+	SCARG(&ua, fd) = SCARG(uap, fd);
+	SCARG(&ua, path) = SCARG(uap, path);
+	SCARG(&ua, flag) = linux_to_bsd_atflags(SCARG(uap, flag));
 
-	return (error);
+	error = sys_unlinkat(l, &ua, retval);
+	if (error == EPERM)
+		error = linux_unlink_dircheck(SCARG(uap, path));
+
+	return error;
 }
 
 int
@@ -539,33 +632,95 @@ linux_sys_mknod(struct lwp *l, const struct linux_sys_mknod_args *uap, register_
 {
 	/* {
 		syscallarg(const char *) path;
-		syscallarg(int) mode;
-		syscallarg(int) dev;
+		syscallarg(linux_umode_t) mode;
+		syscallarg(unsigned) dev;
+	} */
+	struct linux_sys_mknodat_args ua;
+
+	SCARG(&ua, fd) = LINUX_AT_FDCWD;
+	SCARG(&ua, path) = SCARG(uap, path);
+	SCARG(&ua, mode) = SCARG(uap, mode);
+	SCARG(&ua, dev) = SCARG(uap, dev);
+
+	return linux_sys_mknodat(l, &ua, retval);
+}
+
+int
+linux_sys_mknodat(struct lwp *l, const struct linux_sys_mknodat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(linux_umode_t) mode;
+		syscallarg(unsigned) dev;
 	} */
 
 	/*
 	 * BSD handles FIFOs separately
 	 */
 	if (S_ISFIFO(SCARG(uap, mode))) {
-		struct sys_mkfifo_args bma;
+		struct sys_mkfifoat_args bma;
 
+		SCARG(&bma, fd) = SCARG(uap, fd);
 		SCARG(&bma, path) = SCARG(uap, path);
 		SCARG(&bma, mode) = SCARG(uap, mode);
-		return sys_mkfifo(l, &bma, retval);
+		return sys_mkfifoat(l, &bma, retval);
 	} else {
-		struct sys_mknod_args bma;
 
-		SCARG(&bma, path) = SCARG(uap, path);
-		SCARG(&bma, mode) = SCARG(uap, mode);
 		/*
 		 * Linux device numbers uses 8 bits for minor and 8 bits
 		 * for major. Due to how we map our major and minor,
 		 * this just fits into our dev_t. Just mask off the
 		 * upper 16bit to remove any random junk.
 		 */
-		SCARG(&bma, dev) = SCARG(uap, dev) & 0xffff;
-		return sys_mknod(l, &bma, retval);
+
+		return do_sys_mknodat(l, SCARG(uap, fd), SCARG(uap, path),
+		    SCARG(uap, mode), SCARG(uap, dev) & 0xffff, retval,
+		    UIO_USERSPACE);
 	}
+}
+
+int
+linux_sys_fchmodat(struct lwp *l, const struct linux_sys_fchmodat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(linux_umode_t) mode;
+	} */
+
+	return do_sys_chmodat(l, SCARG(uap, fd), SCARG(uap, path),
+			      SCARG(uap, mode), AT_SYMLINK_FOLLOW);
+}
+
+int
+linux_sys_fchownat(struct lwp *l, const struct linux_sys_fchownat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(uid_t) owner;
+		syscallarg(gid_t) group;
+		syscallarg(int) flag;
+	} */
+	int flag;
+
+	flag = linux_to_bsd_atflags(SCARG(uap, flag));
+	return do_sys_chownat(l, SCARG(uap, fd), SCARG(uap, path),
+			      SCARG(uap, owner), SCARG(uap, group), flag);
+}
+
+int
+linux_sys_faccessat(struct lwp *l, const struct linux_sys_faccessat_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(int) amode;
+	} */
+
+	return do_sys_accessat(l, SCARG(uap, fd), SCARG(uap, path),
+	     SCARG(uap, amode), AT_SYMLINK_FOLLOW);
 }
 
 /*
@@ -594,13 +749,14 @@ linux_sys_pread(struct lwp *l, const struct linux_sys_pread_args *uap, register_
 		syscallarg(int) fd;
 		syscallarg(void *) buf;
 		syscallarg(size_t) nbyte;
-		syscallarg(linux_off_t) offset;
+		syscallarg(off_t) offset;
 	} */
 	struct sys_pread_args pra;
 
 	SCARG(&pra, fd) = SCARG(uap, fd);
 	SCARG(&pra, buf) = SCARG(uap, buf);
 	SCARG(&pra, nbyte) = SCARG(uap, nbyte);
+	SCARG(&pra, PAD) = 0;
 	SCARG(&pra, offset) = SCARG(uap, offset);
 
 	return sys_pread(l, &pra, retval);
@@ -616,17 +772,56 @@ linux_sys_pwrite(struct lwp *l, const struct linux_sys_pwrite_args *uap, registe
 		syscallarg(int) fd;
 		syscallarg(void *) buf;
 		syscallarg(size_t) nbyte;
-		syscallarg(linux_off_t) offset;
+		syscallarg(off_t) offset;
 	} */
 	struct sys_pwrite_args pra;
 
 	SCARG(&pra, fd) = SCARG(uap, fd);
 	SCARG(&pra, buf) = SCARG(uap, buf);
 	SCARG(&pra, nbyte) = SCARG(uap, nbyte);
+	SCARG(&pra, PAD) = 0;
 	SCARG(&pra, offset) = SCARG(uap, offset);
 
 	return sys_pwrite(l, &pra, retval);
 }
+
+int
+linux_sys_dup3(struct lwp *l, const struct linux_sys_dup3_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) from;
+		syscallarg(int) to;
+		syscallarg(int) flags;
+	} */
+	int flags;
+
+	flags = linux_to_bsd_ioflags(SCARG(uap, flags));
+	if ((flags & ~O_CLOEXEC) != 0)
+		return EINVAL;
+
+	if (SCARG(uap, from) == SCARG(uap, to))
+		return EINVAL;
+
+	return dodup(l, SCARG(uap, from), SCARG(uap, to), flags, retval);
+}
+
+
+int
+linux_to_bsd_atflags(int lflags)
+{
+	int bflags = 0;
+
+	if (lflags & LINUX_AT_SYMLINK_NOFOLLOW)
+		bflags |= AT_SYMLINK_NOFOLLOW;
+	if (lflags & LINUX_AT_REMOVEDIR)
+		bflags |= AT_REMOVEDIR;
+	if (lflags & LINUX_AT_SYMLINK_FOLLOW)
+		bflags |= AT_SYMLINK_FOLLOW;
+
+	return bflags;
+}
+
 
 #define LINUX_NOT_SUPPORTED(fun) \
 int \
@@ -650,4 +845,3 @@ LINUX_NOT_SUPPORTED(linux_sys_flistxattr)
 LINUX_NOT_SUPPORTED(linux_sys_removexattr)
 LINUX_NOT_SUPPORTED(linux_sys_lremovexattr)
 LINUX_NOT_SUPPORTED(linux_sys_fremovexattr)
-

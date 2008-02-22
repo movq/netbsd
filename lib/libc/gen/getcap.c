@@ -1,4 +1,4 @@
-/*	$NetBSD: getcap.c,v 1.48 2008/02/02 20:56:46 christos Exp $	*/
+/*	$NetBSD: getcap.c,v 1.57 2017/06/18 03:56:39 manu Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,17 +41,18 @@
 #if 0
 static char sccsid[] = "@(#)getcap.c	8.3 (Berkeley) 3/25/94";
 #else
-__RCSID("$NetBSD: getcap.c,v 1.48 2008/02/02 20:56:46 christos Exp $");
+__RCSID("$NetBSD: getcap.c,v 1.57 2017/06/18 03:56:39 manu Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#ifndef SMALL
+#ifndef LIBHACK
 #include "namespace.h"
 #endif
 #include <sys/types.h>
 #include <sys/param.h>
 
 #include <assert.h>
+#include <stddef.h>
 #include <ctype.h>
 #ifndef SMALL
 #include <db.h>
@@ -64,7 +65,7 @@ __RCSID("$NetBSD: getcap.c,v 1.48 2008/02/02 20:56:46 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#ifdef __weak_alias
+#if defined(__weak_alias) && !defined(LIBHACK)
 __weak_alias(cgetcap,_cgetcap)
 __weak_alias(cgetclose,_cgetclose)
 __weak_alias(cgetent,_cgetent)
@@ -159,10 +160,7 @@ cgetset(const char *ent)
  * return NULL.
  */
 char *
-cgetcap(buf, cap, type)
-	char *buf;
-	const char *cap;
-	int type;
+cgetcap(char *buf, const char *cap, int type)
 {
 	char *bp;
 	const char *cp;
@@ -256,13 +254,6 @@ static int
 getent(char **cap, size_t *len, const char * const *db_array, int fd,
     const char *name, int depth, char *nfield)
 {
-#ifndef SMALL
-	DB *capdbp;
-	char pbuf[MAXPATHLEN];
-	char *cbuf;
-	int retval;
-	size_t clen;
-#endif
 	char *record, *newrecord;
 	char *r_end, *rp;	/* pacify gcc */
 	const char * const *db_p;
@@ -324,10 +315,15 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 			(void)lseek(fd, (off_t)0, SEEK_SET);
 		} else {
 #ifndef SMALL
+			DB *capdbp;
+			char pbuf[MAXPATHLEN];
+			char *cbuf;
+			int retval;
+			size_t clen;
+
 			(void)snprintf(pbuf, sizeof(pbuf), "%s.db", *db_p);
-			if (expandtc &&
-			    (capdbp = dbopen(pbuf, O_RDONLY, 0, DB_HASH, 0))
-			     != NULL) {
+			if ((capdbp = dbopen(pbuf, O_RDONLY | O_CLOEXEC, 0,
+			    DB_HASH, 0)) != NULL) {
 				free(record);
 				retval = cdbget(capdbp, &record, name);
 				if (retval < 0) {
@@ -356,7 +352,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 			} else
 #endif
 			{
-				fd = open(*db_p, O_RDONLY, 0);
+				fd = open(*db_p, O_RDONLY | O_CLOEXEC, 0);
 				if (fd < 0) {
 					/* No error on unfound file. */
 					continue;
@@ -393,7 +389,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 			rp = record;
 			for (;;) {
 				if (bp >= b_end) {
-					int n;
+					ssize_t n;
 		
 					n = read(fd, buf, sizeof(buf));
 					if (n <= 0) {
@@ -456,7 +452,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 				 * some more.
 				 */
 				if (rp >= r_end) {
-					u_int pos;
+					ptrdiff_t pos;
 					size_t newsize;
 
 					pos = rp - record;
@@ -518,7 +514,8 @@ tc_exp:
 	if (expandtc) {
 		char *newicap, *s;
 		size_t ilen, newilen;
-		int diff, iret, tclen;
+		int iret;
+		ptrdiff_t diff, tclen;
 		char *icap, *scan, *tc, *tcstart, *tcend;
 
 		/*
@@ -597,7 +594,7 @@ tc_exp:
 			 */
 			diff = newilen - tclen;
 			if (diff >= r_end - rp) {
-				u_int pos, tcpos, tcposend;
+				ptrdiff_t pos, tcpos, tcposend;
 				size_t newsize;
 
 				pos = rp - record;
@@ -789,7 +786,7 @@ cgetnext(char **bp, const char * const *db_array)
 	if (dbp == NULL)
 		dbp = db_array;
 
-	if (pfp == NULL && (pfp = fopen(*dbp, "r")) == NULL) {
+	if (pfp == NULL && (pfp = fopen(*dbp, "re")) == NULL) {
 		(void)cgetclose();
 		return -1;
 	}
@@ -812,7 +809,7 @@ cgetnext(char **bp, const char * const *db_array)
 						(void)cgetclose();
 						return 0;
 					} else if ((pfp =
-					    fopen(*dbp, "r")) == NULL) {
+					    fopen(*dbp, "re")) == NULL) {
 						(void)cgetclose();
 						return -1;
 					} else
@@ -917,7 +914,7 @@ cgetstr(char *buf, const char *cap, char **str)
 	u_int m_room;
 	const char *bp;
 	char *mp;
-	int len;
+	ptrdiff_t len;
 	char *mem, *newmem;
 
 	_DIAGASSERT(buf != NULL);
@@ -1033,7 +1030,8 @@ cgetstr(char *buf, const char *cap, char **str)
 		mem = newmem;
 	}
 	*str = mem;
-	return len;
+	_DIAGASSERT(__type_fit(int, len));
+	return (int)len;
 }
 
 /*
@@ -1052,7 +1050,7 @@ cgetustr(char *buf, const char *cap, char **str)
 	u_int m_room;
 	const char *bp;
 	char *mp;
-	int len;
+	size_t len;
 	char *mem, *newmem;
 
 	_DIAGASSERT(buf != NULL);
@@ -1117,7 +1115,8 @@ cgetustr(char *buf, const char *cap, char **str)
 		mem = newmem;
 	}
 	*str = mem;
-	return len;
+	_DIAGASSERT(__type_fit(int, len));
+	return (int)len;
 }
 
 /*

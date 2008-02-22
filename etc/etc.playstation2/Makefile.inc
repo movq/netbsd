@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.6 2007/07/24 10:49:27 pavel Exp $
+#	$NetBSD: Makefile.inc,v 1.8 2014/03/31 11:25:48 martin Exp $
 #
 #	etc.playstation2/Makefile.inc --
 #		playstation2-specific etc Makefile targets

@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.h,v 1.99 2007/11/11 23:22:25 matt Exp $	*/
+/*	$NetBSD: malloc.h,v 1.116 2014/12/27 19:32:57 maxv Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,12 +34,7 @@
 #ifndef _SYS_MALLOC_H_
 #define	_SYS_MALLOC_H_
 
-#if defined(_KERNEL_OPT)
-#include "opt_kmemstats.h"
-#include "opt_malloclog.h"
-#include "opt_malloc_debug.h"
-#endif
-
+#ifdef _KERNEL
 
 /*
  * flags to malloc
@@ -49,73 +44,34 @@
 #define	M_ZERO		0x0002	/* zero the allocation */
 #define	M_CANFAIL	0x0004	/* can fail if requested memory can't ever
 				 * be allocated */
-#ifdef _KERNEL
-
 #include <sys/mallocvar.h>
+#if 0
 /*
  * The following are standard, built-in malloc types that are
  * not specific to any one subsystem.
+ *
+ * They are currently not defined, but are still passed to malloc()
+ * and free(). They may be re-instated as diagnostics at some point.
  */
 MALLOC_DECLARE(M_DEVBUF);
 MALLOC_DECLARE(M_DMAMAP);
 MALLOC_DECLARE(M_FREE);
-MALLOC_DECLARE(M_PCB);
-MALLOC_DECLARE(M_SOFTINTR);
 MALLOC_DECLARE(M_TEMP);
-
-/* XXX These should all be declared elsewhere. */
 MALLOC_DECLARE(M_RTABLE);
 MALLOC_DECLARE(M_FTABLE);
 MALLOC_DECLARE(M_UFSMNT);
 MALLOC_DECLARE(M_NETADDR);
-MALLOC_DECLARE(M_IPMOPTS);
-MALLOC_DECLARE(M_IPMADDR);
 MALLOC_DECLARE(M_MRTABLE);
-MALLOC_DECLARE(M_BWMETER);
-MALLOC_DECLARE(M_1394DATA);
+#endif
+
+void	*kern_malloc(unsigned long, int);
+void	*kern_realloc(void *, unsigned long, int);
+void	kern_free(void *);
+
+#define	malloc(size, type, flags)	kern_malloc(size, flags)
+#define	free(addr, type)		kern_free(addr)
+#define	realloc(ptr, size, type, flags)	kern_realloc(ptr, size, flags)
+
 #endif /* _KERNEL */
 
-/*
- * Set of buckets for each size of memory block that is retained
- */
-struct kmembuckets {
-	void *kb_next;	/* list of free blocks */
-	void *kb_last;	/* last free block */
-	long	kb_calls;	/* total calls to allocate this size */
-	long	kb_total;	/* total number of blocks allocated */
-	long	kb_totalfree;	/* # of free elements in this bucket */
-	long	kb_elmpercl;	/* # of elements in this sized allocation */
-	long	kb_highwat;	/* high water mark */
-	long	kb_couldfree;	/* over high water mark and could free */
-};
-
-#ifdef _KERNEL
-#define	MALLOC(space, cast, size, type, flags) \
-	(space) = (cast)malloc((u_long)(size), (type), (flags))
-#define	FREE(addr, type) free((void *)(addr), (type))
-
-#ifdef MALLOCLOG
-void	*_malloc(unsigned long, struct malloc_type *, int, const char *, long);
-void	_free(void *, struct malloc_type *, const char *, long);
-#define	malloc(size, type, flags) \
-	    _malloc((size), (type), (flags), __FILE__, __LINE__)
-#define	free(addr, type) \
-	    _free((addr), (type), __FILE__, __LINE__)
-#else
-void	*malloc(unsigned long, struct malloc_type *, int);
-void	free(void *, struct malloc_type *);
-#endif /* MALLOCLOG */
-
-#ifdef MALLOC_DEBUG
-int	debug_malloc(unsigned long, struct malloc_type *, int, void **);
-int	debug_free(void *, struct malloc_type *);
-
-void	debug_malloc_print(void);
-void	debug_malloc_printit(void (*)(const char *, ...), vaddr_t);
-#endif /* MALLOC_DEBUG */
-
-void	*realloc(void *, unsigned long, struct malloc_type *, int);
-unsigned long
-	malloc_roundup(unsigned long);
-#endif /* _KERNEL */
 #endif /* !_SYS_MALLOC_H_ */

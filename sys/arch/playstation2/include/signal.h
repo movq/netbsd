@@ -1,3 +1,3 @@
-/*	$NetBSD: signal.h,v 1.1 2001/10/16 15:38:51 uch Exp $	*/
+/*	$NetBSD: signal.h,v 1.3 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/signal.h>

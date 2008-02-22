@@ -1,4 +1,4 @@
-/*	$NetBSD: ctu.c,v 1.28 2007/10/17 19:57:59 garbled Exp $ */
+/*	$NetBSD: ctu.c,v 1.37 2018/04/02 22:49:48 mrg Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,25 +34,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ctu.c,v 1.28 2007/10/17 19:57:59 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ctu.c,v 1.37 2018/04/02 22:49:48 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/callout.h>
-#include <sys/kernel.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
-#include <sys/fcntl.h>
-#include <sys/malloc.h>
-#include <sys/ioctl.h>
-#include <sys/device.h>
-#include <sys/proc.h>
+#include <sys/callout.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/proc.h>
 
-#include <machine/mtpr.h>
 #include <machine/rsp.h>
 #include <machine/scb.h>
-#include <machine/trap.h>
 
 #undef TUDEBUG
 
@@ -100,20 +93,37 @@ dev_type_write(ctuwrite);
 dev_type_strategy(ctustrategy);
 
 const struct bdevsw ctu_bdevsw = {
-	ctuopen, ctuclose, ctustrategy, noioctl, nodump, nosize, D_TAPE
+	.d_open = ctuopen,
+	.d_close = ctuclose,
+	.d_strategy = ctustrategy,
+	.d_ioctl = noioctl,
+	.d_dump = nodump,
+	.d_psize = nosize,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
 #if 0 /* not yet */
 const struct cdevsw ctu_cdevsw = {
-	ctuopen, ctuclose, cturead, ctuwrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
+	.d_open = ctuopen,
+	.d_close = ctuclose,
+	.d_read = cturead,
+	.d_write = ctuwrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 #endif
 
 static callout_t ctu_watch_ch;
 
 void
-ctuattach()
+ctuattach(void)
 {
 
 	callout_init(&ctu_watch_ch, 0);
@@ -180,7 +190,7 @@ ctuclose(dev_t dev, int oflags, int devtype, struct lwp *l)
 {
 	struct buf *bp;
 	int s = spl7();
-	while ((bp = BUFQ_GET(tu_sc.sc_bufq)))
+	while ((bp = bufq_get(tu_sc.sc_bufq)))
 		;
 	splx(s);
 
@@ -208,20 +218,20 @@ ctustrategy(struct buf *bp)
 		return;
 	}
 
-	empty = (BUFQ_PEEK(tu_sc.sc_bufq) == NULL);
-	BUFQ_PUT(tu_sc.sc_bufq, bp);
+	empty = (bufq_peek(tu_sc.sc_bufq) == NULL);
+	bufq_put(tu_sc.sc_bufq, bp);
 	if (empty)
 		ctustart();
 	splx(s);
 }
 
 void
-ctustart()
+ctustart(void)
 {
 	struct rsp *rsp = (struct rsp *)tu_sc.sc_rsp;
 	struct buf *bp;
 
-	bp = BUFQ_PEEK(tu_sc.sc_bufq);
+	bp = bufq_peek(tu_sc.sc_bufq);
 	if (bp == NULL)
 		return;
 #ifdef TUDEBUG
@@ -273,7 +283,7 @@ cturintr(void *arg)
 	unsigned short ck = 0;
 	char *buf;
 
-	bp = BUFQ_PEEK(tu_sc.sc_bufq);
+	bp = bufq_peek(tu_sc.sc_bufq);
 	buf = bp->b_data;
 	switch (tu_sc.sc_state) {
 	case TU_RESET:
@@ -366,16 +376,20 @@ cturintr(void *arg)
 #ifdef TUDEBUG
 		printf("Writing byte %d\n", tu_sc.sc_xbytes);
 #endif
-		WAIT; mtpr(RSP_TYP_DATA, PR_CSTD); 
-		WAIT; mtpr(128, PR_CSTD);
+		WAIT;
+		mtpr(RSP_TYP_DATA, PR_CSTD);
+		WAIT;
+		mtpr(128, PR_CSTD);
 		for (i = 0; i < 128; i++) {
 			WAIT;
 			mtpr(buf[tu_sc.sc_xbytes++], PR_CSTD);
 		}
 		tck = ctu_cksum((void *)&buf[tu_sc.sc_xbytes-128], 64);
 		tck += 0x8001; if (tck > 0xffff) tck -= 0xffff;
-		WAIT; mtpr(tck & 0xff, PR_CSTD);
-		WAIT; mtpr((tck >> 8) & 0xff, PR_CSTD);
+		WAIT;
+		mtpr(tck & 0xff, PR_CSTD);
+		WAIT;
+		mtpr((tck >> 8) & 0xff, PR_CSTD);
 		bp->b_resid = 0;
 		if (tu_sc.sc_xbytes == bp->b_bcount)
 			tu_sc.sc_state = TU_ENDPACKET;
@@ -393,7 +407,7 @@ cturintr(void *arg)
 		return;
 	}
 	if (bp->b_error == 0) {
-		(void)BUFQ_GET(tu_sc.sc_bufq);
+		(void)bufq_get(tu_sc.sc_bufq);
 		biodone(bp);
 #ifdef TUDEBUG
 		printf("biodone %p\n", bp);

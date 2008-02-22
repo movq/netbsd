@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_amiga.c,v 1.29 2006/03/27 19:35:33 aymeric Exp $ */
+/*	$NetBSD: wdc_amiga.c,v 1.40 2017/10/20 07:06:06 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,16 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_amiga.c,v 1.29 2006/03/27 19:35:33 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_amiga.c,v 1.40 2017/10/20 07:06:06 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <sys/bswap.h>
 
@@ -63,59 +56,58 @@ struct wdc_amiga_softc {
 	struct wdc_softc sc_wdcdev;
 	struct	ata_channel *sc_chanlist[1];
 	struct  ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
 	struct wdc_regs sc_wdc_regs;
 	struct isr sc_isr;
-	volatile u_char *sc_intreg;
 	struct bus_space_tag cmd_iot;
 	struct bus_space_tag ctl_iot;
-	char	sc_a1200;
+	bool gayle_intr;
 };
 
-int	wdc_amiga_probe(struct device *, struct cfdata *, void *);
-void	wdc_amiga_attach(struct device *, struct device *, void *);
+int	wdc_amiga_probe(device_t, cfdata_t, void *);
+void	wdc_amiga_attach(device_t, device_t, void *);
 int	wdc_amiga_intr(void *);
 
-CFATTACH_DECL(wdc_amiga, sizeof(struct wdc_amiga_softc),
+CFATTACH_DECL_NEW(wdc_amiga, sizeof(struct wdc_amiga_softc),
     wdc_amiga_probe, wdc_amiga_attach, NULL, NULL);
 
 int
-wdc_amiga_probe(struct device *parent, struct cfdata *cfp, void *aux)
+wdc_amiga_probe(device_t parent, cfdata_t cfp, void *aux)
 {
-	if ((!is_a4000() && !is_a1200()) || !matchname(aux, "wdc"))
+	if ((!is_a4000() && !is_a1200() && !is_a600()) ||
+	    !matchname(aux, "wdc"))
 		return(0);
 	return 1;
 }
 
 void
-wdc_amiga_attach(struct device *parent, struct device *self, void *aux)
+wdc_amiga_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_amiga_softc *sc = (void *)self;
+	struct wdc_amiga_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	int i;
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 
+	gayle_init();
+
 	if (is_a4000()) {
-		sc->cmd_iot.base = (u_long)ztwomap(0xdd2020 + 2);
-		sc->sc_intreg = (volatile u_char *)ztwomap(0xdd2020 + 0x1000);
-		sc->sc_a1200 = 0;
+		sc->cmd_iot.base = (bus_addr_t) ztwomap(GAYLE_IDE_BASE_A4000 + 2);
+		sc->gayle_intr = false;
 	} else {
-		sc->cmd_iot.base = (u_long) ztwomap(0xda0000 + 2);
-		gayle_init();
-		sc->sc_intreg = &gayle.intreq;
-		sc->sc_a1200 = 1;
+		sc->cmd_iot.base = (bus_addr_t) ztwomap(GAYLE_IDE_BASE + 2);
+		sc->gayle_intr = true;
 	}
+
 	sc->cmd_iot.absm = sc->ctl_iot.absm = &amiga_bus_stride_4swap;
 	wdr->cmd_iot = &sc->cmd_iot;
 	wdr->ctl_iot = &sc->ctl_iot;
 
 	if (bus_space_map(wdr->cmd_iot, 0, 0x40, 0,
 			  &wdr->cmd_baseioh)) {
-		printf("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map registers\n");
 		return;
 	}
 
@@ -126,8 +118,7 @@ wdc_amiga_attach(struct device *parent, struct device *self, void *aux)
 
 			bus_space_unmap(wdr->cmd_iot,
 			    wdr->cmd_baseioh, 0x40);
-			printf("%s: couldn't map registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(self, "couldn't map registers\n");
 			return;
 		}
 	}
@@ -141,20 +132,19 @@ wdc_amiga_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_chanlist[0] = &sc->sc_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_channel.ch_channel = 0;
 	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
-	sc->sc_channel.ch_queue = &sc->sc_chqueue;
-	sc->sc_channel.ch_ndrive = 2;
 
-	wdc_init_shadow_regs(&sc->sc_channel);
+	wdc_init_shadow_regs(wdr);
 
 	sc->sc_isr.isr_intr = wdc_amiga_intr;
 	sc->sc_isr.isr_arg = sc;
 	sc->sc_isr.isr_ipl = 2;
 	add_isr (&sc->sc_isr);
 
-	if (sc->sc_a1200)
-		gayle.intena |= GAYLE_INT_IDE;
+	if (sc->gayle_intr)
+		gayle_intr_enable_set(GAYLE_INT_IDE);
 
 	wdcattach(&sc->sc_channel);
 }
@@ -162,15 +152,20 @@ wdc_amiga_attach(struct device *parent, struct device *self, void *aux)
 int
 wdc_amiga_intr(void *arg)
 {
-	struct wdc_amiga_softc *sc = (struct wdc_amiga_softc *)arg;
-	u_char intreq = *sc->sc_intreg;
-	int ret = 0;
+	struct wdc_amiga_softc *sc;
+	uint8_t intreq;
+	int ret;
+
+	sc = (struct wdc_amiga_softc *)arg;
+	ret = 0;
+	intreq = gayle_intr_status();
 
 	if (intreq & GAYLE_INT_IDE) {
-		if (sc->sc_a1200)
-			gayle.intreq = 0x7c | (intreq & 0x03);
+		if (sc->gayle_intr)
+			gayle_intr_ack(0x7C | (intreq & GAYLE_INT_IDEACK));
 		ret = wdcintr(&sc->sc_channel);
 	}
 
 	return ret;
 }
+

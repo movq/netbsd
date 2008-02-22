@@ -1,4 +1,4 @@
-/* $NetBSD: i386.c,v 1.28 2007/06/23 23:18:29 christos Exp $ */
+/* $NetBSD: i386.c,v 1.41 2018/06/23 14:15:57 kamil Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: i386.c,v 1.28 2007/06/23 23:18:29 christos Exp $");
+__RCSID("$NetBSD: i386.c,v 1.41 2018/06/23 14:15:57 kamil Exp $");
 #endif /* !__lint */
 
 #include <sys/param.h>
@@ -62,8 +55,6 @@ __RCSID("$NetBSD: i386.c,v 1.28 2007/06/23 23:18:29 christos Exp $");
 #include <unistd.h>
 
 #include "installboot.h"
-
-#define nelem(x) (sizeof (x)/sizeof *(x))
 
 static const struct console_name {
 	const char	*name;		/* Name of console selection */
@@ -87,12 +78,16 @@ static int i386_editboot(ib_params *);
 struct ib_mach ib_mach_i386 =
 	{ "i386", i386_setboot, no_clearboot, i386_editboot,
 		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
-		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT };
+		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT |
+		IB_MODULES | IB_BOOTCONF |
+		IB_STAGE1START };
 
 struct ib_mach ib_mach_amd64 =
 	{ "amd64", i386_setboot, no_clearboot, i386_editboot,
 		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
-		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT };
+		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT |
+		IB_MODULES | IB_BOOTCONF |
+		IB_STAGE1START };
 
 /*
  * Attempting to write the 'labelsector' (or a sector near it - within 8k?)
@@ -119,17 +114,19 @@ pwrite_validate(int fd, const void *buf, size_t n_bytes, off_t offset)
 		return -1;
 	}
 	fsync(fd);
-	if (pread(fd, r_buf, rv, offset) == rv && memcmp(r_buf, buf, rv) == 0)
+	if (pread(fd, r_buf, rv, offset) == rv && memcmp(r_buf, buf, rv) == 0) {
+		free(r_buf);
 		return rv;
+	}
+	free(r_buf);
 	errno = EROFS;
 	return -1;
 }
 
 static int
-write_boot_area(ib_params *params, void *v_buf, int len)
+write_boot_area(ib_params *params, uint8_t *buf, size_t len)
 {
 	int rv, i;
-	uint8_t *buf = v_buf;
 
 	/*
 	 * Writing the 'label' sector (likely to be bytes 512-1023) could
@@ -151,7 +148,7 @@ write_boot_area(ib_params *params, void *v_buf, int len)
 			return 1;
 		len -= 512 * 2;
 		rv = pwrite_validate(params->fsfd, buf + 512 * 2, len, 512 * 2);
-		if (rv != len)
+		if (rv != (ssize_t)len)
 			goto bad_write;
 		return 1;
 	}
@@ -161,7 +158,7 @@ write_boot_area(ib_params *params, void *v_buf, int len)
 	if (errno == EINVAL) {
 		/* Assume the failure was due to to the sector size > 512 */
 		rv = pwrite_validate(params->fsfd, buf, len, 0);
-		if (rv == len)
+		if (rv == (ssize_t)len)
 			return 1;
 		if (rv != -1 || (errno != EROFS))
 			goto bad_write;
@@ -181,14 +178,14 @@ write_boot_area(ib_params *params, void *v_buf, int len)
 	/* Reset write-protext */
 	i = 0;
 	ioctl(params->fsfd, DIOCWLABEL, &i);
-	if (rv == len)
+	if (rv == (ssize_t)len)
 		return 1;
 #endif
 
   bad_write:
 	if (rv == -1)
 		warn("Writing `%s'", params->filesystem);
-	else 
+	else
 		warnx("Writing `%s': short write, %u bytes",
 			params->filesystem, rv);
 	return 0;
@@ -204,11 +201,11 @@ show_i386_boot_params(struct x86_boot_params  *bpp)
 	printf("flags %x, ", le32toh(bpp->bp_flags));
 	printf("speed %d, ", le32toh(bpp->bp_conspeed));
 	printf("ioaddr %x, ", le32toh(bpp->bp_consaddr));
-	for (i = 0; i < nelem(consoles); i++) {
-		if (consoles[i].dev == le32toh(bpp->bp_consdev))
+	for (i = 0; i < __arraycount(consoles); i++) {
+		if (consoles[i].dev == (int)le32toh(bpp->bp_consdev))
 			break;
 	}
-	if (i == nelem(consoles))
+	if (i == __arraycount(consoles))
 		printf("console %d\n", le32toh(bpp->bp_consdev));
 	else
 		printf("console %s\n", consoles[i].name);
@@ -226,7 +223,7 @@ static int
 update_i386_boot_params(ib_params *params, struct x86_boot_params  *bpp)
 {
 	struct x86_boot_params bp;
-	int bplen;
+	uint32_t bplen;
 	size_t i;
 
 	bplen = le32toh(bpp->bp_length);
@@ -247,14 +244,14 @@ update_i386_boot_params(ib_params *params, struct x86_boot_params  *bpp)
 	if (params->flags & IB_CONSADDR)
 		bp.bp_consaddr = htole32(params->consaddr);
 	if (params->flags & IB_CONSOLE) {
-		for (i = 0; i < nelem(consoles); i++)
+		for (i = 0; i < __arraycount(consoles); i++)
 			if (strcmp(consoles[i].name, params->console) == 0)
 				break;
 
-		if (i == nelem(consoles)) {
+		if (i == __arraycount(consoles)) {
 			warnx("invalid console name, valid names are:");
 			(void)fprintf(stderr, "\t%s", consoles[0].name);
-			for (i = 1; consoles[i].name != NULL; i++)
+			for (i = 1; i < __arraycount(consoles); i++)
 				(void)fprintf(stderr, ", %s", consoles[i].name);
 			(void)fprintf(stderr, "\n");
 			return 1;
@@ -276,6 +273,10 @@ update_i386_boot_params(ib_params *params, struct x86_boot_params  *bpp)
 	}
 	if (params->flags & IB_KEYMAP)
 		strlcpy(bp.bp_keymap, params->keymap, sizeof bp.bp_keymap);
+	if (params->flags & IB_MODULES)
+		bp.bp_flags ^= htole32(X86_BP_FLAGS_NOMODULES);
+	if (params->flags & IB_BOOTCONF)
+		bp.bp_flags ^= htole32(X86_BP_FLAGS_NOBOOTCONF);
 
 	if (params->flags & (IB_NOWRITE | IB_VERBOSE))
 		show_i386_boot_params(&bp);
@@ -307,10 +308,10 @@ i386_setboot(ib_params *params)
 	assert(params->stage1 != NULL);
 
 	/*
-	 * There is only 8k of space in a UFSv1 partition (and ustarfs)
+	 * There is only 8k of space in a FFSv1 partition (and ustarfs)
 	 * so ensure we don't splat over anything important.
 	 */
-	if (params->s1stat.st_size > sizeof bootstrap) {
+	if (params->s1stat.st_size > (off_t)(sizeof bootstrap)) {
 		warnx("stage1 bootstrap `%s' (%u bytes) is larger than 8192 bytes",
 			params->stage1, (unsigned int)params->s1stat.st_size);
 		return 0;
@@ -392,7 +393,7 @@ i386_setboot(ib_params *params)
 	}
 
 	/*
-	 * If the partion has a FAT (or NTFS) filesystem, then we must
+	 * If the partition has a FAT (or NTFS) filesystem, then we must
 	 * preserve the BIOS Parameter Block (BPB).
 	 * It is also very likely that there isn't 8k of space available
 	 * for (say) bootxx_msdos, and that blindly installing it will trash
@@ -405,25 +406,38 @@ i386_setboot(ib_params *params)
 	 * Specifying 'installboot -f' will delete the old BPB info.
 	 */
 	if (!(params->flags & IB_FORCE)) {
+		#define USE_F ", use -f (may invalidate filesystem)"
 		/*
 		 * For FAT compatibility, the pbr code starts 'jmp xx; nop'
 		 * followed by the BIOS Parameter Block (BPB).
 		 * The 2nd byte (jump offset) is the size of the nop + BPB.
 		 */
 		if (bootstrap.b[0] != 0xeb || bootstrap.b[2] != 0x90) {
-			warnx("No BPB in new bootstrap %02x:%02x:%02x, use -f",
+			warnx("No BPB in new bootstrap %02x:%02x:%02x" USE_F,
 				bootstrap.b[0], bootstrap.b[1], bootstrap.b[2]);
 			return 0;
 		}
 
-		/* Find size of old BPB, and copy into new bootcode */
-		if (!is_zero(disk_buf.b + 3 + 8, disk_buf.b[1] - 1 - 8)) {
+		/*
+		 * Find size of old BPB, and copy into new bootcode
+		 *
+		 * The 2nd byte (b[1]) contains jmp short relative offset.
+		 * If it is zero or some invalid input that is smaller than 9,
+		 * it will cause overflow and call is_zero() with enormous size.
+		 * Add a paranoid check to prevent this scenario.
+		 *
+		 * Verify that b[0] contains JMP (0xeb) and b[2] NOP (0x90).
+		 */
+		if (disk_buf.b[0] == 0xeb && disk_buf.b[1] >= 9 &&
+		    disk_buf.b[2] == 0x90 &&
+		    !is_zero(disk_buf.b + 3 + 8, disk_buf.b[1] - 1 - 8)) {
 			struct mbr_bpbFAT16 *bpb = (void *)(disk_buf.b + 3 + 8);
 			/* Check enough space before the FAT for the bootcode */
 			u = le16toh(bpb->bpbBytesPerSec)
 			    * le16toh(bpb->bpbResSectors);
 			if (u != 0 && u < params->s1stat.st_size) {
-				warnx("Insufficient reserved space before FAT (%u bytes available), use -f", u);
+				warnx("Insufficient reserved space before FAT "
+					"(%u bytes available)" USE_F, u);
 				return 0;
 			}
 			/* Check we have enough space for the old bpb */
@@ -431,7 +445,7 @@ i386_setboot(ib_params *params)
 				/* old BPB is larger, allow if extra zeros */
 				if (!is_zero(disk_buf.b + 2 + bootstrap.b[1],
 				    disk_buf.b[1] - bootstrap.b[1])) {
-					warnx("Old BPB too big, use -f");
+					warnx("Old BPB too big" USE_F);
 					    return 0;
 				}
 				u = bootstrap.b[1];
@@ -439,8 +453,12 @@ i386_setboot(ib_params *params)
 				/* Old BPB is shorter, leave zero filled */
 				u = disk_buf.b[1];
 			}
+			if (params->s1start != 0)
+				/* Fixup physical offset of filesytem */
+				bpb->bpbHiddenSecs = htole32(params->s1start);
 			memcpy(bootstrap.b + 2, disk_buf.b + 2, u);
 		}
+		#undef USE_F
 	}
 
 	/*
@@ -466,7 +484,7 @@ i386_setboot(ib_params *params)
 			(8192 - params->s1stat.st_size) & 511);
 	}
 
-	return write_boot_area(params, &disk_buf, sizeof disk_buf);
+	return write_boot_area(params, disk_buf.b, sizeof disk_buf.b);
 }
 
 static int
@@ -538,8 +556,8 @@ i386_editboot(ib_params *params)
 		warn("Writing `%s'", params->filesystem);
 		goto done;
 	} else if (rv != sizeof buf) {
-		warnx("Writing `%s': short write, %ld bytes (should be %ld)",
-		    params->filesystem, (long)rv, (long)sizeof(buf));
+		warnx("Writing `%s': short write, %zd bytes (should be %zu)",
+		    params->filesystem, rv, sizeof(buf));
 		goto done;
 	}
 

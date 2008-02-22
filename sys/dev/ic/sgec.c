@@ -1,4 +1,4 @@
-/*      $NetBSD: sgec.c,v 1.34 2007/10/19 12:00:00 ad Exp $ */
+/*      $NetBSD: sgec.c,v 1.48 2018/06/26 06:48:00 msaitoh Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -10,12 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -45,10 +39,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.34 2007/10/19 12:00:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.48 2018/06/26 06:48:00 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -57,19 +50,13 @@ __KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.34 2007/10/19 12:00:00 ad Exp $");
 #include <sys/systm.h>
 #include <sys/sockio.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
+#include <net/bpf.h>
 
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -82,7 +69,7 @@ static	int	zeioctl(struct ifnet *, u_long, void *);
 static	int	ze_add_rxbuf(struct ze_softc *, int);
 static	void	ze_setup(struct ze_softc *);
 static	void	zetimeout(struct ifnet *);
-static	int	zereset(struct ze_softc *);
+static	bool	zereset(struct ze_softc *);
 
 #define	ZE_WCSR(csr, val) \
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, csr, val)
@@ -95,46 +82,47 @@ static	int	zereset(struct ze_softc *);
  * to accept packets.
  */
 void
-sgec_attach(sc)
-	struct ze_softc *sc;
+sgec_attach(struct ze_softc *sc)
 {
-	struct	ifnet *ifp = (struct ifnet *)&sc->sc_if;
-	struct	ze_tdes *tp;
-	struct	ze_rdes *rp;
+	struct ifnet *ifp = &sc->sc_if;
+	struct ze_tdes *tp;
+	struct ze_rdes *rp;
 	bus_dma_segment_t seg;
 	int i, rseg, error;
 
         /*
          * Allocate DMA safe memory for descriptors and setup memory.
          */
-	if ((error = bus_dmamem_alloc(sc->sc_dmat,
-	    sizeof(struct ze_cdata), PAGE_SIZE, 0, &seg, 1, &rseg,
-	    BUS_DMA_NOWAIT)) != 0) {
-		printf(": unable to allocate control data, error = %d\n",
+	error = bus_dmamem_alloc(sc->sc_dmat, sizeof(struct ze_cdata),
+	    PAGE_SIZE, 0, &seg, 1, &rseg, BUS_DMA_NOWAIT);
+	if (error) {
+		aprint_error(": unable to allocate control data, error = %d\n",
 		    error);
 		goto fail_0;
 	}
 
-	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
-	    sizeof(struct ze_cdata), (void **)&sc->sc_zedata,
-	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf(": unable to map control data, error = %d\n", error);
+	error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, sizeof(struct ze_cdata),
+	    (void **)&sc->sc_zedata, BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
+	if (error) {
+		aprint_error(
+		    ": unable to map control data, error = %d\n", error);
 		goto fail_1;
 	}
 
-	if ((error = bus_dmamap_create(sc->sc_dmat,
-	    sizeof(struct ze_cdata), 1,
-	    sizeof(struct ze_cdata), 0, BUS_DMA_NOWAIT,
-	    &sc->sc_cmap)) != 0) {
-		printf(": unable to create control data DMA map, error = %d\n",
+	error = bus_dmamap_create(sc->sc_dmat, sizeof(struct ze_cdata), 1,
+	    sizeof(struct ze_cdata), 0, BUS_DMA_NOWAIT, &sc->sc_cmap);
+	if (error) {
+		aprint_error(
+		    ": unable to create control data DMA map, error = %d\n",
 		    error);
 		goto fail_2;
 	}
 
-	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cmap,
-	    sc->sc_zedata, sizeof(struct ze_cdata), NULL,
-	    BUS_DMA_NOWAIT)) != 0) {
-		printf(": unable to load control data DMA map, error = %d\n",
+	error = bus_dmamap_load(sc->sc_dmat, sc->sc_cmap, sc->sc_zedata,
+	    sizeof(struct ze_cdata), NULL, BUS_DMA_NOWAIT);
+	if (error) {
+		aprint_error(
+		    ": unable to load control data DMA map, error = %d\n",
 		    error);
 		goto fail_3;
 	}
@@ -143,56 +131,62 @@ sgec_attach(sc)
 	 * Zero the newly allocated memory.
 	 */
 	memset(sc->sc_zedata, 0, sizeof(struct ze_cdata));
+
 	/*
 	 * Create the transmit descriptor DMA maps.
 	 */
-	for (i = 0; i < TXDESCS; i++) {
-		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
+	for (i = 0; error == 0 && i < TXDESCS; i++) {
+		error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    TXDESCS - 1, MCLBYTES, 0, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW,
-		    &sc->sc_xmtmap[i]))) {
-			printf(": unable to create tx DMA map %d, error = %d\n",
-			    i, error);
-			goto fail_4;
-		}
+		    &sc->sc_xmtmap[i]);
+	}
+	if (error) {
+		aprint_error(": unable to create tx DMA map %d, error = %d\n",
+		    i, error);
+		goto fail_4;
 	}
 
 	/*
 	 * Create receive buffer DMA maps.
 	 */
-	for (i = 0; i < RXDESCS; i++) {
-		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
-		    MCLBYTES, 0, BUS_DMA_NOWAIT,
-		    &sc->sc_rcvmap[i]))) {
-			printf(": unable to create rx DMA map %d, error = %d\n",
-			    i, error);
-			goto fail_5;
-		}
+	for (i = 0; error == 0 && i < RXDESCS; i++) {
+		error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
+		    MCLBYTES, 0, BUS_DMA_NOWAIT, &sc->sc_rcvmap[i]);
 	}
+	if (error) {
+		aprint_error(": unable to create rx DMA map %d, error = %d\n",
+		    i, error);
+		goto fail_5;
+	}
+
 	/*
 	 * Pre-allocate the receive buffers.
 	 */
-	for (i = 0; i < RXDESCS; i++) {
-		if ((error = ze_add_rxbuf(sc, i)) != 0) {
-			printf(": unable to allocate or map rx buffer %d\n,"
-			    " error = %d\n", i, error);
-			goto fail_6;
-		}
+	for (i = 0; error == 0 && i < RXDESCS; i++) {
+		error = ze_add_rxbuf(sc, i);
+	}
+
+	if (error) {
+		aprint_error(
+		    ": unable to allocate or map rx buffer %d, error = %d\n",
+		    i, error);
+		goto fail_6;
 	}
 
 	/* For vmstat -i
 	 */
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    sc->sc_dev.dv_xname, "intr");
+	    device_xname(sc->sc_dev), "intr");
 	evcnt_attach_dynamic(&sc->sc_rxintrcnt, EVCNT_TYPE_INTR,
-	    &sc->sc_intrcnt, sc->sc_dev.dv_xname, "rx intr");
+	    &sc->sc_intrcnt, device_xname(sc->sc_dev), "rx intr");
 	evcnt_attach_dynamic(&sc->sc_txintrcnt, EVCNT_TYPE_INTR,
-	    &sc->sc_intrcnt, sc->sc_dev.dv_xname, "tx intr");
+	    &sc->sc_intrcnt, device_xname(sc->sc_dev), "tx intr");
 	evcnt_attach_dynamic(&sc->sc_txdraincnt, EVCNT_TYPE_INTR,
-	    &sc->sc_intrcnt, sc->sc_dev.dv_xname, "tx drain");
+	    &sc->sc_intrcnt, device_xname(sc->sc_dev), "tx drain");
 	evcnt_attach_dynamic(&sc->sc_nobufintrcnt, EVCNT_TYPE_INTR,
-	    &sc->sc_intrcnt, sc->sc_dev.dv_xname, "nobuf intr");
+	    &sc->sc_intrcnt, device_xname(sc->sc_dev), "nobuf intr");
 	evcnt_attach_dynamic(&sc->sc_nointrcnt, EVCNT_TYPE_INTR,
-	    &sc->sc_intrcnt, sc->sc_dev.dv_xname, "no intr");
+	    &sc->sc_intrcnt, device_xname(sc->sc_dev), "no intr");
 
 	/*
 	 * Create ring loops of the buffer chains.
@@ -213,7 +207,7 @@ sgec_attach(sc)
 	if (zereset(sc))
 		return;
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = zestart;
@@ -227,7 +221,8 @@ sgec_attach(sc)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-	printf("\n%s: hardware address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal("\n");
+	aprint_normal_dev(sc->sc_dev, "hardware address %s\n",
 	    ether_sprintf(sc->sc_enaddr));
 	return;
 
@@ -238,17 +233,17 @@ sgec_attach(sc)
  fail_6:
 	for (i = 0; i < RXDESCS; i++) {
 		if (sc->sc_rxmbuf[i] != NULL) {
-			bus_dmamap_unload(sc->sc_dmat, sc->sc_xmtmap[i]);
+			bus_dmamap_unload(sc->sc_dmat, sc->sc_rcvmap[i]);
 			m_freem(sc->sc_rxmbuf[i]);
 		}
 	}
  fail_5:
-	for (i = 0; i < RXDESCS; i++) {
+	for (i = 0; i < TXDESCS; i++) {
 		if (sc->sc_xmtmap[i] != NULL)
 			bus_dmamap_destroy(sc->sc_dmat, sc->sc_xmtmap[i]);
 	}
  fail_4:
-	for (i = 0; i < TXDESCS; i++) {
+	for (i = 0; i < RXDESCS; i++) {
 		if (sc->sc_rcvmap[i] != NULL)
 			bus_dmamap_destroy(sc->sc_dmat, sc->sc_rcvmap[i]);
 	}
@@ -268,10 +263,9 @@ sgec_attach(sc)
  * Initialization of interface.
  */
 void
-zeinit(sc)
-	struct ze_softc *sc;
+zeinit(struct ze_softc *sc)
 {
-	struct ifnet *ifp = (struct ifnet *)&sc->sc_if;
+	struct ifnet *ifp = &sc->sc_if;
 	struct ze_cdata *zc = sc->sc_zedata;
 	int i;
 
@@ -321,8 +315,7 @@ zeinit(sc)
  * Start output on interface.
  */
 void
-zestart(ifp)
-	struct ifnet *ifp;
+zestart(struct ifnet *ifp)
 {
 	struct ze_softc *sc = ifp->if_softc;
 	struct ze_cdata *zc = sc->sc_zedata;
@@ -331,7 +324,7 @@ zestart(ifp)
 	int nexttx, starttx;
 	int len, i, totlen, error;
 	int old_inq = sc->sc_inq;
-	uint16_t orword, tdr;
+	uint16_t orword, tdr = 0;
 	bus_dmamap_t map;
 
 	while (sc->sc_inq < (TXDESCS - 1)) {
@@ -353,7 +346,8 @@ zestart(ifp)
 		error = bus_dmamap_load_mbuf(sc->sc_dmat, map, m,
 		    BUS_DMA_WRITE);
 		if (error) {
-			printf("zestart: load_mbuf failed: %d", error);
+			aprint_error_dev(sc->sc_dev,
+			    "zestart: load_mbuf failed: %d", error);
 			goto out;
 		}
 
@@ -419,6 +413,8 @@ zestart(ifp)
 		if ((ZE_RCSR(ZE_CSR5) & ZE_NICSR5_TS) != ZE_NICSR5_TS_RUN)
 			ZE_WCSR(ZE_CSR1, -1);
 		sc->sc_nexttx = nexttx;
+
+		bpf_mtap(ifp, m, BPF_D_OUT);
 	}
 	if (sc->sc_inq == (TXDESCS - 1))
 		ifp->if_flags |= IFF_OACTIVE;
@@ -428,8 +424,7 @@ out:	if (old_inq < sc->sc_inq)
 }
 
 int
-sgec_intr(sc)
-	struct ze_softc *sc;
+sgec_intr(struct ze_softc *sc)
 {
 	struct ze_cdata *zc = sc->sc_zedata;
 	struct ifnet *ifp = &sc->sc_if;
@@ -451,7 +446,6 @@ sgec_intr(sc)
 		while ((zc->zc_recv[sc->sc_nextrx].ze_framelen &
 		    ZE_FRAMELEN_OW) == 0) {
 
-			ifp->if_ipackets++;
 			m = sc->sc_rxmbuf[sc->sc_nextrx];
 			len = zc->zc_recv[sc->sc_nextrx].ze_framelen;
 			ze_add_rxbuf(sc, sc->sc_nextrx);
@@ -461,14 +455,10 @@ sgec_intr(sc)
 				ifp->if_ierrors++;
 				m_freem(m);
 			} else {
-				m->m_pkthdr.rcvif = ifp;
+				m_set_rcvif(m, ifp);
 				m->m_pkthdr.len = m->m_len =
 				    len - ETHER_CRC_LEN;
-#if NBPFILTER > 0
-				if (ifp->if_bpf)
-					bpf_mtap(ifp->if_bpf, m);
-#endif
-				(*ifp->if_input)(ifp, m);
+				if_percpuq_enqueue(ifp->if_percpuq, m);
 			}
 		}
 	}
@@ -508,10 +498,6 @@ sgec_intr(sc)
 			ifp->if_opackets++;
 			bus_dmamap_unload(sc->sc_dmat, map);
 			KASSERT(sc->sc_txmbuf[lastack]);
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, sc->sc_txmbuf[lastack]);
-#endif
 			m_freem(sc->sc_txmbuf[lastack]);
 			sc->sc_txmbuf[lastack] = 0;
 			if (++lastack == TXDESCS)
@@ -533,18 +519,15 @@ sgec_intr(sc)
  * Process an ioctl request.
  */
 int
-zeioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+zeioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ze_softc *sc = ifp->if_softc;
-	struct ifaddr *ifa = (struct ifaddr *)data;
+	struct ifaddr *ifa = data;
 	int s = splnet(), error = 0;
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
@@ -557,8 +540,11 @@ zeioctl(ifp, cmd, data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running,
 			 * stop it. (by disabling receive mechanism).
@@ -566,19 +552,23 @@ zeioctl(ifp, cmd, data)
 			ZE_WCSR(ZE_CSR6, ZE_RCSR(ZE_CSR6) &
 			    ~(ZE_NICSR6_ST|ZE_NICSR6_SR));
 			ifp->if_flags &= ~IFF_RUNNING;
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-			   (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface it marked up and it is stopped, then
 			 * start it.
 			 */
 			zeinit(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
+			break;
+		case IFF_UP|IFF_RUNNING:
 			/*
 			 * Send a new setup packet to match any new changes.
 			 * (Like IFF_PROMISC etc)
 			 */
 			ze_setup(sc);
+			break;
+		case 0:
+			break;
 		}
 		break;
 
@@ -599,7 +589,7 @@ zeioctl(ifp, cmd, data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 
 	}
 	splx(s);
@@ -610,9 +600,7 @@ zeioctl(ifp, cmd, data)
  * Add a receive buffer to the indicated descriptor.
  */
 int
-ze_add_rxbuf(sc, i)
-	struct ze_softc *sc;
-	int i;
+ze_add_rxbuf(struct ze_softc *sc, int i)
 {
 	struct mbuf *m;
 	struct ze_rdes *rp;
@@ -637,7 +625,7 @@ ze_add_rxbuf(sc, i)
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error)
 		panic("%s: can't load rx DMA map %d, error = %d",
-		    sc->sc_dev.dv_xname, i, error);
+		    device_xname(sc->sc_dev), i, error);
 	sc->sc_rxmbuf[i] = m;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rcvmap[i], 0,
@@ -660,8 +648,7 @@ ze_add_rxbuf(sc, i)
  * Create a setup packet and put in queue for sending.
  */
 void
-ze_setup(sc)
-	struct ze_softc *sc;
+ze_setup(struct ze_softc *sc)
 {
 	struct ether_multi *enm;
 	struct ether_multistep step;
@@ -746,15 +733,14 @@ ze_setup(sc)
  * Check for dead transmit logic.
  */
 void
-zetimeout(ifp)
-	struct ifnet *ifp;
+zetimeout(struct ifnet *ifp)
 {
 	struct ze_softc *sc = ifp->if_softc;
 
 	if (sc->sc_inq == 0)
 		return;
 
-	printf("%s: xmit logic died, resetting...\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "xmit logic died, resetting...\n");
 	/*
 	 * Do a reset of interface, to get it going again.
 	 * Will it work by just restart the transmit logic?
@@ -769,17 +755,16 @@ zetimeout(ifp)
  *  Write ring buffer addresses.
  *  Write SBR.
  */
-int
-zereset(sc)
-	struct ze_softc *sc;
+bool
+zereset(struct ze_softc *sc)
 {
 	int reg, i;
 
 	ZE_WCSR(ZE_CSR6, ZE_NICSR6_RE);
 	DELAY(50000);
 	if (ZE_RCSR(ZE_CSR6) & ZE_NICSR5_SF) {
-		printf("%s: selftest failed\n", sc->sc_dev.dv_xname);
-		return 1;
+		aprint_error_dev(sc->sc_dev, "selftest failed\n");
+		return true;
 	}
 
 	/*
@@ -791,13 +776,14 @@ zereset(sc)
 	i = 10;
 	do {
 		if (i-- == 0) {
-			printf("Failing SGEC CSR0 init\n");
-			return 1;
+			aprint_error_dev(sc->sc_dev,
+			    "failing SGEC CSR0 init\n");
+			return true;
 		}
 		ZE_WCSR(ZE_CSR0, reg);
 	} while (ZE_RCSR(ZE_CSR0) != reg);
 
 	ZE_WCSR(ZE_CSR3, (vaddr_t)sc->sc_pzedata->zc_recv);
 	ZE_WCSR(ZE_CSR4, (vaddr_t)sc->sc_pzedata->zc_xmit);
-	return 0;
+	return false;
 }

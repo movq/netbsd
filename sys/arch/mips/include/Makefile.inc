@@ -1,7 +1,15 @@
-# $NetBSD: Makefile.inc,v 1.6 2006/06/02 19:45:56 mrg Exp $
+# $NetBSD: Makefile.inc,v 1.10 2016/06/09 05:43:51 martin Exp $
 
-# Standard kernel compile flags
-CFLAGS += -G 0 -mno-abicalls
+CFLAGS+=	-G 0 -ffixed-24
 
-# Needed so modules loaded in KSEG2 can make calls to KSEG0
-CFLAGS += -mlong-calls
+# this should really be !(RUMPKERNEL && target=PIC)
+.if !defined(RUMPKERNEL)
+CFLAGS+=	-mno-abicalls
+AFLAGS+=	-mno-abicalls
+.endif
+
+.if ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el"
+CFLAGS+=	-msym32
+.endif
+
+AFLAGS+=	-x assembler-with-cpp ${AOPTS}

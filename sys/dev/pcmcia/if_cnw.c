@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnw.c,v 1.42 2007/09/01 07:32:31 dyoung Exp $	*/
+/*	$NetBSD: if_cnw.c,v 1.63 2018/06/26 06:48:01 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -112,10 +105,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.42 2007/09/01 07:32:31 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.63 2018/06/26 06:48:01 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -137,6 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.42 2007/09/01 07:32:31 dyoung Exp $");
 
 #include <net/if_dl.h>
 #include <net/if_ether.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -144,11 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.42 2007/09/01 07:32:31 dyoung Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
-#endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 /*
@@ -185,14 +173,14 @@ int cnw_skey = CNW_SCRAMBLEKEY;		/* Scramble key */
  */
 #define MEMORY_MAPPED
 
-int	cnw_match(struct device *, struct cfdata *, void *);
-void	cnw_attach(struct device *, struct device *, void *);
-int	cnw_detach(struct device *, int);
+int	cnw_match(device_t, cfdata_t, void *);
+void	cnw_attach(device_t, device_t, void *);
+int	cnw_detach(device_t, int);
 
-int	cnw_activate(struct device *, enum devact);
+int	cnw_activate(device_t, enum devact);
 
 struct cnw_softc {
-	struct device sc_dev;		    /* Device glue (must be first) */
+	device_t sc_dev;		    /* Device glue (must be first) */
 	struct ethercom sc_ethercom;	    /* Ethernet common part */
 	int sc_domain;			    /* Netwave domain */
 	int sc_skey;			    /* Netwave scramble key */
@@ -222,7 +210,7 @@ struct cnw_softc {
 #define CNW_RES_NET	8
 };
 
-CFATTACH_DECL(cnw, sizeof(struct cnw_softc),
+CFATTACH_DECL_NEW(cnw, sizeof(struct cnw_softc),
     cnw_match, cnw_attach, cnw_detach, cnw_activate);
 
 void cnw_reset(struct cnw_softc *);
@@ -252,9 +240,7 @@ static int cnw_cmd(struct cnw_softc *, int, int, int, int);
  * ASR (Adapter Status Register) is asserted.
  */
 static int
-wait_WOC(sc, line)
-	struct cnw_softc *sc;
-	int line;
+wait_WOC(struct cnw_softc *sc, int line)
 {
 	int i, asr;
 
@@ -270,7 +256,7 @@ wait_WOC(sc, line)
 		DELAY(100);
 	}
 	if (line > 0)
-		printf("%s: wedged at line %d\n", sc->sc_dev.dv_xname, line);
+		printf("%s: wedged at line %d\n", device_xname(sc->sc_dev), line);
 	return (1);
 }
 #define WAIT_WOC(sc) wait_WOC(sc, __LINE__)
@@ -280,9 +266,7 @@ wait_WOC(sc, line)
  * Read a 16 bit value from the card.
  */
 static int
-read16(sc, offset)
-	struct cnw_softc *sc;
-	int offset;
+read16(struct cnw_softc *sc, int offset)
 {
 	int hi, lo;
 	int offs = sc->sc_memoff + offset;
@@ -302,15 +286,13 @@ read16(sc, offset)
  * Send a command to the card by writing it to the command buffer.
  */
 int
-cnw_cmd(sc, cmd, count, arg1, arg2)
-	struct cnw_softc *sc;
-	int cmd, count, arg1, arg2;
+cnw_cmd(struct cnw_softc *sc, int cmd, int count, int arg1, int arg2)
 {
 	int ptr = sc->sc_memoff + CNW_EREG_CB;
 
 	if (wait_WOC(sc, 0)) {
 		printf("%s: wedged when issuing cmd 0x%x\n",
-		    sc->sc_dev.dv_xname, cmd);
+		    device_xname(sc->sc_dev), cmd);
 		/*
 		 * We'll continue anyway, as that's probably the best
 		 * thing we can do; at least the user knows there's a
@@ -343,12 +325,11 @@ cnw_cmd(sc, cmd, count, arg1, arg2)
  * Reset the hardware.
  */
 void
-cnw_reset(sc)
-	struct cnw_softc *sc;
+cnw_reset(struct cnw_softc *sc)
 {
 #ifdef CNW_DEBUG
 	if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-		printf("%s: resetting\n", sc->sc_dev.dv_xname);
+		printf("%s: resetting\n", device_xname(sc->sc_dev));
 #endif
 	wait_WOC(sc, 0);
 #ifndef MEMORY_MAPPED
@@ -372,8 +353,7 @@ cnw_reset(sc)
  * Initialize the card.
  */
 void
-cnw_init(sc)
-	struct cnw_softc *sc;
+cnw_init(struct cnw_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	const u_int8_t rxmode =
@@ -429,8 +409,7 @@ cnw_init(sc)
  * Enable and initialize the card.
  */
 int
-cnw_enable(sc)
-	struct cnw_softc *sc;
+cnw_enable(struct cnw_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -439,12 +418,11 @@ cnw_enable(sc)
 
 	sc->sc_ih = pcmcia_intr_establish(sc->sc_pf, IPL_NET, cnw_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt handler\n");
 		return (EIO);
 	}
 	if (pcmcia_function_enable(sc->sc_pf) != 0) {
-		printf("%s: couldn't enable card\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't enable card\n");
 		return (EIO);
 	}
 	sc->sc_resource |= CNW_RES_PCIC;
@@ -459,8 +437,7 @@ cnw_enable(sc)
  * Stop and disable the card.
  */
 void
-cnw_disable(sc)
-	struct cnw_softc *sc;
+cnw_disable(struct cnw_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -479,8 +456,7 @@ cnw_disable(sc)
  * Match the hardware we handle.
  */
 int
-cnw_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cnw_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -498,22 +474,23 @@ cnw_match(struct device *parent, struct cfdata *match,
  * Attach the card.
  */
 void
-cnw_attach(struct device  *parent, struct device *self, void *aux)
+cnw_attach(device_t parent, device_t self, void *aux)
 {
-	struct cnw_softc *sc = (void *) self;
+	struct cnw_softc *sc = device_private(self);
 	struct pcmcia_attach_args *pa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int8_t macaddr[ETHER_ADDR_LEN];
 	int i;
 	bus_size_t memsize;
 
+	sc->sc_dev = self;
 	sc->sc_resource = 0;
 
 	/* Enable the card */
 	sc->sc_pf = pa->pf;
 	pcmcia_function_init(sc->sc_pf, SIMPLEQ_FIRST(&sc->sc_pf->cfe_head));
 	if (pcmcia_function_enable(sc->sc_pf)) {
-		printf("%s: function enable failed\n", self->dv_xname);
+		aprint_error_dev(self, "function enable failed\n");
 		return;
 	}
 	sc->sc_resource |= CNW_RES_PCIC;
@@ -522,12 +499,12 @@ cnw_attach(struct device  *parent, struct device *self, void *aux)
 #ifndef MEMORY_MAPPED
 	if (pcmcia_io_alloc(sc->sc_pf, 0, CNW_IO_SIZE, CNW_IO_SIZE,
 	    &sc->sc_pcioh) != 0) {
-		printf("%s: can't allocate i/o space\n", self->dv_xname);
+		aprint_error_dev(self, "can't allocate i/o space\n");
 		goto fail;
 	}
 	if (pcmcia_io_map(sc->sc_pf, PCMCIA_WIDTH_IO16, &sc->sc_pcioh,
 	    &sc->sc_iowin) != 0) {
-		printf("%s: can't map i/o space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		pcmcia_io_free(sc->sc_pf, &sc->sc_pcioh);
 		goto fail;
 	}
@@ -541,13 +518,13 @@ cnw_attach(struct device  *parent, struct device *self, void *aux)
 	memsize = CNW_MEM_SIZE + CNW_IOM_SIZE;
 #endif
 	if (pcmcia_mem_alloc(sc->sc_pf, memsize, &sc->sc_pcmemh) != 0) {
-		printf("%s: can't allocate memory\n", self->dv_xname);
+		aprint_error_dev(self, "can't allocate memory\n");
 		goto fail;
 	}
 	if (pcmcia_mem_map(sc->sc_pf, PCMCIA_WIDTH_MEM8|PCMCIA_MEM_COMMON,
 	    CNW_MEM_ADDR, memsize, &sc->sc_pcmemh, &sc->sc_memoff,
 	    &sc->sc_memwin) != 0) {
-		printf("%s: can't map memory\n", self->dv_xname);
+		aprint_error_dev(self, "can't map memory\n");
 		pcmcia_mem_free(sc->sc_pf, &sc->sc_pcmemh);
 		goto fail;
 	}
@@ -564,11 +541,11 @@ cnw_attach(struct device  *parent, struct device *self, void *aux)
 	for (i = 0; i < ETHER_ADDR_LEN; i++)
 		macaddr[i] = bus_space_read_1(sc->sc_memt, sc->sc_memh,
 		    sc->sc_memoff + CNW_EREG_PA + i);
-	printf("%s: address %s\n", sc->sc_dev.dv_xname,
+	printf("%s: address %s\n", device_xname(sc->sc_dev),
 	    ether_sprintf(macaddr));
 
 	/* Set up ifnet structure */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = cnw_start;
 	ifp->if_ioctl = cnw_ioctl;
@@ -579,6 +556,7 @@ cnw_attach(struct device  *parent, struct device *self, void *aux)
 
 	/* Attach the interface */
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, macaddr);
 
 	sc->sc_resource |= CNW_RES_NET;
@@ -608,8 +586,7 @@ fail:
  * Start outputting on the interface.
  */
 void
-cnw_start(ifp)
-	struct ifnet *ifp;
+cnw_start(struct ifnet *ifp)
 {
 	struct cnw_softc *sc = ifp->if_softc;
 	struct mbuf *m0;
@@ -690,10 +667,7 @@ cnw_start(ifp)
 		if (m0 == 0)
 			break;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 
 		cnw_transmit(sc, m0);
 		++ifp->if_opackets;
@@ -710,9 +684,7 @@ cnw_start(ifp)
  * Transmit a packet.
  */
 void
-cnw_transmit(sc, m0)
-	struct cnw_softc *sc;
-	struct mbuf *m0;
+cnw_transmit(struct cnw_softc *sc, struct mbuf *m0)
 {
 	int buffer, bufsize, bufoffset, bufptr, bufspace, len, mbytes, n;
 	struct mbuf *m;
@@ -725,7 +697,7 @@ cnw_transmit(sc, m0)
 #ifdef CNW_DEBUG
 	if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
 		printf("%s: cnw_transmit b=0x%x s=%d o=0x%x\n",
-		    sc->sc_dev.dv_xname, buffer, bufsize, bufoffset);
+		    device_xname(sc->sc_dev), buffer, bufsize, bufoffset);
 #endif
 
 	/* Copy data from mbuf chain to card buffers */
@@ -744,7 +716,7 @@ cnw_transmit(sc, m0)
 #ifdef CNW_DEBUG
 				if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
 					printf("%s:   next buffer @0x%x\n",
-					    sc->sc_dev.dv_xname, buffer);
+					    device_xname(sc->sc_dev), buffer);
 #endif
 			}
 			n = mbytes <= bufspace ? mbytes : bufspace;
@@ -755,8 +727,7 @@ cnw_transmit(sc, m0)
 			mptr += n;
 			mbytes -= n;
 		}
-		MFREE(m, m0);
-		m = m0;
+		m = m0 = m_free(m);
 	}
 
 	/* Issue transmit command */
@@ -768,8 +739,7 @@ cnw_transmit(sc, m0)
  * Pull a packet from the card into an mbuf chain.
  */
 struct mbuf *
-cnw_read(sc)
-	struct cnw_softc *sc;
+cnw_read(struct cnw_softc *sc)
 {
 	struct mbuf *m, *top, **mp;
 	int totbytes, buffer, bufbytes, bufptr, mbytes, n;
@@ -779,7 +749,7 @@ cnw_read(sc)
 	totbytes = read16(sc, CNW_EREG_RDP);
 #ifdef CNW_DEBUG
 	if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
-		printf("%s: recv %d bytes\n", sc->sc_dev.dv_xname, totbytes);
+		printf("%s: recv %d bytes\n", device_xname(sc->sc_dev), totbytes);
 #endif
 	buffer = CNW_EREG_RDP + 2;
 	bufbytes = 0;
@@ -788,7 +758,7 @@ cnw_read(sc)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return (0);
-	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
+	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
 	m->m_pkthdr.len = totbytes;
 	mbytes = MHLEN;
 	top = 0;
@@ -830,9 +800,9 @@ cnw_read(sc)
 #ifdef CNW_DEBUG
 				if (sc->sc_ethercom.ec_if.if_flags & IFF_DEBUG)
 					printf("%s:   %d bytes @0x%x+0x%lx\n",
-					    sc->sc_dev.dv_xname, bufbytes,
-					    buffer, bufptr - buffer -
-					    sc->sc_memoff);
+					    device_xname(sc->sc_dev), bufbytes,
+					    buffer, (u_long)(bufptr - buffer -
+					    sc->sc_memoff));
 #endif
 			}
 			n = mbytes <= bufbytes ? mbytes : bufbytes;
@@ -855,8 +825,7 @@ cnw_read(sc)
  * Handle received packets.
  */
 void
-cnw_recv(sc)
-	struct cnw_softc *sc;
+cnw_recv(struct cnw_softc *sc)
 {
 	int rser;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -882,13 +851,8 @@ cnw_recv(sc)
 		}
 		++ifp->if_ipackets;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
-
 		/* Pass the packet up. */
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 	}
 }
 
@@ -897,15 +861,14 @@ cnw_recv(sc)
  * Interrupt handler.
  */
 int
-cnw_intr(arg)
-	void *arg;
+cnw_intr(void *arg)
 {
 	struct cnw_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int ret, status, rser, tser;
 
 	if ((sc->sc_ethercom.ec_if.if_flags & IFF_RUNNING) == 0 ||
-	    !device_is_active(&sc->sc_dev))
+	    !device_is_active(sc->sc_dev))
 		return (0);
 	ifp->if_timer = 0;	/* stop watchdog timer */
 
@@ -919,12 +882,9 @@ cnw_intr(arg)
 		status = bus_space_read_1(sc->sc_memt, sc->sc_memh,
 		    sc->sc_memoff + CNW_IOM_OFF + CNW_REG_CCSR);
 #endif
-		if (!(status & 0x02)) {
-			if (ret == 0)
-				printf("%s: spurious interrupt\n",
-				    sc->sc_dev.dv_xname);
+		if (!(status & 0x02))
+			/* No more commands, or shared IRQ */
 			return (ret);
-		}
 		ret = 1;
 #ifndef MEMORY_MAPPED
 		status = bus_space_read_1(sc->sc_iot, sc->sc_ioh, CNW_REG_ASR);
@@ -1012,7 +972,7 @@ cnw_intr(arg)
 			ifp->if_flags &= ~IFF_OACTIVE;
 
 			/* Continue to send packets from the queue */
-			cnw_start(&sc->sc_ethercom.ec_if);
+			if_schedule_deferred_start(&sc->sc_ethercom.ec_if);
 		}
 
 	}
@@ -1023,10 +983,7 @@ cnw_intr(arg)
  * Handle device ioctls.
  */
 int
-cnw_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+cnw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct cnw_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1035,7 +992,7 @@ cnw_ioctl(ifp, cmd, data)
 	struct lwp *l = curlwp;	/*XXX*/
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 	case SIOCSIFFLAGS:
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
@@ -1044,9 +1001,18 @@ cnw_ioctl(ifp, cmd, data)
 		break;
 	case SIOCSCNWDOMAIN:
 	case SIOCSCNWKEY:
+		error = kauth_authorize_network(l->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, KAUTH_ARG(cmd),
+		    NULL);
+		if (error)
+			return (error);
+		break;
 	case SIOCGCNWSTATUS:
-		error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		error = kauth_authorize_network(l->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_GETPRIV, ifp, KAUTH_ARG(cmd),
+		    NULL);
 		if (error)
 			return (error);
 		break;
@@ -1058,40 +1024,46 @@ cnw_ioctl(ifp, cmd, data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		if (!(ifp->if_flags & IFF_RUNNING) &&
 		    (error = cnw_enable(sc)) != 0)
 			break;
 		ifp->if_flags |= IFF_UP;
+		cnw_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			cnw_init(sc);
 			arp_ifinit(&sc->sc_ethercom.ec_if, ifa);
 			break;
 #endif
 		default:
-			cnw_init(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == IFF_RUNNING) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * The interface is marked down and it is running, so
 			 * stop it.
 			 */
 			cnw_disable(sc);
-		} else if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == IFF_UP){
+			break;
+		case IFF_UP:
 			/*
 			 * The interface is marked up and it is stopped, so
 			 * start it.
 			 */
 			error = cnw_enable(sc);
-		} else {
+			break;
+		default:
 			/* IFF_PROMISC may be changed */
 			cnw_init(sc);
+			break;
 		}
 		break;
 
@@ -1132,7 +1104,7 @@ cnw_ioctl(ifp, cmd, data)
 			break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -1146,20 +1118,17 @@ cnw_ioctl(ifp, cmd, data)
  * generate an interrupt after a transmit has been started on it.
  */
 void
-cnw_watchdog(ifp)
-	struct ifnet *ifp;
+cnw_watchdog(struct ifnet *ifp)
 {
 	struct cnw_softc *sc = ifp->if_softc;
 
-	printf("%s: device timeout; card reset\n", sc->sc_dev.dv_xname);
+	printf("%s: device timeout; card reset\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 	cnw_init(sc);
 }
 
 int
-cnw_setdomain(sc, domain)
-	struct cnw_softc *sc;
-	int domain;
+cnw_setdomain(struct cnw_softc *sc, int domain)
 {
 	int s;
 
@@ -1175,9 +1144,7 @@ cnw_setdomain(sc, domain)
 }
 
 int
-cnw_setkey(sc, key)
-	struct cnw_softc *sc;
-	int key;
+cnw_setkey(struct cnw_softc *sc, int key)
 {
 	int s;
 
@@ -1193,31 +1160,23 @@ cnw_setkey(sc, key)
 }
 
 int
-cnw_activate(self, act)
-	struct device *self;
-	enum devact act;
+cnw_activate(device_t self, enum devact act)
 {
-	struct cnw_softc *sc = (struct cnw_softc *)self;
-	int rv = 0, s;
+	struct cnw_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (rv);
 }
 
 int
-cnw_detach(struct device *self, int flags)
+cnw_detach(device_t self, int flags)
 {
-	struct cnw_softc *sc = (struct cnw_softc *)self;
+	struct cnw_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	/* cnw_disable() checks IFF_RUNNING */

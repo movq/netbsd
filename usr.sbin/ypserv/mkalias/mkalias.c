@@ -1,4 +1,4 @@
-/*	$NetBSD: mkalias.c,v 1.14 2006/05/11 08:44:56 mrg Exp $ */
+/*	$NetBSD: mkalias.c,v 1.18 2011/08/30 21:10:28 joerg Exp $ */
 
 /*
  * Copyright (c) 1997 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mkalias.c,v 1.14 2006/05/11 08:44:56 mrg Exp $");
+__RCSID("$NetBSD: mkalias.c,v 1.18 2011/08/30 21:10:28 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -43,7 +38,6 @@ __RCSID("$NetBSD: mkalias.c,v 1.14 2006/05/11 08:44:56 mrg Exp $");
 
 #include <ctype.h>
 #include <err.h>
-#include <fcntl.h>
 #include <netdb.h>
 #include <resolv.h>
 #include <stdio.h>
@@ -58,13 +52,12 @@ __RCSID("$NetBSD: mkalias.c,v 1.14 2006/05/11 08:44:56 mrg Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-void	capitalize(char *, int);
-int	check_host(char *, char *, int, int, int);
-int	main(int, char *[]);
-void	split_address(char *, int, char *, char *);
-void	usage(void);
+static void	capitalize(char *, int);
+static int	check_host(char *, char *, int, int, int);
+static void	split_address(char *, int, char *, char *);
+__dead static void	usage(void);
 
-void
+static void
 split_address(char *address, int len, char *user, char *host)
 {
 	char *c, *s, *r;
@@ -101,7 +94,7 @@ split_address(char *address, int len, char *user, char *host)
 	}
 }
 
-int
+static int
 check_host(char *address, char *host, int dflag, int uflag, int Eflag)
 {
 	u_char answer[PACKETSZ];
@@ -125,7 +118,7 @@ check_host(char *address, char *host, int dflag, int uflag, int Eflag)
 	return(status == -1);
 }
 
-void
+static void
 capitalize(char *name, int len)
 {
 	char last = ' ';
@@ -164,9 +157,8 @@ main(int argc, char *argv[])
 	datum	key, val;
 	char	*slash;
 	DBM	*new_db = NULL;
-	static	char mapname[] = "ypdbXXXXXXXXXX";
-	char	db_mapname[MAXPATHLEN], db_outfile[MAXPATHLEN],
-		db_tempname[MAXPATHLEN];
+	static	const char template[] = "ypdbXXXXXX";
+	char	db_mapname[MAXPATHLEN], db_outfile[MAXPATHLEN];
 	int	status;
 	char	user[4096], host[4096]; /* XXX: DB bsize = 4096 in ypdb.c */
 	char	datestr[11];
@@ -217,7 +209,7 @@ main(int argc, char *argv[])
 	if (optind < argc)
 		usage();
 	
-	db = ypdb_open(input, O_RDONLY, 0444);
+	db = ypdb_open(input);
 	if (db == NULL)
 		err(1, "Unable to open input database `%s'", input);
 
@@ -236,17 +228,14 @@ main(int argc, char *argv[])
 	
 		/* note: output is now directory where map goes ! */
 	
-		if (strlen(output) + strlen(mapname) + strlen(YPDB_SUFFIX) >
+		if (strlen(output) + strlen(template) + strlen(YPDB_SUFFIX) >
 		    (sizeof(db_mapname) - 1))
 			errx(1, "Directory name `%s' too long", output);
 	
-		snprintf(db_tempname, sizeof(db_tempname), "%s%s", output,
-			mapname);
-		mktemp(db_tempname);	/* OK */
-		snprintf(db_mapname, sizeof(db_mapname), "%s%s", db_tempname,
-			YPDB_SUFFIX);
+		snprintf(db_mapname, sizeof(db_mapname), "%s%s",
+		    output, template);
 	
-		new_db = ypdb_open(db_tempname, O_RDWR|O_CREAT, 0444);
+		new_db = ypdb_mktemp(db_mapname);
 		if (new_db == NULL)
 			err(1, "Unable to open output database `%s'",
 			    db_outfile);
@@ -305,7 +294,7 @@ main(int argc, char *argv[])
 
 	if (new_db != NULL) {
 	  	snprintf(datestr, sizeof(datestr), "%010d", (int)time(NULL));
-		key.dptr = YP_LAST_KEY;
+		key.dptr = __UNCONST(YP_LAST_KEY);
 		key.dsize = strlen(YP_LAST_KEY);
 		val.dptr = datestr;
 		val.dsize = strlen(datestr);
@@ -318,7 +307,7 @@ main(int argc, char *argv[])
 
 	if (new_db != NULL) {
 	  	localhostname(myname, sizeof(myname) - 1);
-		key.dptr = YP_MASTER_KEY;
+		key.dptr = __UNCONST(YP_MASTER_KEY);
 		key.dsize = strlen(YP_MASTER_KEY);
 		val.dptr = myname;
 		val.dsize = strlen(myname);
@@ -341,7 +330,7 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-void
+static void
 usage(void)
 {
 	fprintf(stderr,

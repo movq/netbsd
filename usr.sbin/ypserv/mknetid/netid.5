@@ -1,4 +1,4 @@
-.\"	$NetBSD: netid.5,v 1.8 2005/02/26 16:27:44 thorpej Exp $
+.\"	$NetBSD: netid.5,v 1.12 2017/07/03 21:35:32 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
 .\" All rights reserved.
@@ -11,11 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"      This product includes software developed by Mats O Jansson
-.\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
 .\" OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -49,12 +44,12 @@ there are three kind of records.
 .Pp
 The first type is information about which gids a uid has:
 .Bd -literal
-unix.\*[Lt]uid\*[Gt]@\*[Lt]yp-domain\*[Gt] \*[Lt]uid\*[Gt]:\*[Lt]gid\*[Gt],\*[Lt]gid\*[Gt]
+unix.<uid>@<yp-domain> <uid>:<gid>,<gid>
 .Ed
 .Pp
 The second type has informations about hosts:
 .Bd -literal
-unix.\*[Lt]hostname\*[Gt]@\*[Lt]yp-domain\*[Gt] 0:\*[Lt]hostname\*[Gt]
+unix.<hostname>@<yp-domain> 0:<hostname>
 .Ed
 .Pp
 The third type is records from a
@@ -76,4 +71,4 @@ unix.jodie@kaka 0:jodie
 .Xr mknetid 8 ,
 .Xr nis 8
 .Sh AUTHORS
-.An Mats O Jansson Aq moj@stacken.kth.se
+.An Mats O Jansson Aq Mt moj@stacken.kth.se

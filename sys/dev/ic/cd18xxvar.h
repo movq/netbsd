@@ -1,4 +1,4 @@
-/*	$NetBSD: cd18xxvar.h,v 1.1 2001/10/03 04:25:30 mrg Exp $	*/
+/*	$NetBSD: cd18xxvar.h,v 1.5 2014/11/15 19:18:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -99,7 +97,7 @@ struct cdtty_port {
 
 /* softc allocated per-cd18xx */
 struct cd18xx_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 	/* tag and handle for our registers (128 bytes) */
 	bus_space_tag_t		sc_tag;
@@ -152,10 +150,10 @@ void cd18xx_attach(struct cd18xx_softc *);
  * the first 3 bits of the unit are the channel number inside a single
  * cd18xx instance, and the remaining bits indicate the instance number.
  */
-#define CD18XX_TTY(x)		(minor(x) & 0x7ffff)
-#define CD18XX_CHANNEL(x)	(minor(x) & 7)
-#define CD18XX_INSTANCE(x)	((minor(x) >> 3) & 0xffff)
-#define CD18XX_DIALOUT(x)	((minor(x) & 0x80000) != 0)
+#define CD18XX_TTY(x)		TTUNIT(x)
+#define CD18XX_CHANNEL(x)	(TTUNIT(x) & 7)
+#define CD18XX_INSTANCE(x)	(TTUNIT(x) >> 3)
+#define CD18XX_DIALOUT(x)	TTDIALOUT(x)
 
 /* short helpers for read/write */
 #define cd18xx_read(sc, o)		\

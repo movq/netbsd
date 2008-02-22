@@ -1,4 +1,4 @@
-.\" $NetBSD: sunlabel.8,v 1.5 2003/02/25 10:36:19 wiz Exp $
+.\" $NetBSD: sunlabel.8,v 1.9 2017/07/03 21:35:32 wiz Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@ Synthesize a new label rather than reading what is there.
 .It Fl q
 Quiet mode - don't print unnecessary babble (currently
 this suppresses the
-.Dq sunlabel\*[Gt]
+.Dq sunlabel>
 prompt).
 .It Fl s
 Ignore checksum errors when reading the label.
@@ -87,13 +80,13 @@ and the partition table printed by
 .Pp
 .Nm
 prints a prompt
-.Dq sunlabel\*[Gt]
+.Dq sunlabel>
 and expects commands.
 The following commands are understood:
 .Bl -tag -width 16n -offset indent
 .It \&?
 Show a short help message.
-.It Ic [abcdefghijklmnop] Ar \*[Lt]cylno\*[Gt] Ar \*[Lt]size\*[Gt]
+.It Ic [abcdefghijklmnop] Ar <cylno> Ar <size>
 Change partition (see below).
 .It Ic L
 Print label, except for the partition table.
@@ -106,7 +99,7 @@ Quit program (unconditionally) [EOF also quits].
 .It Ic S
 Set label in the kernel (orthogonal to
 .Ic W ) .
-.It Ic V Ar \*[Lt]name\*[Gt] Ar \*[Lt]value\*[Gt]
+.It Ic V Ar <name> Ar <value>
 Change a non-partition label value.
 .It Ic W
 Write (possibly modified) label out.
@@ -117,7 +110,7 @@ The
 through
 .Ic p
 commands will accept, for the
-.Ar \*[Lt]size\*[Gt]
+.Ar <size>
 parameter, the
 .Ar nnn/nnn/nnn
 syntax used by
@@ -145,7 +138,7 @@ if
 .Fl n
 is used), this syntax is not very useful.  Some additional strings are
 accepted.  For the
-.Ar \*[Lt]cylno\*[Gt]
+.Ar <cylno>
 parameter,
 .Dq end-X
 (where
@@ -158,7 +151,7 @@ indicates that the partition should start at the same place as
 partition
 .Ar X .
 For the
-.Ar \*[Lt]size\*[Gt]
+.Ar <size>
 parameter,
 .Dq end-X
 indicates that the partition should end at the same place as partition
@@ -225,7 +218,7 @@ would set the ascii-label string to that string.
 performs very few consistency checks on the values you supply, and the
 ones it does perform never generate errors, only warnings.
 .Sh AUTHORS
-.An der Mouse Aq mouse@rodents.montreal.qc.ca
+.An der Mouse Aq Mt mouse@rodents.montreal.qc.ca
 .Sh BUGS
 It may be that the space in the label where the information for the
 extended partitions is saved is used by

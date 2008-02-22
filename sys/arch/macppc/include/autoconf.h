@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.15 2007/11/26 19:58:30 garbled Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.18 2011/07/01 21:02:15 dyoung Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -34,7 +34,7 @@
 #ifndef _MACHINE_AUTOCONF_H_
 #define _MACHINE_AUTOCONF_H_
 
-#include <machine/bus.h>	/* for bus_space_tag_t */
+#include <sys/bus.h>	/* for bus_space_tag_t */
 
 struct confargs {
 	const char *ca_name;
@@ -62,10 +62,9 @@ void identifycpu(char *);
 /* these are in machdep.c */
 void initppc(u_int, u_int, char *);
 void model_init(void);
-void *mapiodev(paddr_t, psize_t);
 paddr_t kvtop(void *);
 void dumpsys(void);
-void copy_disp_props(struct device *, int, prop_dictionary_t);
+void copy_disp_props(device_t, int, prop_dictionary_t);
 
 /* these are in extintr.c */
 void init_interrupt(void);

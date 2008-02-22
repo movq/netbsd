@@ -1,4 +1,4 @@
-/* $NetBSD: rm.c,v 1.46 2007/06/24 17:59:31 christos Exp $ */
+/* $NetBSD: rm.c,v 1.53 2013/04/26 18:43:22 christos Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993, 1994, 2003
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rm.c	8.8 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: rm.c,v 1.46 2007/06/24 17:59:31 christos Exp $");
+__RCSID("$NetBSD: rm.c,v 1.53 2013/04/26 18:43:22 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,20 +54,23 @@ __RCSID("$NetBSD: rm.c,v 1.46 2007/06/24 17:59:31 christos Exp $");
 #include <grp.h>
 #include <locale.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
+static int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
+static int xflag;
+static sig_atomic_t pinfo;
 
-int	check(char *, char *, struct stat *);
-void	checkdot(char **);
-void	rm_file(char **);
-int	rm_overwrite(char *, struct stat *);
-void	rm_tree(char **);
-void	usage(void);
-int	main(int, char *[]);
+static int	check(char *, char *, struct stat *);
+static void	checkdot(char **);
+static void	progress(int);
+static void	rm_file(char **);
+static int	rm_overwrite(char *, struct stat *);
+static void	rm_tree(char **);
+__dead static void	usage(void);
 
 /*
  * For the sake of the `-f' flag, check whether an error number indicates the
@@ -92,8 +95,8 @@ main(int argc, char *argv[])
 	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
-	Pflag = rflag = 0;
-	while ((ch = getopt(argc, argv, "dfiPRrvW")) != -1)
+	Pflag = rflag = xflag = 0;
+	while ((ch = getopt(argc, argv, "dfiPRrvWx")) != -1)
 		switch (ch) {
 		case 'd':
 			dflag = 1;
@@ -116,6 +119,9 @@ main(int argc, char *argv[])
 		case 'v':
 			vflag = 1;
 			break;
+		case 'x':
+			xflag = 1;
+			break;
 		case 'W':
 			Wflag = 1;
 			break;
@@ -126,8 +132,13 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc < 1)
+	if (argc < 1) {
+		if (fflag)
+			return 0;
 		usage();
+	}
+
+	(void)signal(SIGINFO, progress);
 
 	checkdot(argv);
 
@@ -144,7 +155,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-void
+static void
 rm_tree(char **argv)
 {
 	FTS *fts;
@@ -168,9 +179,10 @@ rm_tree(char **argv)
 		flags |= FTS_NOSTAT;
 	if (Wflag)
 		flags |= FTS_WHITEOUT;
-	if (!(fts = fts_open(argv, flags,
-	    (int (*)(const FTSENT **, const FTSENT **))NULL)))
-		err(1, NULL);
+	if (xflag)
+		flags |= FTS_XDEV;
+	if ((fts = fts_open(argv, flags, NULL)) == NULL)
+		err(1, "fts_open failed");
 	while ((p = fts_read(fts)) != NULL) {
 	
 		switch (p->fts_info) {
@@ -251,15 +263,17 @@ rm_tree(char **argv)
 		if (rval != 0) {
 			warn("%s", p->fts_path);
 			eval = 1;
-		} else if (vflag)
+		} else if (vflag || pinfo) {
+			pinfo = 0;
 			(void)printf("%s\n", p->fts_path);
+		}
 	}
 	if (errno)
 		err(1, "fts_read");
 	fts_close(fts);
 }
 
-void
+static void
 rm_file(char **argv)
 {
 	struct stat sb;
@@ -369,10 +383,10 @@ rm_file(char **argv)
  * rm_overwrite will return 0 on success.
  */
 
-int
+static int
 rm_overwrite(char *file, struct stat *sbp)
 {
-	struct stat sb;
+	struct stat sb, sb2;
 	int fd, randint;
 	char randchar;
 
@@ -386,15 +400,25 @@ rm_overwrite(char *file, struct stat *sbp)
 		return 0;
 
 	/* flags to try to defeat hidden caching by forcing seeks */
-	if ((fd = open(file, O_RDWR|O_SYNC|O_RSYNC, 0)) == -1)
+	if ((fd = open(file, O_RDWR|O_SYNC|O_RSYNC|O_NOFOLLOW, 0)) == -1)
 		goto err;
+
+	if (fstat(fd, &sb2)) {
+		goto err;
+	}
+
+	if (sb2.st_dev != sbp->st_dev || sb2.st_ino != sbp->st_ino ||
+	    !S_ISREG(sb2.st_mode)) {
+		errno = EPERM;
+		goto err;
+	}
 
 #define RAND_BYTES	1
 #define THIS_BYTE	0
 
 #define	WRITE_PASS(mode, byte) do {					\
 	off_t len;							\
-	int wlen, i;							\
+	size_t wlen, i;							\
 	char buf[8 * 1024];						\
 									\
 	if (fsync(fd) || lseek(fd, (off_t)0, SEEK_SET))			\
@@ -408,8 +432,8 @@ rm_overwrite(char *file, struct stat *sbp)
 			    i+= sizeof(u_int32_t))			\
 				*(int *)(buf + i) = arc4random();	\
 		}							\
-		wlen = len < sizeof(buf) ? len : sizeof(buf);		\
-		if (write(fd, buf, wlen) != wlen)			\
+		wlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
+		if ((size_t)write(fd, buf, wlen) != wlen)		\
 			goto err;					\
 	}								\
 	sync();		/* another poke at hidden caches */		\
@@ -417,7 +441,7 @@ rm_overwrite(char *file, struct stat *sbp)
 
 #define READ_PASS(byte) do {						\
 	off_t len;							\
-	int rlen;							\
+	size_t rlen;							\
 	char pattern[8 * 1024];						\
 	char buf[8 * 1024];						\
 									\
@@ -426,8 +450,8 @@ rm_overwrite(char *file, struct stat *sbp)
 									\
 	memset(pattern, byte, sizeof(pattern));				\
 	for(len = sbp->st_size; len > 0; len -= rlen) {			\
-		rlen = len < sizeof(buf) ? len : sizeof(buf);		\
-		if(read(fd, buf, rlen) != rlen)				\
+		rlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
+		if((size_t)read(fd, buf, rlen) != rlen)			\
 			goto err;					\
 		if(memcmp(buf, pattern, rlen))				\
 			goto err;					\
@@ -490,7 +514,7 @@ err:	eval = 1;
 	return 1;
 }
 
-int
+static int
 check(char *path, char *name, struct stat *sp)
 {
 	int ch, first;
@@ -538,7 +562,7 @@ check(char *path, char *name, struct stat *sp)
  * trailing slashes have been removed, we'll remove them here.
  */
 #define ISDOT(a) ((a)[0] == '.' && (!(a)[1] || ((a)[1] == '.' && !(a)[2])))
-void
+static void
 checkdot(char **argv)
 {
 	char *p, **save, **t;
@@ -569,12 +593,19 @@ checkdot(char **argv)
 	}
 }
 
-void
+static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage: %s [-f|-i] [-dPRrvW] file ...\n",
+	(void)fprintf(stderr, "usage: %s [-f|-i] [-dPRrvWx] file ...\n",
 	    getprogname());
 	exit(1);
 	/* NOTREACHED */
+}
+
+static void
+progress(int sig __unused)
+{
+	
+	pinfo++;
 }

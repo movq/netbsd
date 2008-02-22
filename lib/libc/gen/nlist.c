@@ -1,4 +1,4 @@
-/* $NetBSD: nlist.c,v 1.21 2003/08/07 16:42:54 agc Exp $ */
+/* $NetBSD: nlist.c,v 1.25 2014/09/18 13:58:20 christos Exp $ */
 
 /*
  * Copyright (c) 1989, 1993
@@ -66,7 +66,7 @@
 #if 0
 static char sccsid[] = "@(#)nlist.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: nlist.c,v 1.21 2003/08/07 16:42:54 agc Exp $");
+__RCSID("$NetBSD: nlist.c,v 1.25 2014/09/18 13:58:20 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -81,7 +81,7 @@ __RCSID("$NetBSD: nlist.c,v 1.21 2003/08/07 16:42:54 agc Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <a.out.h>			/* for 'struct nlist' declaration */
+#include <nlist.h>
 
 #if 0
 #ifdef __weak_alias
@@ -92,7 +92,7 @@ __weak_alias(nlist,_nlist)
 #include "nlist_private.h"
 
 static const struct {
-	int	(*fdnlist) __P((int, struct nlist *));
+	int	(*fdnlist)(int, struct nlist *);
 } fdnlist_fmts[] = {
 #ifdef NLIST_AOUT
 	{	__fdnlist_aout		},
@@ -112,16 +112,14 @@ static const struct {
 };
 	
 int
-nlist(name, list)
-	const char *name;
-	struct nlist *list;
+nlist(const char *name, struct nlist *list)
 {
 	int fd, n;
 
 	_DIAGASSERT(name != NULL);
 	_DIAGASSERT(list != NULL);
 
-	fd = open(name, O_RDONLY, 0);
+	fd = open(name, O_RDONLY | O_CLOEXEC, 0);
 	if (fd < 0)
 		return (-1);
 	n = __fdnlist(fd, list);
@@ -130,9 +128,7 @@ nlist(name, list)
 }
 
 int
-__fdnlist(fd, list)
-	int fd;
-	struct nlist *list;
+__fdnlist(int fd, struct nlist *list)
 {
 	size_t i;
 	int rv;

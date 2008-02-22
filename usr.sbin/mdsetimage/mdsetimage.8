@@ -1,4 +1,4 @@
-.\" $NetBSD: mdsetimage.8,v 1.9 2002/01/19 03:35:05 wiz Exp $
+.\"	$NetBSD: mdsetimage.8,v 1.12 2016/09/21 16:25:41 christos Exp $
 .\"
 .\" Copyright (c) 1996 Christopher G. Demetriou
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\"
 .\" <<Id: LICENSE_GC,v 1.1 2001/10/01 23:24:05 cgd Exp>>
 .\"
-.Dd October 3, 1996
+.Dd September 21, 2016
 .Dt MDSETIMAGE 8
 .Os
 .Sh NAME
@@ -35,8 +35,11 @@
 .Nd set kernel RAM disk image
 .Sh SYNOPSIS
 .Nm
+.Op Fl svx
+.Op Fl b Ar bfdname
+.Op Fl I Ar image_symbol
+.Op Fl S Ar size_symbol
 .Op Fl T Ar address
-.Op Fl v
 .Ar kernel
 .Ar image
 .Sh DESCRIPTION
@@ -51,10 +54,28 @@ The file system present in
 will typically be used by the kernel
 as the root file system.
 .Pp
+To recognize kernel executable format, the
+.Fl b
+flag specifies BFD name of kernel.
+.Pp
+The
+.Fl I
+and
+.Fl S
+flags specify the symbol names of image and size of memory disk
+drivers respectively.
+.Pp
 For a.out kernels only, the
 .Fl T
 flag specifies the starting address of kernel text.
 This flag is ignored for other kernel executable formats.
+.Pp
+If the
+.Fl s
+flags is given,
+.Nm
+will write back the actual disk image size back into
+.Ar kernel .
 .Pp
 If the
 .Fl v
@@ -62,6 +83,16 @@ flag is given,
 .Nm
 will print out status information as
 it is copying the image.
+.Pp
+If the
+.Fl x
+flag is given,
+.Nm
+will extract the disk image from
+.Ar kernel
+into the file
+.Ar image .
+This is the opposite of the default behavior.
 .Sh SEE ALSO
 .Xr md 4 ,
 .Xr mdconfig 8

@@ -1,4 +1,4 @@
-/*	$NetBSD: dkio.h,v 1.14 2007/08/17 11:05:03 pavel Exp $	*/
+/*	$NetBSD: dkio.h,v 1.24 2017/04/05 20:15:49 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -38,11 +38,15 @@
 /*
  * Disk-specific ioctls.
  */
-		/* get and set disklabel; DIOCGPART used internally */
+		/* get and set disklabel; DIOCGPARTINFO used internally */
 #define DIOCGDINFO	_IOR('d', 101, struct disklabel)/* get */
 #define DIOCSDINFO	_IOW('d', 102, struct disklabel)/* set */
 #define DIOCWDINFO	_IOW('d', 103, struct disklabel)/* set, update disk */
-#define DIOCGPART	_IOW('d', 104, struct partinfo)	/* get partition */
+
+#ifdef _KERNEL
+#define DIOCGDINFO32	(DIOCGDINFO - (sizeof(uint32_t) << IOCPARM_SHIFT))
+#define DIOCGPARTINFO	_IOW('d', 104, struct partinfo)	/* get partition */
+#endif
 
 #if defined(__HAVE_OLD_DISKLABEL) && defined(_KERNEL)
 #define ODIOCGDINFO	_IOR('d', 101, struct olddisklabel)/* get */
@@ -81,6 +85,17 @@
 #define	DKCACHE_RCHANGE	0x000100 /* read enable is changeable */
 #define	DKCACHE_WCHANGE	0x000200 /* write enable is changeable */
 #define	DKCACHE_SAVE	0x010000 /* cache parameters are savable/save them */
+#define	DKCACHE_FUA	0x020000 /* Force Unit Access supported */
+#define	DKCACHE_DPO	0x040000 /* Disable Page Out supported */
+
+/*
+ * Combine disk cache flags of two drives to get common cache capabilities.
+ * All common flags are retained. Besides this, if one of the disks
+ * has a write cache enabled or changeable, propagate those flags into result,
+ * even if it's not shared, to indicate that write cache is present.
+ */
+#define DKCACHE_COMBINE(a, b) \
+	(((a) & (b)) | (((a) | (b)) & (DKCACHE_WRITE|DKCACHE_WCHANGE)))
 
 		/* sync disk cache */
 #define	DIOCCACHESYNC	_IOW('d', 118, int)	/* sync cache (force?) */
@@ -101,5 +116,18 @@
 
 		/* get disk-info dictionary */
 #define	DIOCGDISKINFO	_IOR('d', 127, struct plistref)
+
+
+#define	DIOCTUR		_IOR('d', 128, int)	/* test unit ready */
+
+/* 129 was DIOCGDISCARDPARAMS during 6.99 */
+/* 130 was DIOCDISCARD during 6.99 */
+
+		/* trigger wedge auto discover */
+#define	DIOCMWEDGES	_IOR('d', 131, int)	/* make wedges */
+
+		/* query disk geometry */
+#define	DIOCGSECTORSIZE	_IOR('d', 133, u_int)	/* sector size in bytes */
+#define	DIOCGMEDIASIZE	_IOR('d', 132, off_t)	/* media size in bytes */
 
 #endif /* _SYS_DKIO_H_ */

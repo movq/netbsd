@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.46 2007/12/14 00:58:37 uwe Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.61 2011/01/28 21:06:07 uwe Exp $	*/
 
 /*-
  * Copyright (C) 2002 UCHIYAMA Yasushi.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.46 2007/12/14 00:58:37 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.61 2011/01/28 21:06:07 uwe Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -36,7 +36,6 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.46 2007/12/14 00:58:37 uwe Exp $"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -85,19 +84,36 @@ static void db_frame_cmd(db_expr_t, bool, db_expr_t, const char *);
 static void __db_print_symbol(db_expr_t);
 static void __db_print_tfstack(struct trapframe *, struct trapframe *);
 
+static void db_reset_cmd(db_expr_t, bool, db_expr_t, const char *);
+
 #ifdef KSTACK_DEBUG
 static void db_stackcheck_cmd(db_expr_t, bool, db_expr_t, const char *);
 #endif
 
 
 const struct db_command db_machine_command_table[] = {
-	{ DDB_ADD_CMD("tlb",	db_tlbdump_cmd,		0,	NULL, NULL,NULL) },
-	{ DDB_ADD_CMD("cache",	db_cachedump_cmd,	0,	NULL, NULL,NULL) },
-	{ DDB_ADD_CMD("frame",	db_frame_cmd,		0,	NULL, NULL,NULL) },
+	{ DDB_ADD_CMD("cache", db_cachedump_cmd, 0,
+		"Dump contents of the cache address array.",
+		"[address]",
+		"   address: if specified, dump only matching entries" ) },
+
+	{ DDB_ADD_CMD("frame", db_frame_cmd, 0,
+		"Dump switch frame and trap frames of curlwp.",
+		NULL, NULL) },
+
+	{ DDB_ADD_CMD("reset", db_reset_cmd, 0,
+		"Reset machine (by taking a trap with exceptions disabled).",
+		NULL, NULL) },
 #ifdef KSTACK_DEBUG
-	{ DDB_ADD_CMD("stack",	db_stackcheck_cmd,	0,	NULL, NULL,NULL) },
+	{ DDB_ADD_CMD("stack", db_stackcheck_cmd, 0,
+		"Dump kernel stacks of all lwps.",
+		NULL, NULL) },
 #endif
-	{  DDB_ADD_CMD(NULL,     NULL,              0,  NULL, NULL,NULL) }
+	{ DDB_ADD_CMD("tlb", db_tlbdump_cmd, 0,
+		"Dump TLB contents.",
+		NULL, NULL) },
+
+	{ DDB_ADD_CMD(NULL, NULL, 0, NULL, NULL,NULL) }
 };
 
 int db_active;
@@ -124,10 +140,10 @@ kdb_trap(int type, int code, db_regs_t *regs)
 	int s;
 
 	switch (type) {
-	case EXPEVT_TRAPA:	/* trapa instruction */
-	case EXPEVT_BREAK:	/* UBC */
-	case -1:		/* keyboard interrupt */
+	case EXPEVT_TRAPA:	/* FALLTHROUGH */
+	case EXPEVT_BREAK:
 		break;
+
 	default:
 		if (!db_onpanic && db_recover == NULL)
 			return 0;
@@ -141,14 +157,16 @@ kdb_trap(int type, int code, db_regs_t *regs)
 		}
 	}
 
-	/* XXX Should switch to kdb's own stack here. */
+	/* XXX: Should switch to ddb's own stack here. */
 
 	ddb_regs = *regs;
 
 	s = splhigh();
 	db_active++;
 	cnpollc(true);
+
 	db_trap(type, code);
+
 	cnpollc(false);
 	db_active--;
 	splx(s);
@@ -159,7 +177,7 @@ kdb_trap(int type, int code, db_regs_t *regs)
 }
 
 void
-cpu_Debugger()
+cpu_Debugger(void)
 {
 
 	__asm volatile("trapa %0" :: "i"(_SH_TRA_BREAK));
@@ -209,13 +227,21 @@ void
 db_set_single_step(db_regs_t *regs)
 {
 
-	_reg_write_2(SH_(BBRA), 0);		/* disable break */
-	_reg_write_4(SH_(BARA), 0);		/* break address */
-	_reg_write_1(SH_(BASRA), 0);		/* break ASID */
-	_reg_write_1(SH_(BAMRA), 0x07);		/* break always */
-	_reg_write_2(SH_(BRCR),  0x400);	/* break after each execution */
-
-	regs->tf_ubc = 0x0014;	/* will be written to BBRA */
+	/*
+	 * Channel A is set up for single stepping in sh_cpu_init().
+	 * Before RTE we write tf_ubc to BBRA and tf_spc to BARA.
+	 */
+#ifdef SH3
+	if (CPU_IS_SH3) {
+		regs->tf_ubc = UBC_CYCLE_INSN | UBC_CYCLE_READ
+			| SH3_UBC_CYCLE_CPU;
+	}
+#endif
+#ifdef SH4
+	if (CPU_IS_SH4) {
+		regs->tf_ubc = UBC_CYCLE_INSN | UBC_CYCLE_READ;
+	}
+#endif
 }
 
 void
@@ -294,6 +320,8 @@ db_tlbdump_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 #endif /* SH3 */
 #ifdef SH4
 	if (CPU_IS_SH4) {
+		uint32_t aa, da1, da2;
+
 		/* MMU configuration */
 		r = _reg_read_4(SH4_MMUCR);
 		db_printf("%s virtual storage mode, SQ access: (kernel%s)\n",
@@ -310,29 +338,28 @@ db_tlbdump_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 		for (i = 0; i < 4; i++) {
 			e = i << SH4_ITLB_E_SHIFT;
 
-			r = _reg_read_4(SH4_ITLB_AA | e);
+			RUN_P2;
+			aa = _reg_read_4(SH4_ITLB_AA | e);
+			da1 = _reg_read_4(SH4_ITLB_DA1 | e);
+			da2 = _reg_read_4(SH4_ITLB_DA2 | e);
+			RUN_P1;
+
 			db_printf("0x%08x   %3d",
-			    r & SH4_ITLB_AA_VPN_MASK,
-			    r & SH4_ITLB_AA_ASID_MASK);
+			    aa & SH4_ITLB_AA_VPN_MASK,
+			    aa & SH4_ITLB_AA_ASID_MASK);
 
-			r = _reg_read_4(SH4_ITLB_DA1 | e);
-			__db_tlbdump_pfn(r);
+			__db_tlbdump_pfn(da1);
 			db_printf(" %c_%c%c_ %s ",
-			    ON(r, SH4_ITLB_DA1_V),
-			    ON(r, SH4_ITLB_DA1_C),
-			    ON(r, SH4_ITLB_DA1_SH),
-			    pr[(r & SH4_ITLB_DA1_PR) >>
+			    ON(da1, SH4_ITLB_DA1_V),
+			    ON(da1, SH4_ITLB_DA1_C),
+			    ON(da1, SH4_ITLB_DA1_SH),
+			    pr[(da1 & SH4_ITLB_DA1_PR) >>
 				SH4_UTLB_DA1_PR_SHIFT]);
-			__db_tlbdump_page_size_sh4(r);
+			__db_tlbdump_page_size_sh4(da1);
 
-#if 0 /* XXX: causes weird effects on landisk */
-			r = _reg_read_4(SH4_ITLB_DA2 | e);
 			db_printf(" %c  %d\n",
-			    ON(r, SH4_ITLB_DA2_TC),
-			    r & SH4_ITLB_DA2_SA_MASK);
-#else
-			db_printf("\n");
-#endif
+			    ON(da2, SH4_ITLB_DA2_TC),
+			    da2 & SH4_ITLB_DA2_SA_MASK);
 		}
 
 		/* Dump UTLB */
@@ -340,32 +367,31 @@ db_tlbdump_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 		for (i = 0; i < 64; i++) {
 			e = i << SH4_UTLB_E_SHIFT;
 
-			r = _reg_read_4(SH4_UTLB_AA | e);
-			db_printf("0x%08x   %3d",
-			    r & SH4_UTLB_AA_VPN_MASK,
-			    r & SH4_UTLB_AA_ASID_MASK);
+			RUN_P2;
+			aa = _reg_read_4(SH4_UTLB_AA | e);
+			da1 = _reg_read_4(SH4_UTLB_DA1 | e);
+			da2 = _reg_read_4(SH4_UTLB_DA2 | e);
+			RUN_P1;
 
-			r = _reg_read_4(SH4_UTLB_DA1 | e);
-			__db_tlbdump_pfn(r);
+			db_printf("0x%08x   %3d",
+			    aa & SH4_UTLB_AA_VPN_MASK,
+			    aa & SH4_UTLB_AA_ASID_MASK);
+
+			__db_tlbdump_pfn(da1);
 			db_printf(" %c%c%c%c%c %s ",
-			    ON(r, SH4_UTLB_DA1_V),
-			    ON(r, SH4_UTLB_DA1_D),
-			    ON(r, SH4_UTLB_DA1_C),
-			    ON(r, SH4_UTLB_DA1_SH),
-			    ON(r, SH4_UTLB_DA1_WT),
-			    pr[(r & SH4_UTLB_DA1_PR_MASK) >>
+			    ON(da1, SH4_UTLB_DA1_V),
+			    ON(da1, SH4_UTLB_DA1_D),
+			    ON(da1, SH4_UTLB_DA1_C),
+			    ON(da1, SH4_UTLB_DA1_SH),
+			    ON(da1, SH4_UTLB_DA1_WT),
+			    pr[(da1 & SH4_UTLB_DA1_PR_MASK) >>
 				SH4_UTLB_DA1_PR_SHIFT]
 			    );
-			__db_tlbdump_page_size_sh4(r);
+			__db_tlbdump_page_size_sh4(da1);
 
-#if 0 /* XXX: causes weird effects on landisk */
-			r = _reg_read_4(SH4_UTLB_DA2 | e);
 			db_printf(" %c  %d\n",
-			    ON(r, SH4_UTLB_DA2_TC),
-			    r & SH4_UTLB_DA2_SA_MASK);
-#else
-			db_printf("\n");
-#endif
+			    ON(da2, SH4_UTLB_DA2_TC),
+			    da2 & SH4_UTLB_DA2_SA_MASK);
 		}
 	}
 #endif /* SH4 */
@@ -498,7 +524,7 @@ __db_cachedump_sh4(vaddr_t va)
 	}
 
 	db_printf("[I-cache]\n");
-	db_printf("  Entry             V           V           V           V\n");
+	db_printf("  Entry             V           V           V           V");
 	for (i = istart; i < iend; i++) {
 		if ((i & 3) == 0)
 			db_printf("\n[%3d-%3d] ", i, i + 3);
@@ -506,8 +532,8 @@ __db_cachedump_sh4(vaddr_t va)
 		db_printf("%08x _%c ", r & CCIA_TAGADDR_MASK, ON(r, CCIA_V));
 	}
 
-	db_printf("\n[D-cache]\n");
-	db_printf("  Entry            UV          UV          UV          UV\n");
+	db_printf("\n\n[D-cache]\n");
+	db_printf("  Entry            UV          UV          UV          UV");
 	for (i = istart; i < iend; i++) {
 		if ((i & 3) == 0)
 			db_printf("\n[%3d-%3d] ", i, i + 3);
@@ -543,6 +569,7 @@ db_frame_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 
 	SF(sr);
 	SF(pr);
+	SF(gbr);
 	SF(r8);
 	SF(r9);
 	SF(r10);
@@ -560,12 +587,6 @@ db_frame_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	tfbot = (struct trapframe *)((vaddr_t)curpcb + PAGE_SIZE);
 
 	__asm("stc r6_bank, %0" : "=r"(tf));
-	if ((uint32_t)tf < intfp) {
-	    db_printf("[trap frames on interrupt stack]\n");
-	    __db_print_tfstack(tf, (void *)intfp);
-
-	    tf = *(struct trapframe **)((uint32_t *)intsp - 2);
-	}
 
 	db_printf("[trap frames]\n");
 	__db_print_tfstack(tf, tfbot);
@@ -589,6 +610,7 @@ __db_print_tfstack(struct trapframe *tf, struct trapframe *tfbot)
 		TF(ssr);
 		TF(spc);
 		TF(pr);
+		TF(gbr);
 		TF(macl);
 		TF(mach);
 		TF(r0);
@@ -630,18 +652,17 @@ __db_print_symbol(db_expr_t value)
  * Stack overflow check
  */
 static void
-db_stackcheck_cmd(db_expr_t addr, int have_addr, db_expr_t count,
+db_stackcheck_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
 		  const char *modif)
 {
 	struct lwp *l;
-	struct user *u;
 	struct pcb *pcb;
 	uint32_t *t32;
 	uint8_t *t8;
 	int i, j;
 
 #define	MAX_STACK	(USPACE - PAGE_SIZE)
-#define	MAX_FRAME	(PAGE_SIZE - sizeof(struct user))
+#define	MAX_FRAME	(PAGE_SIZE - sizeof(struct pcb))
 
 	db_printf("stack max: %d byte, frame max %d byte,"
 	    " sizeof(struct trapframe) %d byte\n", MAX_STACK, MAX_FRAME,
@@ -651,8 +672,7 @@ db_stackcheck_cmd(db_expr_t addr, int have_addr, db_expr_t count,
 		  "  nest\n");
 
 	LIST_FOREACH(l, &alllwp, l_list) {
-		u = l->l_addr;
-		pcb = &u->u_pcb;
+		pcb = lwp_getpcb(l);
 		/* stack */
 		t32 = (uint32_t *)(pcb->pcb_sf.sf_r7_bank - MAX_STACK);
 		for (i = 0; *t32++ == 0xa5a5a5a5; i++)
@@ -676,4 +696,17 @@ db_stackcheck_cmd(db_expr_t addr, int have_addr, db_expr_t count,
 #undef	MAX_FRAME
 }
 #endif /* KSTACK_DEBUG */
+
+
+static void
+db_reset_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
+	     const char *modif)
+{
+    _cpu_exception_suspend();
+    __asm volatile("trapa %0" :: "i"(_SH_TRA_BREAK));
+
+    /* NOTREACHED, but just in case ... */
+    printf("Reset failed\n");
+}
+
 #endif /* !KGDB */

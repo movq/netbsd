@@ -1,4 +1,4 @@
-/*	$NetBSD: p9100reg.h,v 1.3 2006/03/06 21:53:17 macallan Exp $ */
+/*	$NetBSD: p9100reg.h,v 1.6 2012/09/21 01:07:44 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,8 @@
 	#define DAC_INDX_AUTOINCR	0x01
 	
 #define DAC_VERSION	0x01
-#define DAC_POWER	0x05
+#define DAC_MISC_CLK    0x02
+#define DAC_POWER_MGT	0x05
 	#define DAC_POWER_SCLK_DISABLE	0x10
 	#define DAC_POWER_DDOT_DISABLE	0x08
 	#define DAC_POWER_SYNC_DISABLE	0x04
@@ -65,7 +59,34 @@
 	#define DAC_POWER_ICLK_DISABLE	0x02
 	/* Disable internal DAC power */
 	#define DAC_POWER_IPWR_DISABLE	0x01        
-
+#define DAC_OPERATION   0x06
+	#define DAC_SYNC_ON_GREEN       0x08
+#define DAC_PALETTE_CTRL 0x07
+#define DAC_PIXEL_FMT   0x0a
+#define DAC_8BIT_CTRL   0x0b
+	#define DAC8_DIRECT_COLOR       0x01
+#define DAC_16BIT_CTRL  0x0c
+	#define DAC16_INDIRECT_COLOR    0x00
+	#define DAC16_DYNAMIC_COLOR     0x40
+	#define DAC16_DIRECT_COLOR      0xc0
+	#define DAC16_BYPASS_POLARITY   0x20
+	#define DAC16_BIT_FILL_LINEAR   0x04
+	#define DAC16_555               0x00
+	#define DAC16_565               0x02
+	#define DAC16_CONTIGUOUS        0x01
+#define DAC_24BIT_CTRL  0x0d
+	#define DAC24_DIRECT_COLOR      0x01
+#define DAC_32BIT_CTRL  0x0e
+	#define DAC32_BYPASS_POLARITY   0x04
+	#define DAC32_INDIRECT_COLOR    0x00
+	#define DAC32_DYNAMIC_COLOR     0x01
+	#define DAC32_DIRECT_COLOR      0x03
+#define DAC_VCO_DIV     0x16
+#define DAC_PLL0        0x20
+#define DAC_MISC_1      0x70
+#define DAC_MISC_2      0x71
+#define DAC_MISC_3      0x72
+                                                                                                                      
 #define DAC_CURSOR_CTL	0x30
 	#define DAC_CURSOR_OFF	0x00
 	#define DAC_CURSOR_WIN	0x02
@@ -81,17 +102,63 @@
 #define DAC_PIX_PLL		0x8e
 #define DAC_CURSOR_DATA		0x100
 
+/* main registers */
+#define SYS_CONF        0x0004  /* System Configuration Register */
+        #define BUFFER_WRITE_1  0x0200  /* writes got o buffer 1 */
+        #define BUFFER_WRITE_0  0x0000  /* writes go to buffer 0 */
+        #define BUFFER_READ_1   0x0400  /* read from buffer 1 */
+        #define BUFFER_READ_0   0x0000  
+        #define MEM_SWAP_BITS   0x0800  /* swap bits when accessing VRAM */
+        #define MEM_SWAP_BYTES  0x1000  /* swap bytes when accessing VRAM */
+        #define MEM_SWAP_HWORDS 0x2000  /* swap halfwords when accessing VRAM */
+        #define SHIFT_0         14      
+        #define SHIFT_1         17
+        #define SHIFT_2         20
+        #define SHIFT_3         29
+        #define PIXEL_SHIFT     26
+        #define SWAP_SHIFT      11
+        /* this is what the 3GX manual says */
+        #define SC_8BIT         2
+        #define SC_16BIT        3
+        #define SC_24BIT        7
+        #define SC_32BIT        5
+
+/* video controller registers */
+#define VID_HCOUNTER    0x104
+#define VID_HTOTAL      0x108
+#define VID_HSRE        0x10c   /* hsync raising edge */
+#define VID_HBRE        0x110   /* hblank raising edge */
+#define VID_HBFE        0x114   /* hblank falling edge */
+#define VID_HCNTPRLD    0x118   /* hcounter preload */
+#define VID_VCOUNTER    0x11c   /* vcounter */
+#define VID_VLENGTH     0x120   /* lines, including blanks */
+#define VID_VSRE        0x124   /* vsync raising edge */
+#define VID_VBRE        0x128   /* vblank raising edge */
+#define VID_VBFE        0x12c   /* vblank falling edge */
+#define VID_VCNTPRLD    0x130   /* vcounter preload */
+#define VID_SRADDR      0x134   /* screen repaint address */
+#define VID_SRTC        0x138   /* screen repaint timing control */
+#define VID_QSFCNTR     0x13c   /* QSF counter */
+
+#define VID_MEM_CONFIG  0x184   /* memory config */
+#define VID_RFPERIOD    0x188   /* refresh period */
+#define VID_RFCOUNT     0x18c   /* refresh counter */
+#define VID_RLMAX       0x190   /* RAS low max */
+#define VID_RLCUR       0x194   /* RAS low current */
+#define VID_DACSYNC     0x198   /* read after last DAC access */
+
 #define ENGINE_STATUS	0x2000	/* drawing engine status register */
 	#define BLITTER_BUSY	0x80000000
 	#define ENGINE_BUSY	0x40000000
 #define COMMAND_BLIT		0x2004
 #define COMMAND_QUAD		0x2008
+#define COMMAND_PIXEL8		0x200c
 /* pixel data for monochrome colour expansion */
 #define PIXEL_1			0x2080	
 /* apparently bits 2-6 control how many pixels we write - n+1 */
 
 /* drawing engine registers */
-#define COORD_INDEX			0x218c
+#define COORD_INDEX		0x218c
 #define WINDOW_OFFSET		0x2190
 
 #define FOREGROUND_COLOR	0x2200
@@ -105,12 +172,12 @@
 	#define ROP_2BIT_PATTERN	0x04000 /* 4-colour pattern instead of mono */
 	#define ROP_PIX1_TRANS		0x08000	/* transparent background in mono */
 	#define ROP_OVERSIZE		0x10000
-	#define ROP_PATTERN			0x20000		/* the manual says pattern enable */
-	#define ROP_TRANS			0x20000		/* but XFree86 says trans */
-	#define ROP_SRC 			0xCC
-	#define ROP_PAT				0xF0
-	#define ROP_DST 			0xAA
-	#define ROP_SET				0xff
+	#define ROP_PATTERN		0x20000		/* the manual says pattern enable */
+	#define ROP_TRANS		0x20000		/* but XFree86 says trans */
+	#define ROP_SRC 		0xCC
+	#define ROP_PAT			0xF0
+	#define ROP_DST 		0xAA
+	#define ROP_SET			0xff
 
 #define PIXEL_8				0x221c
 #define WINDOW_MIN			0x2220

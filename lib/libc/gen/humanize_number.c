@@ -1,4 +1,4 @@
-/*	$NetBSD: humanize_number.c,v 1.13 2007/12/14 17:26:19 christos Exp $	*/
+/*	$NetBSD: humanize_number.c,v 1.17 2017/04/13 17:45:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: humanize_number.c,v 1.13 2007/12/14 17:26:19 christos Exp $");
+__RCSID("$NetBSD: humanize_number.c,v 1.17 2017/04/13 17:45:56 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -55,9 +48,9 @@ humanize_number(char *buf, size_t len, int64_t bytes,
     const char *suffix, int scale, int flags)
 {
 	const char *prefixes, *sep;
-	int	b, i, r, maxscale, s1, s2, sign;
-	int64_t	divisor, max;
-	size_t	baselen;
+	int	b, r, s1, s2, sign;
+	int64_t	divisor, max, post = 1;
+	size_t	i, baselen, maxscale;
 
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(suffix != NULL);
@@ -83,9 +76,9 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 	}
 
 #define	SCALE2PREFIX(scale)	(&prefixes[(scale) << 1])
-	maxscale = 7;
+	maxscale = 6;
 
-	if (scale >= maxscale &&
+	if ((size_t)scale > maxscale &&
 	    (scale & (HN_AUTOSCALE | HN_GETSCALE)) == 0)
 		return (-1);
 
@@ -96,12 +89,23 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 		buf[0] = '\0';
 	if (bytes < 0) {
 		sign = -1;
-		bytes *= -100;
 		baselen = 3;		/* sign, digit, prefix */
+		if (-bytes < INT64_MAX / 100)
+			bytes *= -100;
+		else {
+			bytes = -bytes;
+			post = 100;
+			baselen += 2;
+		}
 	} else {
 		sign = 1;
-		bytes *= 100;
 		baselen = 2;		/* digit, prefix */
+		if (bytes < INT64_MAX / 100)
+			bytes *= 100;
+		else {
+			post = 100;
+			baselen += 2;
+		}
 	}
 	if (flags & HN_NOSPACE)
 		sep = "";
@@ -128,11 +132,14 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 		for (i = 0; bytes >= max - 50 && i < maxscale; i++)
 			bytes /= divisor;
 
-		if (scale & HN_GETSCALE)
-			return (i);
+		if (scale & HN_GETSCALE) {
+			_DIAGASSERT(__type_fit(int, i));
+			return (int)i;
+		}
 	} else
-		for (i = 0; i < scale && i < maxscale; i++)
+		for (i = 0; i < (size_t)scale && i < maxscale; i++)
 			bytes /= divisor;
+	bytes *= post;
 
 	/* If a value <= 9.9 after rounding and ... */
 	if (bytes < 995 && i > 0 && flags & HN_DECIMAL) {

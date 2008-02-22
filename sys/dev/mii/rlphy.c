@@ -1,4 +1,4 @@
-/*	$NetBSD: rlphy.c,v 1.20 2007/12/29 19:34:56 dyoung Exp $	*/
+/*	$NetBSD: rlphy.c,v 1.30 2016/07/07 06:55:41 msaitoh Exp $	*/
 /*	$OpenBSD: rlphy.c,v 1.20 2005/07/31 05:27:30 pvalchev Exp $	*/
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.20 2007/12/29 19:34:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.30 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,10 +61,10 @@ struct rlphy_softc {
 	int sc_rtl8201l;
 };
 
-int	rlphymatch(struct device *, struct cfdata *, void *);
-void	rlphyattach(struct device *, struct device *, void *);
+int	rlphymatch(device_t, cfdata_t, void *);
+void	rlphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL(rlphy, sizeof(struct rlphy_softc),
+CFATTACH_DECL_NEW(rlphy, sizeof(struct rlphy_softc),
     rlphymatch, rlphyattach, mii_phy_detach, mii_phy_activate);
 
 int	rlphy_service(struct mii_softc *, struct mii_data *, int);
@@ -87,9 +87,13 @@ static const struct mii_phydesc rlphys[] = {
 };
 
 int
-rlphymatch(struct device *parent, struct cfdata *match, void *aux)
+rlphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
+	struct mii_data *mii = ma->mii_data;
+
+	if (mii->mii_instance != 0)
+		return 0;
 
 	if (mii_phy_match(ma, rlphys) != NULL)
 		return (10);
@@ -109,7 +113,7 @@ rlphymatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-rlphyattach(struct device *parent, struct device *self, void *aux)
+rlphyattach(device_t parent, device_t self, void *aux)
 {
 	struct rlphy_softc *rsc = device_private(self);
 	struct mii_softc *sc = &rsc->sc_mii;
@@ -124,6 +128,7 @@ rlphyattach(struct device *parent, struct device *self, void *aux)
 	} else
 		aprint_normal(": Realtek internal PHY\n");
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_funcs = &rlphy_funcs;
@@ -134,23 +139,17 @@ rlphyattach(struct device *parent, struct device *self, void *aux)
 
 	PHY_RESET(sc);
 
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
-	sc->mii_capabilities =
-	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	aprint_normal_dev(self, "");
+	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_MEDIAMASK)
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
-
-	if (!pmf_device_register(self, NULL, mii_phy_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 int
 rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 {
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
-
-	int rv;
 
 	/*
 	 * Can't isolate the RTL8139 phy, so it has to be the only one.
@@ -169,49 +168,7 @@ rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		if ((mii->mii_ifp->if_flags & IFF_UP) == 0)
 			break;
 
-		switch (IFM_SUBTYPE(ife->ifm_media)) {
-		case IFM_AUTO:
-			/*
-			 * If we're already in auto mode, just return.
-			 */
-			if (PHY_READ(sc, MII_BMCR) & BMCR_AUTOEN)
-				return (0);
-			(void) mii_phy_auto(sc, 0);
-			break;
-		case IFM_100_T4:
-			/*
-			 * XXX Not supported as a manual setting right now.
-			 */
-			return (EINVAL);
-		default:
-			/*
-			 * BMCR data is stored in the ifmedia entry.
-			 */
-			switch (ife->ifm_media &
-			    (IFM_TMASK|IFM_NMASK|IFM_FDX)) {
-				case IFM_ETHER|IFM_10_T:
-					rv = ANAR_10|ANAR_CSMA;
-					break;
-				case IFM_ETHER|IFM_10_T|IFM_FDX:
-					rv = ANAR_10_FD|ANAR_CSMA;
-					break;
-				case IFM_ETHER|IFM_100_TX:
-					rv = ANAR_TX|ANAR_CSMA;
-					break;
-				case IFM_ETHER|IFM_100_TX|IFM_FDX:
-					rv = ANAR_TX_FD|ANAR_CSMA;
-					break;
-				case IFM_ETHER|IFM_100_T4:
-					rv = ANAR_T4|ANAR_CSMA;
-					break;
-				default:
-					rv = 0;
-					break;
-			}
-
-			PHY_WRITE(sc, MII_ANAR, rv);
-			PHY_WRITE(sc, MII_BMCR, ife->ifm_data);
-		}
+		mii_phy_setmedia(sc);
 		break;
 
 	case MII_TICK:
@@ -285,16 +242,16 @@ rlphy_status(struct mii_softc *sc)
 
 		if ((anlpar = PHY_READ(sc, MII_ANAR) &
 		    PHY_READ(sc, MII_ANLPAR))) {
-			if (anlpar & ANLPAR_T4)
-				mii->mii_media_active |= IFM_100_T4;
-			else if (anlpar & ANLPAR_TX_FD)
+			if (anlpar & ANLPAR_TX_FD)
 				mii->mii_media_active |= IFM_100_TX|IFM_FDX;
+			else if (anlpar & ANLPAR_T4)
+				mii->mii_media_active |= IFM_100_T4|IFM_HDX;
 			else if (anlpar & ANLPAR_TX)
-				mii->mii_media_active |= IFM_100_TX;
+				mii->mii_media_active |= IFM_100_TX|IFM_HDX;
 			else if (anlpar & ANLPAR_10_FD)
 				mii->mii_media_active |= IFM_10_T|IFM_FDX;
 			else if (anlpar & ANLPAR_10)
-				mii->mii_media_active |= IFM_10_T;
+				mii->mii_media_active |= IFM_10_T|IFM_HDX;
 			else
 				mii->mii_media_active |= IFM_NONE;
 			return;
@@ -303,7 +260,7 @@ rlphy_status(struct mii_softc *sc)
 		/*
 		 * If the other side doesn't support NWAY, then the
 		 * best we can do is determine if we have a 10Mbps or
-		 * 100Mbps link. There's no way to know if the link 
+		 * 100Mbps link. There's no way to know if the link
 		 * is full or half duplex, so we default to half duplex
 		 * and hope that the user is clever enough to manually
 		 * change the media settings if we're wrong.
@@ -338,7 +295,7 @@ rlphy_status(struct mii_softc *sc)
 			else
 				mii->mii_media_active |= IFM_100_TX;
 		}
-
+		mii->mii_media_active |= IFM_HDX;
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }

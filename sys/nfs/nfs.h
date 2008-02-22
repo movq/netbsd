@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.h,v 1.69 2007/12/04 17:42:30 yamt Exp $	*/
+/*	$NetBSD: nfs.h,v 1.77 2018/01/25 17:14:36 riastradh Exp $	*/
 /*
  * Copyright (c) 1989, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -41,6 +41,7 @@
 #include <sys/fstypes.h>
 #include <sys/mbuf.h>
 #include <sys/mutex.h>
+#include <sys/rbtree.h>
 #endif
 
 /*
@@ -67,6 +68,9 @@
 #define	NFS_TRYLATERDEL	1		/* Initial try later delay (sec) */
 #define	NFS_TRYLATERDELMAX (1*60)	/* Maximum try later delay (sec) */
 #define	NFS_TRYLATERDELMUL 2		/* Exponential backoff multiplier */
+
+#define NFS_CWNDSCALE   256             
+#define NFS_MAXCWND     (NFS_CWNDSCALE * 32)    
 
 /*
  * These can be overridden through <machine/param.h>, included via
@@ -235,39 +239,39 @@ struct mountd_exports_list {
  * Stats structure
  */
 struct nfsstats {
-	int	attrcache_hits;
-	int	attrcache_misses;
-	int	lookupcache_hits;
-	int	lookupcache_misses;
-	int	direofcache_hits;
-	int	direofcache_misses;
-	int	biocache_reads;
-	int	read_bios;
-	int	read_physios;
-	int	biocache_writes;
-	int	write_bios;
-	int	write_physios;
-	int	biocache_readlinks;
-	int	readlink_bios;
-	int	biocache_readdirs;
-	int	readdir_bios;
-	int	rpccnt[NFSSTATS_NPROCS];
-	int	rpcretries;
-	int	srvrpccnt[NFSSTATS_NPROCS];
-	int	srvrpc_errs;
-	int	srv_errs;
-	int	rpcrequests;
-	int	rpctimeouts;
-	int	rpcunexpected;
-	int	rpcinvalid;
-	int	srvcache_inproghits;
-	int	srvcache_idemdonehits;
-	int	srvcache_nonidemdonehits;
-	int	srvcache_misses;
-	int	__srvnqnfs_leases;	/* unused */
-	int	__srvnqnfs_maxleases;	/* unused */
-	int	__srvnqnfs_getleases;	/* unused */
-	int	srvvop_writes;
+	uint32_t	attrcache_hits;
+	uint32_t	attrcache_misses;
+	uint32_t	lookupcache_hits;
+	uint32_t	lookupcache_misses;
+	uint32_t	direofcache_hits;
+	uint32_t	direofcache_misses;
+	uint32_t	biocache_reads;
+	uint32_t	read_bios;
+	uint32_t	read_physios;
+	uint32_t	biocache_writes;
+	uint32_t	write_bios;
+	uint32_t	write_physios;
+	uint32_t	biocache_readlinks;
+	uint32_t	readlink_bios;
+	uint32_t	biocache_readdirs;
+	uint32_t	readdir_bios;
+	uint32_t	rpccnt[NFSSTATS_NPROCS];
+	uint32_t	rpcretries;
+	uint32_t	srvrpccnt[NFSSTATS_NPROCS];
+	uint32_t	srvrpc_errs;
+	uint32_t	srv_errs;
+	uint32_t	rpcrequests;
+	uint32_t	rpctimeouts;
+	uint32_t	rpcunexpected;
+	uint32_t	rpcinvalid;
+	uint32_t	srvcache_inproghits;
+	uint32_t	srvcache_idemdonehits;
+	uint32_t	srvcache_nonidemdonehits;
+	uint32_t	srvcache_misses;
+	uint32_t	__srvnqnfs_leases;	/* unused */
+	uint32_t	__srvnqnfs_maxleases;	/* unused */
+	uint32_t	__srvnqnfs_getleases;	/* unused */
+	uint32_t	srvvop_writes;
 };
 
 /*
@@ -329,7 +333,6 @@ struct nfsreq {
 	int		r_flags;	/* flags on request, see below */
 	int		r_retry;	/* max retransmission count */
 	int		r_rexmit;	/* current retrans count */
-	int		r_timer;	/* tick counter on reply */
 	u_int32_t	r_procnum;	/* NFS procedure number */
 	int		r_rtt;		/* RTT for rpc */
 	struct lwp	*r_lwp;		/* LWP that did I/O system call */
@@ -339,6 +342,7 @@ struct nfsreq {
  * Queue head for nfsreq's
  */
 extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
+extern kmutex_t nfs_reqq_lock;
 
 /* Flag values for r_flags */
 #define R_TIMING	0x01		/* timing request (in mntp) */
@@ -369,7 +373,6 @@ extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
 #endif
 #define	NMUIDHASH(nmp, uid) \
 	(&(nmp)->nm_uidhashtbl[(uid) % NFS_MUIDHASHSIZ])
-#define	NFSNOHASH(fhsum) ((fhsum) & nfsnodehash)
 
 #ifndef NFS_DIRHASHSIZ
 #define NFS_DIRHASHSIZ 64
@@ -421,13 +424,8 @@ struct nfsuid {
 /* Bits for nu_flag */
 #define	NU_INETADDR	0x1
 #define NU_NAM		0x2
-#ifdef INET6
 #define NU_NETFAM(u) \
-	(((u)->nu_flag & NU_INETADDR) ? \
-	(((u)->nu_flag & NU_NAM) ? AF_INET6 : AF_INET) : AF_ISO)
-#else
-#define NU_NETFAM(u)	(((u)->nu_flag & NU_INETADDR) ? AF_INET : AF_ISO)
-#endif
+	(((u)->nu_flag & NU_INETADDR) ? AF_INET : AF_INET6)
 
 /*
  * b: protected by SLP_BUSY
@@ -489,7 +487,7 @@ extern int nfssvc_sockhead_flag;
  * One of these structures is allocated for each nfsd.
  */
 struct nfsd {
-	TAILQ_ENTRY(nfsd) nfsd_chain;	/* List of all nfsd's */
+	struct rb_node	nfsd_node;	/* Tree of all nfsd's */
 	SLIST_ENTRY(nfsd) nfsd_idle;	/* List of idle nfsd's */
 	kcondvar_t	nfsd_cv;
 	int		nfsd_flag;	/* NFSD_ flags */
@@ -500,6 +498,7 @@ struct nfsd {
 	u_char		nfsd_verfstr[RPCVERF_MAXSIZ];
 	struct proc	*nfsd_procp;	/* Proc ptr */
 	struct nfsrv_descript *nfsd_nd;	/* Associated nfsrv_descript */
+	uint32_t	nfsd_cookie;	/* Userland cookie, fits 32bit ptr */
 };
 
 /* Bits for "nfsd_flag" */
@@ -549,8 +548,8 @@ struct nfsrv_descript {
 };
 
 /* Bits for "nd_flag" */
-#define	ND_READ		LEASE_READ
-#define ND_WRITE	LEASE_WRITE
+#define ND_READ		0x01	/* Check lease for readers */
+#define ND_WRITE	0x02	/* Check lease for modifiers */
 #define ND_CHECK	0x04
 #define ND_LEASE	(ND_READ | ND_WRITE | ND_CHECK)
 #define ND_NFSV3	0x08
@@ -560,7 +559,6 @@ struct nfsrv_descript {
 
 extern kmutex_t nfsd_lock;
 extern kcondvar_t nfsd_initcv;
-extern TAILQ_HEAD(nfsdhead, nfsd) nfsd_head;
 extern SLIST_HEAD(nfsdidlehead, nfsd) nfsd_idle_head;
 extern int nfsd_head_flag;
 #define	NFSD_CHECKSLP	0x01

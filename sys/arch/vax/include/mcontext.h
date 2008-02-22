@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.4 2005/12/11 12:19:34 christos Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.9 2018/02/15 15:53:57 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,10 +64,26 @@ typedef struct {
 	__gregset_t	__gregs;	/* General Purpose Register set */
 } mcontext_t;
 
+/* Machine-dependent uc_flags */
+#define _UC_TLSBASE	0x00080000
+
 #define	_UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_SP])
+#define	_UC_MACHINE_FP(uc)	((uc)->uc_mcontext.__gregs[_REG_FP])
 #define	_UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_PC])
 #define	_UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_R0])
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
+
+#ifndef _KERNEL
+#include <sys/syscall.h>
+
+static __inline void *
+__lwp_getprivate_fast(void)
+{
+	register void *tcb __asm("r0");
+	__asm("chmk %0" :: "i"(SYS__lwp_getprivate) : "r0");
+	return tcb;
+}
+#endif
 
 #endif	/* !_VAX_MCONTEXT_H_ */

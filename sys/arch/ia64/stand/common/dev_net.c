@@ -1,5 +1,5 @@
 /*	
- * $NetBSD: dev_net.c,v 1.2 2006/04/22 07:58:53 cherry Exp $
+ * $NetBSD: dev_net.c,v 1.11 2016/08/04 16:22:40 scole Exp $
  */
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,19 +52,16 @@
  * for use by the NFS open code (NFS/lookup).
  */
 
-#include <machine/stdarg.h>
 #include <sys/param.h>
-#include <sys/socket.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
 
-#include <stand.h>
-#include <string.h>
-#include <net.h>
-#include <netif.h>
-#include <bootp.h>
-#include <bootparam.h>
+#include <lib/libsa/stand.h>
+#include <lib/libsa/net.h>
+#include <lib/libsa/bootparam.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libsa/netif.h>
+#include <lib/libsa/nfs.h>
+#include <lib/libsa/bootp.h>
+#include <lib/libkern/libkern.h>
 
 #include "dev_net.h"
 #include "bootstrap.h"
@@ -81,30 +71,7 @@ int debug = 0;
 static int netdev_sock = -1;
 static int netdev_opens;
 
-static int	net_init(void);
-static int	net_open(struct open_file *, ...);
-static int	net_close(struct open_file *);
-static int	net_strategy();
-static void	net_print(int);
-
 static int net_getparams(int sock);
-
-struct devsw netdev = {
-    "net", 
-    DEVT_NET, 
-    net_init,
-    net_strategy, 
-    net_open, 
-    net_close, 
-    noioctl,
-    net_print
-};
-
-int
-net_init(void)
-{
-    return 0;
-}
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -144,6 +111,23 @@ net_open(struct open_file *f, ...)
 		return (error);
 	    }
 	}
+	if (debug)
+	    printf("net_open: got rootip %s\n", inet_ntoa(rootip));
+
+	/*
+	 * Get the NFS file handle (mount).
+	 */
+	error = nfs_mount(netdev_sock, rootip, rootpath);
+	if (error) {
+	    netif_close(netdev_sock);
+	    netdev_sock = -1;
+	    printf("net_open: error with nfs mount 0x%x\n", error);
+	    return error;
+	}
+
+	if (debug)
+	    printf("root addr=%s path=%s\n", inet_ntoa(rootip), rootpath);
+
 	netdev_opens++;
     }
     netdev_opens++;
@@ -152,8 +136,7 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(f)
-    struct open_file *f;
+net_close(struct open_file *f)
 {
 
 #ifdef	NETIF_DEBUG
@@ -181,7 +164,13 @@ net_close(f)
 }
 
 int
-net_strategy()
+net_strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t *rsize)
+{
+	return EIO;
+}
+
+int
+net_ioctl(struct open_file *f, u_long cmd, void *data)
 {
     return EIO;
 }
@@ -203,14 +192,13 @@ net_strategy()
 int try_bootp = 1;
 #endif
 
-extern n_long ip_convertaddr(char *p);
-
 static int
-net_getparams(sock)
-    int sock;
+net_getparams(int sock)
 {
     char buf[MAXHOSTNAMELEN];
     char temp[FNAME_SIZE];
+    char num[8];
+
     struct iodesc *d;
     int i;
     n_long smask;
@@ -223,7 +211,7 @@ net_getparams(sock)
      * use RARP and RPC/bootparam (the Sun way) to get them.
      */
     if (try_bootp)
-	bootp(sock, BOOTP_NONE);
+	bootp(sock);
     if (myip.s_addr != 0)
 	goto exit;
     if (debug)
@@ -255,14 +243,16 @@ net_getparams(sock)
     gateip.s_addr = 0;
     if (bp_getfile(sock, "gateway", &gateip, buf) == 0) {
 	/* Got it!  Parse the netmask. */
-	smask = ip_convertaddr(buf);
+	smask = inet_addr(buf);
     }
     if (smask) {
 	netmask = smask;
-	printf("net_open: subnet mask: %s\n", intoa(netmask));
+	if (debug)
+	    printf("net_open: subnet mask: %s\n", intoa(netmask));
     }
     if (gateip.s_addr)
-	printf("net_open: net gateway: %s\n", inet_ntoa(gateip));
+	if (debug)
+	    printf("net_open: net gateway: %s\n", inet_ntoa(gateip));
 
     /* Get the root server and pathname. */
     if (bp_getfile(sock, "root", &rootip, rootpath)) {
@@ -275,21 +265,40 @@ net_getparams(sock)
      * before passing it along.  This allows us to be compatible with
      * the kernel's diskless (BOOTP_NFSROOT) booting conventions
      */
-    for (i = 0; rootpath[i] != '\0' && i < FNAME_SIZE; i++)
+    for (i = 0; i < FNAME_SIZE && rootpath[i] != '\0'; i++)
 	    if (rootpath[i] == ':')
 		    break;
     if (i && i != FNAME_SIZE && rootpath[i] == ':') {
 	    rootpath[i++] = '\0';
 	    if (inet_addr(&rootpath[0]) != INADDR_NONE)
 		    rootip.s_addr = inet_addr(&rootpath[0]);
-	    bcopy(&rootpath[i], &temp[0], strlen(&rootpath[i])+1);
-	    bcopy(&temp[0], &rootpath[0], strlen(&rootpath[i])+1);	    
+	    memcpy(&temp[0], &rootpath[i], strlen(&rootpath[i])+1);
+	    memcpy(&rootpath[0], &temp[0], strlen(&rootpath[i])+1);	    
     }
-    printf("net_open: server addr: %s\n", inet_ntoa(rootip));
-    printf("net_open: server path: %s\n", rootpath);	    
 
+    if (debug) {
+	printf("net_open: server addr: %s\n", inet_ntoa(rootip));
+	printf("net_open: server path: %s\n", rootpath);	    
+    }
+
+    /* do equivalent of
+     *   snprintf(temp, sizeof(temp), "%6D", d->myea, ":");
+     * in lame way since snprintf seems to understand "%x", but not "%x:%x"
+     */
     d = socktodesc(sock);
-    sprintf(temp, "%6D", d->myea, ":");
+    memset(temp, '\0', sizeof(temp));
+
+    for (i = 0; i < ETHER_ADDR_LEN; i++) {
+	if (d->myea[i] < 0x10)
+	    strncat(temp, "0", 1);
+
+	snprintf(num, sizeof(num), "%x", d->myea[i]);
+	strncat(temp, num, 2);
+
+	if (i < ETHER_ADDR_LEN-1)
+	    strncat(temp, ":", 1);
+    }
+
     setenv("boot.netif.ip", inet_ntoa(myip), 1);
     setenv("boot.netif.netmask", intoa(netmask), 1);
     setenv("boot.netif.gateway", inet_ntoa(gateip), 1);
@@ -298,10 +307,4 @@ net_getparams(sock)
     setenv("boot.nfsroot.path", rootpath, 1);
 
     return (0);
-}
-
-static void
-net_print(int verbose)
-{
-    return;
 }

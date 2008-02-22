@@ -1,4 +1,4 @@
-/*	$NetBSD: md2.c,v 1.4 2006/05/12 02:49:00 mrg Exp $	*/
+/*	$NetBSD: md2.c,v 1.7 2012/06/25 22:32:44 abs Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: md2.c,v 1.4 2006/05/12 02:49:00 mrg Exp $");
+__RCSID("$NetBSD: md2.c,v 1.7 2012/06/25 22:32:44 abs Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -117,8 +110,7 @@ __weak_alias(MD2Transform,_MD2Transform)
 #endif
 
 void
-MD2Init(context)
-	MD2_CTX *context;
+MD2Init(MD2_CTX *context)
 {
 	_DIAGASSERT(context != 0);
 
@@ -128,10 +120,7 @@ MD2Init(context)
 }
 
 void
-MD2Update(context, input, inputLen)
-	MD2_CTX *context;
-	const unsigned char *input;
-	unsigned int inputLen;
+MD2Update(MD2_CTX *context, const unsigned char *input, unsigned int inputLen)
 {
 	unsigned int idx, piece;
 
@@ -149,9 +138,7 @@ MD2Update(context, input, inputLen)
 }
 
 void
-MD2Final(digest, context)
-	unsigned char digest[16];	/* message digest */
-	MD2_CTX *context;		/* context */
+MD2Final(unsigned char digest[16], MD2_CTX *context)
 {
 	unsigned int padlen;
 
@@ -175,10 +162,9 @@ MD2Final(digest, context)
 }
 
 /*static*/ void
-MD2Transform(context)
-	MD2_CTX *context;
+MD2Transform(MD2_CTX *context)
 {
-	u_int32_t l, j, k, t;
+	uint32_t l, j, k, t;
 
 	/* set block "3" and update "checksum" */
 	for (l = context->C[15], j = 0; j < 16; j++) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_errno.c,v 1.12 2001/11/13 02:08:49 lukem Exp $	*/
+/*	$NetBSD: linux_errno.c,v 1.15 2013/12/22 17:14:22 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_errno.c,v 1.12 2001/11/13 02:08:49 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_errno.c,v 1.15 2013/12/22 17:14:22 njoly Exp $");
+
+#include <sys/errno.h>
 
 #include <compat/linux/common/linux_errno.h>
 
@@ -130,59 +125,18 @@ const int native_to_linux_errno[] = {
 	LINUX_SCERR_SIGN LINUX_ENOSYS,		/* not mapped (ENEEDAUTH) */
 	LINUX_SCERR_SIGN LINUX_EIDRM,
 	LINUX_SCERR_SIGN LINUX_ENOMSG,		/* 83 */
-
-	/*
-	 * The rest of the list consists of errors that only
-	 * Linux has. They can be used to map them on to
-	 * themselves, so Linux emulating syscalls can return
-	 * these values.
-	 */
-
-	LINUX_SCERR_SIGN LINUX_ECHRNG,
-	LINUX_SCERR_SIGN LINUX_EL2NSYNC,
-	LINUX_SCERR_SIGN LINUX_EL3HLT,
-	LINUX_SCERR_SIGN LINUX_EL3RST,
-	LINUX_SCERR_SIGN LINUX_ELNRNG,
-	LINUX_SCERR_SIGN LINUX_EUNATCH,
-	LINUX_SCERR_SIGN LINUX_ENOCSI,
-	LINUX_SCERR_SIGN LINUX_EL2HLT,
-	LINUX_SCERR_SIGN LINUX_EBADE,
-	LINUX_SCERR_SIGN LINUX_EBADR,
-	LINUX_SCERR_SIGN LINUX_EXFULL,
-	LINUX_SCERR_SIGN LINUX_ENOANO,
-	LINUX_SCERR_SIGN LINUX_EBADRQC,
-	LINUX_SCERR_SIGN LINUX_EBADSLT,
-	LINUX_SCERR_SIGN LINUX_EDEADLOCK,
-	LINUX_SCERR_SIGN LINUX_EBFONT,
-	LINUX_SCERR_SIGN LINUX_ENOSTR,
-	LINUX_SCERR_SIGN LINUX_ENODATA,
-	LINUX_SCERR_SIGN LINUX_ETIME,
-	LINUX_SCERR_SIGN LINUX_ENOSR,
-	LINUX_SCERR_SIGN LINUX_ENONET,
-	LINUX_SCERR_SIGN LINUX_ENOPKG,
-	LINUX_SCERR_SIGN LINUX_ENOLINK,
-	LINUX_SCERR_SIGN LINUX_EADV,
-	LINUX_SCERR_SIGN LINUX_ESRMNT,
-	LINUX_SCERR_SIGN LINUX_ECOMM,
-	LINUX_SCERR_SIGN LINUX_EPROTO,
-	LINUX_SCERR_SIGN LINUX_EMULTIHOP,
-	LINUX_SCERR_SIGN LINUX_EDOTDOT,
-	LINUX_SCERR_SIGN LINUX_EBADMSG,
 	LINUX_SCERR_SIGN LINUX_EOVERFLOW,
-	LINUX_SCERR_SIGN LINUX_ENOTUNIQ,
-	LINUX_SCERR_SIGN LINUX_EBADFD,
-	LINUX_SCERR_SIGN LINUX_EREMCHG,
-	LINUX_SCERR_SIGN LINUX_ELIBACC,
-	LINUX_SCERR_SIGN LINUX_ELIBBAD,
-	LINUX_SCERR_SIGN LINUX_ELIBSCN,
-	LINUX_SCERR_SIGN LINUX_ELIBMAX,
-	LINUX_SCERR_SIGN LINUX_ELIBEXEC,
 	LINUX_SCERR_SIGN LINUX_EILSEQ,
-	LINUX_SCERR_SIGN LINUX_ERESTART,
-	LINUX_SCERR_SIGN LINUX_ESTRPIPE,
-	LINUX_SCERR_SIGN LINUX_EUCLEAN,
-	LINUX_SCERR_SIGN LINUX_ENOTNAM,
-	LINUX_SCERR_SIGN LINUX_ENAVAIL,
-	LINUX_SCERR_SIGN LINUX_EISNAM,
-	LINUX_SCERR_SIGN LINUX_EREMOTEIO,
+	LINUX_SCERR_SIGN LINUX_ENOTSUP,
+	LINUX_SCERR_SIGN LINUX_ECANCELED,
+	LINUX_SCERR_SIGN LINUX_EBADMSG,
+	LINUX_SCERR_SIGN LINUX_ENODATA,
+	LINUX_SCERR_SIGN LINUX_ENOSR,
+	LINUX_SCERR_SIGN LINUX_ENOSTR,
+	LINUX_SCERR_SIGN LINUX_ETIME,
+	LINUX_SCERR_SIGN LINUX_ENOSYS,		/* not mapped (ENOATTR) */
+	LINUX_SCERR_SIGN LINUX_EMULTIHOP,
+	LINUX_SCERR_SIGN LINUX_ENOLINK,
+	LINUX_SCERR_SIGN LINUX_EPROTO,		/* 96 */
 };
+__CTASSERT(__arraycount(native_to_linux_errno) == ELAST + 1);

@@ -1,4 +1,4 @@
-/* $NetBSD: asc_ioasic.c,v 1.18 2007/03/06 22:31:36 simonb Exp $ */
+/* $NetBSD: asc_ioasic.c,v 1.25 2012/10/13 06:49:26 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.18 2007/03/06 22:31:36 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.25 2012/10/13 06:49:26 tsutsui Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/device.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
+#include <sys/device.h>
+#include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -51,8 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: asc_ioasic.c,v 1.18 2007/03/06 22:31:36 simonb Exp $
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
-
-#include <machine/bus.h>
 
 #include <dev/ic/ncr53c9xreg.h>
 #include <dev/ic/ncr53c9xvar.h>
@@ -68,32 +59,38 @@ struct asc_softc {
 	bus_space_handle_t sc_scsi_bsh;		/* ASC register handle */
 	bus_dma_tag_t sc_dmat;			/* bus dma tag */
 	bus_dmamap_t sc_dmamap;			/* bus dmamap */
-	void **sc_dmaaddr;
+	uint8_t **sc_dmaaddr;
 	size_t *sc_dmalen;
 	size_t sc_dmasize;
-	unsigned sc_flags;
+	unsigned int sc_flags;
 #define	ASC_ISPULLUP		0x0001
 #define	ASC_DMAACTIVE		0x0002
 #define	ASC_MAPLOADED		0x0004
 };
 
-static int  asc_ioasic_match __P((struct device *, struct cfdata *, void *));
-static void asc_ioasic_attach __P((struct device *, struct device *, void *));
+#define	ASC_READ_REG(asc, reg)						\
+	((uint8_t)bus_space_read_4((asc)->sc_bst, (asc)->sc_scsi_bsh,	\
+	    (reg) * sizeof(uint32_t)))
+#define	ASC_WRITE_REG(asc, reg, val)					\
+	bus_space_write_4((asc)->sc_bst, (asc)->sc_scsi_bsh,		\
+	    (reg) * sizeof(uint32_t), (uint8_t)(val))
 
-CFATTACH_DECL(asc_ioasic, sizeof(struct asc_softc),
+static int  asc_ioasic_match(device_t, cfdata_t, void *);
+static void asc_ioasic_attach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(asc_ioasic, sizeof(struct asc_softc),
     asc_ioasic_match, asc_ioasic_attach, NULL, NULL);
 
-static u_char	asc_read_reg __P((struct ncr53c9x_softc *, int));
-static void	asc_write_reg __P((struct ncr53c9x_softc *, int, u_char));
-static int	asc_dma_isintr __P((struct ncr53c9x_softc *sc));
-static void	asc_ioasic_reset __P((struct ncr53c9x_softc *));
-static int	asc_ioasic_intr __P((struct ncr53c9x_softc *));
-static int	asc_ioasic_setup __P((struct ncr53c9x_softc *,
-				void **, size_t *, int, size_t *));
-static void	asc_ioasic_go __P((struct ncr53c9x_softc *));
-static void	asc_ioasic_stop __P((struct ncr53c9x_softc *));
-static int	asc_dma_isactive __P((struct ncr53c9x_softc *));
-static void	asc_clear_latched_intr __P((struct ncr53c9x_softc *));
+static uint8_t	asc_read_reg(struct ncr53c9x_softc *, int);
+static void	asc_write_reg(struct ncr53c9x_softc *, int, u_char);
+static int	asc_dma_isintr(struct ncr53c9x_softc *sc);
+static void	asc_ioasic_reset(struct ncr53c9x_softc *);
+static int	asc_ioasic_intr(struct ncr53c9x_softc *);
+static int	asc_ioasic_setup(struct ncr53c9x_softc *,
+		    uint8_t **, size_t *, int, size_t *);
+static void	asc_ioasic_go(struct ncr53c9x_softc *);
+static void	asc_ioasic_stop(struct ncr53c9x_softc *);
+static int	asc_dma_isactive(struct ncr53c9x_softc *);
 
 static struct ncr53c9x_glue asc_ioasic_glue = {
 	asc_read_reg,
@@ -105,14 +102,11 @@ static struct ncr53c9x_glue asc_ioasic_glue = {
 	asc_ioasic_go,
 	asc_ioasic_stop,
 	asc_dma_isactive,
-	asc_clear_latched_intr,
+	NULL,
 };
 
 static int
-asc_ioasic_match(parent, cfdata, aux)
-	struct device *parent;
-	struct cfdata *cfdata;
-	void *aux;
+asc_ioasic_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ioasicdev_attach_args *d = aux;
 	
@@ -123,30 +117,30 @@ asc_ioasic_match(parent, cfdata, aux)
 }
 
 static void
-asc_ioasic_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+asc_ioasic_attach(device_t parent, device_t self, void *aux)
 {
-	struct ioasicdev_attach_args *d = aux;
-	struct asc_softc *asc = (struct asc_softc *)self;	
+	struct asc_softc *asc = device_private(self);	
 	struct ncr53c9x_softc *sc = &asc->sc_ncr53c9x;
+	struct ioasicdev_attach_args *d = aux;
+	struct ioasic_softc *isc = device_private(parent);
 
 	/*
 	 * Set up glue for MI code early; we use some of it here.
 	 */
+	sc->sc_dev = self;
 	sc->sc_glue = &asc_ioasic_glue;
-	asc->sc_bst = ((struct ioasic_softc *)parent)->sc_bst;
-	asc->sc_bsh = ((struct ioasic_softc *)parent)->sc_bsh;
+	asc->sc_bst = isc->sc_bst;
+	asc->sc_bsh = isc->sc_bsh;
 	if (bus_space_subregion(asc->sc_bst, asc->sc_bsh,
-			IOASIC_SLOT_12_START, 0x100, &asc->sc_scsi_bsh)) {
-		printf(": failed to map device registers\n");
+	    IOASIC_SLOT_12_START, 0x100, &asc->sc_scsi_bsh)) {
+		aprint_error(": failed to map device registers\n");
 		return;
 	}
-	asc->sc_dmat = ((struct ioasic_softc *)parent)->sc_dmat;
+	asc->sc_dmat = isc->sc_dmat;
 	if (bus_dmamap_create(asc->sc_dmat, PAGE_SIZE * 2,
-			2, PAGE_SIZE, PAGE_SIZE, BUS_DMA_NOWAIT,
-			&asc->sc_dmamap)) {
-		printf(": failed to create DMA map\n");
+	    2, PAGE_SIZE, PAGE_SIZE, BUS_DMA_NOWAIT,
+	    &asc->sc_dmamap)) {
+		aprint_error(": failed to create DMA map\n");
 		return;
 	}
 
@@ -157,7 +151,7 @@ asc_ioasic_attach(parent, self, aux)
 	sc->sc_freq /= 1000000;
 
 	ioasic_intr_establish(parent, d->iada_cookie, TC_IPL_BIO,
-		ncr53c9x_intr, sc);
+	    ncr53c9x_intr, sc);
 
 	/*
 	 * XXX More of this should be in ncr53c9x_attach(), but
@@ -198,11 +192,10 @@ asc_ioasic_attach(parent, self, aux)
 }
 
 void
-asc_ioasic_reset(sc)
-	struct ncr53c9x_softc *sc;
+asc_ioasic_reset(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	u_int32_t ssr;
+	uint32_t ssr;
 
 	ssr = bus_space_read_4(asc->sc_bst, asc->sc_bsh, IOASIC_CSR);
 	ssr &= ~IOASIC_CSR_DMAEN_SCSI;
@@ -217,20 +210,16 @@ asc_ioasic_reset(sc)
 #define	TWOPAGE(a)	(PAGE_SIZE*2 - ((a) & (PAGE_SIZE-1)))
 
 int
-asc_ioasic_setup(sc, addr, len, ispullup, dmasize)
-	struct ncr53c9x_softc *sc;
-	void **addr;
-	size_t *len;
-	int ispullup;
-	size_t *dmasize;
+asc_ioasic_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
+    int ispullup, size_t *dmasize)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	u_int32_t ssr, scr, *p;
+	uint32_t ssr, scr, *p;
 	size_t size;
 	vaddr_t cp;
 
-	NCR_DMA(("%s: start %d@%p,%s\n", sc->sc_dev.dv_xname,
-		*asc->sc_dmalen, *asc->sc_dmaaddr, ispullup ? "IN" : "OUT"));
+	NCR_DMA(("%s: start %d@%p,%s\n", device_xname(sc->sc_dev),
+	    *asc->sc_dmalen, *asc->sc_dmaaddr, ispullup ? "IN" : "OUT"));
 
 	/* upto two 4KB pages */
 	size = min(*dmasize, TWOPAGE((size_t)*addr));
@@ -247,9 +236,9 @@ asc_ioasic_setup(sc, addr, len, ispullup, dmasize)
 
 	/* have dmamap for the transfering addresses */
 	if (bus_dmamap_load(asc->sc_dmat, asc->sc_dmamap,
-			*addr, size,
-			NULL /* kernel address */, BUS_DMA_NOWAIT))
-		panic("%s: cannot allocate DMA address", sc->sc_dev.dv_xname);
+	    *addr, size, NULL /* kernel address */, BUS_DMA_NOWAIT))
+		panic("%s: cannot allocate DMA address",
+		    device_xname(sc->sc_dev));
 
 	/* take care of 8B constraint on starting address */
 	cp = (vaddr_t)*addr;
@@ -259,7 +248,7 @@ asc_ioasic_setup(sc, addr, len, ispullup, dmasize)
 	}
 	else {
 		/* truncate to the boundary */
-		p = (u_int32_t *)(cp & ~7);
+		p = (uint32_t *)(cp & ~7);
 		/* how many 16bit quantities in subject */
 		scr = (cp & 7) >> 1;
 		/* trim down physical address too */
@@ -274,34 +263,33 @@ asc_ioasic_setup(sc, addr, len, ispullup, dmasize)
 		}
 		/* pack fixup data in SDR0/SDR1 pair and instruct SCR */
 		bus_space_write_4(asc->sc_bst, asc->sc_bsh,
-			IOASIC_SCSI_SDR0, p[0]);
+		    IOASIC_SCSI_SDR0, p[0]);
 		bus_space_write_4(asc->sc_bst, asc->sc_bsh,
-			IOASIC_SCSI_SDR1, p[1]);
+		    IOASIC_SCSI_SDR1, p[1]);
 	}
 	bus_space_write_4(asc->sc_bst, asc->sc_bsh,
-		IOASIC_SCSI_DMAPTR,
-		IOASIC_DMA_ADDR(asc->sc_dmamap->dm_segs[0].ds_addr));
+	    IOASIC_SCSI_DMAPTR,
+	    IOASIC_DMA_ADDR(asc->sc_dmamap->dm_segs[0].ds_addr));
 	bus_space_write_4(asc->sc_bst, asc->sc_bsh,
-		IOASIC_SCSI_NEXTPTR,
-		(asc->sc_dmamap->dm_nsegs == 1)
-		? ~0 : IOASIC_DMA_ADDR(asc->sc_dmamap->dm_segs[1].ds_addr));
+	    IOASIC_SCSI_NEXTPTR,
+	    (asc->sc_dmamap->dm_nsegs == 1) ?
+	    ~0 : IOASIC_DMA_ADDR(asc->sc_dmamap->dm_segs[1].ds_addr));
 	bus_space_write_4(asc->sc_bst, asc->sc_bsh, IOASIC_SCSI_SCR, scr);
 
 	/* synchronize dmamap contents with memory image */
 	bus_dmamap_sync(asc->sc_dmat, asc->sc_dmamap,
-		0, size,
-		(ispullup) ? BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
+	    0, size,
+	    (ispullup) ? BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
 
 	asc->sc_flags |= ASC_MAPLOADED;
 	return 0;
 }
 
 void
-asc_ioasic_go(sc)
-	struct ncr53c9x_softc *sc;
+asc_ioasic_go(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	u_int32_t ssr;
+	uint32_t ssr;
 
 	ssr = bus_space_read_4(asc->sc_bst, asc->sc_bsh, IOASIC_CSR);
 	if (asc->sc_flags & ASC_ISPULLUP)
@@ -318,15 +306,14 @@ asc_ioasic_go(sc)
 }
 
 static int
-asc_ioasic_intr(sc)
-	struct ncr53c9x_softc *sc;
+asc_ioasic_intr(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	int trans, resid;
+	ssize_t trans, resid;
 	u_int tcl, tcm, ssr, scr, intr;
 	
 	if ((asc->sc_flags & ASC_DMAACTIVE) == 0)
-		panic("ioasic_intr: DMA wasn't active");
+		panic("%s: DMA wasn't active", __func__);
 
 #define	IOASIC_ASC_ERRORS \
     (IOASIC_INTR_SCSI_PTR_LOAD|IOASIC_INTR_SCSI_OVRUN|IOASIC_INTR_SCSI_READ_E)
@@ -351,8 +338,8 @@ asc_ioasic_intr(sc)
 
 	if (asc->sc_dmasize == 0) {
 		/* A "Transfer Pad" operation completed */
-		tcl = NCR_READ_REG(sc, NCR_TCL); 
-		tcm = NCR_READ_REG(sc, NCR_TCM);
+		tcl = ASC_READ_REG(asc, NCR_TCL); 
+		tcm = ASC_READ_REG(asc, NCR_TCM);
 		NCR_DMA(("ioasic_intr: discarded %d bytes (tcl=%d, tcm=%d)\n",
 		    tcl | (tcm << 8), tcl, tcm));
 		return 0;
@@ -360,17 +347,17 @@ asc_ioasic_intr(sc)
 
 	resid = 0;
 	if ((asc->sc_flags & ASC_ISPULLUP) == 0 &&
-	    (resid = (NCR_READ_REG(sc, NCR_FFLAG) & NCRFIFO_FF)) != 0) {
+	    (resid = (ASC_READ_REG(asc, NCR_FFLAG) & NCRFIFO_FF)) != 0) {
 		NCR_DMA(("ioasic_intr: empty FIFO of %d ", resid));
 		DELAY(1);
 	}
 
-	resid += (tcl = NCR_READ_REG(sc, NCR_TCL));
-	resid += (tcm = NCR_READ_REG(sc, NCR_TCM)) << 8;
+	resid += (tcl = ASC_READ_REG(asc, NCR_TCL));
+	resid += (tcm = ASC_READ_REG(asc, NCR_TCM)) << 8;
 
 	trans = asc->sc_dmasize - resid;
 	if (trans < 0) {			/* transferred < 0 ? */
-		printf("ioasic_intr: xfer (%d) > req (%d)\n",
+		printf("ioasic_intr: xfer (%zd) > req (%zu)\n",
 		    trans, asc->sc_dmasize);
 		trans = asc->sc_dmasize;
 	}
@@ -378,21 +365,20 @@ asc_ioasic_intr(sc)
 	    tcl, tcm, trans, resid));
 
 	bus_dmamap_sync(asc->sc_dmat, asc->sc_dmamap,
-			0, asc->sc_dmasize,
-			(asc->sc_flags & ASC_ISPULLUP)
-				? BUS_DMASYNC_POSTREAD
-				: BUS_DMASYNC_POSTWRITE);
+	    0, asc->sc_dmasize,
+	    (asc->sc_flags & ASC_ISPULLUP) ?
+	    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
 
 	scr = bus_space_read_4(asc->sc_bst, asc->sc_bsh, IOASIC_SCSI_SCR);
 	if ((asc->sc_flags & ASC_ISPULLUP) && scr != 0) {
-		u_int32_t sdr[2], ptr;
+		uint32_t sdr[2], ptr;
 
 		sdr[0] = bus_space_read_4(asc->sc_bst, asc->sc_bsh,
-						IOASIC_SCSI_SDR0);
+		    IOASIC_SCSI_SDR0);
 		sdr[1] = bus_space_read_4(asc->sc_bst, asc->sc_bsh,
-						IOASIC_SCSI_SDR1);
+		    IOASIC_SCSI_SDR1);
 		ptr = bus_space_read_4(asc->sc_bst, asc->sc_bsh,
-						IOASIC_SCSI_DMAPTR);
+		    IOASIC_SCSI_DMAPTR);
 		ptr = (ptr >> 3) & 0x1ffffffc;
 		/*
 		 * scr:	1 -> short[0]
@@ -407,74 +393,56 @@ asc_ioasic_intr(sc)
 	asc->sc_flags &= ~ASC_MAPLOADED;
 
 	*asc->sc_dmalen -= trans;
-	*asc->sc_dmaaddr = (char *)(*asc->sc_dmaaddr) + trans;
+	*asc->sc_dmaaddr += trans;
 	
 	return 0;
 }
 
 
 void
-asc_ioasic_stop(sc)
-	struct ncr53c9x_softc *sc;
+asc_ioasic_stop(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
 
 	if (asc->sc_flags & ASC_MAPLOADED) {
 		bus_dmamap_sync(asc->sc_dmat, asc->sc_dmamap,
-				0, asc->sc_dmasize,
-				(asc->sc_flags & ASC_ISPULLUP)
-					? BUS_DMASYNC_POSTREAD
-					: BUS_DMASYNC_POSTWRITE);
+		    0, asc->sc_dmasize,
+		    (asc->sc_flags & ASC_ISPULLUP) ?
+		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(asc->sc_dmat, asc->sc_dmamap);
 	}
 
 	asc->sc_flags &= ~(ASC_DMAACTIVE|ASC_MAPLOADED);
 }
 
-static u_char
-asc_read_reg(sc, reg)
-	struct ncr53c9x_softc *sc;
-	int reg;
+static uint8_t
+asc_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
-	u_int32_t v;
 
-	v = bus_space_read_4(asc->sc_bst,
-		asc->sc_scsi_bsh, reg * sizeof(u_int32_t));
-
-	return v & 0xff;
+	return ASC_READ_REG(asc, reg);
 }
 
 static void
-asc_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+asc_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
 
-	bus_space_write_4(asc->sc_bst,
-		asc->sc_scsi_bsh, reg * sizeof(u_int32_t), val);
+	ASC_WRITE_REG(asc, reg, val);
 }
 
 static int
-asc_dma_isintr(sc)
-	struct ncr53c9x_softc *sc;
-{
-	return !!(NCR_READ_REG(sc, NCR_STAT) & NCRSTAT_INT);
-}
-
-static int
-asc_dma_isactive(sc)
-	struct ncr53c9x_softc *sc;
+asc_dma_isintr(struct ncr53c9x_softc *sc)
 {
 	struct asc_softc *asc = (struct asc_softc *)sc;
 
-	return !!(asc->sc_flags & ASC_DMAACTIVE);
+	return (ASC_READ_REG(asc, NCR_STAT) & NCRSTAT_INT) != 0;
 }
 
-static void
-asc_clear_latched_intr(sc)
-	struct ncr53c9x_softc *sc;
+static int
+asc_dma_isactive(struct ncr53c9x_softc *sc)
 {
+	struct asc_softc *asc = (struct asc_softc *)sc;
+
+	return (asc->sc_flags & ASC_DMAACTIVE) != 0;
 }

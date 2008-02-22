@@ -1,4 +1,4 @@
-/*	$NetBSD: obs405_machdep.c,v 1.3 2006/06/30 17:54:50 freza Exp $	*/
+/*	$NetBSD: obs405_machdep.c,v 1.6 2011/06/18 06:44:26 matt Exp $	*/
 
 /*
  * Copyright (c) 2004 Shigeyuki Fukushima.
@@ -31,26 +31,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs405_machdep.c,v 1.3 2006/06/30 17:54:50 freza Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs405_machdep.c,v 1.6 2011/06/18 06:44:26 matt Exp $");
 
 #include <sys/param.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <net/netisr.h>
-
-#include <machine/cpu.h>
-
 /*
  * Machine-dependent global variables
- *   exec_map:		sys/uvm/uvm_extern.h
- *   mb_map:		sys/uvm/uvm_extern.h
  *   phys_map:		sys/uvm/uvm_extern.h
  *   machine:		sys/sys/systm.h
  *   machine_arch:	sys/sys/systm.h
  */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */

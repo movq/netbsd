@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_ptm.c,v 1.23 2008/01/24 17:32:54 ad Exp $	*/
+/*	$NetBSD: tty_ptm.c,v 1.37 2015/08/24 22:50:32 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,9 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.23 2008/01/24 17:32:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.37 2015/08/24 22:50:32 pooka Exp $");
 
+#ifdef _KERNEL_OPT
+#include "opt_compat_netbsd.h"
 #include "opt_ptm.h"
+#endif
 
 /* pty multiplexor driver /dev/ptm{,x} */
 
@@ -55,11 +51,16 @@ __KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.23 2008/01/24 17:32:54 ad Exp $");
 #include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
-#include <sys/malloc.h>
 #include <sys/pty.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
+
+#ifdef COMPAT_60
+#include <compat/sys/ttycom.h>
+#endif /* COMPAT_60 */
+
+#include "ioconf.h"
 
 #ifdef DEBUG_PTM
 #define DPRINTF(a)	printf a
@@ -69,8 +70,18 @@ __KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.23 2008/01/24 17:32:54 ad Exp $");
 
 #ifdef NO_DEV_PTM
 const struct cdevsw ptm_cdevsw = {
-	noopen, noclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_TTY
+	.d_open = noopen,
+	.d_close = noclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 #else
 
@@ -78,10 +89,18 @@ static struct ptm_pty *ptm;
 int pts_major, ptc_major;
 
 static dev_t pty_getfree(void);
-static int pty_alloc_master(struct lwp *, int *, dev_t *);
-static int pty_alloc_slave(struct lwp *, int *, dev_t);
+static int pty_alloc_master(struct lwp *, int *, dev_t *, struct mount *);
+static int pty_alloc_slave(struct lwp *, int *, dev_t, struct mount *);
+static int pty_vn_open(struct vnode *, struct lwp *);
 
-void ptmattach(int);
+int
+pty_getmp(struct lwp *l, struct mount **mpp)
+{
+	if (ptm == NULL)
+		return EOPNOTSUPP;
+
+	return (*ptm->getmp)(l, mpp);
+}
 
 dev_t
 pty_makedev(char ms, int minor)
@@ -134,15 +153,15 @@ pty_vn_open(struct vnode *vp, struct lwp *l)
 }
 
 static int
-pty_alloc_master(struct lwp *l, int *fd, dev_t *dev)
+pty_alloc_master(struct lwp *l, int *fd, dev_t *dev, struct mount *mp)
 {
 	int error;
 	struct file *fp;
 	struct vnode *vp;
 	int md;
 
-	if ((error = falloc(l, &fp, fd)) != 0) {
-		DPRINTF(("falloc %d\n", error));
+	if ((error = fd_allocfile(&fp, fd)) != 0) {
+		DPRINTF(("fd_allocfile %d\n", error));
 		return error;
 	}
 retry:
@@ -158,7 +177,7 @@ retry:
 		error = EOPNOTSUPP;
 		goto bad;
 	}
-	if ((error = (*ptm->allocvp)(ptm, l, &vp, *dev, 'p')) != 0) {
+	if ((error = (*ptm->allocvp)(mp, l, &vp, *dev, 'p')) != 0) {
 		DPRINTF(("pty_allocvp %d\n", error));
 		goto bad;
 	}
@@ -181,20 +200,17 @@ retry:
 	fp->f_flag = FREAD|FWRITE;
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
-	fp->f_data = vp;
-	VOP_UNLOCK(vp, 0);
-	FILE_SET_MATURE(fp);
-	FILE_UNUSE(fp, l);
+	fp->f_vnode = vp;
+	VOP_UNLOCK(vp);
+	fd_affix(curproc, fp, *fd);
 	return 0;
 bad:
-	FILE_UNUSE(fp, l);
-	fdremove(l->l_proc->p_fd, *fd);
-	ffree(fp);
+	fd_abort(curproc, fp, *fd);
 	return error;
 }
 
 int
-pty_grant_slave(struct lwp *l, dev_t dev)
+pty_grant_slave(struct lwp *l, dev_t dev, struct mount *mp)
 {
 	int error;
 	struct vnode *vp;
@@ -210,22 +226,22 @@ pty_grant_slave(struct lwp *l, dev_t dev)
 	 */
 	if (ptm == NULL)
 		return EOPNOTSUPP;
-	if ((error = (*ptm->allocvp)(ptm, l, &vp, dev, 't')) != 0)
+	if ((error = (*ptm->allocvp)(mp, l, &vp, dev, 't')) != 0)
 		return error;
 
 	if ((vp->v_mount->mnt_flag & MNT_RDONLY) == 0) {
 		struct vattr vattr;
-		(*ptm->getvattr)(ptm, l, &vattr);
+		(*ptm->getvattr)(mp, l, &vattr);
 		/* Do the VOP_SETATTR() as root. */
 		error = VOP_SETATTR(vp, &vattr, lwp0.l_cred);
 		if (error) {
 			DPRINTF(("setattr %d\n", error));
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 			vrele(vp);
 			return error;
 		}
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	VOP_REVOKE(vp, REVOKEALL);
 
 	/*
@@ -236,15 +252,15 @@ pty_grant_slave(struct lwp *l, dev_t dev)
 }
 
 static int
-pty_alloc_slave(struct lwp *l, int *fd, dev_t dev)
+pty_alloc_slave(struct lwp *l, int *fd, dev_t dev, struct mount *mp)
 {
 	int error;
 	struct file *fp;
 	struct vnode *vp;
 
 	/* Grab a filedescriptor for the slave */
-	if ((error = falloc(l, &fp, fd)) != 0) {
-		DPRINTF(("falloc %d\n", error));
+	if ((error = fd_allocfile(&fp, fd)) != 0) {
+		DPRINTF(("fd_allocfile %d\n", error));
 		return error;
 	}
 
@@ -253,7 +269,7 @@ pty_alloc_slave(struct lwp *l, int *fd, dev_t dev)
 		goto bad;
 	}
 
-	if ((error = (*ptm->allocvp)(ptm, l, &vp, dev, 't')) != 0)
+	if ((error = (*ptm->allocvp)(mp, l, &vp, dev, 't')) != 0)
 		goto bad;
 	if ((error = pty_vn_open(vp, l)) != 0)
 		goto bad;
@@ -261,15 +277,12 @@ pty_alloc_slave(struct lwp *l, int *fd, dev_t dev)
 	fp->f_flag = FREAD|FWRITE;
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
-	fp->f_data = vp;
-	VOP_UNLOCK(vp, 0);
-	FILE_SET_MATURE(fp);
-	FILE_UNUSE(fp, l);
+	fp->f_vnode = vp;
+	VOP_UNLOCK(vp);
+	fd_affix(curproc, fp, *fd);
 	return 0;
 bad:
-	FILE_UNUSE(fp, l);
-	fdremove(l->l_proc->p_fd, *fd);
-	ffree(fp);
+	fd_abort(curproc, fp, *fd);
 	return error;
 }
 
@@ -282,7 +295,7 @@ pty_sethandler(struct ptm_pty *nptm)
 }
 
 int
-pty_fill_ptmget(struct lwp *l, dev_t dev, int cfd, int sfd, void *data)
+pty_fill_ptmget(struct lwp *l, dev_t dev, int cfd, int sfd, void *data, struct mount *mp)
 {
 	struct ptmget *ptmg = data;
 	int error;
@@ -293,11 +306,11 @@ pty_fill_ptmget(struct lwp *l, dev_t dev, int cfd, int sfd, void *data)
 	ptmg->cfd = cfd == -1 ? minor(dev) : cfd;
 	ptmg->sfd = sfd == -1 ? minor(dev) : sfd;
 
-	error = (*ptm->makename)(ptm, l, ptmg->cn, sizeof(ptmg->cn), dev, 'p');
+	error = (*ptm->makename)(mp, l, ptmg->cn, sizeof(ptmg->cn), dev, 'p');
 	if (error)
 		return error;
 
-	return (*ptm->makename)(ptm, l, ptmg->sn, sizeof(ptmg->sn), dev, 't');
+	return (*ptm->makename)(mp, l, ptmg->sn, sizeof(ptmg->sn), dev, 't');
 }
 
 void
@@ -322,11 +335,14 @@ ptmopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int error;
 	int fd;
 	dev_t ttydev;
+	struct mount *mp;
 
 	switch(minor(dev)) {
 	case 0:		/* /dev/ptmx */
 	case 2:		/* /emul/linux/dev/ptmx */
-		if ((error = pty_alloc_master(l, &fd, &ttydev)) != 0)
+		if ((error = pty_getmp(l, &mp)) != 0)
+			return error;
+		if ((error = pty_alloc_master(l, &fd, &ttydev, mp)) != 0)
 			return error;
 		if (minor(dev) == 2) {
 			/*
@@ -334,13 +350,10 @@ ptmopen(dev_t dev, int flag, int mode, struct lwp *l)
 			 * Handle this case here, instead of writing
 			 * a new linux module.
 			 */
-			if ((error = pty_grant_slave(l, ttydev)) != 0) {
-				struct file *fp =
-				    fd_getfile(l->l_proc->p_fd, fd);
+			if ((error = pty_grant_slave(l, ttydev, mp)) != 0) {
+				file_t *fp = fd_getfile(fd);
 				if (fp != NULL) {
-					FILE_UNUSE(fp, l);
-					fdremove(l->l_proc->p_fd, fd);
-					ffree(fp);
+					fd_close(fd);
 				}
 				return error;
 			}
@@ -369,39 +382,62 @@ ptmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	int error;
 	dev_t newdev;
 	int cfd, sfd;
-	struct file *fp;
-	struct proc *p = l->l_proc;
+	file_t *fp;
+	struct mount *mp;
 
 	error = 0;
 	switch (cmd) {
 	case TIOCPTMGET:
-		if ((error = pty_alloc_master(l, &cfd, &newdev)) != 0)
+		if ((error = pty_getmp(l, &mp)) != 0)
 			return error;
 
-		if ((error = pty_grant_slave(l, newdev)) != 0)
+		if ((error = pty_alloc_master(l, &cfd, &newdev, mp)) != 0)
+			return error;
+
+		if ((error = pty_grant_slave(l, newdev, mp)) != 0)
 			goto bad;
 
-		if ((error = pty_alloc_slave(l, &sfd, newdev)) != 0)
+		if ((error = pty_alloc_slave(l, &sfd, newdev, mp)) != 0)
 			goto bad;
 
 		/* now, put the indices and names into struct ptmget */
-		return pty_fill_ptmget(l, newdev, cfd, sfd, data);
+		if ((error = pty_fill_ptmget(l, newdev, cfd, sfd, data, mp)) != 0)
+			goto bad2;
+		return 0;
 	default:
+#ifdef COMPAT_60
+		error = compat_60_ptmioctl(dev, cmd, data, flag, l);
+		if (error != EPASSTHROUGH)
+			return error;
+#endif /* COMPAT_60 */
 		DPRINTF(("ptmioctl EINVAL\n"));
 		return EINVAL;
 	}
-bad:
-	fp = fd_getfile(p->p_fd, cfd);
+bad2:
+	fp = fd_getfile(sfd);
 	if (fp != NULL) {
-		FILE_UNUSE(fp, l);
-		fdremove(p->p_fd, cfd);
-		ffree(fp);
+		fd_close(sfd);
+	}
+ bad:
+	fp = fd_getfile(cfd);
+	if (fp != NULL) {
+		fd_close(cfd);
 	}
 	return error;
 }
 
 const struct cdevsw ptm_cdevsw = {
-	ptmopen, ptmclose, noread, nowrite, ptmioctl,
-	nullstop, notty, nopoll, nommap, nokqfilter, D_TTY
+	.d_open = ptmopen,
+	.d_close = ptmclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = ptmioctl,
+	.d_stop = nullstop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 #endif

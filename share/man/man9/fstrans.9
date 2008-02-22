@@ -1,4 +1,4 @@
-.\"     $NetBSD: fstrans.9,v 1.11 2007/12/02 13:56:15 hannken Exp $
+.\"     $NetBSD: fstrans.9,v 1.26 2017/07/03 21:28:48 wiz Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 2, 2007
+.Dd June 4, 2017
 .Dt FSTRANS 9
 .Os
 .Sh NAME
@@ -52,16 +45,16 @@
 .Sh SYNOPSIS
 .In sys/mount.h
 .In sys/fstrans.h
+.Ft void
+.Fn fstrans_start "struct mount *mp"
+.Ft int
+.Fn fstrans_start_nowait "struct mount *mp"
+.Ft void
+.Fn fstrans_done "struct mount *mp"
 .Ft int
 .Fn fstrans_setstate "struct mount *mp" "enum fstrans_state new_state"
 .Ft "enum fstrans_state"
 .Fn fstrans_getstate "struct mount *mp"
-.Ft void
-.Fn fstrans_start "struct mount *mp" "enum fstrans_lock_type lock_type"
-.Ft int
-.Fn fstrans_start_nowait "struct mount *mp" "enum fstrans_lock_type lock_type"
-.Ft void
-.Fn fstrans_done "struct mount *mp"
 .Ft int
 .Fn fstrans_is_owner "struct mount *mp"
 .Ft int
@@ -75,97 +68,172 @@
 .Sh DESCRIPTION
 The
 .Nm
-subsystem is a set of operations to assist file system suspension.
-These operations must not be used outside of file systems.
+subsystem assists file system suspension and copy-on-write snapshots.
 .Pp
-File systems supporting this subsystem must set the flag
-.Dv IMNT_HAS_TRANS
-in
-.Dv "mnt_iflag" .
+The file system's normal operations, such as its
+.Xr vnodeops 9 ,
+must be bracketed by
+.Fn fstrans_start
+and
+.Fn fstrans_done
+in a
+.Em shared
+transaction, which is blocked by suspending the file system and while
+it is suspended.
 .Pp
-File systems are always in one of these states:
-.Bl -tag -offset indent -width FSTRANS_SUSPENDING -compact
-.It Dv FSTRANS_NORMAL
-normal operations.
-.It Dv FSTRANS_SUSPENDING
-preparing a suspension.
-.It Dv FSTRANS_SUSPENDED
-suspended.
+Transactions are per-thread and nestable: if a thread is already in a
+transaction, it can enter another transaction without blocking.
+Each
+.Fn fstrans_start
+must be paired with
+.Fn fstrans_done .
+Transactions for multiple distinct mount points may not be nested.
+.Pp
+The file system's
+.Xr VFS_SUSPENDCTL 9
+method can use
+.Fn fstrans_setstate
+to:
+.Bl -dash
+.It
+enter the
+.Dv FSTRANS_SUSPENDED
+state to suspend all operations, and
+.It
+restore to the
+.Dv FSTRANS_NORMAL
+state to resume all operations.
 .El
-This state is represented by
-.Vt "enum fstrans_state" .
-.Bl -tag -width compact
+.Pp
+A file system supporting
+.Nm
+may establish a copy-on-write callback with
+.Fn fscow_establish .
+The copy-on-write callback will be called every time a buffer is
+written to a block device with
+.Fn VOP_STRATEGY
+and every time a buffer is read into the
+.Xr buffercache 9
+with
+.Dv B_MODIFY
+set indicating the caller's intent to modify it.
+Anyone modifying a buffer may additionally use
+.Fn fscow_run
+to explicitly invoke the established callback.
+The copy-on-write callback must be disestablished with
+.Fn fscow_disestablish
+when the file system is done with it.
+.Sh FUNCTIONS
+.Bl -tag -width abcd
+.It Fn fstrans_start "mp"
+Enter a transaction on the file system
+.Fa mp
+in the current thread.
+If the file system is in a state that blocks such transactions, wait
+until it changes state to one that does not.
+.Pp
+If the file system is suspended, wait until it is resumed.
+.Pp
+However, if the current thread is already in a transaction on
+.Fa mp ,
+.Fn fstrans_start
+will enter a nested transaction and return immediately without
+waiting.
+.Pp
+May sleep.
+.It Fn fstrans_start_nowait "mp"
+Like
+.Fn fstrans_start ,
+but return
+.Dv EBUSY
+immediately if transactions are blocked in its current state.
+.Pp
+May sleep nevertheless on internal locks.
+.It Fn fstrans_done "mp"
+End the current transaction on
+.Fa mp .
 .It Fn fstrans_getstate "mp"
-returns the current state of the file system
+Return the current state of the file system
 .Fa mp .
 .Pp
+Must be called within a transaction for the answer to be stable.
 .It Fn fstrans_setstate "mp" "new_state"
-changes the state of the file system
+Change the state of the file system
 .Fa mp
 to
-.Fa new_state .
+.Fa new_state ,
+and wait for all transactions not allowed in
+.Fa new_state
+to complete.
+.Bl -tag -width FSTRANS_SUSPENDED
+.It Dv FSTRANS_NORMAL
+Allow all transactions.
+.It Dv FSTRANS_SUSPENDED
+Block all transactions.
 .El
 .Pp
-All file system operations use a
-.Em "fstrans lock" .
-This lock is recursive.
-A thread already owning a lock will always get another lock.
-The lock has two variants:
-.Bl -tag -offset indent -width FSTRANS_SHARED -compact
-.It Dv FSTRANS_SHARED
-this lock will be granted if the file system is in state
-.Dv FSTRANS_NORMAL .
-.It Dv FSTRANS_LAZY
-this lock will be granted if the file system is in state
+A thread that changes a file system to a state other than
 .Dv FSTRANS_NORMAL
-or
-.Dv FSTRANS_SUSPENDING .
-It needs special care because operations using this variant will not block
-while the file system prepares suspension.
-.El
-The lock variant is represented by
-.Vt "enum fstrans_lock_type" .
-.Bl -tag -width compact
-.It Fn fstrans_start "mp" "lock_type"
-sets a lock of type
-.Fa lock_type
-on the file system
-.Fa mp .
-.It Fn fstrans_start_nowait "mp" "lock_type"
-will not wait for a state change of the file system when attempting to
-aquire the lock.
-The thread may still sleep while attempting to aquire the lock.
-.It Fn fstrans_done "mp"
-releases a lock on the file system
-.Fa mp .
+enters a transaction for the purposes of
+.Fn fstrans_getstate
+until it changes state back to
+.Dv FSTRANS_NORMAL .
+.Pp
+Additionally, a thread that changes a file system to a state other than
+.Dv FSTRANS_NORMAL
+acquires an exclusive lock on the file system state, so that
+.Fn fstrans_is_owner
+will return true in that thread, and no other thread can change the
+file system's state until the owner restores it to
+.Dv FSTRANS_NORMAL .
+.Pp
+May sleep, and may be interrupted by a signal.
+On success, return zero.
+On failure, restore the file system to the
+.Dv FSTRANS_NORMAL
+state and return an error code.
+.Fn fstrans_setstate
+never fails if
+.Fa new_state
+is
+.Dv FSTRANS_NORMAL .
 .It Fn fstrans_is_owner "mp"
-returns
+Return
 .Dv true
-if this thread is currently suspending the file system
+if the current thread is currently suspending the file system
 .Fa mp .
 .It Fn fscow_establish "mp" "func" "cookie"
 Establish a copy-on-write callback for the file system
 .Fa mp .
+The function
 .Fa func
-will be called for every buffer written through this file system.
+will be called for every buffer
+.Fa bp
+written through this file system as
+.Dl Fa func Ns Li "(" Ns Fa cookie Ns Li "," Fa bp Ns Li "," Fa data_valid Ns Li ")"
+where
+.Fa data_valid
+is true if and only if the buffer
+.Fa bp
+has not yet been modified.
+.Pp
+May sleep.
 .It Fn fscow_disestablish "mp" "func" "cookie"
-Disestablish a copy-on-write callback registered with
+Disestablish a copy-on-write callback established with
 .Fn fscow_establish .
+.Pp
+May sleep.
 .It Fn fscow_run "bp" "data_valid"
 Run all copy-on-write callbacks established for the file system this buffer
-belongs to.
+belongs to, if they have not already been run for this buffer.
 If
 .Fa data_valid
 is
 .Dv true
 the buffer data has not yet been modified.
+.Pp
+May sleep.
 .El
-.Sh RETURN VALUES
-The functions
-.Fn fstrans_setstate
-and
-.Fn fstrans_start_nowait
-return zero on success and an error value on failure.
 .Sh EXAMPLES
 The following is an example of a file system suspend operation.
 .Bd -literal
@@ -176,12 +244,6 @@ xxx_suspendctl(struct mount *mp, int cmd)
 
 	switch (cmd) {
 	case SUSPEND_SUSPEND:
-		error = fstrans_setstate(mp, FSTRANS_SUSPENDING);
-		if (error != 0)
-			return error;
-
-		/* Sync file system state to disk. */
-
 		return fstrans_setstate(mp, FSTRANS_SUSPENDED);
 
 	case SUSPEND_RESUME:
@@ -199,11 +261,10 @@ int
 xxx_create(void *v)
 {
 	struct vop_create_args *ap = v;
-	struct mount *mp = ap-\*[Gt]a_dvp-\*[Gt]v_mount;
+	struct mount *mp = ap->a_dvp->v_mount;
 	int error;
 
-	if ((error = fstrans_start(mp, FSTRANS_SHARED)) != 0)
-		return error;
+	fstrans_start(mp);
 
 	/* Actually create the node. */
 
@@ -212,12 +273,14 @@ xxx_create(void *v)
 	return 0;
 }
 .Ed
+.Sh CODE REFERENCES
+The
+.Nm
+subsystem is implemented in the file
+.Pa sys/kern/vfs_trans.c .
 .Sh SEE ALSO
 .Xr vfs_resume 9 ,
 .Xr vfs_suspend 9
-.Sh CODE REFERENCES
-The actual code implementing this subsystem can be found in the file
-.Pa sys/kern/vfs_trans.c .
 .Sh HISTORY
 The
 .Nm
@@ -227,6 +290,11 @@ subsystem appeared in
 The
 .Nm
 subsystem was written by
-.if t .An J\(:urgen Hannken-Illjes
-.if n .An Juergen Hannken-Illjes
+.An J\(:urgen Hannken-Illjes
 .Aq hannken@NetBSD.org .
+.Sh BUGS
+.Nm
+is useful only for temporary suspension \(em it does not help to
+permanently block file system operations for unmounting, because
+.Fn fstrans_start
+cannot fail.

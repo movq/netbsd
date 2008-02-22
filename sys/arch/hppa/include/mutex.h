@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.8 2007/11/21 10:19:07 yamt Exp $	*/
+/*	$NetBSD: mutex.h,v 1.13 2017/10/04 23:04:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -104,7 +97,7 @@ MUTEX_OWNED(uintptr_t owner)
 }
 
 static inline int
-MUTEX_SET_WAITERS(kmutex_t *mtx, uintptr_t owner)
+MUTEX_SET_WAITERS(struct kmutex *mtx, uintptr_t owner)
 {
 	mb_write();
 	mtx->mtx_waiters = 1;
@@ -113,13 +106,13 @@ MUTEX_SET_WAITERS(kmutex_t *mtx, uintptr_t owner)
 }
 
 static inline int
-MUTEX_HAS_WAITERS(volatile kmutex_t *mtx)
+MUTEX_HAS_WAITERS(const volatile struct kmutex *mtx)
 {
 	return mtx->mtx_waiters != 0;
 }
 
 static inline void
-MUTEX_INITIALIZE_SPIN(kmutex_t *mtx, bool dodebug, int ipl)
+MUTEX_INITIALIZE_SPIN(struct kmutex *mtx, bool dodebug, int ipl)
 {
 	mtx->mtx_ipl = makeiplcookie(ipl);
 	mtx->mtx_dodebug = dodebug;
@@ -128,7 +121,7 @@ MUTEX_INITIALIZE_SPIN(kmutex_t *mtx, bool dodebug, int ipl)
 }
 
 static inline void
-MUTEX_INITIALIZE_ADAPTIVE(kmutex_t *mtx, bool dodebug)
+MUTEX_INITIALIZE_ADAPTIVE(struct kmutex *mtx, bool dodebug)
 {
 	mtx->mtx_dodebug = dodebug;
 	mtx->mtx_owner = MUTEX_ADAPTIVE_UNOWNED;
@@ -136,32 +129,32 @@ MUTEX_INITIALIZE_ADAPTIVE(kmutex_t *mtx, bool dodebug)
 }
 
 static inline void
-MUTEX_DESTROY(kmutex_t *mtx)
+MUTEX_DESTROY(struct kmutex *mtx)
 {
 	mtx->mtx_owner = 0xffffffff;
 }
 
 static inline bool
-MUTEX_DEBUG_P(kmutex_t *mtx)
+MUTEX_DEBUG_P(const volatile struct kmutex *mtx)
 {
 	return mtx->mtx_dodebug != 0;
 }
 
 static inline int
-MUTEX_SPIN_P(volatile kmutex_t *mtx)
+MUTEX_SPIN_P(const volatile struct kmutex *mtx)
 {
 	return mtx->mtx_owner == MUTEX_SPIN_FLAG;
 }
 
 static inline int
-MUTEX_ADAPTIVE_P(volatile kmutex_t *mtx)
+MUTEX_ADAPTIVE_P(const volatile struct kmutex *mtx)
 {
 	return mtx->mtx_owner != MUTEX_SPIN_FLAG;
 }
 
 /* Acquire an adaptive mutex */
 static inline int
-MUTEX_ACQUIRE(kmutex_t *mtx, uintptr_t curthread)
+MUTEX_ACQUIRE(struct kmutex *mtx, uintptr_t curthread)
 {
 	if (!__cpu_simple_lock_try(&mtx->mtx_lock))
 		return 0;
@@ -171,7 +164,7 @@ MUTEX_ACQUIRE(kmutex_t *mtx, uintptr_t curthread)
 
 /* Release an adaptive mutex */
 static inline void
-MUTEX_RELEASE(kmutex_t *mtx)
+MUTEX_RELEASE(struct kmutex *mtx)
 {
 	mtx->mtx_owner = MUTEX_ADAPTIVE_UNOWNED;
 	__cpu_simple_unlock(&mtx->mtx_lock);
@@ -179,7 +172,7 @@ MUTEX_RELEASE(kmutex_t *mtx)
 }
 
 static inline void
-MUTEX_CLEAR_WAITERS(kmutex_t *mtx)
+MUTEX_CLEAR_WAITERS(struct kmutex *mtx)
 {
 	mtx->mtx_waiters = 0;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: mkdir.1,v 1.16 2003/08/07 09:05:16 agc Exp $
+.\"	$NetBSD: mkdir.1,v 1.21 2017/07/04 06:49:35 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)mkdir.1	8.2 (Berkeley) 1/25/94
 .\"
-.Dd January 25, 1994
+.Dd August 10, 2016
 .Dt MKDIR 1
 .Os
 .Sh NAME
@@ -49,10 +49,9 @@ creates the directories named as operands, in the order specified,
 using mode
 .Li rwxrwxrwx (\&0777)
 as modified by the current
-.Xr umask  2  .
+.Xr umask 2 .
 .Pp
 The options are as follows:
-.Pp
 .Bl -tag -width indent
 .It Fl m
 Set the file permission bits of the final created directory to
@@ -79,8 +78,7 @@ Do not consider it an error if the argument directory already exists.
 .Pp
 The user must have write permission in the parent directory.
 .Sh EXIT STATUS
-.Nm
-exits 0 if successful, and \*[Gt]0 if an error occurred.
+.Ex -std mkdir
 .Sh SEE ALSO
 .Xr chmod 1 ,
 .Xr rmdir 1 ,
@@ -92,3 +90,8 @@ The
 utility is expected to be
 .St -p1003.2
 compatible.
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.At v1 .

@@ -1,4 +1,4 @@
-/*      $NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $        */
+/*      $NetBSD: ip_etherip.c,v 1.21 2018/01/26 14:47:41 maxv Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -27,8 +27,9 @@
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  *  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  *  SUCH DAMAGE.
- *
- *
+ */
+
+/*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
  *
@@ -58,9 +59,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.21 2018/01/26 14:47:41 maxv Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +74,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $"
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
-#include <sys/protosw.h>
 #include <sys/kernel.h>
 
 #include <net/if.h>
@@ -87,8 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $"
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_etherip.h>
-
-#include <machine/stdarg.h>
+#include <net/bpf.h>
 
 int
 ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
@@ -107,7 +108,7 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	sin_src = (struct sockaddr_in *)sc->sc_src;
 	sin_dst = (struct sockaddr_in *)sc->sc_dst;
 
-	if (sin_src == NULL || 
+	if (sin_src == NULL ||
 	    sin_dst == NULL ||
 	    sin_src->sin_family != AF_INET ||
 	    sin_dst->sin_family != AF_INET) {
@@ -118,7 +119,7 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	/* reset broadcast/multicast flags */
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-	m->m_flags |= M_PKTHDR;
+	KASSERT((m->m_flags & M_PKTHDR) != 0);
 	proto = IPPROTO_ETHERIP;
 
 	/* fill and prepend Ethernet-in-IP header */
@@ -132,8 +133,8 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 		if (m == NULL)
 			return ENOBUFS;
 	}
-	memcpy(mtod(m, struct etherip_header *), &eiphdr, 
-	       sizeof(struct etherip_header));
+	memcpy(mtod(m, struct etherip_header *), &eiphdr,
+	    sizeof(struct etherip_header));
 
 	/* fill new IP header */
 	memset(&iphdr, 0, sizeof(struct ip));
@@ -156,6 +157,8 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 		return ENOBUFS;
 	if (M_UNWRITABLE(m, sizeof(struct ip)))
 		m = m_pullup(m, sizeof(struct ip));
+	if (m == NULL)
+		return ENOBUFS;
 	memcpy(mtod(m, struct ip *), &iphdr, sizeof(struct ip));
 
 	sockaddr_in_init(&u.dst4, &sin_dst->sin_addr, 0);
@@ -166,10 +169,12 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 
 	/* if it constitutes infinite encapsulation, punt. */
 	if (rt->rt_ifp == ifp) {
+		rtcache_unref(rt, &sc->sc_ro);
 		rtcache_free(&sc->sc_ro);
 		m_freem(m);
 		return ENETUNREACH;     /*XXX*/
 	}
+	rtcache_unref(rt, &sc->sc_ro);
 
 	error = ip_output(m, NULL, &sc->sc_ro, 0, NULL, NULL);
 
@@ -183,7 +188,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	const struct ip *ip;
 	struct sockaddr_in *src, *dst;
 	struct ifnet *ifp = NULL;
-	int off, proto;
+	int off, proto, s;
 	va_list ap;
 
 	va_start(ap, m);
@@ -193,13 +198,13 @@ ip_etherip_input(struct mbuf *m, ...)
 
 	if (proto != IPPROTO_ETHERIP) {
 		m_freem(m);
-		ipstat.ips_noproto++;
+		ip_statinc(IP_STAT_NOPROTO);
 		return;
 	}
 
 	ip = mtod(m, const struct ip *);
 
-	/* find device configured for this packets src and dst */
+	/* find device configured for this packet's src and dst */
 	LIST_FOREACH(sc, &etherip_softc_list, etherip_list) {
 		if (!sc->sc_src || !sc->sc_dst)
 			continue;
@@ -214,7 +219,7 @@ ip_etherip_input(struct mbuf *m, ...)
 		if (src->sin_addr.s_addr != ip->ip_dst.s_addr ||
 		    dst->sin_addr.s_addr != ip->ip_src.s_addr)
 			continue;
-		
+
 		ifp = &sc->sc_ec.ec_if;
 		break;
 	}
@@ -222,7 +227,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	/* no matching device found */
 	if (!ifp) {
 		m_freem(m);
-		ipstat.ips_odropped++;
+		ip_statinc(IP_STAT_ODROPPED);
 		return;
 	}
 
@@ -250,16 +255,12 @@ ip_etherip_input(struct mbuf *m, ...)
 		return;
 	}
 
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
-
-	ifp->if_ipackets++;
-	(ifp->if_input)(ifp, m);
+	s = splnet();
+	if_input(ifp, m);
+	splx(s);
 
 	return;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_parityscan.c,v 1.32 2006/11/16 01:33:23 christos Exp $	*/
+/*	$NetBSD: rf_parityscan.c,v 1.34 2011/05/01 01:09:05 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.32 2006/11/16 01:33:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.34 2011/05/01 01:09:05 mrg Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.32 2006/11/16 01:33:23 christos 
 #include "rf_engine.h"
 #include "rf_parityscan.h"
 #include "rf_map.h"
+#include "rf_paritymap.h"
 
 /*****************************************************************************
  *
@@ -63,6 +64,20 @@ __KERNEL_RCSID(0, "$NetBSD: rf_parityscan.c,v 1.32 2006/11/16 01:33:23 christos 
 int
 rf_RewriteParity(RF_Raid_t *raidPtr)
 {
+	if (raidPtr->parity_map != NULL)
+		return rf_paritymap_rewrite(raidPtr->parity_map);
+	else
+		return rf_RewriteParityRange(raidPtr, 0, raidPtr->totalSectors);
+}
+
+int
+rf_RewriteParityRange(RF_Raid_t *raidPtr, RF_SectorNum_t sec_begin,
+    RF_SectorNum_t sec_len)
+{
+	/* 
+	 * Note: It is the caller's responsibility to ensure that
+	 * sec_begin and sec_len are stripe-aligned.
+	 */
 	RF_RaidLayout_t *layoutPtr = &raidPtr->Layout;
 	RF_AccessStripeMapHeader_t *asm_h;
 	int ret_val;
@@ -86,7 +101,7 @@ rf_RewriteParity(RF_Raid_t *raidPtr)
 
 	rc = RF_PARITY_OKAY;
 
-	for (i = 0; i < raidPtr->totalSectors &&
+	for (i = sec_begin; i < sec_begin + sec_len &&
 		     rc <= RF_PARITY_CORRECTED;
 	     i += layoutPtr->dataSectorsPerStripe) {
 		if (raidPtr->waitShutdown) {
@@ -247,17 +262,17 @@ rf_VerifyParityBasic(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 		rf_PrintDAGList(rd_dag_h);
 	}
 #endif
-	RF_LOCK_MUTEX(mcpair->mutex);
+	RF_LOCK_MCPAIR(mcpair);
 	mcpair->flag = 0;
-	RF_UNLOCK_MUTEX(mcpair->mutex);
+	RF_UNLOCK_MCPAIR(mcpair);
 
 	rf_DispatchDAG(rd_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 	    (void *) mcpair);
 
-	RF_LOCK_MUTEX(mcpair->mutex);
+	RF_LOCK_MCPAIR(mcpair);
 	while (!mcpair->flag)
-		RF_WAIT_COND(mcpair->cond, mcpair->mutex);
-	RF_UNLOCK_MUTEX(mcpair->mutex);
+		RF_WAIT_MCPAIR(mcpair);
+	RF_UNLOCK_MCPAIR(mcpair);
 	if (rd_dag_h->status != rf_enable) {
 		RF_ERRORMSG("Unable to verify parity:  can't read the stripe\n");
 		retcode = RF_PARITY_COULD_NOT_VERIFY;
@@ -293,17 +308,17 @@ rf_VerifyParityBasic(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 			rf_PrintDAGList(wr_dag_h);
 		}
 #endif
-		RF_LOCK_MUTEX(mcpair->mutex);
+		RF_LOCK_MCPAIR(mcpair);
 		mcpair->flag = 0;
-		RF_UNLOCK_MUTEX(mcpair->mutex);
+		RF_UNLOCK_MCPAIR(mcpair);
 
 		rf_DispatchDAG(wr_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 		    (void *) mcpair);
 
-		RF_LOCK_MUTEX(mcpair->mutex);
+		RF_LOCK_MCPAIR(mcpair);
 		while (!mcpair->flag)
-			RF_WAIT_COND(mcpair->cond, mcpair->mutex);
-		RF_UNLOCK_MUTEX(mcpair->mutex);
+			RF_WAIT_MCPAIR(mcpair);
+		RF_UNLOCK_MCPAIR(mcpair);
 		if (wr_dag_h->status != rf_enable) {
 			RF_ERRORMSG("Unable to correct parity in VerifyParity:  can't write the stripe\n");
 			retcode = RF_PARITY_COULD_NOT_CORRECT;

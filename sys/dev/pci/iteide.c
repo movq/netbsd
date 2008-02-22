@@ -1,4 +1,4 @@
-/*	$NetBSD: iteide.c,v 1.8 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: iteide.c,v 1.19 2013/10/07 19:51:55 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.8 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.19 2013/10/07 19:51:55 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,14 +42,14 @@ __KERNEL_RCSID(0, "$NetBSD: iteide.c,v 1.8 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_ite_reg.h>
 
-static void ite_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void ite_chip_map(struct pciide_softc*, const struct pci_attach_args*);
 static void ite_setup_channel(struct ata_channel*);
 
-static int  iteide_match(struct device *, struct cfdata *, void *);
-static void iteide_attach(struct device *, struct device *, void *);
+static int  iteide_match(device_t, cfdata_t, void *);
+static void iteide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(iteide, sizeof(struct pciide_softc),
-    iteide_match, iteide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(iteide, sizeof(struct pciide_softc),
+    iteide_match, iteide_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_ite_products[] =  {
 	{ PCI_PRODUCT_ITE_IT8211,
@@ -70,8 +70,7 @@ static const struct pciide_product_desc pciide_ite_products[] =  {
 };
 
 static int
-iteide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+iteide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ITE &&
@@ -83,22 +82,23 @@ iteide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-iteide_attach(struct device *parent, struct device *self, void *aux)
+iteide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_ite_products));
 }
 
 static void
-ite_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+ite_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t cfg, modectl;
 
 	/* fake interface since IT8212 claims to be a RAID device */
@@ -108,14 +108,14 @@ ite_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	cfg = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_CFG);
 	modectl = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_MODE);
 	ATADEBUG_PRINT(("%s: cfg=0x%x, modectl=0x%x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cfg & IT_CFG_MASK,
+	    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), cfg & IT_CFG_MASK,
 	    modectl & IT_MODE_MASK), DEBUG_PROBE);
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -132,6 +132,7 @@ ite_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = ite_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -148,14 +149,13 @@ ite_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
 
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 	/* Re-read configuration registers after channels setup */
 	cfg = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_CFG);
 	modectl = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_MODE);
 	ATADEBUG_PRINT(("%s: cfg=0x%x, modectl=0x%x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cfg & IT_CFG_MASK,
+	    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), cfg & IT_CFG_MASK,
 	    modectl & IT_MODE_MASK), DEBUG_PROBE);
 }
 
@@ -175,7 +175,7 @@ ite_setup_channel(struct ata_channel *chp)
 	modectl = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_MODE);
 	tim = pci_conf_read(sc->sc_pc, sc->sc_tag, IT_TIM(channel));
 	ATADEBUG_PRINT(("%s:%d: tim=0x%x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+	    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
 	    channel, tim), DEBUG_PROBE);
 
 	/* Setup DMA if needed */
@@ -189,13 +189,13 @@ ite_setup_channel(struct ata_channel *chp)
 		drvp = &chp->ch_drive[drive];
 
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 
 		if ((chp->ch_atac->atac_cap & ATAC_CAP_UDMA) != 0 &&
-		    (drvp->drive_flags & DRIVE_UDMA) != 0) {
+		    (drvp->drive_flags & ATA_DRIVE_UDMA) != 0) {
 			/* Setup UltraDMA mode */
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			modectl &= ~IT_MODE_DMA(channel, drive);
 
 #if 0
@@ -204,7 +204,7 @@ ite_setup_channel(struct ata_channel *chp)
 			    (cfg & IT_CFG_CABLE(channel, drive)) == 0) {
 				ATADEBUG_PRINT(("(%s:%d:%d): "
 				    "80-wire cable not detected\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+				    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
 				    channel, drive), DEBUG_PROBE);
 				drvp->UDMA_mode = 2;
 			}
@@ -217,9 +217,9 @@ ite_setup_channel(struct ata_channel *chp)
 
 			mode = drvp->PIO_mode;
 		} else if ((chp->ch_atac->atac_cap & ATAC_CAP_DMA) != 0 &&
-		    (drvp->drive_flags & DRIVE_DMA) != 0) {
+		    (drvp->drive_flags & ATA_DRIVE_DMA) != 0) {
 			/* Setup multiword DMA mode */
-			drvp->drive_flags &= ~DRIVE_UDMA;
+			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
 			modectl |= IT_MODE_DMA(channel, drive);
 
 			/* mode = min(pio, dma + 2) */
@@ -249,7 +249,7 @@ pio:
 	}
 
 	ATADEBUG_PRINT(("%s: tim=0x%x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, tim), DEBUG_PROBE);
+	    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), tim), DEBUG_PROBE);
 
 	pci_conf_write(sc->sc_pc, sc->sc_tag, IT_CFG, cfg);
 	pci_conf_write(sc->sc_pc, sc->sc_tag, IT_MODE, modectl);

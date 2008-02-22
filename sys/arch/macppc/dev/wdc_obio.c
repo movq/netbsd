@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_obio.c,v 1.47 2007/10/17 19:55:20 garbled Exp $	*/
+/*	$NetBSD: wdc_obio.c,v 1.61 2017/10/20 07:06:07 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,16 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.47 2007/10/17 19:55:20 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.61 2017/10/20 07:06:07 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -73,30 +66,29 @@ struct wdc_obio_softc {
 	struct wdc_softc sc_wdcdev;
 	struct ata_channel *sc_chanptr;
 	struct ata_channel sc_channel;
-	struct ata_queue sc_chqueue;
 	struct wdc_regs sc_wdc_regs;
 	bus_space_handle_t sc_dmaregh;
 	dbdma_regmap_t *sc_dmareg;
 	dbdma_command_t	*sc_dmacmd;
 	u_int sc_dmaconf[2];	/* per target value of CONFIG_REG */
-	void *sc_ih;
+	void *sc_ih, *sc_dma;
 };
 
-int wdc_obio_probe __P((struct device *, struct cfdata *, void *));
-void wdc_obio_attach __P((struct device *, struct device *, void *));
-int wdc_obio_detach __P((struct device *, int));
-int wdc_obio_dma_init __P((void *, int, int, void *, size_t, int));
-void wdc_obio_dma_start __P((void *, int, int));
-int wdc_obio_dma_finish __P((void *, int, int, int));
+static int wdc_obio_match(device_t, cfdata_t, void *);
+static void wdc_obio_attach(device_t, device_t, void *);
+static int wdc_obio_detach(device_t, int);
+static int wdc_obio_dma_init(void *, int, int, void *, size_t, int);
+static void wdc_obio_dma_start(void *, int, int);
+static int wdc_obio_dma_finish(void *, int, int, int);
 
-static void wdc_obio_select __P((struct ata_channel *, int));
-static void adjust_timing __P((struct ata_channel *));
-static void ata4_adjust_timing __P((struct ata_channel *));
+static void wdc_obio_select(struct ata_channel *, int);
+static void adjust_timing(struct ata_channel *);
+static void ata4_adjust_timing(struct ata_channel *);
 
-CFATTACH_DECL(wdc_obio, sizeof(struct wdc_obio_softc),
-    wdc_obio_probe, wdc_obio_attach, wdc_obio_detach, wdcactivate);
+CFATTACH_DECL_NEW(wdc_obio, sizeof(struct wdc_obio_softc),
+    wdc_obio_match, wdc_obio_attach, wdc_obio_detach, NULL);
 
-static const char *ata_names[] = {
+static const char * const ata_names[] = {
     "heathrow-ata",
     "keylargo-ata",
     "ohare-ata",
@@ -104,10 +96,7 @@ static const char *ata_names[] = {
 };
 
 int
-wdc_obio_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+wdc_obio_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -125,11 +114,9 @@ wdc_obio_probe(parent, match, aux)
 }
 
 void
-wdc_obio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wdc_obio_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_obio_softc *sc = (void *)self;
+	struct wdc_obio_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	struct confargs *ca = aux;
 	struct ata_channel *chp = &sc->sc_channel;
@@ -137,7 +124,8 @@ wdc_obio_attach(parent, self, aux)
 	int use_dma = 0;
 	char path[80];
 
-	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
+	if (device_cfdata(sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
 	    WDC_OPTIONS_DMA) {
 		if (ca->ca_nreg >= 16 || ca->ca_nintr == -1)
 			use_dma = 1;	/* XXX Don't work yet. */
@@ -145,23 +133,23 @@ wdc_obio_attach(parent, self, aux)
 
 	if (ca->ca_nintr >= 4 && ca->ca_nreg >= 8) {
 		intr = ca->ca_intr[0];
-		printf(" irq %d", intr);
+		aprint_normal(" irq %d", intr);
 		if (ca->ca_nintr > 8) {
 			type = ca->ca_intr[1] ? IST_LEVEL : IST_EDGE;
 		}
-		printf(", %s triggered", (type == IST_EDGE) ? "edge" : "level");
+		aprint_normal(", %s triggered", (type == IST_EDGE) ? "edge" : "level");
 	} else if (ca->ca_nintr == -1) {
 		intr = WDC_DEFAULT_PIO_IRQ;
-		printf(" irq property not found; using %d", intr);
+		aprint_normal(" irq property not found; using %d", intr);
 	} else {
-		printf(": couldn't get irq property\n");
+		aprint_error(": couldn't get irq property\n");
 		return;
 	}
 
 	if (use_dma)
-		printf(": DMA transfer");
+		aprint_normal(": DMA transfer");
 
-	printf("\n");
+	aprint_normal("\n");
 
 	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 
@@ -171,8 +159,7 @@ wdc_obio_attach(parent, self, aux)
 	    WDC_REG_NPORTS << 4, 0, &wdr->cmd_baseioh) ||
 	    bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
 			WDC_AUXREG_OFFSET << 4, 1, &wdr->ctl_ioh)) {
-		printf("%s: couldn't map registers\n",
-			sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map registers\n");
 		return;
 	}
 
@@ -181,8 +168,8 @@ wdc_obio_attach(parent, self, aux)
 		    i == 0 ? 4 : 1, &wdr->cmd_iohs[i]) != 0) {
 			bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh,
 			    WDC_REG_NPORTS << 4);
-			printf("%s: couldn't subregion registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(self,
+			    "couldn't subregion registers\n");
 			return;
 		}
 	}
@@ -194,7 +181,8 @@ wdc_obio_attach(parent, self, aux)
 	sc->sc_ih = intr_establish(intr, type, IPL_BIO, wdcintr, chp);
 
 	if (use_dma) {
-		sc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20);
+		sc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20,
+		    &sc->sc_dma);
 		/*
 		 * XXX
 		 * we don't use ca->ca_reg[3] for size here because at least
@@ -207,8 +195,8 @@ wdc_obio_attach(parent, self, aux)
 		if (bus_space_map(wdr->cmd_iot, ca->ca_baseaddr + ca->ca_reg[2],
 		    0x100, BUS_SPACE_MAP_LINEAR, &sc->sc_dmaregh)) {
 
-			aprint_error("%s: unable to map DMA registers (%08x)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+			aprint_error_dev(self,
+			    "unable to map DMA registers (%08x)\n",
 			    ca->ca_reg[2]);
 			/* should unmap stuff here */
 			return;
@@ -235,23 +223,24 @@ wdc_obio_attach(parent, self, aux)
 	} else {
 		/* all non-DMA controllers can use adjust_timing */
 		sc->sc_wdcdev.sc_atac.atac_set_modes = adjust_timing;
+		sc->sc_dmacmd = NULL;
 	}
 
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
-	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
+	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 /*| ATAC_CAP_DATA32*/;
 	sc->sc_chanptr = chp;
 	sc->sc_wdcdev.sc_atac.atac_channels = &sc->sc_chanptr;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_wdcdev.dma_arg = sc;
 	sc->sc_wdcdev.dma_init = wdc_obio_dma_init;
 	sc->sc_wdcdev.dma_start = wdc_obio_dma_start;
 	sc->sc_wdcdev.dma_finish = wdc_obio_dma_finish;
+
 	chp->ch_channel = 0;
 	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
-	chp->ch_queue = &sc->sc_chqueue;
-	chp->ch_ndrive = 2;
 
-	wdc_init_shadow_regs(chp);
+	wdc_init_shadow_regs(wdr);
 
 #define OHARE_FEATURE_REG	0xf3000038
 
@@ -274,25 +263,25 @@ struct ide_timings {
 	int cycle;	/* minimum cycle time [ns] */
 	int active;	/* minimum command active time [ns] */
 };
-static struct ide_timings pio_timing[5] = {
+static const struct ide_timings pio_timing[5] = {
 	{ 600, 180 },    /* Mode 0 */
 	{ 390, 150 },    /*      1 */
 	{ 240, 105 },    /*      2 */
 	{ 180,  90 },    /*      3 */
 	{ 120,  75 }     /*      4 */
 };
-static struct ide_timings dma_timing[3] = {
+static const struct ide_timings dma_timing[3] = {
 	{ 480, 240 },	/* Mode 0 */
 	{ 165,  90 },	/* Mode 1 */
 	{ 120,  75 }	/* Mode 2 */
 };
 
-static struct ide_timings udma_timing[5] = {
-	{120, 180},	/* Mode 0 */
-	{ 90, 150},	/* Mode 1 */
-	{ 60, 120},	/* Mode 2 */
-	{ 45, 90},	/* Mode 3 */
-	{ 30, 90}	/* Mode 4 */
+static const struct ide_timings udma_timing[5] = {
+	{ 120, 180 },	/* Mode 0 */
+	{  90, 150 },	/* Mode 1 */
+	{  60, 120 },	/* Mode 2 */
+	{  45,  90 },	/* Mode 3 */
+	{  30,  90 }	/* Mode 4 */
 };
 
 #define TIME_TO_TICK(time) howmany((time), 30)
@@ -308,9 +297,7 @@ static struct ide_timings udma_timing[5] = {
 #define CONFIG_REG (0x200)		/* IDE access timing register */
 
 void
-wdc_obio_select(chp, drive)
-	struct ata_channel *chp;
-	int drive;
+wdc_obio_select(struct ata_channel *chp, int drive)
 {
 	struct wdc_obio_softc *sc = (struct wdc_obio_softc *)chp->ch_atac;
 	struct wdc_regs *wdr = CHAN_TO_WDC_REGS(chp);
@@ -320,8 +307,7 @@ wdc_obio_select(chp, drive)
 }
 
 void
-adjust_timing(chp)
-	struct ata_channel *chp;
+adjust_timing(struct ata_channel *chp)
 {
 	struct wdc_obio_softc *sc = (struct wdc_obio_softc *)chp->ch_atac;
 	int drive;
@@ -334,7 +320,7 @@ adjust_timing(chp)
 		
 		drvp = &chp->ch_drive[drive];
 		/* set up pio mode timings */
-		if (drvp->drive_flags & DRIVE) {
+		if (drvp->drive_type != ATA_DRIVET_NONE) {
 			int piomode = drvp->PIO_mode;
 			min_cycle = pio_timing[piomode].cycle;
 			min_active = pio_timing[piomode].active;
@@ -350,7 +336,7 @@ adjust_timing(chp)
 			conf |= (inact_tick << 5) | act_tick;
 		}
 		/* Set up DMA mode timings */
-		if (drvp->drive_flags & DRIVE_DMA) {
+		if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			int dmamode = drvp->DMA_mode;
 			min_cycle = dma_timing[dmamode].cycle;
 			min_active = dma_timing[dmamode].active;
@@ -386,8 +372,7 @@ adjust_timing(chp)
 }
 
 void
-ata4_adjust_timing(chp)
-	struct ata_channel *chp;
+ata4_adjust_timing(struct ata_channel *chp)
 {
 	struct wdc_obio_softc *sc = (struct wdc_obio_softc *)chp->ch_atac;
 	int drive;
@@ -401,7 +386,7 @@ ata4_adjust_timing(chp)
 		drvp = &chp->ch_drive[drive];
 		/* set up pio mode timings */
 
-		if (drvp->drive_flags & DRIVE) {
+		if (drvp->drive_type != ATA_DRIVET_NONE) {
 			int piomode = drvp->PIO_mode;
 			min_cycle = pio_timing[piomode].cycle;
 			min_active = pio_timing[piomode].active;
@@ -413,7 +398,7 @@ ata4_adjust_timing(chp)
 			conf |= (inact_tick << 5) | act_tick;
 		}
 		/* set up dma mode timings */
-		if (drvp->drive_flags & DRIVE_DMA) {
+		if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			int dmamode = drvp->DMA_mode;
 			min_cycle = dma_timing[dmamode].cycle;
 			min_active = dma_timing[dmamode].active;
@@ -424,7 +409,7 @@ ata4_adjust_timing(chp)
 			conf |= (act_tick << 10) | (inact_tick << 15);
 		}
 		/* set up udma mode timings */
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			int udmamode = drvp->UDMA_mode;
 			min_cycle = udma_timing[udmamode].cycle;
 			min_active = udma_timing[udmamode].active;
@@ -454,11 +439,9 @@ ata4_adjust_timing(chp)
 }
 
 int
-wdc_obio_detach(self, flags)
-	struct device *self;
-	int flags;
+wdc_obio_detach(device_t self, int flags)
 {
-	struct wdc_obio_softc *sc = (void *)self;
+	struct wdc_obio_softc *sc = device_private(self);
 	int error;
 
 	if ((error = wdcdetach(self, flags)) != 0)
@@ -471,18 +454,18 @@ wdc_obio_detach(self, flags)
 			sc->sc_wdcdev.regs->cmd_baseioh, WDC_REG_NPORTS << 4);
 
 	/* Unmap DMA registers. */
-	/* XXX unmapiodev(sc->sc_dmareg); */
-	/* XXX free(sc->sc_dmacmd); */
+	if (sc->sc_dmacmd != NULL) {
 
+		bus_space_unmap(sc->sc_wdcdev.regs->cmd_iot,
+		    sc->sc_dmaregh, 0x100);
+		dbdma_free(sc->sc_dma, sizeof(dbdma_command_t) * 20);
+	}
 	return 0;
 }
 
 int
-wdc_obio_dma_init(v, channel, drive, databuf, datalen, flags)
-	void *v;
-	void *databuf;
-	size_t datalen;
-	int flags;
+wdc_obio_dma_init(void *v, int channel, int drive, void *databuf,
+	size_t datalen, int flags)
 {
 	struct wdc_obio_softc *sc = v;
 	vaddr_t va = (vaddr_t)databuf;
@@ -531,9 +514,7 @@ wdc_obio_dma_init(v, channel, drive, databuf, datalen, flags)
 }
 
 void
-wdc_obio_dma_start(v, channel, drive)
-	void *v;
-	int channel, drive;
+wdc_obio_dma_start(void *v, int channel, int drive)
 {
 	struct wdc_obio_softc *sc = v;
 
@@ -541,10 +522,7 @@ wdc_obio_dma_start(v, channel, drive)
 }
 
 int
-wdc_obio_dma_finish(v, channel, drive, read)
-	void *v;
-	int channel, drive;
-	int read;
+wdc_obio_dma_finish(void *v, int channel, int drive, int read)
 {
 	struct wdc_obio_softc *sc = v;
 

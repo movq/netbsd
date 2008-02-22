@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.39 2007/12/20 23:03:03 dsl Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.54 2017/04/13 09:17:55 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,11 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.39 2007/12/20 23:03:03 dsl Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "fs_nfs.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.54 2017/04/13 09:17:55 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,17 +107,16 @@ static int	osf1_mount_nfs(struct lwp *, const struct osf1_sys_mount_args *);
 int
 osf1_sys_fstatfs(struct lwp *l, const struct osf1_sys_fstatfs_args *uap, register_t *retval)
 {
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)))
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)))
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)))
 		goto out;
@@ -130,14 +125,15 @@ osf1_sys_fstatfs(struct lwp *l, const struct osf1_sys_fstatfs_args *uap, registe
 	error = copyout(&osfs, SCARG(uap, buf), min(sizeof osfs,
 	    SCARG(uap, len)));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
 int
 osf1_sys_getfsstat(struct lwp *l, const struct osf1_sys_getfsstat_args *uap, register_t *retval)
 {
-	struct mount *mp, *nmp;
+	mount_iterator_t *iter;
+	struct mount *mp;
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	char *osf_sfsp;
@@ -148,9 +144,9 @@ osf1_sys_getfsstat(struct lwp *l, const struct osf1_sys_getfsstat_args *uap, reg
 
 	maxcount = SCARG(uap, bufsize) / sizeof(struct osf1_statfs);
 	osf_sfsp = (void *)SCARG(uap, buf);
-	for (count = 0, mp = mountlist.cqh_first; mp != (void *)&mountlist;
-	    mp = nmp) {
-		nmp = mp->mnt_list.cqe_next;
+	mountlist_iterator_init(&iter);
+	count = 0;
+	while ((mp = mountlist_iterator_next(iter)) != NULL) {
 		if (osf_sfsp && count < maxcount) {
 			sp = &mp->mnt_stat;
 			/*
@@ -160,17 +156,20 @@ osf1_sys_getfsstat(struct lwp *l, const struct osf1_sys_getfsstat_args *uap, reg
 			 */
 			if (((SCARG(uap, flags) & OSF1_MNT_NOWAIT) == 0 ||
 			    (SCARG(uap, flags) & OSF1_MNT_WAIT)) &&
-			    (error = VFS_STATVFS(mp, sp)))
-				continue;
-			sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-			osf1_cvt_statfs_from_native(sp, &osfs);
-			if ((error = copyout(&osfs, osf_sfsp,
-			    sizeof (struct osf1_statfs))))
-				return (error);
-			osf_sfsp += sizeof (struct osf1_statfs);
+			    (error = VFS_STATVFS(mp, sp)) == 0) {
+				sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
+				osf1_cvt_statfs_from_native(sp, &osfs);
+				if ((error = copyout(&osfs, osf_sfsp,
+				    sizeof (struct osf1_statfs)))) {
+				    	mountlist_iterator_destroy(iter);
+					return (error);
+				}
+				osf_sfsp += sizeof (struct osf1_statfs);
+			}
 		}
 		count++;
 	}
+	mountlist_iterator_destroy(iter);
 	if (osf_sfsp && count > maxcount)
 		*retval = maxcount;
 	else
@@ -207,15 +206,15 @@ osf1_sys_statfs(struct lwp *l, const struct osf1_sys_statfs_args *uap, register_
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)))
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
+	vrele(vp);
 	if ((error = VFS_STATVFS(mp, sp)))
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -258,7 +257,7 @@ osf1_mount_mfs(struct lwp *l, const struct osf1_sys_mount_args *uap)
 	bsd_ma.base = osf_ma.base;
 	bsd_ma.size = osf_ma.size;
 
-	return do_sys_mount(l, vfs_getopsbyname("mfs"), NULL, SCARG(uap, path),
+	return do_sys_mount(l, "mfs", UIO_SYSSPACE, SCARG(uap, path),
 	    SCARG(uap, flags), &bsd_ma, UIO_SYSSPACE, sizeof bsd_ma, &dummy);
 }
 
@@ -309,8 +308,6 @@ osf1_mount_nfs(struct lwp *l, const struct osf1_sys_mount_args *uap)
 	if (bsd_na.flags & NFSMNT_RETRANS)
 		bsd_na.retrans = osf_na.retrans;
 
-	return do_sys_mount(l, vfs_getopsbyname("nfs"), NULL, SCARG(uap, path),
+	return do_sys_mount(l, "nfs", UIO_SYSSPACE, SCARG(uap, path),
 	    SCARG(uap, flags), &bsd_na, UIO_SYSSPACE, sizeof bsd_na, &dummy);
-
-	return 0;
 }

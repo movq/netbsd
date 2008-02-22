@@ -1,4 +1,4 @@
-/*	$NetBSD: remote.c,v 1.17 2006/12/14 17:09:43 christos Exp $	*/
+/*	$NetBSD: remote.c,v 1.20 2015/06/16 22:54:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -32,15 +32,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)remote.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: remote.c,v 1.17 2006/12/14 17:09:43 christos Exp $");
+__RCSID("$NetBSD: remote.c,v 1.20 2015/06/16 22:54:11 christos Exp $");
 #endif /* not lint */
 
 #include "pathnames.h"
@@ -128,12 +128,12 @@ getremcap(char *host)
 	else
 		DU = cgetflag("du");
 	if (DV == NULL) {
-		errx(3, "%s: missing device spec\n", host);
+		errx(3, "%s: missing device spec", host);
 	}
 	if (DU && CU == NULL)
 		CU = DV;
 	if (DU && PN == NULL) {
-		errx(3, "%s: missing phone number\n", host);
+		errx(3, "%s: missing phone number", host);
 	}
 
 	HD = cgetflag("hd");
@@ -143,7 +143,7 @@ getremcap(char *host)
 	 *   from the description file
 	 */
 	if (!HW)
-		HW = (CU == NULL) || (DU && equal(DV, CU));
+		HW = (CU == NULL) || (DU && strcmp(DV, CU) == 0);
 	HO = host;
 	/*
 	 * see if uppercase mode should be turned on initially

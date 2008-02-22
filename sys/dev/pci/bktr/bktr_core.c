@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_core.c,v 1.6 2003/03/11 23:11:22 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_core.c,v 1.46 2008/01/16 13:08:54 jmcneill Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.54 2012/12/14 19:38:36 joerg Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.114 2000/10/31 13:09:56 roger Exp$ */
 
 /*
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.46 2008/01/16 13:08:54 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.54 2012/12/14 19:38:36 joerg Exp $");
 
 #include "opt_bktr.h"		/* Include any kernel config options */
 
@@ -194,7 +194,6 @@ bktr_name(bktr_ptr_t bktr)
 #include <sys/proc.h>
 
 #ifdef __NetBSD__
-#include <uvm/uvm_extern.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
 #else
@@ -218,7 +217,7 @@ static int bt848_format = -1;
 const char *
 bktr_name(bktr_ptr_t bktr)
 {
-        return (bktr->bktr_dev.dv_xname);
+        return device_xname(bktr->bktr_dev);
 }
 
 #define		PROC_LOCK(p)
@@ -465,6 +464,7 @@ static int      i2c_write_byte(bktr_ptr_t bktr, unsigned char data);
 static int      i2c_read_byte(bktr_ptr_t bktr, unsigned char *data, int last);
 #endif
 
+static void	bktr_softintr(void *);
 
 
 /*
@@ -565,7 +565,7 @@ bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
 	if (sbuf != 0) {
 		bktr->bigbuf = sbuf;
 		bktr->alloc_pages = BROOKTREE_ALLOC_PAGES;
-		bzero((void *) bktr->bigbuf, BROOKTREE_ALLOC);
+		memset((void *) bktr->bigbuf, 0, BROOKTREE_ALLOC);
 	} else {
 		bktr->alloc_pages = 0;
 	}
@@ -634,6 +634,8 @@ bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
 
 	/* Initialise any MSP34xx or TDA98xx audio chips */
 	init_audio_devices(bktr);
+	bktr->sih = softint_establish(SOFTINT_MPSAFE | SOFTINT_CLOCK,
+	    bktr_softintr, bktr);
 	return 1;
 }
 
@@ -822,7 +824,7 @@ common_bktr_intr(void *arg)
 		}
 
 		/* If someone has a select() on /dev/vbi, inform them */
-		selwakeup(&bktr->vbi_select);
+		selnotify(&bktr->vbi_select, 0, 0);
 	}
 
 	/*
@@ -914,12 +916,7 @@ common_bktr_intr(void *arg)
 		 */
 
 		if (bktr->proc && !(bktr->signal & METEOR_SIG_MODE_MASK)) {
-			mutex_enter(&proclist_mutex);
-			PROC_LOCK(bktr->proc);
-			psignal(bktr->proc,
-				 bktr->signal&(~METEOR_SIG_MODE_MASK));
-			PROC_UNLOCK(bktr->proc);
-			mutex_exit(&proclist_mutex);
+			softint_schedule(bktr->sih);
 		}
 
 		/*
@@ -954,13 +951,24 @@ common_bktr_intr(void *arg)
 	return 1;
 }
 
+void
+bktr_softintr(void *cookie)
+{
+	bktr_ptr_t bktr;
 
+	bktr = cookie;
 
+	mutex_enter(proc_lock);
+	if (bktr->proc && !(bktr->signal & METEOR_SIG_MODE_MASK)) {
+		psignal(bktr->proc,
+		    bktr->signal&(~METEOR_SIG_MODE_MASK));
+	}
+	mutex_exit(proc_lock);
+}
 
 /*
  *
  */
-extern int bt848_format; /* used to set the default format, PAL or NTSC */
 int
 video_open(bktr_ptr_t bktr)
 {
@@ -968,6 +976,10 @@ video_open(bktr_ptr_t bktr)
 
 	if (bktr->flags & METEOR_OPEN)		/* device is busy */
 		return(EBUSY);
+
+	mutex_enter(proc_lock);
+	bktr->proc = NULL;
+	mutex_exit(proc_lock);
 
 	bktr->flags |= METEOR_OPEN;
 
@@ -1046,7 +1058,6 @@ video_open(bktr_ptr_t bktr)
 	bktr->frames_captured = 0;
 	bktr->even_fields_captured = 0;
 	bktr->odd_fields_captured = 0;
-	bktr->proc = NULL;
 	set_fps(bktr, frame_rate);
 	bktr->video.addr = 0;
 	bktr->video.width = 0;
@@ -1079,8 +1090,8 @@ vbi_open(bktr_ptr_t bktr)
 	bktr->vbi_sequence_number = 0;
 	bktr->vbi_read_blocked = FALSE;
 
-	bzero((void *) bktr->vbibuffer, VBI_BUFFER_SIZE);
-	bzero((void *) bktr->vbidata,  VBI_DATA_SIZE);
+	memset((void *) bktr->vbibuffer, 0, VBI_BUFFER_SIZE);
+	memset((void *) bktr->vbidata, 0,  VBI_DATA_SIZE);
 
 	return(0);
 }
@@ -1581,7 +1592,9 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
 		break;
 
 	case METEORSSIGNAL:
+		mutex_enter(proc_lock);
 		if(*(int *)arg == 0 || *(int *)arg >= NSIG) {
+			mutex_exit(proc_lock);
 			return(EINVAL);
 			break;
 		}
@@ -1591,6 +1604,7 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
 #else
 		bktr->proc = l->l_proc;
 #endif
+		mutex_exit(proc_lock);
 		break;
 
 	case METEORGSIGNAL:
@@ -1763,7 +1777,7 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
 			    && bktr->video.addr == 0) {
 
 /*****************************/
-/* *** OS Dependant code *** */
+/* *** OS Dependent code *** */
 /*****************************/
 #if defined(__NetBSD__) || defined(__OpenBSD__)
                                 bus_dmamap_t dmamap;
@@ -3644,7 +3658,7 @@ start_capture(bktr_ptr_t bktr, unsigned type)
 
 	/*  If requested, clear out capture buf first  */
 	if (bktr->clr_on_start && (bktr->video.addr == 0)) {
-		bzero((void *)bktr->bigbuf,
+		memset((void *)bktr->bigbuf, 0,
 		      (size_t)bktr->rows * bktr->cols * bktr->frames *
 			pixfmt_table[bktr->pixfmt].public.Bpp);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci.h,v 1.3 2004/08/03 03:32:43 mycroft Exp $	*/
+/*	$NetBSD: pci.h,v 1.9 2016/09/24 23:12:54 mrg Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -38,6 +38,9 @@
 #ifndef _PCI_H_
 #define	_PCI_H_
 
+#include <stddef.h>
+#include <stdint.h> /* XXX */
+
 /*
  * Interface to the PCI bus for user programs.
  */
@@ -45,17 +48,22 @@
 typedef uint32_t pcireg_t;	/* XXX */
 
 /* pci_bus.c */
-int	pcibus_conf_read(int, u_int, u_int, u_int, u_int, pcireg_t *);
-int	pcibus_conf_write(int, u_int, u_int, u_int, u_int, pcireg_t);
+int	pcibus_conf_read(int, unsigned int, unsigned int, unsigned int,
+		unsigned int, pcireg_t *);
+int	pcibus_conf_write(int, unsigned int, unsigned int, unsigned int,
+		unsigned int, pcireg_t);
 
 /* pci_device.c */
-int	pcidev_conf_read(int, u_int, pcireg_t *);
-int	pcidev_conf_write(int, u_int, pcireg_t);
+int	pcidev_conf_read(int, unsigned int, pcireg_t *);
+int	pcidev_conf_write(int, unsigned int, pcireg_t);
+
+/* pci_drvname.c */
+int	pci_drvname(int, unsigned int, unsigned int, char *, size_t);
+int	pci_drvnameonbus(int, unsigned int, unsigned int, unsigned int, char *,
+		size_t);
 
 /* pci_subr.c */
-const char *pci_findvendor(pcireg_t);
-const char *pci_findproduct(pcireg_t);
 void	pci_devinfo(pcireg_t, pcireg_t, int, char *, size_t);
-void	pci_conf_print(int, u_int, u_int, u_int);
+void	pci_conf_print(int, unsigned int, unsigned int, unsigned int);
 
 #endif /* _PCI_H_ */

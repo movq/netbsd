@@ -1,4 +1,4 @@
-/*	$NetBSD: sony_acpi.c,v 1.3 2008/01/06 19:42:03 christos Exp $	*/
+/*	$NetBSD: sony_acpi.c,v 1.23 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,35 +29,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sony_acpi.c,v 1.3 2008/01/06 19:42:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sony_acpi.c,v 1.23 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/proc.h>
-#include <sys/kernel.h>
-#include <sys/callout.h>
 #include <sys/sysctl.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
-
-#include <dev/acpi/acpica.h>
+#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
-#define SONY_NOTIFY_FnKeyEvent			0x92
-#define SONY_NOTIFY_BrightnessDownPressed	0x85
-#define SONY_NOTIFY_BrightnessDownReleased	0x05
-#define SONY_NOTIFY_BrightnessUpPressed		0x86
-#define SONY_NOTIFY_BrightnessUpReleased	0x06
-#define SONY_NOTIFY_DisplaySwitchPressed	0x87
-#define SONY_NOTIFY_DisplaySwitchReleased	0x07
-#define SONY_NOTIFY_ZoomPressed			0x8a
-#define SONY_NOTIFY_ZoomReleased		0x0a
-#define SONY_NOTIFY_SuspendPressed		0x8c
-#define SONY_NOTIFY_SuspendReleased		0x0c
+#define _COMPONENT          ACPI_RESOURCE_COMPONENT
+ACPI_MODULE_NAME            ("sony_acpi")
+
+#define	SONY_NOTIFY_FnKeyEvent			0x92
+#define	SONY_NOTIFY_BrightnessDownPressed	0x85
+#define	SONY_NOTIFY_BrightnessDownReleased	0x05
+#define	SONY_NOTIFY_BrightnessUpPressed		0x86
+#define	SONY_NOTIFY_BrightnessUpReleased	0x06
+#define	SONY_NOTIFY_DisplaySwitchPressed	0x87
+#define	SONY_NOTIFY_DisplaySwitchReleased	0x07
+#define	SONY_NOTIFY_ZoomPressed			0x8a
+#define	SONY_NOTIFY_ZoomReleased		0x0a
+#define	SONY_NOTIFY_SuspendPressed		0x8c
+#define	SONY_NOTIFY_SuspendReleased		0x0c
 
 struct sony_acpi_softc {
-        struct device sc_dev;
+	device_t sc_dev;
 	struct sysctllog *sc_log;
 	struct acpi_devnode *sc_node;
 
@@ -75,7 +65,7 @@ struct sony_acpi_softc {
 	struct sysmon_pswitch sc_smpsw[SONY_PSW_LAST];
 	int sc_smpsw_valid;
 
-#define SONY_ACPI_QUIRK_FNINIT	0x01
+#define	SONY_ACPI_QUIRK_FNINIT	0x01
 	int sc_quirks;
 	bool sc_has_pic;
 
@@ -89,24 +79,23 @@ static const char * const sony_acpi_ids[] = {
 	NULL
 };
 
-static int	sony_acpi_match(struct device *, struct cfdata *, void *);
-static void	sony_acpi_attach(struct device *, struct device *, void *);
+static int	sony_acpi_match(device_t, cfdata_t, void *);
+static void	sony_acpi_attach(device_t, device_t, void *);
 static ACPI_STATUS sony_acpi_eval_set_integer(ACPI_HANDLE, const char *,
     ACPI_INTEGER, ACPI_INTEGER *);
 static void	sony_acpi_quirk_setup(struct sony_acpi_softc *);
-static void	sony_acpi_notify_handler(ACPI_HANDLE, UINT32, void *);
-static bool	sony_acpi_suspend(device_t);
-static bool	sony_acpi_resume(device_t);
+static void	sony_acpi_notify_handler(ACPI_HANDLE, uint32_t, void *);
+static bool	sony_acpi_suspend(device_t, const pmf_qual_t *);
+static bool	sony_acpi_resume(device_t, const pmf_qual_t *);
 static void	sony_acpi_brightness_down(device_t);
 static void	sony_acpi_brightness_up(device_t);
-static ACPI_STATUS sony_acpi_find_pic(ACPI_HANDLE, UINT32, void *, void **);
+static ACPI_STATUS sony_acpi_find_pic(ACPI_HANDLE, uint32_t, void *, void **);
 
-CFATTACH_DECL(sony_acpi, sizeof(struct sony_acpi_softc),
+CFATTACH_DECL_NEW(sony_acpi, sizeof(struct sony_acpi_softc),
     sony_acpi_match, sony_acpi_attach, NULL, NULL);
 
 static int
-sony_acpi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+sony_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -128,12 +117,13 @@ sony_sysctl_helper(SYSCTLFN_ARGS)
 
 	(void)snprintf(buf, sizeof(buf), "G%s", rnode->sysctl_name);
 	for (ptr = buf; *ptr; ptr++)
-		*ptr = toupper(*ptr);
+		*ptr = toupper((unsigned char)*ptr);
 
 	rv = acpi_eval_integer(sc->sc_node->ad_handle, buf, &acpi_val);
 	if (ACPI_FAILURE(rv)) {
 #ifdef DIAGNOSTIC
-		printf("%s: couldn't get `%s'\n", device_xname(&sc->sc_dev), buf);
+		printf("%s: couldn't get `%s'\n", device_xname(sc->sc_dev),
+		    buf);
 #endif
 		return EIO;
 	}
@@ -146,14 +136,14 @@ sony_sysctl_helper(SYSCTLFN_ARGS)
 	if (error || newp == NULL)
 		return error;
 
-	(void)snprintf(buf, sizeof(buf), "S%s", rnode->sysctl_name);
+	buf[0] = 'S';
 	acpi_val = val;
 	rv = sony_acpi_eval_set_integer(sc->sc_node->ad_handle, buf,
 	    acpi_val, NULL);
 	if (ACPI_FAILURE(rv)) {
 #ifdef DIAGNOSTIC
 		printf("%s: couldn't set `%s' to %d\n",
-		    device_xname(&sc->sc_dev), buf, val);
+		    device_xname(sc->sc_dev), buf, val);
 #endif
 		return EIO;
 	}
@@ -161,10 +151,9 @@ sony_sysctl_helper(SYSCTLFN_ARGS)
 }
 
 static ACPI_STATUS
-sony_walk_cb(ACPI_HANDLE hnd, UINT32 v, void *context,
-    void **status)
+sony_walk_cb(ACPI_HANDLE hnd, uint32_t v, void *context, void **status)
 {
-	struct sony_acpi_softc *sc = (void*)context;
+	struct sony_acpi_softc *sc = (void *)context;
 	const struct sysctlnode *node, *snode;
 	const char *name = acpi_name(hnd);
 	ACPI_INTEGER acpi_val;
@@ -191,26 +180,22 @@ sony_walk_cb(ACPI_HANDLE hnd, UINT32 v, void *context,
 	for (ptr = buf; *ptr; ptr++)
 		*ptr = tolower(*ptr);
 
-	if ((rv = sysctl_createv(&sc->sc_log, 0, NULL, &node, CTLFLAG_PERMANENT,
-	    CTLTYPE_NODE, "hw", NULL, NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0)
-		goto out;
-
-	if ((rv = sysctl_createv(&sc->sc_log, 0, &node, &snode, 0,
-	    CTLTYPE_NODE, device_xname(&sc->sc_dev),
+	if ((rv = sysctl_createv(&sc->sc_log, 0, NULL, &snode, 0,
+	    CTLTYPE_NODE, device_xname(sc->sc_dev),
 	    SYSCTL_DESCR("sony controls"),
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0)
 		goto out;
 
 	if ((rv = sysctl_createv(&sc->sc_log, 0, &snode, &node,
 	    CTLFLAG_READWRITE, CTLTYPE_INT, buf + 1, NULL,
-	    sony_sysctl_helper, 0, sc, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    sony_sysctl_helper, 0, (void *)sc, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto out;
 
 out:
 #ifdef DIAGNOSTIC
 	if (rv)
 		printf("%s: sysctl_createv failed (rv = %d)\n",
-		    device_xname(&sc->sc_dev), rv);
+		    device_xname(sc->sc_dev), rv);
 #endif
 	return AE_OK;
 }
@@ -246,9 +231,9 @@ sony_acpi_eval_set_integer(ACPI_HANDLE handle, const char *path,
 }
 
 static void
-sony_acpi_attach(struct device *parent, struct device *self, void *aux)
+sony_acpi_attach(device_t parent, device_t self, void *aux)
 {
-	struct sony_acpi_softc *sc = (void *)self;
+	struct sony_acpi_softc *sc = device_private(self);
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 	int i;
@@ -257,9 +242,10 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal(": Sony Miscellaneous Controller\n");
 
 	sc->sc_node = aa->aa_node;
+	sc->sc_dev = self;
 
 	rv = AcpiWalkNamespace(ACPI_TYPE_DEVICE, ACPI_ROOT_OBJECT, 100,
-	    sony_acpi_find_pic, sc, NULL);
+	    sony_acpi_find_pic, NULL, sc, NULL);
 	if (ACPI_FAILURE(rv))
 		aprint_error_dev(self, "couldn't walk namespace: %s\n",
 		    AcpiFormatException(rv));
@@ -274,7 +260,7 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 	sony_acpi_quirk_setup(sc);
 
 	/* Configure suspend button and hotkeys */
-	sc->sc_smpsw[SONY_PSW_SLEEP].smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_smpsw[SONY_PSW_SLEEP].smpsw_name = device_xname(self);
 	sc->sc_smpsw[SONY_PSW_SLEEP].smpsw_type = PSWITCH_TYPE_SLEEP;
 	sc->sc_smpsw[SONY_PSW_DISPLAY_CYCLE].smpsw_name =
 	    PSWITCH_HK_DISPLAY_CYCLE;
@@ -285,25 +271,22 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 
 	for (i = 0; i < SONY_PSW_LAST; i++)
 		if (sysmon_pswitch_register(&sc->sc_smpsw[i]) != 0) {
-			aprint_error("%s: couldn't register %s with sysmon\n",
-			    device_xname(self), sc->sc_smpsw[i].smpsw_name);
+			aprint_error_dev(self, 
+			    "couldn't register %s with sysmon\n",
+			    sc->sc_smpsw[i].smpsw_name);
 			sc->sc_smpsw_valid = 0;
 		}
 
-	/* Install notify handler */
-	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
-	    ACPI_DEVICE_NOTIFY, sony_acpi_notify_handler, self);
-	if (ACPI_FAILURE(rv))
-		aprint_error("%s: couldn't install notify handler (%d)\n",
-		    device_xname(self), rv);
+	(void)acpi_register_notify(sc->sc_node, sony_acpi_notify_handler);
 
 	/* Install sysctl handler */
 	rv = AcpiWalkNamespace(ACPI_TYPE_METHOD,
-	    sc->sc_node->ad_handle, 1, sony_walk_cb, sc, NULL);
+	    sc->sc_node->ad_handle, 1, sony_walk_cb, NULL, sc, NULL);
+
 #ifdef DIAGNOSTIC
 	if (ACPI_FAILURE(rv))
-		aprint_error("%s: Cannot walk ACPI namespace (%d)\n",
-		    device_xname(self), rv);
+		aprint_error_dev(self, "Cannot walk ACPI namespace (%u)\n",
+		    rv);
 #endif
 
 	if (!pmf_device_register(self, sony_acpi_suspend, sony_acpi_resume))
@@ -311,11 +294,13 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 
 	if (!pmf_event_register(self, PMFE_DISPLAY_BRIGHTNESS_UP,
 				 sony_acpi_brightness_up, true))
-		aprint_error_dev(self, "couldn't register BRIGHTNESS UP handler\n");
+		aprint_error_dev(self,
+		    "couldn't register BRIGHTNESS UP handler\n");
 
 	if (!pmf_event_register(self, PMFE_DISPLAY_BRIGHTNESS_DOWN,
 				 sony_acpi_brightness_down, true))
-		aprint_error_dev(self, "couldn't register BRIGHTNESS DOWN handler\n");
+		aprint_error_dev(self,
+		    "couldn't register BRIGHTNESS DOWN handler\n");
 }
 
 static void
@@ -335,13 +320,12 @@ sony_acpi_quirk_setup(struct sony_acpi_softc *sc)
 }
 
 static void
-sony_acpi_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
+sony_acpi_notify_handler(ACPI_HANDLE hdl, uint32_t notify, void *opaque)
 {
 	device_t dv = opaque;
 	struct sony_acpi_softc *sc = device_private(dv);
 	ACPI_STATUS rv;
 	ACPI_INTEGER arg;
-	int s;
 
 	if (notify == SONY_NOTIFY_FnKeyEvent) {
 		rv = sony_acpi_eval_set_integer(hdl, "SN07", 0x202, &arg);
@@ -351,7 +335,6 @@ sony_acpi_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
 		notify = arg & 0xff;
 	}
 
-	s = spltty();
 	switch (notify) {
 	case SONY_NOTIFY_BrightnessDownPressed:
 		sony_acpi_brightness_down(dv);
@@ -387,15 +370,13 @@ sony_acpi_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
 	case SONY_NOTIFY_ZoomReleased:
 		break;
 	default:
-		printf("%s: unknown notify event 0x%x\n",
-		    device_xname(&sc->sc_dev), notify);
+		aprint_debug_dev(dv, "unknown notify event 0x%x\n", notify);
 		break;
 	}
-	splx(s);
 }
 
 static bool
-sony_acpi_suspend(device_t dv)
+sony_acpi_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct sony_acpi_softc *sc = device_private(dv);
 
@@ -405,7 +386,7 @@ sony_acpi_suspend(device_t dv)
 }
 
 static bool
-sony_acpi_resume(device_t dv)
+sony_acpi_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct sony_acpi_softc *sc = device_private(dv);
 
@@ -451,24 +432,23 @@ sony_acpi_brightness_down(device_t dv)
 }
 
 static ACPI_STATUS
-sony_acpi_find_pic(ACPI_HANDLE hdl, UINT32 level, void *opaque, void **status)
+sony_acpi_find_pic(ACPI_HANDLE hdl, uint32_t level,
+    void *opaque, void **status)
 {
 	struct sony_acpi_softc *sc = opaque;
-	ACPI_BUFFER buf;
 	ACPI_STATUS rv;
 	ACPI_DEVICE_INFO *devinfo;
 
-	buf.Pointer = NULL;
-	buf.Length = ACPI_ALLOCATE_BUFFER;
-	rv = AcpiGetObjectInfo(hdl, &buf);
-	if (ACPI_FAILURE(rv) || buf.Pointer == NULL)
+	rv = AcpiGetObjectInfo(hdl, &devinfo);
+	if (ACPI_FAILURE(rv) || devinfo == NULL)
 		return AE_OK;	/* we don't want to stop searching */
 
-	devinfo = buf.Pointer;
-	if (strncmp(devinfo->HardwareId.Value, "SNY6001", 7) == 0)
+	if ((devinfo->Valid & ACPI_VALID_HID) != 0 &&
+	    devinfo->HardwareId.String &&
+	    strncmp(devinfo->HardwareId.String, "SNY6001", 7) == 0)
 		sc->sc_has_pic = true;
 
-	AcpiOsFree(buf.Pointer);
+	ACPI_FREE(devinfo);
 
 	return AE_OK;
 }

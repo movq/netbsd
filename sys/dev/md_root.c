@@ -1,4 +1,4 @@
-/*	$NetBSD: md_root.c,v 1.13 2007/03/04 06:01:42 christos Exp $	*/
+/*	$NetBSD: md_root.c,v 1.19 2015/08/30 05:24:03 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.13 2007/03/04 06:01:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.19 2015/08/30 05:24:03 uebayasi Exp $");
 
 #include "opt_md.h"
+#include "opt_memory_disk_image.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,26 +41,24 @@ __KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.13 2007/03/04 06:01:42 christos Exp $"
 
 #include <dev/md.h>
 
-extern int boothowto;
-
 #ifdef MEMORY_DISK_DYNAMIC
-#ifdef MEMORY_DISK_IMAGE
+#ifdef makeoptions_MEMORY_DISK_IMAGE
 #error MEMORY_DISK_DYNAMIC is not compatible with MEMORY_DISK_IMAGE
 #endif
 size_t md_root_size;
 char *md_root_image;
 #else /* MEMORY_DISK_DYNAMIC */
 
-#ifdef MEMORY_DISK_IMAGE
+#ifdef makeoptions_MEMORY_DISK_IMAGE
 #ifdef MEMORY_DISK_ROOT_SIZE
 #error MEMORY_DISK_ROOT_SIZE is not compatible with MEMORY_DISK_IMAGE
 #endif
 char md_root_image[] = {
 #include "md_root_image.h"
 };
-u_int32_t md_root_size = sizeof(md_root_image) & ~(DEV_BSIZE - 1);
+uint32_t md_root_size = sizeof(md_root_image) & ~(DEV_BSIZE - 1);
 
-#else /* MEMORY_DISK_IMAGE */
+#else /* makeoptions_MEMORY_DISK_IMAGE */
 
 #ifndef MEMORY_DISK_ROOT_SIZE
 #define MEMORY_DISK_ROOT_SIZE 512
@@ -77,19 +69,21 @@ u_int32_t md_root_size = sizeof(md_root_image) & ~(DEV_BSIZE - 1);
  * This array will be patched to contain a file-system image.
  * See the program mdsetimage(8) for details.
  */
-u_int32_t md_root_size = ROOTBYTES;
+uint32_t md_root_size = ROOTBYTES;
 char md_root_image[ROOTBYTES] = "|This is the root ramdisk!\n";
-#endif /* MEMORY_DISK_IMAGE */
+#endif /* makeoptions_MEMORY_DISK_IMAGE */
 #endif /* MEMORY_DISK_DYNAMIC */
 
-#ifndef MEMORY_RBFLAGS
-#define MEMORY_RBFLAGS	RB_SINGLE	/* force single user */
+#ifndef MEMORY_DISK_RBFLAGS
+#define MEMORY_DISK_RBFLAGS	RB_AUTOBOOT	/* default boot mode */
 #endif
 
 #ifdef MEMORY_DISK_DYNAMIC
 void
 md_root_setconf(char *addr, size_t size)
 {
+
+	md_is_root = 1;
 	md_root_image = addr;
 	md_root_size = size;
 }
@@ -98,18 +92,20 @@ md_root_setconf(char *addr, size_t size)
 /*
  * This is called during pseudo-device attachment.
  */
+#define PBUFLEN	sizeof("99999 KB")
+
 void
 md_attach_hook(int unit, struct md_conf *md)
 {
-	char pbuf[9];
+	char pbuf[PBUFLEN];
 
-	if (unit == 0) {
+	if (unit == 0 && md_is_root) {
 		/* Setup root ramdisk */
 		md->md_addr = (void *)md_root_image;
 		md->md_size = (size_t)md_root_size;
 		md->md_type = MD_KMEM_FIXED;
 		format_bytes(pbuf, sizeof(pbuf), md->md_size);
-		aprint_normal("md%d: internal %s image area\n", unit, pbuf);
+		aprint_verbose("md%d: internal %s image area\n", unit, pbuf);
 	}
 }
 
@@ -120,8 +116,7 @@ void
 md_open_hook(int unit, struct md_conf *md)
 {
 
-	if (unit == 0) {
-		/* The root ramdisk only works single-user. */
-		boothowto |= MEMORY_RBFLAGS;
+	if (unit == 0 && md_is_root) {
+		boothowto |= MEMORY_DISK_RBFLAGS;
 	}
 }

@@ -1,4 +1,4 @@
-/*      $NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $        */
+/*      $NetBSD: opms.c,v 1.29 2017/10/25 08:12:37 maya Exp $        */
 
 /*
  * Copyright 1997
@@ -70,11 +70,11 @@
 **    Super I/O chip.  The main modification has been to change the 
 **    driver to use the bus_space_ macros.  This allows the mouse
 **    to be configured to any base address.  It relies on the keyboard
-**    passing it's io handle in the isa_attach_args structure.
+**    passing its io handle in the isa_attach_args structure.
 **
 **    NOTE : The mouse is an auxiliary device off the keyboard and as such
 **           shares the same device registers.  This shouldn't be an issue
-**           since each logical device generates it's own unique IRQ.  But
+**           since each logical device generates its own unique IRQ.  But
 **           it is worth noting that reseting or mucking with one can affect
 **           the other.
 **
@@ -91,7 +91,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.29 2017/10/25 08:12:37 maya Exp $");
 
 #include "opms.h"
 #if NOPMS > 1
@@ -166,7 +166,6 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $");
 /* Softc structure for the mouse */
 struct opms_softc 
 {               
-    struct device      sc_dev;
     void               *sc_ih;
     struct clist       sc_q;
     struct selinfo     sc_rsel;
@@ -182,20 +181,16 @@ struct opms_softc
 /*
 ** Forward routine declarations
 */
-int                  opmsprobe       __P((struct device *, 
-                                         struct cfdata *, 
-                                         void *));
-void                 opmsattach      __P((struct device *, 
-                                         struct device *, 
-                                         void *));
-int                  opmsintr         __P((void *));
+int           opmsprobe(device_t, cfdata_t, void *);
+void          opmsattach(device_t, device_t, void *);
+int           opmsintr(void *);
 
 /* 
 ** Global variables 
 */
 
 /* Autoconfiguration data structures */
-CFATTACH_DECL(opms, sizeof(struct opms_softc),
+CFATTACH_DECL_NEW(opms, sizeof(struct opms_softc),
     opmsprobe, opmsattach, NULL, NULL);
 
 extern struct cfdriver opms_cd;
@@ -208,14 +203,24 @@ dev_type_poll(opmspoll);
 dev_type_kqfilter(opmskqfilter);
 
 const struct cdevsw opms_cdevsw = {
-	opmsopen, opmsclose, opmsread, nowrite, opmsioctl,
-	nostop, notty, opmspoll, nommap, opmskqfilter,
+	.d_open = opmsopen,
+	.d_close = opmsclose,
+	.d_read = opmsread,
+	.d_write = nowrite,
+	.d_ioctl = opmsioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = opmspoll,
+	.d_mmap = nommap,
+	.d_kqfilter = opmskqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /* variable to control which debugs printed if kernel compiled with 
 ** option KERNEL_DEBUG. 
 */
-int opmsdebug = KERN_DEBUG_WARNING | KERN_DEBUG_ERROR; 
+int opmsdebug = KERN_DEBUG_WARNING | KERN_DEBUG_ERROR;
 
 
 /*
@@ -254,15 +259,12 @@ int opmsdebug = KERN_DEBUG_WARNING | KERN_DEBUG_ERROR;
 **--
 */
 int
-opmsprobe(parent, match, aux)
-    struct device *parent;
-    struct cfdata *match;
-    void          *aux;
+opmsprobe(device_t parent, cfdata_t match, void *aux)
 {
     struct cfdata             *cf     = match;
     int                       probeOk = 0;    /* assume failure */
-    struct isa_attach_args    *ia = aux;                   
-    
+    struct isa_attach_args    *ia = aux;
+
     KERN_DEBUG(opmsdebug, KERN_DEBUG_INFO, ("opmsprobe: entered\n"));
     /*
     ** We only attach to the keyboard controller via
@@ -355,14 +357,11 @@ opmsprobe(parent, match, aux)
 **--
 */
 void
-opmsattach(parent, self, aux)
-    struct device *parent;
-    struct device *self;
-    void          *aux;
+opmsattach(device_t parent, device_t self, void *aux)
 {
-    struct opms_softc          *sc = (void *)self;
+    struct opms_softc         *sc = device_private(self);
     int                       irq = device_cfdata(self)->cf_loc[SPCKBDCF_IRQ];
-    struct isa_attach_args    *ia = aux;                   
+    struct isa_attach_args    *ia = aux;
 
     printf(" irq %d\n", irq);
     /* 
@@ -373,7 +372,7 @@ opmsattach(parent, self, aux)
     sc->sc_ioh    = (bus_space_handle_t)ia->ia_aux;
     sc->sc_state  = PMS_INIT;
 
-    
+    selinit(&sc->sc_rsel);
     sc->sc_ih     = isa_intr_establish(ia->ia_ic, irq, IST_LEVEL, 
                                        IPL_TTY, opmsintr, sc);
     KERN_DEBUG(opmsdebug, KERN_DEBUG_INFO,
@@ -423,33 +422,19 @@ opmsattach(parent, self, aux)
 **--
 */
 int
-opmsopen(dev, flag, mode, l)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct lwp *l;
+opmsopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-    int                 unit = PMSUNIT(dev);
     struct opms_softc    *sc;
     
-    /* Sanity check the minor device number we have been instructed
-    ** to open and set up our softc structure pointer. 
-    */
-    if (unit >= opms_cd.cd_ndevs)
-    {
-        return ENXIO;
-    }
-    sc = opms_cd.cd_devs[unit];
+    sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
     if (!sc)
-    {
         return ENXIO;
-    }
+
     /* Check to see if the mouse has already been opened. 
     */
     if (sc->sc_state & PMS_OPEN)
-    {
         return EBUSY;
-    }
+
     /* Initialise the mouse softc structure 
     */
     if (clalloc(&sc->sc_q, PMS_BSIZE, 0) == -1)
@@ -458,13 +443,13 @@ opmsopen(dev, flag, mode, l)
     } 
     sc->sc_state |= PMS_OPEN;
     sc->sc_status = 0;
-    sc->sc_x      = 0; 
+    sc->sc_x      = 0;
     sc->sc_y      = 0;
     /* Enable the device both in the mouse and in the keyboard after making
     ** sure there isn't any garbage in the input buffer.
     */
     i8042_flush(sc->sc_iot, sc->sc_ioh);
-    sc->sc_protocol_byte = PMS_RD_BYTE1; 
+    sc->sc_protocol_byte = PMS_RD_BYTE1;
     (void) i8042_cmd(sc->sc_iot, sc->sc_ioh, I8042_AUX_CMD, 
                          I8042_NO_RESPONSE, 0, PMS_MOUSE_ENABLE);
     (void) I8042_AUXENABLE(sc->sc_iot, sc->sc_ioh);
@@ -509,13 +494,9 @@ opmsopen(dev, flag, mode, l)
 **--
 */
 int
-opmsclose(dev, flag, mode, l)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct lwp *l;
+opmsclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-    struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 
     /* Disable the mouse device and interrupts on it. Note that if we don't
     ** flush the device first it seems to generate LOTs of interrupts after
@@ -571,12 +552,9 @@ opmsclose(dev, flag, mode, l)
 **--
 */
 int
-opmsread(dev, uio, flag)
-    dev_t dev;
-    struct uio *uio;
-    int flag;
+opmsread(dev_t dev, struct uio *uio, int flag)
 {
-    struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
     int s;
     int error = 0;
     size_t length;
@@ -671,14 +649,9 @@ opmsread(dev, uio, flag)
 **--
 */
 int
-opmsioctl(dev, cmd, addr, flag, l)
-    dev_t       dev;
-    u_long      cmd;
-    void *    addr;
-    int         flag;
-    struct lwp *l;
+opmsioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-    struct opms_softc     *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc     *sc = device_lookup_private(&opms_cd,PMSUNIT(dev));
     struct mouseinfo     info;
     int                  oldIpl;
     int                  error;
@@ -690,7 +663,7 @@ opmsioctl(dev, cmd, addr, flag, l)
 #else
         case MOUSEIOCREAD:
 #endif
-            oldIpl = spltty();  
+            oldIpl = spltty();
             info.status = sc->sc_status;
             if (sc->sc_x || sc->sc_y)
             {
@@ -785,8 +758,7 @@ opmsioctl(dev, cmd, addr, flag, l)
 **--
 */
 int
-opmsintr(arg)
-        void *arg;
+opmsintr(void *arg)
 {
     struct opms_softc     *sc   = arg;
     static u_char        buttons;
@@ -794,8 +766,8 @@ opmsintr(arg)
     u_char               status;
     u_char               buffer[5];
     int                  handledInt;
-    bus_space_tag_t      iot;        
-    bus_space_handle_t   ioh;        
+    bus_space_tag_t      iot;
+    bus_space_handle_t   ioh;
     static signed char   dx;
     static signed char   dy;
     u_char               value = 0;	/* XXX */
@@ -909,7 +881,7 @@ opmsintr(arg)
                             wakeup((void *)sc);
                         }
                         /* Wakeup any selects waiting */
-                        selwakeup(&sc->sc_rsel);
+                        selnotify(&sc->sc_rsel, 0, 0);
                     }
                 break;
                 default :
@@ -935,7 +907,7 @@ opmsintr(arg)
 **
 **     This routine is used to poll the device for the presence of a set 
 **     of events (e.g. is there data to be read).  If any of the polled 
-**     for events are present on the device, then these events are returned; 
+**     for events are present on the device, then these events are returned;
 **     otherwise the process is marked as waiting for the set of events
 **
 **  FORMAL PARAMETERS:
@@ -962,14 +934,11 @@ opmsintr(arg)
 **--
 */
 int
-opmspoll(dev, events, l)
-    dev_t dev;
-    int events;
-    struct lwp *l;
+opmspoll(dev_t dev, int events, struct lwp *l)
 {
-    struct opms_softc     *sc     = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc     *sc     = device_lookup_private(&opms_cd, PMSUNIT(dev));
     int                  revents = 0;
-    int                  oldIpl; 
+    int                  oldIpl;
 
     oldIpl = spltty();
     
@@ -1010,13 +979,17 @@ filt_opmsread(struct knote *kn, long hint)
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops opmsread_filtops =
-	{ 1, NULL, filt_opmsrdetach, filt_opmsread };
+static const struct filterops opmsread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_opmsrdetach,
+	.f_event = filt_opmsread,
+};
 
 int
 opmskqfilter(dev_t dev, struct knote *kn)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	struct klist *klist;
 	int s;
 

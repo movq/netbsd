@@ -1,4 +1,4 @@
-.\"	$NetBSD: shutdown.8,v 1.27 2008/02/09 04:09:22 dholland Exp $
+.\"	$NetBSD: shutdown.8,v 1.33 2016/09/14 00:16:31 kre Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)shutdown.8	8.2 (Berkeley) 4/27/95
 .\"
-.Dd February 8, 2008
+.Dd September 12, 2016
 .Dt SHUTDOWN 8
 .Os
 .Sh NAME
@@ -37,8 +37,8 @@
 .Nd close down the system at a given time
 .Sh SYNOPSIS
 .Nm
+.Op Fl Ddfhknprvxz
 .Op Fl b Ar bootstr
-.Op Fl Ddfhknpr
 .Ar time
 .Op Ar message ... | Ar -
 .Sh DESCRIPTION
@@ -102,7 +102,7 @@ before stopping.
 The system is powered down at the specified
 .Ar time ,
 using
-.Xr halt 8 .
+.Xr poweroff 8 .
 If the powerdown fails, or the system does not support software powerdown,
 the system will simply halt instead.
 .It Fl r
@@ -110,6 +110,27 @@ The system is rebooted at the specified
 .Ar time ,
 using
 .Xr reboot 8 .
+.It Fl v
+To enable verbose messages on the console, pass
+.Fl v
+to
+.Xr reboot 8
+or
+.Xr halt 8 .
+.It Fl x
+To enable debugging messages on the console, pass
+.Fl x
+to
+.Xr reboot 8
+or
+.Xr halt 8 .
+.It Fl z
+To silence some shutdown messages on the console, pass
+.Fl z
+to
+.Xr reboot 8
+or
+.Xr halt 8 .
 .It Fl D
 Prevents
 .Nm
@@ -210,12 +231,15 @@ System shutdown commands
 .Xr halt 8 ,
 .Xr init 8 ,
 .Xr poweroff 8 ,
-.Xr reboot 8
+.Xr reboot 8 ,
+.Xr rescue 8
 .Sh BACKWARD COMPATIBILITY
 The hours and minutes in the second time format may be separated by
 a colon (``:'') for backward compatibility.
 .Sh HISTORY
-The
+A
 .Nm
-command appeared in
-.Bx 4.0 .
+command was originally written by Ian Johnstone for UNSW's modified
+.At "6th Edn" ,
+modified, and then incorporated in
+.Bx 4.1 .

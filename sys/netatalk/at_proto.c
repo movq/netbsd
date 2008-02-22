@@ -1,4 +1,4 @@
-/*	$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $	*/
+/*	$NetBSD: at_proto.c,v 1.22 2017/09/21 07:15:34 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.22 2017/09/21 07:15:34 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $")
 
 #include <sys/kernel.h>
 #include <net/if.h>
-#include <net/radix.h>
 #include <net/if_ether.h>
 #include <netinet/in.h>
 #include <net/route.h>
@@ -56,8 +55,7 @@ const struct protosw atalksw[] = {
 	.pr_domain = &atalkdomain,
 	.pr_protocol = ATPROTO_DDP,
 	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_output = ddp_output,
-	.pr_usrreq = ddp_usrreq,
+	.pr_usrreqs = &ddp_usrreqs,
 	.pr_init = ddp_init,
     },
 };
@@ -70,7 +68,7 @@ struct domain atalkdomain = {
 	.dom_dispose = NULL,
 	.dom_protosw = atalksw,
 	.dom_protoswNPROTOSW = &atalksw[__arraycount(atalksw)],
-	.dom_rtattach = rn_inithead,
+	.dom_rtattach = rt_inithead,
 	.dom_rtoffset = 32,
 	.dom_maxrtkey = sizeof(struct sockaddr_at),
 	.dom_ifattach = NULL,
@@ -80,7 +78,6 @@ struct domain atalkdomain = {
 	.dom_mowner = MOWNER_INIT("",""),
 	.dom_sa_cmpofs = offsetof(struct sockaddr_at, sat_addr),
 	.dom_sa_cmplen = sizeof(struct at_addr),
-	.dom_rtcache = LIST_HEAD_INITIALIZER(atalkdomain.dom_rtcache)
 };
 
 int

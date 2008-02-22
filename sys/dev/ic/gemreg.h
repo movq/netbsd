@@ -1,4 +1,4 @@
-/*	$NetBSD: gemreg.h,v 1.11 2008/01/05 20:27:44 jdc Exp $ */
+/*	$NetBSD: gemreg.h,v 1.15 2012/07/02 11:23:40 jdc Exp $ */
 
 /*
  *
@@ -36,7 +36,9 @@
  * Register definitions for Sun GEM Gigabit Ethernet
  * See `GEM Gigabit Ethernet ASIC Specification'
  *   http://www.sun.com/processors/manuals/ge.pdf
- * Section 3.1.3 GEM Register Space (from Rev 1.2)
+ * and `Sbus GEM Specification'
+ *  http://mediacast.sun.com/users/Barton808/media/gem_sbus-1.pdf
+ * section 3.1.3 GEM Register Space
  */
 
 /*
@@ -44,7 +46,7 @@
  * Section 3.1.4.1
  *
  * First bank: this registers live at the start of the PCI
- * mapping, and at the start of the second bank of the SBUS
+ * mapping, and at the start of the second bank of the SBus
  * version.
  */
 #define	GEM_SEB_STATE		0x0000	/* SEB State (R/O) */
@@ -58,18 +60,22 @@
 
 /*
  * Second bank: this registers live at offset 0x1000 of the PCI
- * mapping, and at the start of the first bank of the SBUS
+ * mapping, and at the start of the first bank of the SBus
  * version.
  */
 #define GEM_PCI_BANK2_OFFSET	0x1000
 #define GEM_PCI_BANK2_SIZE	0x14
-#define	GEM_ERROR_STATUS	0x0000	/* PCI error Status */
+#define	GEM_ERROR_STATUS	0x0000	/* PCI Error Status */
 #define	GEM_ERROR_MASK		0x0004	/* PCI Error Mask */
-#define GEM_SBUS_CONFIG		0x0004
-#define	GEM_BIF_CONFIG		0x0008	/* BIF Configuration */
-#define	GEM_BIF_DIAG		0x000c	/* BIF Diagnostic */
-#define	GEM_RESET		0x0010	/* Software Reset */
+#define	GEM_BIF_CONFIG		0x0008	/* PCI BIF Configuration */
+#define	GEM_BIF_DIAG		0x000c	/* PCI BIF Diagnostic */
+#define	GEM_RESET		0x0010	/* PCI Software Reset */
 
+#define GEM_SBUS_RESET		0x0000	/* SBus Reset */
+#define GEM_SBUS_CONFIG		0x0004	/* SBus Burst-Size Configuration */
+#define GEM_SBUS_ERROR_STATUS	0x0008	/* SBus Fatal Error */
+#define GEM_SBUS_REVISION	0x000c	/* SBus Revision */
+/*  SBus Software Reset at same offset (0x0010) as PCI Software Reset above */
 
 /*
  * Bits in GEM_SEB_STATE register
@@ -137,6 +143,9 @@
 /*
  * Bits in GEM_SBUS_CONFIG register
  */
+#define GEM_SBUS_CFG_BSIZE32	0x00000001
+#define GEM_SBUS_CFG_BSIZE64	0x00000002
+#define GEM_SBUS_CFG_BSIZE128	0x00000004
 #define GEM_SBUS_CFG_BMODE64	0x00000008
 #define GEM_SBUS_CFG_PARITY	0x00000200
 
@@ -507,6 +516,8 @@
 #define	GEM_MAC_CC_PASS_PAUSE	0x00000004	/* pass pause up */
 #define	GEM_MAC_CC_BITS		"\177\020b\0TXPAUSE\0b\1RXPAUSE\0b\2NOPAUSE\0\0"
 
+/* GEM_MAC_MAC_STATE register bits */
+#define GEM_MAC_STATE_OVERFLOW	0x03800000
 
 /* 
  * Bits in GEM_MAC_SLOT_TIME register

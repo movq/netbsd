@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.6 2007/02/21 22:59:37 thorpej Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.16 2017/11/06 03:47:45 christos Exp $	*/
 
 /* 
  * Mach Operating System
@@ -26,22 +26,32 @@
  * the rights to redistribute these changes.
  */
 
-#ifndef	_I386_DB_MACHDEP_H_
-#define	_I386_DB_MACHDEP_H_
+#ifndef	_X86_64_DB_MACHDEP_H_
+#define	_X86_64_DB_MACHDEP_H_
 
 /*
  * Machine-dependent defines for new kernel debugger.
  */
 
+#if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
+#endif /* defined(_KERNEL_OPT) */
 #include <sys/param.h>
 #include <uvm/uvm_extern.h>
 #include <machine/trap.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
+
+struct x86_64_frame {
+	struct x86_64_frame	*f_frame;
+	long			f_retaddr;
+	long			f_arg0;
+};
+
 #ifndef MULTIPROCESSOR
 extern db_regs_t ddb_regs;	/* register state */
 #define	DDB_REGS	(&ddb_regs)
@@ -77,8 +87,8 @@ extern db_regs_t *ddb_regp;
 #define	inst_call(ins)		(((ins)&0xff) == I_CALL || \
 				 (((ins)&0xff) == I_CALLI && \
 				  ((ins)&0x3800) == 0x1000))
-#define inst_load(ins)		0
-#define inst_store(ins)		0
+#define inst_load(ins)		(__USE(ins), 0)
+#define inst_store(ins)		(__USE(ins), 0)
 
 /* access capability and access macros */
 
@@ -95,8 +105,8 @@ extern db_regs_t *ddb_regp;
 	 ((user) && (addr) < VM_MAX_ADDRESS))
 
 #if 0
-bool	 	db_check_access __P((vaddr_t, int, task_t));
-bool		db_phys_eq __P((task_t, vaddr_t, task_t, vaddr_t));
+bool	 	db_check_access(vaddr_t, int, task_t);
+bool		db_phys_eq(task_t, vaddr_t, task_t, vaddr_t);
 #endif
 
 /* macros for printing OS server dependent task name */
@@ -110,7 +120,7 @@ bool		db_phys_eq __P((task_t, vaddr_t, task_t, vaddr_t));
  * Constants for KGDB.
  */
 typedef	long		kgdb_reg_t;
-#define	KGDB_NUMREGS	16
+#define	KGDB_NUMREGS	20
 #define	KGDB_BUFLEN	512
 
 #if 0
@@ -121,18 +131,19 @@ void		db_task_name(/* task_t */);
 
 #define db_thread_fp_used(thread)	((thread)->pcb->ims.ifps != 0)
 
-int kdb_trap __P((int, int, db_regs_t *));
+int kdb_trap(int, int, db_regs_t *);
 
+#ifdef _KERNEL
 /*
  * We define some of our own commands
  */
 #define DB_MACHINE_COMMANDS
+#endif
 
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE	64
 
-extern void db_machine_init __P((void));
+extern void db_machine_init(void);
 
-extern void cpu_debug_dump __P((void));
+extern void cpu_debug_dump(void);
 
-#endif	/* _I386_DB_MACHDEP_H_ */
+#endif	/* _X86_64_DB_MACHDEP_H_ */

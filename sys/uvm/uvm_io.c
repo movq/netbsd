@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_io.c,v 1.24 2007/03/04 06:03:48 christos Exp $	*/
+/*	$NetBSD: uvm_io.c,v 1.28 2016/05/25 17:43:58 christos Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,13 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_io.c,v 1.24 2007/03/04 06:03:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_io.c,v 1.28 2016/05/25 17:43:58 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mman.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/uio.h>
 
 #include <uvm/uvm.h>
@@ -62,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_io.c,v 1.24 2007/03/04 06:03:48 christos Exp $")
  */
 
 int
-uvm_io(struct vm_map *map, struct uio *uio)
+uvm_io(struct vm_map *map, struct uio *uio, int flags)
 {
 	vaddr_t baseva, endva, pageoffset, kva;
 	vsize_t chunksz, togo, sz;
@@ -95,6 +86,7 @@ uvm_io(struct vm_map *map, struct uio *uio)
 	chunksz = MIN(round_page(togo + pageoffset), trunc_page(MAXPHYS));
 	error = 0;
 
+	flags |= UVM_EXTRACT_QREF | UVM_EXTRACT_CONTIG | UVM_EXTRACT_FIXPROT;
 	/*
 	 * step 1: main loop...  while we've got data to move
 	 */
@@ -106,8 +98,7 @@ uvm_io(struct vm_map *map, struct uio *uio)
 		 */
 
 		error = uvm_map_extract(map, baseva, chunksz, kernel_map, &kva,
-			    UVM_EXTRACT_QREF | UVM_EXTRACT_CONTIG |
-			    UVM_EXTRACT_FIXPROT);
+		    flags);
 		if (error) {
 
 			/* retry with a smaller chunk... */
@@ -138,7 +129,7 @@ uvm_io(struct vm_map *map, struct uio *uio)
 
 		vm_map_lock(kernel_map);
 		uvm_unmap_remove(kernel_map, kva, kva + chunksz, &dead_entries,
-		    NULL, 0);
+		   0);
 		vm_map_unlock(kernel_map);
 		if (dead_entries != NULL)
 			uvm_unmap_detach(dead_entries, AMAP_REFALL);

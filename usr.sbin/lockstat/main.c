@@ -1,7 +1,7 @@
-/*	$NetBSD: main.c,v 1.11 2008/01/26 14:29:31 ad Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2013/03/06 11:49:06 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,20 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * TODO:
- *
- * - Tracking of times for sleep locks is broken.
- * - Need better analysis and tracking of events.
- * - Shouldn't have to parse the namelist here.  We should use something like
- *   FreeBSD's libelf.
- * - The way the namelist is searched sucks, is it worth doing something
- *   better?
- */
-
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.11 2008/01/26 14:29:31 ad Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2013/03/06 11:49:06 yamt Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -106,65 +88,80 @@ typedef struct name {
 	int		mask; 
 } name_t;
 
-const name_t locknames[] = {
+static const name_t locknames[] = {
 	{ "adaptive_mutex", LB_ADAPTIVE_MUTEX },
 	{ "spin_mutex", LB_SPIN_MUTEX },
 	{ "rwlock", LB_RWLOCK },
 	{ "kernel_lock", LB_KERNEL_LOCK },
+	{ "preemption", LB_NOPREEMPT },
+	{ "misc", LB_MISC },
 	{ NULL, 0 }
 };
 
-const name_t eventnames[] = {
+static const name_t eventnames[] = {
 	{ "spin", LB_SPIN },
 	{ "sleep_exclusive", LB_SLEEP1 },
 	{ "sleep_shared", LB_SLEEP2 },
 	{ NULL, 0 },
 };
 
-const name_t alltypes[] = {
+static const name_t alltypes[] = {
 	{ "Adaptive mutex spin", LB_ADAPTIVE_MUTEX | LB_SPIN },
 	{ "Adaptive mutex sleep", LB_ADAPTIVE_MUTEX | LB_SLEEP1 },
 	{ "Spin mutex spin", LB_SPIN_MUTEX | LB_SPIN },
 	{ "RW lock sleep (writer)", LB_RWLOCK | LB_SLEEP1 },
 	{ "RW lock sleep (reader)", LB_RWLOCK | LB_SLEEP2 },
+	{ "RW lock spin", LB_RWLOCK | LB_SPIN },
 	{ "Kernel lock spin", LB_KERNEL_LOCK | LB_SPIN },
+	{ "Kernel preemption defer", LB_NOPREEMPT | LB_SPIN },
+	{ "Miscellaneous wait", LB_MISC | LB_SPIN },
 	{ NULL, 0 }
 };
 
-locklist_t	locklist;
-locklist_t	freelist;
-locklist_t	sortlist;
+static const name_t xtypes[] = {
+	{ "Spin", LB_SPIN },
+	{ "Sleep (writer)", LB_SLEEP1 },
+	{ "Sleep (reader)", LB_SLEEP2 },
+	{ NULL, 0 }
+};
 
-lsbuf_t		*bufs;
-lsdisable_t	ld;
-bool		lflag;
-bool		fflag;
-int		nbufs;
-bool		cflag;
-int		lsfd;
-int		displayed;
-int		bin64;
-double		tscale;
-double		cscale;
-double		cpuscale[sizeof(ld.ld_freq) / sizeof(ld.ld_freq[0])];
-FILE		*outfp;
+static locklist_t	locklist;
+static locklist_t	freelist;
+static locklist_t	sortlist;
 
-void	findsym(findsym_t, char *, uintptr_t *, uintptr_t *, bool);
-void	spawn(int, char **);
-void	display(int, const char *name);
-void	listnames(const name_t *);
-void	collapse(bool, bool);
-int	matchname(const name_t *, char *);
-void	makelists(int, int);
-void	nullsig(int);
-void	usage(void);
-int	ncpu(void);
-lock_t	*morelocks(void);
+static lsbuf_t		*bufs;
+static lsdisable_t	ld;
+static bool		lflag;
+static bool		fflag;
+static int		nbufs;
+static bool		cflag;
+static bool		dflag;
+static bool		xflag;
+static int		lsfd;
+static int		displayed;
+static int		bin64;
+static double		tscale;
+static double		cscale;
+static double		cpuscale[sizeof(ld.ld_freq) / sizeof(ld.ld_freq[0])];
+static FILE		*outfp;
+
+static void	findsym(findsym_t, char *, uintptr_t *, uintptr_t *, bool);
+static void	spawn(int, char **);
+static void	display(int, const char *name);
+__dead static void	listnames(const name_t *);
+static void	collapse(bool, bool);
+static int	matchname(const name_t *, char *);
+static void	makelists(int, int);
+static void	nullsig(int);
+__dead static void	usage(void);
+static int	ncpu(void);
+static lock_t	*morelocks(void);
 
 int
 main(int argc, char **argv)
 {
-	int eventtype, locktype, ch, nlfd, fd, i;
+	int eventtype, locktype, ch, nlfd, fd;
+	size_t i;
 	bool sflag, pflag, mflag, Mflag;
 	const char *nlistf, *outf;
 	char *lockname, *funcname;
@@ -185,7 +182,7 @@ main(int argc, char **argv)
 	mflag = false;
 	Mflag = false;
 
-	while ((ch = getopt(argc, argv, "E:F:L:MN:T:b:ceflmo:pst")) != -1)
+	while ((ch = getopt(argc, argv, "E:F:L:MN:T:b:cdeflmo:pstx")) != -1)
 		switch (ch) {
 		case 'E':
 			eventtype = matchname(eventnames, optarg);
@@ -209,6 +206,9 @@ main(int argc, char **argv)
 			break;
 		case 'c':
 			cflag = true;
+			break;
+		case 'd':
+			dflag = true;
 			break;
 		case 'e':
 			listnames(eventnames);
@@ -237,13 +237,16 @@ main(int argc, char **argv)
 		case 't':
 			listnames(locknames);
 			break;
+		case 'x':
+			xflag = true;
+			break;
 		default:
 			usage();
 		}
 	argc -= optind;
 	argv += optind;
 
-	if (*argv == NULL)
+	if (*argv == NULL && !dflag)
 		usage();
 
 	if (outf) {
@@ -309,6 +312,9 @@ main(int argc, char **argv)
 		errx(EXIT_FAILURE,
 		    "incompatible lockstat interface version (%d, kernel %d)",
 			LS_VERSION, ch);
+	if (dflag) {
+		goto disable;
+	}
 	if (ioctl(lsfd, IOC_LOCKSTAT_ENABLE, &le))
 		err(EXIT_FAILURE, "cannot enable tracing");
 
@@ -317,6 +323,7 @@ main(int argc, char **argv)
 	 */
 	spawn(argc, argv);
 
+disable:
 	/*
 	 * Stop tracing, and read the trace buffers from the kernel.
 	 */
@@ -329,7 +336,7 @@ main(int argc, char **argv)
 	}
 	if ((bufs = malloc(ld.ld_size)) == NULL)
 		err(EXIT_FAILURE, "cannot allocate memory for user buffers");
-	if (read(lsfd, bufs, ld.ld_size) != ld.ld_size)
+	if ((size_t)read(lsfd, bufs, ld.ld_size) != ld.ld_size)
 		err(EXIT_FAILURE, "reading from " _PATH_DEV_LOCKSTAT);
 	if (close(lsfd))
 		err(EXIT_FAILURE, "close(" _PATH_DEV_LOCKSTAT ")");
@@ -372,14 +379,13 @@ main(int argc, char **argv)
 	}
 	putc('\n', outfp);
 
-	for (name = alltypes; name->name != NULL; name++) {
+	for (name = xflag ? xtypes : alltypes; name->name != NULL; name++) {
 		if (eventtype != -1 &&
 		    (name->mask & LB_EVENT_MASK) != eventtype)
 			continue;
 		if (locktype != -1 &&
 		    (name->mask & LB_LOCK_MASK) != locktype)
 			continue;
-
 		display(name->mask, name->name);
 	}
 
@@ -388,7 +394,7 @@ main(int argc, char **argv)
 	exit(EXIT_SUCCESS);
 }
 
-void
+static void
 usage(void)
 {
 
@@ -397,7 +403,8 @@ usage(void)
 	    "%s [options] <command>\n\n"
 	    "-b nbuf\t\tset number of event buffers to allocate\n"
 	    "-c\t\treport percentage of total events by count, not time\n"
-	    "-E event\t\tdisplay only one type of event\n"
+	    "-d\t\tdisable lockstat\n"
+	    "-E event\tdisplay only one type of event\n"
 	    "-e\t\tlist event types\n"
 	    "-F func\t\tlimit trace to one function\n"
 	    "-f\t\ttrace only by function\n"
@@ -410,20 +417,21 @@ usage(void)
 	    "-p\t\tshow average count/time per CPU, not total\n"
 	    "-s\t\tshow average count/time per second, not total\n"
 	    "-T type\t\tdisplay only one type of lock\n"
-	    "-t\t\tlist lock types\n",
+	    "-t\t\tlist lock types\n"
+	    "-x\t\tdon't differentiate event types\n",
 	    getprogname(), getprogname());
 
 	exit(EXIT_FAILURE);
 }
 
-void
+static void
 nullsig(int junk)
 {
 
 	(void)junk;
 }
 
-void
+static void
 listnames(const name_t *name)
 {
 
@@ -433,7 +441,7 @@ listnames(const name_t *name)
 	exit(EXIT_SUCCESS);
 }
 
-int
+static int
 matchname(const name_t *name, char *string)
 {
 	int empty, mask;
@@ -466,7 +474,7 @@ matchname(const name_t *name, char *string)
 /*
  * Return the number of CPUs in the running system.
  */
-int
+static int
 ncpu(void)
 {
 	int rv, mib[2];
@@ -484,7 +492,7 @@ ncpu(void)
 /*
  * Call into the ELF parser and look up a symbol by name or by address.
  */
-void
+static void
 findsym(findsym_t find, char *name, uintptr_t *start, uintptr_t *end, bool chg)
 {
 	uintptr_t tend, sa, ea;
@@ -528,7 +536,7 @@ findsym(findsym_t find, char *name, uintptr_t *start, uintptr_t *end, bool chg)
  * so that the caller can use Ctrl-C to stop tracing early and still get
  * useful results.
  */
-void
+static void
 spawn(int argc, char **argv)
 {
 	pid_t pid;
@@ -553,10 +561,10 @@ spawn(int argc, char **argv)
 /*
  * Allocate a new block of lock_t structures.
  */
-lock_t *
+static lock_t *
 morelocks(void)
 {
-	const static int batch = 32;
+	const int batch = 32;
 	lock_t *l, *lp, *max;
 
 	l = (lock_t *)malloc(sizeof(*l) * batch);
@@ -570,7 +578,7 @@ morelocks(void)
 /*
  * Collapse addresses from unique objects.
  */
-void
+static void
 collapse(bool func, bool lock)
 {
 	lsbuf_t *lb, *max;
@@ -591,7 +599,7 @@ collapse(bool func, bool lock)
  * From the kernel supplied data, construct two dimensional lists of locks
  * and event buffers, indexed by lock type and sorted by event type.
  */
-void
+static void
 makelists(int mask, int event)
 {
 	lsbuf_t *lb, *lb2, *max;
@@ -609,8 +617,9 @@ makelists(int mask, int event)
 	type = mask & LB_LOCK_MASK;
 
 	for (lb = bufs, max = bufs + nbufs; lb < max; lb++) {
-		if ((lb->lb_flags & LB_LOCK_MASK) != type ||
-		    lb->lb_counts[event] == 0)
+		if (!xflag && (lb->lb_flags & LB_LOCK_MASK) != type)
+			continue;
+		if (lb->lb_counts[event] == 0)
 			continue;
 
 		/*
@@ -714,7 +723,7 @@ makelists(int mask, int event)
 /*
  * Display a summary table for one lock type / event type pair.
  */
-void
+static void
 display(int mask, const char *name)
 {
 	lock_t *l;

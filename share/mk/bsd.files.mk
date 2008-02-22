@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.files.mk,v 1.38 2007/12/11 14:06:04 lukem Exp $
+#	$NetBSD: bsd.files.mk,v 1.43 2013/04/06 15:39:19 uebayasi Exp $
 
 .if !defined(_BSD_FILES_MK_)
 _BSD_FILES_MK_=1
@@ -8,12 +8,17 @@ _BSD_FILES_MK_=1
 .if !target(__fileinstall)
 ##### Basic targets
 realinstall:	filesinstall
+realall:	filesbuild
 
 ##### Default values
 FILESDIR?=	${BINDIR}
 FILESOWN?=	${BINOWN}
 FILESGRP?=	${BINGRP}
 FILESMODE?=	${NONBINMODE}
+
+##### Build rules
+filesbuild:
+.PHONY:		filesbuild
 
 ##### Install rules
 filesinstall::	# ensure existence
@@ -36,17 +41,23 @@ __fileinstall: .USE
 _FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
 _FNAME:=	${FILESNAME_${F}:U${FILESNAME:U${F:T}}}	# name override
 _F:=		${DESTDIR}${_FDIR}/${_FNAME}		# installed path
+_FDOBUILD:=	${FILESBUILD_${F}:U${FILESBUILD:Uno}}
 
 .if ${MKUPDATE} == "no"
 ${_F}!		${F} __fileinstall			# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
+.if !defined(BUILD) && !make(all) && !make(${F}) && (${_FDOBUILD} == "no")
 ${_F}!		.MADE					# no build at install
 .endif
 .else
 ${_F}:		${F} __fileinstall			# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
+.if !defined(BUILD) && !make(all) && !make(${F}) && (${_FDOBUILD} == "no")
 ${_F}:		.MADE					# no build at install
 .endif
+.endif
+
+.if ${_FDOBUILD} != "no"
+filesbuild:	${F}
+CLEANFILES+=	${F}
 .endif
 
 filesinstall::	${_F}
@@ -63,17 +74,23 @@ configinstall:	configfilesinstall
 _FDIR:=		${FILESDIR_${F}:U${FILESDIR}}		# dir override
 _FNAME:=	${FILESNAME_${F}:U${FILESNAME:U${F:T}}}	# name override
 _F:=		${DESTDIR}${_FDIR}/${_FNAME}		# installed path
+_FDOBUILD:=	${FILESBUILD_${F}:U${FILESBUILD:Uno}}
 
 .if ${MKUPDATE} == "no"
 ${_F}!		${F} __fileinstall	# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
+.if !defined(BUILD) && !make(all) && !make(${F}) && (${_FDOBUILD} == "no")
 ${_F}!		.MADE					# no build at install
 .endif
 .else
 ${_F}:		${F} __fileinstall	# install rule
-.if !defined(BUILD) && !make(all) && !make(${F})
+.if !defined(BUILD) && !make(all) && !make(${F}) && (${_FDOBUILD} == "no")
 ${_F}:		.MADE					# no build at install
 .endif
+.endif
+
+.if ${_FDOBUILD} != "no"
+filesbuild:	${F}
+CLEANFILES+=	${F}
 .endif
 
 configfilesinstall::	${_F}
@@ -94,16 +111,14 @@ configfilesinstall::	${_F}
 BUILDSYMLINKS.s+=	${_SL}
 BUILDSYMLINKS.t+=	${_TL}
 ${_TL}: ${_SL}
-	${_MKTARGET_CREATE}
+	${_MKMSG} "symlink " ${.CURDIR:T}/${.TARGET}
 	rm -f ${.TARGET}
 	ln -s ${.ALLSRC} ${.TARGET}
 .endfor
 
 realall: ${BUILDSYMLINKS.t}
 
-cleandir: cleanbuildsymlinks
-cleanbuildsymlinks: .PHONY
-	rm -f ${BUILDSYMLINKS.t}
+CLEANDIRFILES+= ${BUILDSYMLINKS.t}
 
 .endif								# }
 
@@ -121,24 +136,27 @@ cleanbuildsymlinks: .PHONY
 
 .uue:
 	${_MKTARGET_CREATE}
-	rm -f ${.TARGET} ${.TARGET}.tmp
-	${TOOL_UUDECODE} -p ${.IMPSRC} > ${.TARGET}.tmp \
-	    && mv ${.TARGET}.tmp ${UUDECODE_FILES_RENAME_${.TARGET}:U${.TARGET}}
+	rm -f ${.TARGET}
+	${TOOL_UUDECODE} -p ${.IMPSRC} > ${.TARGET}
+
+.if defined(UUDECODE_FILES_RENAME_${UUDECODE_FILES})
+${UUDECODE_FILES_RENAME_${UUDECODE_FILES}}: ${UUDECODE_FILES}
+	cp ${.ALLSRC} ${.TARGET}
+.endif
 
 realall: ${UUDECODE_FILES}
 
-CLEANUUDECODE_FILES=${UUDECODE_FILES} ${UUDECODE_FILES:=.tmp}
+CLEANUUDECODE_FILES=${UUDECODE_FILES}
 .for i in ${UUDECODE_FILES}
 CLEANUUDECODE_FILES+=${UUDECODE_FILES_RENAME_${i}}
 .endfor
 
-clean: cleanuudecodefiles
-cleanuudecodefiles: .PHONY
-	rm -f ${CLEANUUDECODE_FILES}
+CLEANFILES+= ${CLEANUUDECODE_FILES}
 .endif								# }
 
 ##### Pull in related .mk logic
 .include <bsd.obj.mk>
 .include <bsd.sys.mk>
+.include <bsd.clean.mk>
 
 .endif	# !defined(_BSD_FILES_MK_)

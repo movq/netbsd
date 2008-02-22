@@ -1,4 +1,4 @@
-/* $NetBSD: seeq8005var.h,v 1.5 2001/11/07 20:01:58 bjh21 Exp $ */
+/* $NetBSD: seeq8005var.h,v 1.9 2015/04/13 16:33:24 riastradh Exp $ */
 
 /*
  * Copyright (c) 2000 Ben Harris
@@ -38,10 +38,7 @@
 
 #include <net/if_media.h>
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /* Enumerate the possible cip variants */
 enum seeq_variant {
@@ -53,7 +50,7 @@ enum seeq_variant {
  */
 
 struct seeq8005_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	/* These fields should be initialised by the board driver. */
 	bus_space_tag_t sc_iot;		/* I/O base addr */
@@ -85,9 +82,7 @@ struct seeq8005_softc {
 	enum seeq_variant sc_variant;	/* Chip variant */
 	int sc_flags;
 #define SF_8BIT		0x01
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 extern void seeq8005_attach(struct seeq8005_softc *, const u_int8_t *, int *,

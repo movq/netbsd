@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.78 2008/02/22 10:55:00 martin Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.101 2015/11/06 15:30:59 martin Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,40 +50,36 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.78 2008/02/22 10:55:00 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.101 2015/11/06 15:30:59 martin Exp $");
 
-#include "opt_coredump.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/core.h>
-#include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/vnode.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/trap.h>
-#include <machine/bus.h>
-
-#include <sparc64/sparc64/cache.h>
+#include <sys/bus.h>
 
 /*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().   
  */
-void
-vmapbuf(bp, len)
-	struct buf *bp;
-	vsize_t len;
+int
+vmapbuf(struct buf *bp, vsize_t len)
 {
-	struct pmap *upmap, *kpmap;
+	struct pmap *upmap;
 	vaddr_t uva;	/* User VA (map from) */
 	vaddr_t kva;	/* Kernel VA (new to) */
 	paddr_t pa; 	/* physical address */
@@ -100,27 +96,26 @@ vmapbuf(bp, len)
 	bp->b_data = (void *)(kva + off);
 
 	upmap = vm_map_pmap(&bp->b_proc->p_vmspace->vm_map);
-	kpmap = vm_map_pmap(kernel_map);
 	do {
 		if (pmap_extract(upmap, uva, &pa) == FALSE)
 			panic("vmapbuf: null page frame");
 		/* Now map the page into kernel space. */
-		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 
 		uva += PAGE_SIZE;
 		kva += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	} while (len);
 	pmap_update(pmap_kernel());
+
+	return 0;
 }
 
 /*
  * Unmap a previously-mapped user I/O request.
  */
 void
-vunmapbuf(bp, len)
-	struct buf *bp;
-	vsize_t len;
+vunmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t kva;
 	vsize_t off;
@@ -182,16 +177,12 @@ char cpu_forkname[] = "cpu_lwp_fork()";
  * in both the stack and stacksize args), set up the user stack pointer
  * accordingly.
  */
+void lwp_trampoline(void);
 void
-cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
-	register struct lwp *l1, *l2;
-	void *stack;
-	size_t stacksize;
-	void (*func)(void *);
-	void *arg;
+cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size_t stacksize, void (*func)(void *), void *arg)
 {
-	struct pcb *opcb = &l1->l_addr->u_pcb;
-	struct pcb *npcb = &l2->l_addr->u_pcb;
+	struct pcb *opcb = lwp_getpcb(l1);
+	struct pcb *npcb = lwp_getpcb(l2);
 	struct trapframe *tf2;
 	struct rwindow *rp;
 
@@ -220,7 +211,7 @@ cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
 		opcb->pcb_cwp = getcwp();
 	}
 #ifdef DIAGNOSTIC
-	else if (l1 != &lwp0)	/* XXX is this valid? */
+	else if (l1 != &lwp0)
 		panic("cpu_lwp_fork: curlwp");
 #endif
 #ifdef DEBUG
@@ -231,16 +222,12 @@ cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
 #endif
 	memcpy(npcb, opcb, sizeof(struct pcb));
        	if (l1->l_md.md_fpstate) {
-       		save_and_clear_fpstate(l1);
-		l2->l_md.md_fpstate = malloc(sizeof(struct fpstate64),
-		    M_SUBPROC, M_WAITOK);
+       		fpusave_lwp(l1, true);
+		l2->l_md.md_fpstate = pool_cache_get(fpstate_cache, PR_WAITOK);
 		memcpy(l2->l_md.md_fpstate, l1->l_md.md_fpstate,
 		    sizeof(struct fpstate64));
 	} else
 		l2->l_md.md_fpstate = NULL;
-
-	if (l1->l_proc->p_flag & PK_32)
-		l2->l_proc->p_flag |= PK_32;
 
 	/*
 	 * Setup (kernel) stack frame that will by-pass the child
@@ -259,104 +246,97 @@ cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
 	if (stack != NULL)
 		tf2->tf_out[6] = (uint64_t)(u_long)stack + stacksize;
 
-	/* Set return values in child mode */
+	/*
+	 * Need to create a %tstate if we are forking our first userland
+	 * process - in all other cases we inherit from the parent.
+	 */
+	if (l2->l_proc->p_pid == 1)
+		tf2->tf_tstate = (ASI_PRIMARY_NO_FAULT<<TSTATE_ASI_SHIFT) |
+		    ((PSTATE_USER)<<TSTATE_PSTATE_SHIFT);
+
+	/*
+	 * Set return values in child mode and clear condition code,
+	 * in case we end up running a signal handler before returning
+	 * to userland.
+	 */
 	tf2->tf_out[0] = 0;
 	tf2->tf_out[1] = 1;
+	tf2->tf_tstate &= ~TSTATE_CCR;
 
 	/* Construct kernel frame to return to in cpu_switch() */
 	rp = (struct rwindow *)((u_long)npcb + TOPFRAMEOFF);
 	*rp = *(struct rwindow *)((u_long)opcb + TOPFRAMEOFF);
-	rp->rw_local[0] = (long)func;		/* Function to call */
-	rp->rw_local[1] = (long)arg;		/* and its argument */
-	rp->rw_local[2] = (long)l2;		/* newlwp */
+
+	rp->rw_local[0] = (long)func;	/* Function to call */
+	rp->rw_local[1] = (long)arg;	/* and its argument */
+	rp->rw_local[2] = (long)l2;	/* new lwp */
 
 	npcb->pcb_pc = (long)lwp_trampoline - 8;
 	npcb->pcb_sp = (long)rp - STACK_OFFSET;
+}
 
-#ifdef NOTDEF_DEBUG
-    {
-	char sbuf[sizeof(TSTATE_BITS) + 64];
+static inline void
+fpusave_cpu(bool save)
+{
+	struct lwp *l = fplwp;
 
-	bitmask_snprintf(tf2->tf_tstate, TSTATE_BITS, sbuf, sizeof(sbuf));
+	if (l == NULL)
+		return;
 
-	printf("cpu_lwp_fork: Copying over trapframe: otf=%p ntf=%p sp=%p opcb=%p npcb=%p\n", 
-	       (struct trapframe *)((u_long)opcb + USPACE - sizeof(*tf2)), tf2, rp, opcb, npcb);
-	printf("cpu_lwp_fork: tstate=%s pc=%x:%x npc=%x:%x rsp=%lx\n",
-	       sbuf,
-	       (uint)(tf2->tf_pc>>32), (uint)tf2->tf_pc,
-	       (uint)(tf2->tf_npc>>32), (uint)tf2->tf_npc, 
-	       (long)(tf2->tf_out[6]));
-	printf("cpu_lwp_fork: npcb_pc=%x:%x npcb_sp=%x:%x\n",
-	       (uint)(npcb->pcb_pc>>32), (uint)npcb->pcb_pc, 
-	       (uint)(npcb->pcb_sp>>32), (uint)npcb->pcb_sp);
+	if (save)
+		savefpstate(l->l_md.md_fpstate);
+	else
+		clearfpstate();
 
-	Debugger();
-    }
-#endif
+	fplwp = NULL;
 }
 
 void
-save_and_clear_fpstate(struct lwp *l)
+fpusave_lwp(struct lwp *l, bool save)
 {
 #ifdef MULTIPROCESSOR
-	struct cpu_info *ci;
-#endif
+	volatile struct cpu_info *ci;
 
 	if (l == fplwp) {
-		savefpstate(l->l_md.md_fpstate);
-		fplwp = NULL;
+		int s = intr_disable();
+		fpusave_cpu(save);
+		intr_restore(s);
 		return;
 	}
-#ifdef MULTIPROCESSOR
+
 	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
-		if (ci == curcpu())
+		int spincount;
+
+		if (ci == curcpu() || !CPUSET_HAS(cpus_active, ci->ci_index))
 			continue;
 		if (ci->ci_fplwp != l)
 			continue;
-		sparc64_send_ipi(ci->ci_cpuid, sparc64_ipi_save_fpstate, 0);
+		sparc64_send_ipi(ci->ci_cpuid, save ?
+				 sparc64_ipi_save_fpstate :
+				 sparc64_ipi_drop_fpstate, (uintptr_t)l, 0);
+
+		spincount = 0;
+		while (ci->ci_fplwp == l) {
+			membar_Sync();
+			spincount++;
+			if (spincount > 10000000)
+				panic("fpusave_lwp ipi didn't");
+		}
 		break;
 	}
+#else
+	if (l == fplwp)
+		fpusave_cpu(save);
 #endif
 }
 
 
 void
-cpu_lwp_free(l, proc)
-	struct lwp *l;
-	int proc;
+cpu_lwp_free(struct lwp *l, int proc)
 {
-#ifdef MULTIPROCESSOR
-	struct cpu_info *ci;
-	int found;
 
-	found = 0;
-#endif
-	if (l->l_md.md_fpstate != NULL) {
-		if (l == fplwp) {
-			clearfpstate();
-			fplwp = NULL;
-#ifdef MULTIPROCESSOR
-			found = 1;
-#endif
-		}
-#ifdef MULTIPROCESSOR
-		if (found)
-			return;
-#endif
-	}
-#ifdef MULTIPROCESSOR
-	/* check if anyone else has this lwp as fplwp */
-	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
-		if (ci == curcpu())
-			continue;
-		if (l == ci->ci_fplwp) {
-			/* drop the fplwp from the other fpu */
-			sparc64_send_ipi(ci->ci_cpuid,
-			    sparc64_ipi_drop_fpstate, 0);
-			break;
-		}
-	}
-#endif
+	if (l->l_md.md_fpstate != NULL)
+		fpusave_lwp(l, false);
 }
 
 void
@@ -365,93 +345,15 @@ cpu_lwp_free2(struct lwp *l)
 	struct fpstate64 *fs;
 
 	if ((fs = l->l_md.md_fpstate) != NULL)
-		free(fs, M_SUBPROC);
+		pool_cache_put(fpstate_cache, fs);
 }
 
-#ifdef COREDUMP
-/*
- * cpu_coredump is called to write a core dump header.
- * (should this be defined elsewhere?  machdep.c?)
- */
 int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+cpu_lwp_setprivate(lwp_t *l, void *addr)
 {
-	int error;
-	struct md_coredump md_core;
-	struct coreseg cseg;
+	struct trapframe *tf = l->l_md.md_tf;
 
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
+	tf->tf_global[7] = (uintptr_t)addr;
 
-	/* Copy important fields over. */
-	md_core.md_tf.tf_tstate = l->l_md.md_tf->tf_tstate;
-	md_core.md_tf.tf_pc = l->l_md.md_tf->tf_pc;
-	md_core.md_tf.tf_npc = l->l_md.md_tf->tf_npc;
-	md_core.md_tf.tf_y = l->l_md.md_tf->tf_y;
-	md_core.md_tf.tf_tt = l->l_md.md_tf->tf_tt;
-	md_core.md_tf.tf_pil = l->l_md.md_tf->tf_pil;
-	md_core.md_tf.tf_oldpil = l->l_md.md_tf->tf_oldpil;
-
-	md_core.md_tf.tf_global[0] = l->l_md.md_tf->tf_global[0];
-	md_core.md_tf.tf_global[1] = l->l_md.md_tf->tf_global[1];
-	md_core.md_tf.tf_global[2] = l->l_md.md_tf->tf_global[2];
-	md_core.md_tf.tf_global[3] = l->l_md.md_tf->tf_global[3];
-	md_core.md_tf.tf_global[4] = l->l_md.md_tf->tf_global[4];
-	md_core.md_tf.tf_global[5] = l->l_md.md_tf->tf_global[5];
-	md_core.md_tf.tf_global[6] = l->l_md.md_tf->tf_global[6];
-	md_core.md_tf.tf_global[7] = l->l_md.md_tf->tf_global[7];
-
-	md_core.md_tf.tf_out[0] = l->l_md.md_tf->tf_out[0];
-	md_core.md_tf.tf_out[1] = l->l_md.md_tf->tf_out[1];
-	md_core.md_tf.tf_out[2] = l->l_md.md_tf->tf_out[2];
-	md_core.md_tf.tf_out[3] = l->l_md.md_tf->tf_out[3];
-	md_core.md_tf.tf_out[4] = l->l_md.md_tf->tf_out[4];
-	md_core.md_tf.tf_out[5] = l->l_md.md_tf->tf_out[5];
-	md_core.md_tf.tf_out[6] = l->l_md.md_tf->tf_out[6];
-	md_core.md_tf.tf_out[7] = l->l_md.md_tf->tf_out[7];
-
-#ifdef DEBUG
-	md_core.md_tf.tf_local[0] = l->l_md.md_tf->tf_local[0];
-	md_core.md_tf.tf_local[1] = l->l_md.md_tf->tf_local[1];
-	md_core.md_tf.tf_local[2] = l->l_md.md_tf->tf_local[2];
-	md_core.md_tf.tf_local[3] = l->l_md.md_tf->tf_local[3];
-	md_core.md_tf.tf_local[4] = l->l_md.md_tf->tf_local[4];
-	md_core.md_tf.tf_local[5] = l->l_md.md_tf->tf_local[5];
-	md_core.md_tf.tf_local[6] = l->l_md.md_tf->tf_local[6];
-	md_core.md_tf.tf_local[7] = l->l_md.md_tf->tf_local[7];
-
-	md_core.md_tf.tf_in[0] = l->l_md.md_tf->tf_in[0];
-	md_core.md_tf.tf_in[1] = l->l_md.md_tf->tf_in[1];
-	md_core.md_tf.tf_in[2] = l->l_md.md_tf->tf_in[2];
-	md_core.md_tf.tf_in[3] = l->l_md.md_tf->tf_in[3];
-	md_core.md_tf.tf_in[4] = l->l_md.md_tf->tf_in[4];
-	md_core.md_tf.tf_in[5] = l->l_md.md_tf->tf_in[5];
-	md_core.md_tf.tf_in[6] = l->l_md.md_tf->tf_in[6];
-	md_core.md_tf.tf_in[7] = l->l_md.md_tf->tf_in[7];
-#endif
-	if (l->l_md.md_fpstate) {
-		save_and_clear_fpstate(l);
-		md_core.md_fpstate = *l->l_md.md_fpstate;
-	} else
-		memset(&md_core.md_fpstate, 0,
-		      sizeof(md_core.md_fpstate));
-
-	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
-	cseg.c_addr = 0;
-	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
-	if (error)
-		return error;
-
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
+	return 0;
 }
-#endif

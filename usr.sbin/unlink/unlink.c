@@ -1,4 +1,4 @@
-/*	$NetBSD: unlink.c,v 1.2 1999/09/08 01:33:39 soren Exp $	*/
+/*	$NetBSD: unlink.c,v 1.5 2011/08/30 20:50:24 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1999\
-	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: unlink.c,v 1.2 1999/09/08 01:33:39 soren Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1999\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: unlink.c,v 1.5 2011/08/30 20:50:24 joerg Exp $");
 #endif
 
 #include <locale.h>
@@ -49,13 +41,10 @@ __RCSID("$NetBSD: unlink.c,v 1.2 1999/09/08 01:33:39 soren Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-int		main __P((int, char *[]));
-static void	usage __P((void));
+__dead static void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 
 	(void)setlocale(LC_ALL, "");
@@ -73,7 +62,7 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr, "usage: unlink file\n");

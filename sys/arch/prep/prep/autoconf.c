@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.21 2007/10/17 19:56:52 garbled Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.28 2014/10/18 08:33:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.21 2007/10/17 19:56:52 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.28 2014/10/18 08:33:26 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,9 +85,9 @@ cpu_rootconf(void)
 	findroot();
 
 	aprint_normal("boot device: %s\n",
-	    booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 /*
@@ -109,11 +102,12 @@ cpu_rootconf(void)
  */
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
-	struct device *parent;
+	device_t parent;
 	char devpath[256];
 	prop_string_t str1;
+	int n;
 
 	/* Certain devices will *never* be bootable.  short circuit them. */
 
@@ -151,17 +145,18 @@ device_register(struct device *dev, void *aux)
 	}
 	parent = device_parent(dev);
 
+	n = 0;
 	if (device_is_a(dev, "pci")) {
 		if (device_is_a(parent, "ppb"))
-			sprintf(devpath, "");
+			n = snprintf(devpath, sizeof(devpath), "");
 		else
-			sprintf(devpath, "pci@%x",
+			n = snprintf(devpath, sizeof(devpath), "pci@%x",
 			    prep_io_space_tag.pbs_offset);
 	}
 	if (device_is_a(parent, "pci")) {
 		struct pci_attach_args *pa = aux;
 
-		sprintf(devpath, "pci%x,%x@%x,%x",
+		n = snprintf(devpath, sizeof(devpath), "pci%x,%x@%x,%x",
 		    PCI_VENDOR(pa->pa_id), PCI_PRODUCT(pa->pa_id),
 		    pa->pa_device, pa->pa_function);
 	}
@@ -169,42 +164,59 @@ device_register(struct device *dev, void *aux)
 		struct pnpbus_dev_attach_args *pna = aux;
 		struct pnpbus_io *io;
 
-		sprintf(devpath, "%s@", pna->pna_devid);
+		n = snprintf(devpath, sizeof(devpath), "%s@",
+		    pna->pna_devid);
 		io = SIMPLEQ_FIRST(&pna->pna_res.io);
+		if (n > sizeof(devpath))
+			n = sizeof(devpath);
 		if (io != NULL)
-			sprintf(devpath, "%s%x", devpath, io->minbase);
+			n += snprintf(devpath + n, sizeof(devpath) - n, "%x",
+			    io->minbase);
 	}
 
+	if (n > sizeof(devpath))
+		n = sizeof(devpath);
 	/* we can't trust the device tag on the ethernet, because
 	 * the spec lies about how it is formed.  Therefore we will leave it
 	 * blank, and trim the end off any ethernet stuff. */
 	if (device_class(dev) == DV_IFNET)
-		sprintf(devpath, "%s:", devpath);
+		n += snprintf(devpath + n, sizeof(devpath) - n, ":");
 	else if (device_is_a(dev, "cd"))
-		sprintf(devpath, "cdrom@");
+		n = snprintf(devpath, sizeof(devpath), "cdrom@");
 	else if (device_class(dev) == DV_DISK)
-		sprintf(devpath, "harddisk@");
+		n = snprintf(devpath, sizeof(devpath), "harddisk@");
 	else if (device_class(dev) == DV_TAPE)
-		sprintf(devpath, "tape@");
+		n = snprintf(devpath, sizeof(devpath), "tape@");
 	else if (device_is_a(dev, "fd"))
-		sprintf(devpath, "floppy@");
+		n = snprintf(devpath, sizeof(devpath), "floppy@");
 
 	if (device_is_a(parent, "scsibus") || device_is_a(parent, "atapibus")) {
 		struct scsipibus_attach_args *sa = aux;
 
 		/* periph_target is target for scsi, drive # for atapi */
-		sprintf(devpath, "%s%d", devpath, sa->sa_periph->periph_target);
+		if (n > sizeof(devpath))
+			n = sizeof(devpath);
+		n += snprintf(devpath + n, sizeof(devpath) - n, "%d",
+		    sa->sa_periph->periph_target);
+		if (n > sizeof(devpath))
+			n = sizeof(devpath);
 		if (device_is_a(parent, "scsibus"))
-			sprintf(devpath, "%s,%d", devpath,
+			n += snprintf(devpath + n, sizeof(devpath) - n, ",%d",
 			    sa->sa_periph->periph_lun);
 	} else if (device_is_a(parent, "atabus") ||
 	    device_is_a(parent, "pciide")) {
 		struct ata_device *adev = aux;
 
-		sprintf(devpath, "%s%d", devpath, adev->adev_drv_data->drive);
+		if (n > sizeof(devpath))
+			n = sizeof(devpath);
+		n += snprintf(devpath + n, sizeof(devpath) - n, "%d",
+		    adev->adev_drv_data->drive);
 	} else if (device_is_a(dev, "fd")) {
+		if (n > sizeof(devpath))
+			n = sizeof(devpath);
 		/* XXX device_unit() abuse */
-		sprintf(devpath, "%s%d", devpath, device_unit(dev));
+		n += snprintf(devpath + n, sizeof(devpath) - n, "%d",
+		    device_unit(dev));
 	}
 
 	str1 = prop_string_create_cstring(devpath);
@@ -215,9 +227,9 @@ device_register(struct device *dev, void *aux)
 }
 
 static void
-gen_fwpath(struct device *dev)
+gen_fwpath(device_t dev)
 {
-	struct device *parent;
+	device_t parent;
 	prop_string_t str1, str2, str3;
 
 	parent = device_parent(dev);
@@ -255,31 +267,35 @@ gen_fwpath(struct device *dev)
 }
 
 /*
- * Generate properties for each device by totaling up it's parent device
+ * Generate properties for each device by totaling up its parent device
  */
 static void
 build_fwpath(void)
 {
-	struct device *dev, *d;
+	device_t dev, d;
+	deviter_t di, inner_di;
 	prop_string_t str1;
 
 	/* First, find all the PCI busses */
-	TAILQ_FOREACH(dev, &alldevs, dv_list) {
+	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
+	     dev = deviter_next(&di)) {
 		if (device_is_a(dev, "pci") || device_is_a(dev, "mainbus") ||
 		    device_is_a(dev, "pcib") || device_is_a(dev, "pceb") ||
 		    device_is_a(dev, "ppb"))
 			gen_fwpath(dev);
-		else
-			continue;
 	}
+	deviter_release(&di);
+
 	/* Now go find the ISA bus and fix it up */
-	TAILQ_FOREACH(dev, &alldevs, dv_list) {
+	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
+	     dev = deviter_next(&di)) {
 		if (device_is_a(dev, "isa"))
 			gen_fwpath(dev);
-		else
-			continue;
 	}
-	TAILQ_FOREACH(dev, &alldevs, dv_list) {
+	deviter_release(&di);
+
+	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST); dev != NULL;
+	     dev = deviter_next(&di)) {
 		/* skip the ones we allready computed above */
 		if (device_is_a(dev, "pci") || device_is_a(dev, "pcib") ||
 		    device_is_a(dev, "pceb") || device_is_a(dev, "isa") ||
@@ -287,7 +303,9 @@ build_fwpath(void)
 			continue;
 		/* patch in the properties for the pnpbus */
 		if (device_is_a(dev, "pnpbus")) {
-			TAILQ_FOREACH(d, &alldevs, dv_list) {
+			for (d = deviter_first(&inner_di, DEVITER_F_ROOT_FIRST);
+			     d != NULL;
+			     d = deviter_next(&inner_di)) {
 				if (!device_is_a(d, "isa"))
 					continue;
 				str1 = prop_dictionary_get(device_properties(d),
@@ -297,9 +315,11 @@ build_fwpath(void)
 				prop_dictionary_set(device_properties(dev),
 					"prep-fw-path", str1);
 			}
+			deviter_release(&inner_di);
 		} else
 			gen_fwpath(dev);
 	}
+	deviter_release(&di);
 }
 
 
@@ -310,7 +330,8 @@ build_fwpath(void)
 void
 findroot(void)
 {
-	struct device *d;
+	device_t d;
+	deviter_t di;
 	char *cp;
 	prop_string_t str;
 	size_t len;
@@ -328,19 +349,23 @@ findroot(void)
 #if defined(NVRAM_DUMP)
 	printf("Modified bootpath: %s\n", bootpath);
 #endif
-	TAILQ_FOREACH(d, &alldevs, dv_list) {
+	for (d = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+	     d != NULL;
+	     d = deviter_next(&di)) {
 		str = prop_dictionary_get(device_properties(d), "prep-fw-path");
 		if (str == NULL)
 			continue;
 #if defined(NVRAM_DUMP)
-		printf("dev %s: fw-path: %s\n", d->dv_xname,
+		printf("dev %s: fw-path: %s\n", device_xname(d),
 		    prop_string_cstring_nocopy(str));
 #endif
 		if (strncmp(prop_string_cstring_nocopy(str), bootpath,
-		    len) == 0) {
-			booted_device = d;
-			booted_partition = 0; /* XXX ??? */
-			return;
-		}
+		    len) == 0)
+			break;
+	}
+	deviter_release(&di);
+	if (d != NULL) {
+		booted_device = d;
+		booted_partition = 0; /* XXX ??? */
 	}
 }

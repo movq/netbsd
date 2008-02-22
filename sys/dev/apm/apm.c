@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.17 2008/01/04 21:17:50 ad Exp $ */
+/*	$NetBSD: apm.c,v 1.33 2017/10/28 04:53:54 riastradh Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,13 +33,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.17 2008/01/04 21:17:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.33 2017/10/28 04:53:54 riastradh Exp $");
 
 #include "opt_apm.h"
-
-#ifdef APM_NOIDLE
-#error APM_NOIDLE option deprecated; use APM_NO_IDLE instead
-#endif
 
 #if defined(DEBUG) && !defined(APMDEBUG)
 #define	APMDEBUG
@@ -58,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.17 2008/01/04 21:17:50 ad Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -69,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.17 2008/01/04 21:17:50 ad Exp $");
 
 #include <dev/apm/apmvar.h>
 
-#include <machine/stdarg.h>
+#include "ioconf.h"
 
 #ifdef APMDEBUG
 #define DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)
@@ -119,8 +107,6 @@ static void	apm_standby(struct apm_softc *);
 static void	apm_suspend(struct apm_softc *);
 static void	apm_resume(struct apm_softc *, u_int, u_int);
 
-extern struct cfdriver apm_cd;
-
 dev_type_open(apmopen);
 dev_type_close(apmclose);
 dev_type_ioctl(apmioctl);
@@ -128,22 +114,21 @@ dev_type_poll(apmpoll);
 dev_type_kqfilter(apmkqfilter);
 
 const struct cdevsw apm_cdevsw = {
-	apmopen, apmclose, noread, nowrite, apmioctl,
-	nostop, notty, apmpoll, nommap, apmkqfilter, D_OTHER,
+	.d_open = apmopen,
+	.d_close = apmclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = apmioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = apmpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = apmkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER,
 };
 
 /* configurable variables */
-int	apm_bogus_bios = 0;
-#ifdef APM_DISABLE
-int	apm_enabled = 0;
-#else
-int	apm_enabled = 1;
-#endif
-#ifdef APM_NO_IDLE
-int	apm_do_idle = 0;
-#else
-int	apm_do_idle = 1;
-#endif
 #ifdef APM_NO_STANDBY
 int	apm_do_standby = 0;
 #else
@@ -158,16 +143,6 @@ int	apm_v11_enabled = 1;
 int	apm_v12_enabled = 0;
 #else
 int	apm_v12_enabled = 1;
-#endif
-#ifdef APM_FORCE_64K_SEGMENTS
-int	apm_force_64k_segments = 1;
-#else
-int	apm_force_64k_segments = 0;
-#endif
-#ifdef APM_ALLOW_BOGUS_SEGMENTS
-int	apm_allow_bogus_segments = 1;
-#else
-int	apm_allow_bogus_segments = 0;
 #endif
 
 /* variables used during operation (XXX cgd) */
@@ -234,10 +209,11 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 {
 
 	if (pi->battery_life != APM_BATT_LIFE_UNKNOWN) {
-		printf("%s: battery life expectancy: %d%%\n",
-		    sc->sc_dev.dv_xname, pi->battery_life);
+		aprint_normal_dev(sc->sc_dev,
+		    "battery life expectancy: %d%%\n",
+		    pi->battery_life);
 	}
-	printf("%s: A/C state: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "A/C state: ");
 	switch (pi->ac_state) {
 	case APM_AC_OFF:
 		printf("off\n");
@@ -253,7 +229,7 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 		printf("unknown\n");
 		break;
 	}
-	printf("%s: battery charge state:", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "battery charge state:");
 	if (apm_minver == 0)
 		switch (pi->battery_state) {
 		case APM_BATT_HIGH:
@@ -290,7 +266,7 @@ apm_power_print(struct apm_softc *sc, struct apm_power_info *pi)
 		}
 		printf("\n");
 		if (pi->minutes_valid) {
-			printf("%s: estimated ", sc->sc_dev.dv_xname);
+			aprint_normal_dev(sc->sc_dev, "estimated ");
 			if (pi->minutes_left / 60)
 				printf("%dh ", pi->minutes_left / 60);
 			printf("%dm\n", pi->minutes_left % 60);
@@ -307,15 +283,15 @@ apm_suspend(struct apm_softc *sc)
 
 	if (sc->sc_power_state == PWR_SUSPEND) {
 #ifdef APMDEBUG
-		printf("%s: apm_suspend: already suspended?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev,
+		    "apm_suspend: already suspended?\n");
 #endif
 		return;
 	}
 	sc->sc_power_state = PWR_SUSPEND;
  
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
-		pmf_system_suspend();
+		pmf_system_suspend(PMF_Q_NONE);
 		apm_spl = splhigh();
 	}
 
@@ -324,6 +300,8 @@ apm_suspend(struct apm_softc *sc)
 
 	if (error)
 		apm_resume(sc, 0, 0);
+	else
+		apm_resume(sc, APM_SYS_STANDBY_RESUME, 0);
 }
 
 static void
@@ -333,31 +311,31 @@ apm_standby(struct apm_softc *sc)
 
 	if (sc->sc_power_state == PWR_STANDBY) {
 #ifdef APMDEBUG
-		printf("%s: apm_standby: already standing by?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev,
+		    "apm_standby: already standing by?\n");
 #endif
 		return;
 	}
 	sc->sc_power_state = PWR_STANDBY;
 
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
-		pmf_system_suspend();
+		pmf_system_suspend(PMF_Q_NONE);
 		apm_spl = splhigh();
 	}
 	error = (*sc->sc_ops->aa_set_powstate)(sc->sc_cookie, APM_DEV_ALLDEVS,
 	    APM_SYS_STANDBY);
 	if (error)
 		apm_resume(sc, 0, 0);
+	else
+		apm_resume(sc, APM_SYS_STANDBY_RESUME, 0);
 }
 
 static void
 apm_resume(struct apm_softc *sc, u_int event_type, u_int event_info)
 {
-
 	if (sc->sc_power_state == PWR_RESUME) {
 #ifdef APMDEBUG
-		printf("%s: apm_resume: already running?\n",
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev, "apm_resume: already running?\n");
 #endif
 		return;
 	}
@@ -373,7 +351,7 @@ apm_resume(struct apm_softc *sc, u_int event_type, u_int event_info)
 	inittodr(time_second);
 	if (!(sc->sc_hwflags & APM_F_DONT_RUN_HOOKS)) {
 		splx(apm_spl);
-		pmf_system_resume();
+		pmf_system_resume(PMF_Q_NONE);
 	}
 
 	apm_record_event(sc, event_type);
@@ -398,7 +376,7 @@ apm_record_event(struct apm_softc *sc, u_int event_type)
 	sc->sc_event_ptr %= APM_NEVENTS;
 	evp->type = event_type;
 	evp->index = ++apm_evindex;
-	selnotify(&sc->sc_rsel, 0);
+	selnotify(&sc->sc_rsel, 0, 0);
 	return (sc->sc_flags & SCFLAG_OWRITE) ? 0 : 1; /* user may handle */
 }
 
@@ -428,7 +406,7 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 
 	case APM_STANDBY_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: system standby request\n"));
-		if (apm_standbys || apm_suspends) {
+		if (apm_op_inprog) {
 			DPRINTF(APMDEBUG_EVENTS | APMDEBUG_ANOM,
 			    ("damn fool BIOS did not wait for answer\n"));
 			/* just give up the fight */
@@ -460,7 +438,7 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 
 	case APM_SUSPEND_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: system suspend request\n"));
-		if (apm_standbys || apm_suspends) {
+		if (apm_op_inprog) {
 			DPRINTF(APMDEBUG_EVENTS | APMDEBUG_ANOM,
 			    ("damn fool BIOS did not wait for answer\n"));
 			/* just give up the fight */
@@ -481,6 +459,8 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 		if (error == 0 &&
 		    (sc->sc_flags & (SCFLAG_OREAD|SCFLAG_OWRITE)) == 0)
 			apm_power_print(sc, &pi);
+#else
+		__USE(error);
 #endif
 		apm_record_event(sc, event_code);
 		break;
@@ -604,20 +584,6 @@ apm_set_ver(struct apm_softc *sc)
 ok:
 	aprint_normal("Power Management spec V%d.%d", apm_majver, apm_minver);
 	apm_inited = 1;
-	if (sc->sc_detail & APM_IDLE_SLOWS) {
-#ifdef DIAGNOSTIC
-		/* not relevant often */
-		aprint_normal(" (slowidle)");
-#endif
-		/* leave apm_do_idle at its user-configured setting */
-	} else
-		apm_do_idle = 0;
-#ifdef DIAGNOSTIC
-	if (sc->sc_detail & APM_BIOS_PM_DISABLED)
-		aprint_normal(" (BIOS mgmt disabled)");
-	if (sc->sc_detail & APM_BIOS_PM_DISENGAGED)
-		aprint_normal(" (BIOS managing devices)");
-#endif
 }
 
 int
@@ -665,6 +631,8 @@ apm_attach(struct apm_softc *sc)
 
 	/* Initial state is `resumed'. */
 	sc->sc_power_state = PWR_RESUME;
+	selinit(&sc->sc_rsel);
+	selinit(&sc->sc_xsel);
 
 	/* Do an initial check. */
 	apm_periodic_check(sc);
@@ -674,19 +642,18 @@ apm_attach(struct apm_softc *sc)
 	 * and notify other subsystems when they occur.
 	 */
 	if (kthread_create(PRI_NONE, 0, NULL, apm_thread, sc,
-	    &sc->sc_thread, "%s", sc->sc_dev.dv_xname) != 0) {
+	    &sc->sc_thread, "%s", device_xname(sc->sc_dev)) != 0) {
 		/*
 		 * We were unable to create the APM thread; bail out.
 		 */
 		if (sc->sc_ops->aa_disconnect)
 			(*sc->sc_ops->aa_disconnect)(sc->sc_cookie);
-		printf("%s: unable to create thread, "
-		    "kernel APM support disabled\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to create thread, "
+		    "kernel APM support disabled\n");
 	}
 
-	if (!pmf_device_register(&sc->sc_dev, NULL, NULL))
-		aprint_error_dev(&sc->sc_dev, "couldn't establish power handler\n");
+	if (!pmf_device_register(sc->sc_dev, NULL, NULL))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
 }
 
 void
@@ -708,14 +675,11 @@ apm_thread(void *arg)
 int
 apmopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = APMUNIT(dev);
 	int ctl = APM(dev);
 	int error = 0;
 	struct apm_softc *sc;
 
-	if (unit >= apm_cd.cd_ndevs)
-		return ENXIO;
-	sc = apm_cd.cd_devs[unit];
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
 	if (!sc)
 		return ENXIO;
 
@@ -758,7 +722,7 @@ int
 apmclose(dev_t dev, int flag, int mode,
 	struct lwp *l)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd, APMUNIT(dev));
 	int ctl = APM(dev);
 
 	DPRINTF(APMDEBUG_DEVICE,
@@ -785,7 +749,7 @@ int
 apmioctl(dev_t dev, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd, APMUNIT(dev));
 	struct apm_power_info *powerp;
 	struct apm_event_info *evp;
 #if 0
@@ -844,6 +808,7 @@ apmioctl(dev_t dev, u_long cmd, void *data, int flag,
 		}
 		break;
 
+	case OAPM_IOC_GETPOWER:
 	case APM_IOC_GETPOWER:
 		powerp = (struct apm_power_info *)data;
 		if ((error = (*sc->sc_ops->aa_get_powstat)(sc->sc_cookie, 0,
@@ -884,7 +849,7 @@ apmioctl(dev_t dev, u_long cmd, void *data, int flag,
 int
 apmpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd, APMUNIT(dev));
 	int revents = 0;
 
 	APM_LOCK(sc);
@@ -918,13 +883,17 @@ filt_apmread(struct knote *kn, long hint)
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops apmread_filtops =
-	{ 1, NULL, filt_apmrdetach, filt_apmread };
+static const struct filterops apmread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_apmrdetach,
+	.f_event = filt_apmread,
+};
 
 int
 apmkqfilter(dev_t dev, struct knote *kn)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd, APMUNIT(dev));
 	struct klist *klist;
 
 	switch (kn->kn_filter) {

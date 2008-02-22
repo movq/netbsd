@@ -1,4 +1,4 @@
-/*	$NetBSD: gio.c,v 1.29 2007/02/22 16:54:26 thorpej Exp $	*/
+/*	$NetBSD: gio.c,v 1.35 2016/07/20 22:16:37 macallan Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.29 2007/02/22 16:54:26 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.35 2016/07/20 22:16:37 macallan Exp $");
 
 #include "opt_ddb.h"
 
@@ -41,8 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.29 2007/02/22 16:54:26 thorpej Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#define _SGIMIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
 
@@ -78,19 +77,13 @@ extern int pic_gio32_arb_config(int, uint32_t);
 #endif
 
 
-struct gio_softc {
-	struct	device sc_dev;
-};
-
-static int	gio_match(struct device *, struct cfdata *, void *);
-static void	gio_attach(struct device *, struct device *, void *);
+static int	gio_match(device_t, cfdata_t, void *);
+static void	gio_attach(device_t, device_t, void *);
 static int	gio_print(void *, const char *);
-static int	gio_search(struct device *, struct cfdata *,
-			   const int *, void *);
-static int	gio_submatch(struct device *, struct cfdata *,
-			     const int *, void *);
+static int	gio_search(device_t, cfdata_t, const int *, void *);
+static int	gio_submatch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(gio, sizeof(struct gio_softc),
+CFATTACH_DECL_NEW(gio, 0,
     gio_match, gio_attach, NULL, NULL);
 
 struct gio_probe {
@@ -174,14 +167,17 @@ static const struct gio_probe gfx_bases[] = {
 #define MAXGFX 8
 
 static int
-gio_match(struct device *parent, struct cfdata *match, void *aux)
+gio_match(device_t parent, cfdata_t match, void *aux)
 {
-
-	return 1;
+	if (mach_type == MACH_SGI_IP12 || mach_type == MACH_SGI_IP20 ||
+	    mach_type == MACH_SGI_IP22)
+		return 1;
+	
+	return 0;
 }
 
 static void
-gio_attach(struct device *parent, struct device *self, void *aux)
+gio_attach(device_t parent, device_t self, void *aux)
 {
 	struct gio_attach_args ga;
 	uint32_t gfx[MAXGFX];
@@ -211,13 +207,17 @@ gio_attach(struct device *parent, struct device *self, void *aux)
 
 		ga.ga_slot = -1;
 		ga.ga_addr = gfx_bases[i].base;
-		ga.ga_iot = SGIMIPS_BUS_SPACE_NORMAL;
-		ga.ga_ioh = MIPS_PHYS_TO_KSEG1(ga.ga_addr);
+		/* XXX */
+		if (platform.badaddr((void *)MIPS_PHYS_TO_KSEG1(ga.ga_addr),
+		    sizeof(uint32_t)))
+			continue;
+		ga.ga_iot = normal_memt;
+		if (bus_space_map(normal_memt, ga.ga_addr, 0,
+		    BUS_SPACE_MAP_LINEAR, &ga.ga_ioh) != 0)
+		    	continue;
 		ga.ga_dmat = &sgimips_default_bus_dma_tag;
 		ga.ga_product = -1;
 
-		if (platform.badaddr((void *)ga.ga_ioh, sizeof(uint32_t)))
-			continue;
 		
 		if (config_found_sm_loc(self, "gio", NULL, &ga, gio_print,
 		    gio_submatch)) {
@@ -255,12 +255,15 @@ gio_attach(struct device *parent, struct device *self, void *aux)
 
 		ga.ga_slot = slot_bases[i].slot;
 		ga.ga_addr = slot_bases[i].base;
-		ga.ga_iot = SGIMIPS_BUS_SPACE_NORMAL;
-		ga.ga_ioh = MIPS_PHYS_TO_KSEG1(ga.ga_addr);
-		ga.ga_dmat = &sgimips_default_bus_dma_tag;
-
-		if (platform.badaddr((void *)ga.ga_ioh, sizeof(uint32_t)))
+		/* XXX */
+		if (platform.badaddr((void *)MIPS_PHYS_TO_KSEG1(ga.ga_addr),
+		    sizeof(uint32_t)))
 			continue;
+		ga.ga_iot = normal_memt;
+		if (bus_space_map(normal_memt, ga.ga_addr, 0,
+		    BUS_SPACE_MAP_LINEAR, &ga.ga_ioh) != 0)
+		    	continue;
+		ga.ga_dmat = &sgimips_default_bus_dma_tag;
 
 		ga.ga_product = bus_space_read_4(ga.ga_iot, ga.ga_ioh, 0);
 
@@ -315,8 +318,7 @@ gio_print(void *aux, const char *pnp)
 }
 
 static int
-gio_search(struct device *parent, struct cfdata *cf,
-	   const int *ldesc, void *aux)
+gio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 
@@ -338,8 +340,7 @@ gio_search(struct device *parent, struct cfdata *cf,
 }
 
 static int
-gio_submatch(struct device *parent, struct cfdata *cf,
-	     const int *ldesc, void *aux)
+gio_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 
@@ -355,7 +356,7 @@ gio_submatch(struct device *parent, struct cfdata *cf,
 }
 
 int
-gio_cnattach()
+gio_cnattach(void)
 {
 	struct gio_attach_args ga;
 	int i;
@@ -371,14 +372,17 @@ gio_cnattach()
 
 		ga.ga_slot = -1;
 		ga.ga_addr = gfx_bases[i].base;
-		ga.ga_iot = SGIMIPS_BUS_SPACE_NORMAL;
-		ga.ga_ioh = MIPS_PHYS_TO_KSEG1(ga.ga_addr);
+		/* XXX */
+		if (platform.badaddr((void *)MIPS_PHYS_TO_KSEG1(ga.ga_addr),
+		    sizeof(uint32_t)))
+			continue;
+		ga.ga_iot = normal_memt;
+		if (bus_space_map(normal_memt, ga.ga_addr, 0,
+		    BUS_SPACE_MAP_LINEAR, &ga.ga_ioh) != 0)
+		    	continue;
 		ga.ga_dmat = &sgimips_default_bus_dma_tag;
 		ga.ga_product = -1;
 		
-		if (platform.badaddr((void *)ga.ga_ioh,sizeof(uint32_t)))
-			continue;
-
 #if (NGRTWO > 0)
 		if (grtwo_cnattach(&ga) == 0)
 			return 0;

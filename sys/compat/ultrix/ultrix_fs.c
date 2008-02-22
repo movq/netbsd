@@ -1,4 +1,4 @@
-/*	$NetBSD: ultrix_fs.c,v 1.46 2008/01/30 11:46:59 ad Exp $	*/
+/*	$NetBSD: ultrix_fs.c,v 1.58 2017/12/03 12:53:52 maxv Exp $	*/
 
 /*
  * Copyright (c) 1995, 1997 Jonathan Stone
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ultrix_fs.c,v 1.46 2008/01/30 11:46:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ultrix_fs.c,v 1.58 2017/12/03 12:53:52 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,24 +75,24 @@ __KERNEL_RCSID(0, "$NetBSD: ultrix_fs.c,v 1.46 2008/01/30 11:46:59 ad Exp $");
  * compatibility with the size the Ultrix kernel and user apps expect.
  */
 struct ultrix_fs_data {
-	u_int32_t	ufsd_flags;	/* how mounted */
-	u_int32_t	ufsd_mtsize;	/* max transfer size in bytes */
-	u_int32_t	ufsd_otsize;	/* optimal transfer size in bytes */
-	u_int32_t	ufsd_bsize;	/* fs block size (bytes) for vm code */
-	u_int32_t	ufsd_fstype;	/* see ../h/fs_types.h  */
-	u_int32_t	ufsd_gtot;	/* total number of gnodes */
-	u_int32_t	ufsd_gfree;	/* # of free gnodes */
-	u_int32_t	ufsd_btot;	/* total number of 1K blocks */
-	u_int32_t	ufsd_bfree;	/* # of free 1K blocks */
-	u_int32_t	ufsd_bfreen;	/* user consumable 1K blocks */
-	u_int32_t	ufsd_pgthresh;	/* min size in bytes before paging*/
+	uint32_t	ufsd_flags;	/* how mounted */
+	uint32_t	ufsd_mtsize;	/* max transfer size in bytes */
+	uint32_t	ufsd_otsize;	/* optimal transfer size in bytes */
+	uint32_t	ufsd_bsize;	/* fs block size (bytes) for vm code */
+	uint32_t	ufsd_fstype;	/* see ../h/fs_types.h  */
+	uint32_t	ufsd_gtot;	/* total number of gnodes */
+	uint32_t	ufsd_gfree;	/* # of free gnodes */
+	uint32_t	ufsd_btot;	/* total number of 1K blocks */
+	uint32_t	ufsd_bfree;	/* # of free 1K blocks */
+	uint32_t	ufsd_bfreen;	/* user consumable 1K blocks */
+	uint32_t	ufsd_pgthresh;	/* min size in bytes before paging*/
 	int32_t		ufsd_uid;	/* uid that mounted me */
 	int16_t		ufsd_dev;	/* major/minor of fs */
 	int16_t		ufsd_exroot;	/* root mapping from exports */
 	char		ufsd_devname[ULTRIX_MAXPATHLEN + 4]; /* name of dev */
 	char		ufsd_path[ULTRIX_MAXPATHLEN + 4]; /* name of mnt point */
-	u_int32_t	ufsd_nupdate;	/* number of writes */
-	u_int32_t	ufsd_pad[112];	/* pad to 2560 bytes. */
+	uint32_t	ufsd_nupdate;	/* number of writes */
+	uint32_t	ufsd_pad[112];	/* pad to 2560 bytes. */
 };
 
 /*
@@ -206,17 +206,17 @@ make_ultrix_mntent(struct statvfs *sp, struct ultrix_fs_data *tem)
 int
 ultrix_sys_getmnt(struct lwp *l, const struct ultrix_sys_getmnt_args *uap, register_t *retval)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp;
 	struct statvfs *sp;
 	struct ultrix_fs_data *sfsp;
+	mount_iterator_t *iter;
 	char *path;
 	int mntflags;
 	int skip;
 	int start;
 	long count, maxcount;
-	int error = 0;
+	int error;
 
-	nmp = NULL;	/* XXX keep gcc quiet */
 	path = NULL;
 	error = 0;
 	maxcount = SCARG(uap, bufsize) / sizeof(struct ultrix_fs_data);
@@ -233,10 +233,11 @@ ultrix_sys_getmnt(struct lwp *l, const struct ultrix_sys_getmnt_args *uap, regis
 		 * Only get info on mountpoints that matches the path
 		 * provided.
 		 */
-		MALLOC(path, char *, MAXPATHLEN, M_TEMP, M_WAITOK);
+		path = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 		if ((error = copyinstr(SCARG(uap, path), path,
 				       MAXPATHLEN, NULL)) != 0)
 			goto bad;
+		skip = 0;
 		maxcount = 1;
 	} else {
 		/*
@@ -247,20 +248,14 @@ ultrix_sys_getmnt(struct lwp *l, const struct ultrix_sys_getmnt_args *uap, regis
 		if ((error = copyin((void *)SCARG(uap, start), &start,
 				    sizeof(*SCARG(uap, start))))  != 0)
 			goto bad;
-		mutex_enter(&mountlist_lock);
-		for (skip = start, mp = mountlist.cqh_first;
-		    mp != (void*)&mountlist && skip-- > 0; mp = nmp)
-			nmp = mp->mnt_list.cqe_next;
-		mutex_exit(&mountlist_lock);
+		skip = start;
 	}
 
-	mutex_enter(&mountlist_lock);
-	for (count = 0, mp = mountlist.cqh_first;
-	    mp != (void*)&mountlist && count < maxcount; mp = nmp) {
-		if (vfs_trybusy(mp, RW_READER, &mountlist_lock)) {
-			nmp = mp->mnt_list.cqe_next;
+	count = 0;
+	mountlist_iterator_init(&iter);
+	while (count < maxcount && (mp = mountlist_iterator_next(iter))) {
+		if (skip-- > 0)
 			continue;
-		}
 		if (sfsp != NULL) {
 			struct ultrix_fs_data tem;
 			sp = &mp->mnt_stat;
@@ -281,27 +276,24 @@ ultrix_sys_getmnt(struct lwp *l, const struct ultrix_sys_getmnt_args *uap, regis
 				make_ultrix_mntent(sp, &tem);
 				if ((error = copyout((void *)&tem, sfsp,
 				    sizeof(tem))) != 0) {
-					vfs_unbusy(mp, false);
-					goto bad;
+					goto bad_freeiter;
 				}
 				sfsp++;
 				count++;
 			}
 		}
-		mutex_enter(&mountlist_lock);
-		nmp = mp->mnt_list.cqe_next;
-		vfs_unbusy(mp, false);
 	}
-	mutex_exit(&mountlist_lock);
 
 	if (sfsp != NULL && count > maxcount)
 		*retval = maxcount;
 	else
 		*retval = count;
 
+bad_freeiter:
+	mountlist_iterator_destroy(iter);
 bad:
 	if (path)
-		FREE(path, M_TEMP);
+		free(path, M_TEMP);
 	return error;
 }
 
@@ -340,8 +332,8 @@ struct	ultrix_nfs_args {
  * mounting local (4.2bsd FFS) filesystems
  */
 struct ultrix_ufs_args {
-	u_long ufs_flags;		/* mount flags?*/
-	u_long ufs_pgthresh;		/* minimum file size to page */
+	uint32_t ufs_flags;		/* mount flags?*/
+	uint32_t ufs_pgthresh;		/* minimum file size to page */
 };
 
 int
@@ -403,7 +395,7 @@ ultrix_sys_mount(struct lwp *l, const struct ultrix_sys_mount_args *uap, registe
 		na.timeo = una.timeo;
 		na.retrans = una.retrans;
 		na.hostname = una.hostname;
-		return do_sys_mount(l, vfs_getopsbyname("nfs"), NULL,
+		return do_sys_mount(l, "nfs", UIO_SYSSPACE,
 		    SCARG(uap, special), nflags, &na, UIO_SYSSPACE,
 		    sizeof na, &dummy);
 	}
@@ -433,7 +425,7 @@ ultrix_sys_mount(struct lwp *l, const struct ultrix_sys_mount_args *uap, registe
 			printf("COMPAT_ULTRIX: mount with MNT_UPDATE on %s\n",
 			    fsname);
 		}
-		return do_sys_mount(l, vfs_getopsbyname("ffs"), NULL,
+		return do_sys_mount(l, "ffs", UIO_SYSSPACE,
 		    SCARG(uap, dir), nflags, &ua, UIO_SYSSPACE, sizeof ua,
 		    &dummy);
 	}

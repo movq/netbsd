@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.9 2005/12/11 12:18:35 christos Exp $	*/
+/*	$NetBSD: sbus.c,v 1.17 2016/07/19 17:04:25 maya Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.9 2005/12/11 12:18:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.17 2016/07/19 17:04:25 maya Exp $");
 
 #include <sys/param.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 
 #include <machine/bootinfo.h>
@@ -85,20 +79,20 @@ STATIC void *sbus_usb_context;
 STATIC void sbus_init(int);
 STATIC int sbus_intr(void *);
 
-STATIC int sbus_match(struct device *, struct cfdata *, void *);
-STATIC void sbus_attach(struct device *, struct device *, void *);
-STATIC int sbus_search(struct device *, struct cfdata *,
+STATIC int sbus_match(device_t, cfdata_t, void *);
+STATIC void sbus_attach(device_t, device_t, void *);
+STATIC int sbus_search(device_t, cfdata_t,
 		       const int *, void *);
 STATIC int sbus_print(void *, const char *);
 
-CFATTACH_DECL(sbus, sizeof (struct device),
+CFATTACH_DECL_NEW(sbus, sizeof (struct device),
     sbus_match, sbus_attach, NULL, NULL);
 
 extern struct cfdriver sbus_cd;
 STATIC int __sbus_attached;
 
 int
-sbus_match(struct device *parent, struct cfdata *cf, void *aux)
+sbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -109,7 +103,7 @@ sbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-sbus_attach(struct device *parent, struct device *self, void *aux)
+sbus_attach(device_t parent, device_t self, void *aux)
 {
 	int type = BOOTINFO_REF(BOOTINFO_PCMCIA_TYPE); 
 
@@ -122,7 +116,7 @@ sbus_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-sbus_search(struct device *parent, struct cfdata *cf,
+sbus_search(device_t parent, cfdata_t cf,
 	    const int *ldesc, void *aux)
 {
 	struct sbus_attach_args sa;
@@ -253,7 +247,7 @@ sbus_spurious_intr(void *arg)
 
 /* SCPH-18000 */
 void
-sbus_type2_pcmcia_intr_clear()
+sbus_type2_pcmcia_intr_clear(void)
 {
 
 	if (_reg_read_2(SBUS_PCMCIA_CSC1_REG16) & 0x080)
@@ -261,21 +255,21 @@ sbus_type2_pcmcia_intr_clear()
 }
 
 void
-sbus_type2_pcmcia_intr_enable()
+sbus_type2_pcmcia_intr_enable(void)
 {
 
 	_reg_write_2(SBUS_PCMCIA_TIMR_REG16, 0);
 }
 
 void
-sbus_type2_pcmcia_intr_disable()
+sbus_type2_pcmcia_intr_disable(void)
 {
 
 	_reg_write_2(SBUS_PCMCIA_TIMR_REG16, 1);
 }
 
 void
-sbus_type2_pcmcia_intr_reinstall()
+sbus_type2_pcmcia_intr_reinstall(void)
 {
 	u_int16_t r = _reg_read_2(SBUS_PCMCIA_TIMR_REG16);
 
@@ -285,27 +279,27 @@ sbus_type2_pcmcia_intr_reinstall()
 
 /* SCPH-30000/35000 */
 void
-sbus_type3_pcmcia_intr_clear()
+sbus_type3_pcmcia_intr_clear(void)
 {
 	/* nothing */
 }
 
 void
-sbus_type3_pcmcia_intr_enable()
+sbus_type3_pcmcia_intr_enable(void)
 {
 
 	_reg_write_2(SBUS_PCMCIA3_TIMR_REG16, 0);
 }
 
 void
-sbus_type3_pcmcia_intr_disable()
+sbus_type3_pcmcia_intr_disable(void)
 {
 
 	_reg_write_2(SBUS_PCMCIA3_TIMR_REG16, 1);
 }
 
 void
-sbus_type3_pcmcia_intr_reinstall()
+sbus_type3_pcmcia_intr_reinstall(void)
 {
 	u_int16_t r = _reg_read_2(SBUS_PCMCIA3_TIMR_REG16);
 

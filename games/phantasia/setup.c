@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.18 2008/01/16 23:23:25 lukem Exp $	*/
+/*	$NetBSD: setup.c,v 1.22 2017/10/02 22:03:10 joerg Exp $	*/
 
 /*
  * setup.c - set up all files for Phantasia
@@ -8,14 +8,23 @@
 #include <sys/cdefs.h>
 #endif
 
-#include <sys/param.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "include.h"
+#include <setjmp.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #ifndef __dead /* Not NetBSD */
 #define __dead
 #endif
+
+#include "phantdefs.h"
+#include "phantstruct.h"
+#include "phantglobs.h"
+#include "pathnames.h"
 
 int main(int, char *[]);
 void Error(const char *, const char *) __dead;
@@ -68,9 +77,7 @@ static const char *const files[] = {		/* all files to create */
 const char *monsterfile = "monsters.asc";
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	const char *const *filename; /* for pointing to file names */
 	int		fd;		/* file descriptor */
@@ -229,8 +236,7 @@ main(argc, argv)
 / ************************************************************************/
 
 void
-Error(str, file)
-	const char	*str, *file;
+Error(const char *str, const char *file)
 {
     fprintf(stderr, "Error: ");
     fprintf(stderr, str, file);
@@ -262,7 +268,7 @@ Error(str, file)
 / ************************************************************************/
 
 double
-drandom()
+drandom(void)
 {
     if (sizeof(int) != 2)
 	return((double) (random() & 0x7fff) / 32768.0);

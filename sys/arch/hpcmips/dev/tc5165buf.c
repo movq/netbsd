@@ -1,4 +1,4 @@
-/*	$NetBSD: tc5165buf.c,v 1.15 2007/10/17 19:54:29 garbled Exp $ */
+/*	$NetBSD: tc5165buf.c,v 1.18 2015/06/09 22:46:36 matt Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,19 +35,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tc5165buf.c,v 1.15 2007/10/17 19:54:29 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc5165buf.c,v 1.18 2015/06/09 22:46:36 matt Exp $");
 
 #include "opt_use_poll.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/callout.h>
 #include <sys/device.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/systm.h>
 
 #include <dev/hpc/hpckbdvar.h>
+
+#include <mips/cpuregs.h>
 
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/txcsbusvar.h>
@@ -81,14 +75,13 @@ struct tc5165buf_chip {
 };
 
 struct tc5165buf_softc {
-	struct device		sc_dev;
 	struct tc5165buf_chip	*sc_chip;
 	tx_chipset_tag_t	sc_tc;
 	void			*sc_ih;
 };
 
-int	tc5165buf_match(struct device *, struct cfdata *, void *);
-void	tc5165buf_attach(struct device *, struct device *, void *);
+int	tc5165buf_match(device_t, cfdata_t, void *);
+void	tc5165buf_attach(device_t, device_t, void *);
 int	tc5165buf_intr(void *);
 int	tc5165buf_poll(void *);
 void	tc5165buf_soft(void *);
@@ -98,21 +91,21 @@ int	tc5165buf_input_establish(void *, struct hpckbd_if *);
 
 struct tc5165buf_chip tc5165buf_chip;
 
-CFATTACH_DECL(tc5165buf, sizeof(struct tc5165buf_softc),
+CFATTACH_DECL_NEW(tc5165buf, sizeof(struct tc5165buf_softc),
     tc5165buf_match, tc5165buf_attach, NULL, NULL);
 
 int
-tc5165buf_match(struct device *parent, struct cfdata *cf, void *aux)
+tc5165buf_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 void
-tc5165buf_attach(struct device *parent, struct device *self, void *aux)
+tc5165buf_attach(device_t parent, device_t self, void *aux)
 {
 	struct cs_attach_args *ca = aux;
-	struct tc5165buf_softc *sc = (void*)self;
+	struct tc5165buf_softc *sc = device_private(self);
 	struct hpckbd_attach_args haa;
 
 	printf(": ");

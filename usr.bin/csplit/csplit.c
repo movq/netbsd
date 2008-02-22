@@ -1,4 +1,4 @@
-/*	$NetBSD: csplit.c,v 1.4 2007/12/15 19:44:49 perry Exp $	*/
+/*	$NetBSD: csplit.c,v 1.7 2017/07/30 23:02:53 cheusov Exp $	*/
 /*	$FreeBSD: src/usr.bin/csplit/csplit.c,v 1.9 2004/03/22 11:15:03 tjr Exp$	*/
 
 /*-
@@ -47,7 +47,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: csplit.c,v 1.4 2007/12/15 19:44:49 perry Exp $");
+__RCSID("$NetBSD: csplit.c,v 1.7 2017/07/30 23:02:53 cheusov Exp $");
 #endif
 
 #include <sys/types.h>
@@ -69,7 +69,7 @@ __RCSID("$NetBSD: csplit.c,v 1.4 2007/12/15 19:44:49 perry Exp $");
 static void	 cleanup(void);
 static void	 do_lineno(const char *);
 static void	 do_rexp(const char *);
-static char	*getline(void);
+static char	*get_line(void);
 static void	 handlesig(int);
 static FILE	*newfile(void);
 static void	 toomuch(FILE *, long);
@@ -78,24 +78,24 @@ static void	 usage(void) __dead;
 /*
  * Command line options
  */
-const char *prefix;		/* File name prefix */
-long	 sufflen;		/* Number of decimal digits for suffix */
-int	 sflag;			/* Suppress output of file names */
-int	 kflag;			/* Keep output if error occurs */
+static const char *prefix;		/* File name prefix */
+static long	 sufflen;		/* Number of decimal digits for suffix */
+static int	 sflag;			/* Suppress output of file names */
+static int	 kflag;			/* Keep output if error occurs */
 
 /*
  * Other miscellaneous globals (XXX too many)
  */
-long	 lineno;		/* Current line number in input file */
-long	 reps;			/* Number of repetitions for this pattern */
-long	 nfiles;		/* Number of files output so far */
-long	 maxfiles;		/* Maximum number of files we can create */
-char	 currfile[PATH_MAX];	/* Current output file */
-const char *infn;		/* Name of the input file */
-FILE	*infile;		/* Input file handle */
-FILE	*overfile;		/* Overflow file for toomuch() */
-off_t	 truncofs;		/* Offset this file should be truncated at */
-int	 doclean;		/* Should cleanup() remove output? */
+static long	 lineno;		/* Current line number in input file */
+static long	 reps;			/* Number of repetitions for this pattern */
+static long	 nfiles;		/* Number of files output so far */
+static long	 maxfiles;		/* Maximum number of files we can create */
+static char	 currfile[PATH_MAX];	/* Current output file */
+static const char *infn;		/* Name of the input file */
+static FILE	*infile;		/* Input file handle */
+static FILE	*overfile;		/* Overflow file for toomuch() */
+static off_t	 truncofs;		/* Offset this file should be truncated at */
+static int	 doclean;		/* Should cleanup() remove output? */
 
 int
 main(int argc, char *argv[])
@@ -201,7 +201,7 @@ main(int argc, char *argv[])
 	/* Copy the rest into a new file. */
 	if (!feof(infile)) {
 		ofp = newfile();
-		while ((p = getline()) != NULL && fputs(p, ofp) == 0)
+		while ((p = get_line()) != NULL && fputs(p, ofp) != EOF)
 			;
 		if (!sflag)
 			(void)printf("%jd\n", (intmax_t)ftello(ofp));
@@ -224,7 +224,7 @@ usage(void)
 	exit(1);
 }
 
-static void
+__dead static void
 handlesig(int sig)
 {
 	char msg[BUFSIZ];
@@ -281,7 +281,7 @@ cleanup(void)
 
 /* Read a line from the input into a static buffer. */
 static char *
-getline(void)
+get_line(void)
 {
 	static char lbuf[LINE_MAX];
 	FILE *src;
@@ -302,7 +302,7 @@ again: if (fgets(lbuf, sizeof(lbuf), src) == NULL) {
 	return (lbuf);
 }
 
-/* Conceptually rewind the input (as obtained by getline()) back `n' lines. */
+/* Conceptually rewind the input (as obtained by get_line()) back `n' lines. */
 static void
 toomuch(FILE *ofp, long n)
 {
@@ -354,7 +354,7 @@ toomuch(FILE *ofp, long n)
 		err(1, "%s", currfile);
 
 	/*
-	 * getline() will read from here. Next call will truncate to
+	 * get_line() will read from here. Next call will truncate to
 	 * truncofs in this file.
 	 */
 	overfile = ofp;
@@ -402,8 +402,8 @@ do_rexp(const char *expr)
 
 	/* Read and output lines until we get a match. */
 	first = 1;
-	while ((p = getline()) != NULL) {
-		if (fputs(p, ofp) != 0)
+	while ((p = get_line()) != NULL) {
+		if (fputs(p, ofp) == EOF)
 			break;
 		if (!first && regexec(&cre, p, 0, NULL, 0) == 0)
 			break;
@@ -428,8 +428,8 @@ do_rexp(const char *expr)
 		 * Positive offset: copy the requested number of lines
 		 * after the match.
 		 */
-		while (--ofs > 0 && (p = getline()) != NULL)
-			if (fputs(p, ofp) != 0)
+		while (--ofs > 0 && (p = get_line()) != NULL)
+			if (fputs(p, ofp) == EOF)
 				break;
 		toomuch(NULL, 0L);
 		nwritten = (intmax_t)ftello(ofp);
@@ -463,9 +463,9 @@ do_lineno(const char *expr)
 	while (nfiles < maxfiles - 1) {
 		ofp = newfile();
 		while (lineno + 1 != lastline) {
-			if ((p = getline()) == NULL)
+			if ((p = get_line()) == NULL)
 				errx(1, "%ld: out of range", lastline);
-			if (fputs(p, ofp) != 0)
+			if (fputs(p, ofp) == EOF)
 				break;
 		}
 		if (!sflag)

@@ -1,4 +1,4 @@
-/*	$NetBSD: smdk2410_machdep.c,v 1.17 2008/01/19 13:11:16 chris Exp $ */
+/*	$NetBSD: smdk2410_machdep.c,v 1.36 2016/12/22 14:47:56 cherry Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -94,18 +94,18 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for integrator board
+ * Machine dependent functions for kernel setup for integrator board
  *
  * Created      : 24/11/97
  */
 
 /*
- * Machine dependant functions for kernel setup for Samsung SMDK2410
+ * Machine dependent functions for kernel setup for Samsung SMDK2410
  * derived from integrator_machdep.c
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smdk2410_machdep.c,v 1.17 2008/01/19 13:11:16 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smdk2410_machdep.c,v 1.36 2016/12/22 14:47:56 cherry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -122,6 +122,9 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_machdep.c,v 1.17 2008/01/19 13:11:16 chris 
 #include <sys/reboot.h>
 #include <sys/termios.h>
 #include <sys/ksyms.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -136,10 +139,7 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_machdep.c,v 1.17 2008/01/19 13:11:16 chris 
 #endif
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
-#include <machine/intr.h>
+#include <arm/locore.h>
 #include <arm/undefined.h>
 
 #include <arm/arm32/machdep.h>
@@ -182,48 +182,22 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_machdep.c,v 1.17 2008/01/19 13:11:16 chris 
 #endif
 #endif
 
-
-/*
- * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
- * on where the ROM appears when you turn the MMU off.
- */
-u_int cpu_reset_address = (u_int)0;
-
-/* Define various stack sizes in pages */
-#define IRQ_STACK_SIZE	1
-#define ABT_STACK_SIZE	1
-#define UND_STACK_SIZE	1
-
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
-vm_offset_t physical_start;
-vm_offset_t physical_freestart;
-vm_offset_t physical_freeend;
-vm_offset_t physical_end;
+vaddr_t physical_start;
+vaddr_t physical_freestart;
+vaddr_t physical_freeend;
+vaddr_t physical_end;
 u_int free_pages;
-vm_offset_t pagetables_start;
-int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;		/* Default number */
 #endif				/* !PMAP_STATIC_L1S */
 
-/* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;
-pv_addr_t irqstack;
-pv_addr_t undstack;
-pv_addr_t abtstack;
-pv_addr_t kernelstack;
-
-vm_offset_t msgbufphys;
-
-extern u_int data_abort_handler_address;
-extern u_int prefetch_abort_handler_address;
-extern u_int undefined_handler_address;
+paddr_t msgbufphys;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -239,8 +213,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -291,7 +263,7 @@ cpu_reboot(int howto, char *bootstr)
 	printf("boot: howto=%08x curproc=%p\n", howto, curproc);
 #endif
 
-	cpu_reset_address = vtophys((u_int)s3c2410_softreset);
+	cpu_reset_address_paddr = vtophys((u_int)s3c2410_softreset);
 
 	/*
 	 * If we are still cold then hit the air brakes
@@ -299,6 +271,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -327,6 +300,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -441,11 +416,10 @@ initarm(void *arg)
 	u_int l1pagetable;
 	extern int etext __asm("_etext");
 	extern int end __asm("_end");
-	pv_addr_t kernel_l1pt;
 	int progress_counter = 0;
 
 #ifdef DO_MEMORY_DISK
-	vm_offset_t md_root_start;
+	vaddr_t md_root_start;
 #define MD_ROOT_SIZE (MEMORY_DISK_ROOT_SIZE * DEV_BSIZE)
 #endif
 
@@ -627,8 +601,6 @@ initarm(void *arg)
 	memset((char *)(var), 0, ((np) * PAGE_SIZE));
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = 0;
-	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0
@@ -802,7 +774,7 @@ initarm(void *arg)
 #endif
 	LEDSTEP();
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa, true);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -810,8 +782,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -873,7 +844,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
+	uvm_md_init();
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);
@@ -883,8 +854,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	LEDSTEP();
 
@@ -918,11 +888,6 @@ initarm(void *arg)
 		kgdb_debug_init = 1;
 		kgdb_connect(1);
 	}
-#endif
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-	/* Firmware doesn't load symbols. */
-	ksyms_init(0, NULL, NULL);
 #endif
 
 #ifdef DDB
@@ -1010,26 +975,6 @@ kgdb_port_init(void)
 #endif
 }
 #endif
-
-static inline void
-writeback_dcache_line(vaddr_t va)
-{
-	/* writeback Dcache line */
-	/* we can't use cpu_dcache_wb_range() here, because cpufuncs for ARM9
-	 * assume write-through cache, and always flush Dcache instead of
-	 * cleaning it. Since Boot loader maps page table with write-back
-	 * cached, we really need to clean Dcache. */
-	__asm("mcr	p15, 0, %0, c7, c10, 1"
-	    : :	"r"(va));
-}
-
-static inline void
-clean_dcache_line(vaddr_t va)
-{
-	/* writeback and invalidate Dcache line */
-	__asm("mcr	p15, 0, %0, c7, c14, 1"
-	    : : "r"(va));
-}
 
 static struct arm32_dma_range smdk2410_dma_ranges[1];
 

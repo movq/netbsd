@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.31 2008/01/08 18:04:16 joerg Exp $	*/
+/*	$NetBSD: kbd.c,v 1.47 2018/02/08 09:05:17 dholland Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.31 2008/01/08 18:04:16 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.47 2018/02/08 09:05:17 dholland Exp $");
 
 #include "mouse.h"
 #include "ite.h"
@@ -97,12 +97,11 @@ __KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.31 2008/01/08 18:04:16 joerg Exp $");
  * - If an ite is present the data may be fed to it.
  */
 
-u_char			kbd_modifier;	/* Modifier mask		*/
+uint8_t			kbd_modifier;	/* Modifier mask		*/
 
-static u_char		kbd_ring[KBD_RING_SIZE];
+static uint8_t		kbd_ring[KBD_RING_SIZE];
 static volatile u_int	kbd_rbput = 0;	/* 'put' index			*/
 static u_int		kbd_rbget = 0;	/* 'get' index			*/
-static u_char		kbd_soft  = 0;	/* 1: Softint has been scheduled*/
 
 static struct kbd_softc kbd_softc;
 
@@ -115,23 +114,33 @@ dev_type_poll(kbdpoll);
 dev_type_kqfilter(kbdkqfilter);
 
 /* Interrupt handler */
-void	kbdintr __P((int));
+void	kbdintr(int);
 
-static void kbdsoft __P((void *, void *));
-static void kbdattach __P((struct device *, struct device *, void *));
-static int  kbdmatch __P((struct device *, struct cfdata *, void *));
+static void kbdsoft(void *);
+static void kbdattach(device_t, device_t, void *);
+static int  kbdmatch(device_t, cfdata_t, void *);
 #if NITE>0
-static int  kbd_do_modifier __P((u_char));
+static int  kbd_do_modifier(uint8_t);
 #endif
-static int  kbd_write_poll __P((u_char *, int));
-static void kbd_pkg_start __P((struct kbd_softc *, u_char));
+static int  kbd_write_poll(const uint8_t *, int);
+static void kbd_pkg_start(struct kbd_softc *, uint8_t);
 
-CFATTACH_DECL(kbd, sizeof(struct device),
+CFATTACH_DECL_NEW(kbd, 0,
     kbdmatch, kbdattach, NULL, NULL);
 
 const struct cdevsw kbd_cdevsw = {
-	kbdopen, kbdclose, kbdread, nowrite, kbdioctl,
-	nostop, notty, kbdpoll, nommap, kbdkqfilter,
+	.d_open = kbdopen,
+	.d_close = kbdclose,
+	.d_read = kbdread,
+	.d_write = nowrite,
+	.d_ioctl = kbdioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = kbdpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = kbdkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 #if NWSKBD>0
@@ -166,25 +175,21 @@ static struct wskbd_mapdata kbd_mapdata = {
 
 /*ARGSUSED*/
 static	int
-kbdmatch(pdp, cfp, auxp)
-struct	device	*pdp;
-struct	cfdata	*cfp;
-void		*auxp;
+kbdmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	if (!strcmp((char *)auxp, "kbd"))
-		return (1);
-	return (0);
+
+	if (!strcmp((char *)aux, "kbd"))
+		return 1;
+	return 0;
 }
 
 /*ARGSUSED*/
 static void
-kbdattach(pdp, dp, auxp)
-struct	device *pdp, *dp;
-void	*auxp;
+kbdattach(device_t parent, device_t self, void *aux)
 {
-	int	timeout;
-	u_char	kbd_rst[]  = { 0x80, 0x01 };
-	u_char	kbd_icmd[] = { 0x12, 0x15 };
+	int timeout;
+	const uint8_t kbd_rst[]  = { 0x80, 0x01 };
+	const uint8_t kbd_icmd[] = { 0x12, 0x15 };
 
 	/*
 	 * Disable keyboard interrupts from MFP
@@ -192,7 +197,7 @@ void	*auxp;
 	MFP->mf_ierb &= ~IB_AINT;
 
 	/*
-	 * Reset ACIA and intialize to:
+	 * Reset ACIA and initialize to:
 	 *    divide by 16, 8 data, 1 stop, no parity, enable RX interrupts
 	 */
 	KBD->ac_cs = A_RESET;
@@ -206,7 +211,7 @@ void	*auxp;
 		timeout = KBD->ac_da;
 
 	/*
-	 * Now send the reset string, and read+ignore it's response
+	 * Now send the reset string, and read+ignore its response
 	 */
 	if (!kbd_write_poll(kbd_rst, 2))
 		printf("kbd: error cannot reset keyboard\n");
@@ -224,8 +229,10 @@ void	*auxp;
 
 	printf("\n");
 
+	kbd_softc.k_sicookie = softint_establish(SOFTINT_SERIAL, kbdsoft, NULL);
+
 #if NWSKBD>0
-	if (dp != NULL) {
+	if (self != NULL) {
 		/*
 		 * Try to attach the wskbd.
 		 */
@@ -238,7 +245,7 @@ void	*auxp;
 		waa.keymap = &kbd_mapdata;
 		waa.accessops = &kbd_accessops;
 		waa.accesscookie = NULL;
-		kbd_softc.k_wskbddev = config_found(dp, &waa, wskbddevprint);
+		kbd_softc.k_wskbddev = config_found(self, &waa, wskbddevprint);
 
 		kbd_softc.k_pollingmode = 0;
 
@@ -248,9 +255,9 @@ void	*auxp;
 }
 
 void
-kbdenable()
+kbdenable(void)
 {
-	int	s, code;
+	int s, code;
 
 	s = spltty();
 
@@ -259,6 +266,7 @@ kbdenable()
 	 */
 	while (KBD->ac_cs & (A_IRQ|A_RXRDY))
 		code = KBD->ac_da;
+	__USE(code);
 	/*
 	 * Enable interrupts from MFP
 	 */
@@ -274,32 +282,35 @@ kbdenable()
 
 int kbdopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
+
 	if (kbd_softc.k_events.ev_io)
 		return EBUSY;
 
 	kbd_softc.k_events.ev_io = l->l_proc;
 	ev_init(&kbd_softc.k_events);
-	return (0);
+	return 0;
 }
 
 int
 kbdclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
+
 	/* Turn off event mode, dump the queue */
 	kbd_softc.k_event_mode = 0;
 	ev_fini(&kbd_softc.k_events);
 	kbd_softc.k_events.ev_io = NULL;
-	return (0);
+	return 0;
 }
 
 int
 kbdread(dev_t dev, struct uio *uio, int flags)
 {
+
 	return ev_read(&kbd_softc.k_events, uio, flags);
 }
 
 int
-kbdioctl(dev_t dev,u_long cmd,register void *data,int flag,struct lwp *l)
+kbdioctl(dev_t dev, u_long cmd, register void *data, int flag, struct lwp *l)
 {
 	register struct kbd_softc *k = &kbd_softc;
 	struct kbdbell	*kb;
@@ -325,7 +336,7 @@ kbdioctl(dev_t dev,u_long cmd,register void *data,int flag,struct lwp *l)
 			kb = (struct kbdbell *)data;
 			if (kb)
 				kbd_bell_sparms(kb->volume, kb->pitch,
-							kb->duration);
+				    kb->duration);
 			kbdbell();
 			return 0;
 
@@ -360,22 +371,23 @@ kbdioctl(dev_t dev,u_long cmd,register void *data,int flag,struct lwp *l)
 int
 kbdpoll (dev_t dev, int events, struct lwp *l)
 {
-  return ev_poll (&kbd_softc.k_events, events, l);
+
+	return ev_poll(&kbd_softc.k_events, events, l);
 }
 
 int
 kbdkqfilter(dev_t dev, struct knote *kn)
 {
 
-	return (ev_kqfilter(&kbd_softc.k_events, kn));
+	return ev_kqfilter(&kbd_softc.k_events, kn);
 }
 
 /*
  * Keyboard interrupt handler called straight from MFP at spl6.
  */
 void
-kbdintr(sr)
-int sr;	/* sr at time of interrupt	*/
+kbdintr(int sr)
+	/* sr:	 sr at time of interrupt	*/
 {
 	int	code;
 	int	got_char = 0;
@@ -391,6 +403,7 @@ int sr;	/* sr at time of interrupt	*/
 		}
 		kbd_ring[kbd_rbput++ & KBD_RING_MASK] = KBD->ac_da;
 	}
+	__USE(code);
 
 	/*
 	 * If characters are waiting for transmit, send them.
@@ -413,32 +426,22 @@ int sr;	/* sr at time of interrupt	*/
 	/*
 	 * Activate software-level to handle possible input.
 	 */
-	if (got_char) {
-		if (!BASEPRI(sr)) {
-			if (!kbd_soft++)
-				add_sicallback(kbdsoft, 0, 0);
-		} else {
-			spl1();
-			kbdsoft(NULL, NULL);
-		}
-	}
+	if (got_char)
+		softint_schedule(kbd_softc.k_sicookie);
 }
 
 /*
  * Keyboard soft interrupt handler
  */
-void
-kbdsoft(junk1, junk2)
-void	*junk1, *junk2;
+static void
+kbdsoft(void *junk1)
 {
-	int			s;
-	u_char			code;
-	struct kbd_softc	*k = &kbd_softc;
-	struct firm_event	*fe;
-	int			put;
-	int			n, get;
+	int s;
+	uint8_t code;
+	struct kbd_softc *k = &kbd_softc;
+	struct firm_event *fe;
+	int put, get, n;
 
-	kbd_soft = 0;
 	get      = kbd_rbget;
 
 	for (;;) {
@@ -463,13 +466,13 @@ void	*junk1, *junk2;
 				/*
 				 * Package is complete.
 				 */
-				switch(k->k_pkg_type) {
+				switch (k->k_pkg_type) {
 #if NMOUSE > 0
 				    case KBD_AMS_PKG:
 				    case KBD_RMS_PKG:
 				    case KBD_JOY1_PKG:
 			 		mouse_soft((REL_MOUSE *)k->k_package,
-						k->k_pkg_size, k->k_pkg_type);
+					    k->k_pkg_size, k->k_pkg_type);
 #endif /* NMOUSE */
 				}
 				k->k_pkg_size = 0;
@@ -485,9 +488,9 @@ void	*junk1, *junk2;
 			}
 #if NWSKBD>0
 			/*
-			 * If we have attached a wskbd and not in polling mode and
-			 * nobody has opened us directly, then send the keystroke
-			 * to the wskbd.
+			 * If we have attached a wskbd and not in polling mode
+			 * and nobody has opened us directly, then send the
+			 * keystroke to the wskbd.
 			 */
 
 			if (kbd_softc.k_pollingmode == 0
@@ -529,13 +532,13 @@ void	*junk1, *junk2;
 			put = (put + 1) % EV_QSIZE;
 			if (put == k->k_events.ev_get) {
 				log(LOG_WARNING,
-					"keyboard event queue overflow\n");
+				    "keyboard event queue overflow\n");
 				splx(s);
 				continue;
 			}
 			fe->id    = KBD_SCANCODE(code);
 			fe->value = KBD_RELEASED(code) ? VKEY_UP : VKEY_DOWN;
-			getmicrotime(&fe->time);
+			firm_gettime(fe);
 			k->k_events.ev_put = put;
 			EV_WAKEUP(&k->k_events);
 			splx(s);
@@ -544,13 +547,13 @@ void	*junk1, *junk2;
 	}
 }
 
-static	u_char sound[] = {
-	0xA8,0x01,0xA9,0x01,0xAA,0x01,0x00,
-	0xF8,0x10,0x10,0x10,0x00,0x20,0x03
+static	uint8_t sound[] = {
+	0xA8, 0x01, 0xA9, 0x01, 0xAA, 0x01, 0x00,
+	0xF8, 0x10, 0x10, 0x10, 0x00, 0x20, 0x03
 };
 
 void
-kbdbell()
+kbdbell(void)
 {
 	register int	i, sps;
 
@@ -571,8 +574,7 @@ kbdbell()
 #define KBDBELLDURATION	128	/* 256 / 2MHz */
 
 void
-kbd_bell_gparms(volume, pitch, duration)
-	u_int	*volume, *pitch, *duration;
+kbd_bell_gparms(u_int *volume, u_int *pitch, u_int *duration)
 {
 	u_int	tmp;
 
@@ -586,8 +588,7 @@ kbd_bell_gparms(volume, pitch, duration)
 }
 
 void
-kbd_bell_sparms(volume, pitch, duration)
-	u_int	volume, pitch, duration;
+kbd_bell_sparms(u_int volume, u_int pitch, u_int duration)
 {
 	u_int	f, t;
 
@@ -615,11 +616,11 @@ kbd_bell_sparms(volume, pitch, duration)
 }
 
 int
-kbdgetcn()
+kbdgetcn(void)
 {
-	u_char	code;
-	int	s = spltty();
-	int	ints_active;
+	uint8_t code;
+	int s = spltty();
+	int ints_active;
 
 	ints_active = 0;
 	if (MFP->mf_imrb & IB_AINT) {
@@ -641,11 +642,11 @@ kbdgetcn()
 	}
 
 	if (ints_active) {
-		MFP->mf_iprb  = (u_int8_t)~IB_AINT;
+		MFP->mf_iprb  = (uint8_t)~IB_AINT;
 		MFP->mf_imrb |=  IB_AINT;
 	}
 
-	splx (s);
+	splx(s);
 	return code;
 }
 
@@ -653,9 +654,7 @@ kbdgetcn()
  * Write a command to the keyboard in 'polled' mode.
  */
 static int
-kbd_write_poll(cmd, len)
-u_char	*cmd;
-int	len;
+kbd_write_poll(const uint8_t *cmd, int len)
 {
 	int	timeout;
 
@@ -663,19 +662,17 @@ int	len;
 		KBD->ac_da = *cmd++;
 		for (timeout = 100; !(KBD->ac_cs & A_TXRDY); timeout--)
 			delay(10);
-		if (!(KBD->ac_cs & A_TXRDY))
-			return (0);
+		if ((KBD->ac_cs & A_TXRDY) == 0)
+			return 0;
 	}
-	return (1);
+	return 1;
 }
 
 /*
  * Write a command to the keyboard. Return when command is send.
  */
 void
-kbd_write(cmd, len)
-u_char	*cmd;
-int	len;
+kbd_write(const uint8_t *cmd, int len)
 {
 	struct kbd_softc	*k = &kbd_softc;
 	int			sps;
@@ -721,10 +718,9 @@ int	len;
  * Setup softc-fields to assemble a keyboard package.
  */
 static void
-kbd_pkg_start(kp, msg_start)
-struct kbd_softc *kp;
-u_char		 msg_start;
+kbd_pkg_start(struct kbd_softc *kp, uint8_t msg_start)
 {
+
 	kp->k_pkg_idx    = 1;
 	kp->k_package[0] = msg_start;
 	switch (msg_start) {
@@ -761,20 +757,19 @@ u_char		 msg_start;
 	}
 }
 
-#if NITE>0
+#if NITE > 0
 /*
  * Modifier processing
  */
 static int
-kbd_do_modifier(code)
-u_char	code;
+kbd_do_modifier(uint8_t code)
 {
-	u_char	up, mask;
+	uint8_t up, mask;
 
 	up   = KBD_RELEASED(code);
 	mask = 0;
 
-	switch(KBD_SCANCODE(code)) {
+	switch (KBD_SCANCODE(code)) {
 		case KBD_LEFT_SHIFT:
 			mask = KBD_MOD_LSHIFT;
 			break;
@@ -789,12 +784,12 @@ u_char	code;
 			break;
 		case KBD_CAPS_LOCK:
 			/* CAPSLOCK is a toggle */
-			if(!up)
+			if (!up)
 				kbd_modifier ^= KBD_MOD_CAPS;
 			return 1;
 	}
-	if(mask) {
-		if(up)
+	if (mask) {
+		if (up)
 			kbd_modifier &= ~mask;
 		else
 			kbd_modifier |= mask;
@@ -814,6 +809,7 @@ u_char	code;
 static int
 kbd_enable(void *c, int on)
 {
+
         /* Wonder what this is supposed to do... */
 	return 0;
 }
@@ -821,16 +817,16 @@ kbd_enable(void *c, int on)
 static void
 kbd_set_leds(void *c, int leds)
 {
+
         /* we can not set the leds */
 }
 
 static int
-kbd_ioctl(void *c, u_long cmd, void *data, int flag, struct proc *p)
+kbd_ioctl(void *c, u_long cmd, void *data, int flag, struct lwp *p)
 {
 	struct wskbd_bell_data *kd;
 
-	switch (cmd)
-	{
+	switch (cmd) {
 	case WSKBDIO_COMPLEXBELL:
 		kd = (struct wskbd_bell_data *)data;
 		kbd_bell(0, kd->pitch, kd->period, kd->volume);
@@ -838,10 +834,10 @@ kbd_ioctl(void *c, u_long cmd, void *data, int flag, struct proc *p)
 	case WSKBDIO_SETLEDS:
 		return 0;
 	case WSKBDIO_GETLEDS:
-		*(int*)data = 0;
+		*(int *)data = 0;
 		return 0;
 	case WSKBDIO_GTYPE:
-		*(u_int*)data = WSKBD_TYPE_ATARI;
+		*(u_int *)data = WSKBD_TYPE_ATARI;
 		return 0;
 	}
 
@@ -849,7 +845,7 @@ kbd_ioctl(void *c, u_long cmd, void *data, int flag, struct proc *p)
 	 * We are supposed to return EPASSTHROUGH to wscons if we didn't
 	 * understand.
 	 */
-	return (EPASSTHROUGH);
+	return EPASSTHROUGH;
 }
 
 static void
@@ -865,12 +861,14 @@ kbd_getc(void *c, u_int *type, int *data)
 static void
 kbd_pollc(void *c, int on)
 {
+
         kbd_softc.k_pollingmode = on;
 }
 
 static void
 kbd_bell(void *v, u_int pitch, u_int duration, u_int volume)
 {
+
         kbd_bell_sparms(volume, pitch, duration);
 	kbdbell();
 }

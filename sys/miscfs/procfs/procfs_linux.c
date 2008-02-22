@@ -1,4 +1,4 @@
-/*      $NetBSD: procfs_linux.c,v 1.48 2008/01/30 11:47:02 ad Exp $      */
+/*      $NetBSD: procfs_linux.c,v 1.73 2017/04/13 09:54:18 hannken Exp $      */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,11 +36,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.48 2008/01/30 11:47:02 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.73 2017/04/13 09:54:18 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
+#include <sys/cpu.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
@@ -53,9 +54,14 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.48 2008/01/30 11:47:02 ad Exp $")
 #include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/conf.h>
+#include <sys/sysctl.h>
+#include <sys/kauth.h>
+#include <sys/filedesc.h>
 
 #include <miscfs/procfs/procfs.h>
+
 #include <compat/linux/common/linux_exec.h>
+#include <compat/linux32/common/linux32_sysctl.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm.h>
@@ -95,7 +101,7 @@ get_proc_size_info(struct lwp *l, unsigned long *stext, unsigned long *etext, un
 			break;
 		}
 	}
-#ifdef LINUX_USRSTACK32
+#if defined(LINUX_USRSTACK32) && defined(USRSTACK32)
 	if (strcmp(p->p_emul->e_name, "linux32") == 0 &&
 	    LINUX_USRSTACK32 < USRSTACK32)
 		*sstack = (unsigned long)LINUX_USRSTACK32;
@@ -187,7 +193,6 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 	char *bf;
 	int offset = 0;
 	int i, error = ENAMETOOLONG;
-	extern kmutex_t devsw_lock;
 
 	/* XXX elad - may need filtering. */
 
@@ -197,7 +202,7 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 	if (offset >= LBFSZ)
 		goto out;
 
-	mutex_enter(&devsw_lock);
+	mutex_enter(&device_lock);
 	for (i = 0; i < max_devsw_convs; i++) {
 		if ((devsw_conv[i].d_name == NULL) || 
 		    (devsw_conv[i].d_cmajor == -1))
@@ -206,14 +211,14 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 		offset += snprintf(&bf[offset], LBFSZ - offset, 
 		    "%3d %s\n", devsw_conv[i].d_cmajor, devsw_conv[i].d_name);
 		if (offset >= LBFSZ) {
-			mutex_exit(&devsw_lock);
+			mutex_exit(&device_lock);
 			goto out;
 		}
 	}
 
 	offset += snprintf(&bf[offset], LBFSZ - offset, "\nBlock devices:\n");
 	if (offset >= LBFSZ) {
-		mutex_exit(&devsw_lock);
+		mutex_exit(&device_lock);
 		goto out;
 	}
 
@@ -225,11 +230,11 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 		offset += snprintf(&bf[offset], LBFSZ - offset, 
 		    "%3d %s\n", devsw_conv[i].d_bmajor, devsw_conv[i].d_name);
 		if (offset >= LBFSZ) {
-			mutex_exit(&devsw_lock);
+			mutex_exit(&device_lock);
 			goto out;
 		}
 	}
-	mutex_exit(&devsw_lock);
+	mutex_exit(&device_lock);
 
 	error = uiomove_frombuf(bf, offset, uio);
 out:
@@ -253,6 +258,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
         CPU_INFO_ITERATOR cii;
 #endif
 	int	 	 i;
+	uint64_t	nintr;
+	uint64_t	nswtch;
 
 	error = ENAMETOOLONG;
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
@@ -275,6 +282,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 #endif
 
 	i = 0;
+	nintr = 0;
+	nswtch = 0;
 	for (ALLCPUS) {
 		len += snprintf(&bf[len], LBFSZ - len, 
 			"cpu%d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
@@ -286,20 +295,22 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 		if (len >= LBFSZ)
 			goto out;
 		i += 1;
+		nintr += CPUNAME->ci_data.cpu_nintr;
+		nswtch += CPUNAME->ci_data.cpu_nswtch;
 	}
 
 	len += snprintf(&bf[len], LBFSZ - len,
 			"disk 0 0 0 0\n"
 			"page %u %u\n"
 			"swap %u %u\n"
-			"intr %u\n"
-			"ctxt %u\n"
-			"btime %lld\n",
+			"intr %"PRIu64"\n"
+			"ctxt %"PRIu64"\n"
+			"btime %"PRId64"\n",
 			uvmexp.pageins, uvmexp.pdpageouts,
 			uvmexp.pgswapin, uvmexp.pgswapout,
-			uvmexp.intrs,
-			uvmexp.swtch,
-			(long long)boottime.tv_sec);
+			nintr,
+			nswtch,
+			boottime.tv_sec);
 	if (len >= LBFSZ)
 		goto out;
 
@@ -355,12 +366,11 @@ procfs_do_pid_statm(struct lwp *curl, struct lwp *l,
 {
 	struct vmspace	*vm;
 	struct proc	*p = l->l_proc;
-	struct rusage	*ru = &p->p_stats->p_ru;
 	char		*bf;
 	int	 	 error;
 	int	 	 len;
+	struct kinfo_proc2 ki;
 
-	error = ENAMETOOLONG;
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
 
 	/* XXX - we use values from vmspace, since dsl says that ru figures
@@ -369,15 +379,26 @@ procfs_do_pid_statm(struct lwp *curl, struct lwp *l,
 		goto out;
 	}
 
+	mutex_enter(proc_lock);
+	mutex_enter(p->p_lock);
+
+	/* retrieve RSS size */
+	fill_kproc2(p, &ki, false);
+
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
+
+	uvmspace_free(vm);
+
 	len = snprintf(bf, LBFSZ,
 	        "%lu %lu %lu %lu %lu %lu %lu\n",
-		(unsigned long)(vm->vm_tsize + vm->vm_dsize + vm->vm_ssize), /* size */
-		(unsigned long)(vm->vm_rssize),	/* resident */
-		(unsigned long)(ru->ru_ixrss),	/* shared */
-		(unsigned long)(vm->vm_tsize),	/* text size in pages */
-		(unsigned long)(vm->vm_dsize),	/* data size in pages */
-		(unsigned long)(vm->vm_ssize),	/* stack size in pages */
-		(unsigned long) 0);
+		(unsigned long)(ki.p_vm_msize),	/* size */
+		(unsigned long)(ki.p_vm_rssize),/* resident */
+		(unsigned long)(ki.p_uru_ixrss),/* shared */
+		(unsigned long)(ki.p_vm_tsize),	/* text */
+		(unsigned long) 0,		/* library (unused) */
+		(unsigned long)(ki.p_vm_dsize + ki.p_vm_ssize),	/* data+stack */
+		(unsigned long) 0);		/* dirty */
 
 	if (len == 0)
 		goto out;
@@ -388,7 +409,7 @@ out:
 	return error;
 }
 
-#define USEC_2_TICKS(x)		((x) / 10000)
+#define UTIME2TICKS(s,u)	(((uint64_t)(s) * 1000000 + (u)) / 10000)
 
 /*
  * Linux compatible /proc/<pid>/stat. Only active when the -o linux
@@ -401,13 +422,12 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 	char *bf;
 	struct proc *p = l->l_proc;
 	int len;
-	struct tty *tty = p->p_session->s_ttyp;
-	struct rusage *ru = &p->p_stats->p_ru;
 	struct rusage *cru = &p->p_stats->p_cru;
 	unsigned long stext = 0, etext = 0, sstack = 0;
 	struct timeval rt;
 	struct vmspace	*vm;
-	int error = 0;
+	struct kinfo_proc2 ki;
+	int error;
 
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
 
@@ -417,73 +437,75 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 
 	get_proc_size_info(l, &stext, &etext, &sstack);
 
-	mutex_enter(&proclist_lock);
-	mutex_enter(&p->p_mutex);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(proc_lock);
+	mutex_enter(p->p_lock);
 
+	fill_kproc2(p, &ki, false);
 	calcru(p, NULL, NULL, NULL, &rt);
 
 	len = snprintf(bf, LBFSZ,
-	    "%d (%s) %c %d %d %d %d %d "
+	    "%d (%s) %c %d %d %d %u %d "
 	    "%u "
-	    "%lu %lu %lu %lu %lu %lu %lu %lu "
-	    "%d %d %d "
-	    "%lu %lu %lu %lu %" PRIu64 " "
+	    "%"PRIu64" %lu %"PRIu64" %lu %"PRIu64" %"PRIu64" %"PRIu64" %"PRIu64" "
+	    "%d %d %"PRIu64" "
+	    "%lld %"PRIu64" %"PRId64" %lu %"PRIu64" "
 	    "%lu %lu %lu "
 	    "%u %u "
 	    "%u %u %u %u "
-	    "%lu %lu %lu %d %d\n",
+	    "%"PRIu64" %"PRIu64" %"PRIu64" %d %"PRIu64"\n",
 
-	    p->p_pid,
-	    p->p_comm,
-	    "0IR3SZD"[(p->p_stat > 6) ? 0 : (int)p->p_stat],
-	    (p->p_pptr != NULL) ? p->p_pptr->p_pid : 0,
+	    ki.p_pid,						/* 1 pid */
+	    ki.p_comm,						/* 2 tcomm */
+	    "0RRSTZXR8"[(ki.p_stat > 8) ? 0 : (int)ki.p_stat],	/* 3 state */
+	    ki.p_ppid,						/* 4 ppid */
+	    ki.p__pgid,						/* 5 pgrp */
+	    ki.p_sid,						/* 6 sid */
+	    (ki.p_tdev != (uint32_t)NODEV) ? ki.p_tdev : 0,	/* 7 tty_nr */
+	    ki.p_tpgid,						/* 8 tty_pgrp */
 
-	    p->p_pgid,
-	    p->p_session->s_sid,
-	    tty ? tty->t_dev : 0,
-	    (tty && tty->t_pgrp) ? tty->t_pgrp->pg_id : 0,
+	    ki.p_flag,						/* 9 flags */
 
-	    p->p_flag,
-
-	    ru->ru_minflt,
+	    ki.p_uru_minflt,					/* 10 min_flt */
 	    cru->ru_minflt,
-	    ru->ru_majflt,
+	    ki.p_uru_majflt,					/* 12 maj_flt */
 	    cru->ru_majflt,
-	    USEC_2_TICKS(ru->ru_utime.tv_usec),
-	    USEC_2_TICKS(ru->ru_stime.tv_usec),
-	    USEC_2_TICKS(cru->ru_utime.tv_usec),
-	    USEC_2_TICKS(cru->ru_stime.tv_usec),
+	    UTIME2TICKS(ki.p_uutime_sec, ki.p_uutime_usec),	/* 14 utime */
+	    UTIME2TICKS(ki.p_ustime_sec, ki.p_ustime_usec),	/* 15 stime */
+	    UTIME2TICKS(cru->ru_utime.tv_sec, cru->ru_utime.tv_usec), /* 16 cutime */
+	    UTIME2TICKS(cru->ru_stime.tv_sec, cru->ru_stime.tv_usec), /* 17 cstime */
 
-	    l->l_priority,				/* XXX: priority */
-	    p->p_nice - 20,
-	    0,
+	    ki.p_priority,				/* XXX: 18 priority */
+	    ki.p_nice - NZERO,				/* 19 nice */
+	    ki.p_nlwps,					/* 20 num_threads */
 
-	    rt.tv_sec,
-	    p->p_stats->p_start.tv_sec,
-	    (unsigned long)(vm->vm_tsize + vm->vm_dsize + vm->vm_ssize), /* size */
-	    (unsigned long)(vm->vm_rssize),	/* resident */
-	    p->p_rlimit[RLIMIT_RSS].rlim_cur,
+	    (long long)rt.tv_sec,
+	    UTIME2TICKS(ki.p_ustart_sec, ki.p_ustart_usec), /* 22 start_time */
+	    ki.p_vm_msize,				/* 23 vsize */
+	    PGTOKB(ki.p_vm_rssize),			/* 24 rss */
+	    p->p_rlimit[RLIMIT_RSS].rlim_cur,		/* 25 rsslim */
 
-	    stext,					/* start code */
-	    etext,					/* end code */
-	    sstack,					/* mm start stack */
-	    0,						/* XXX: pc */
-	    0,						/* XXX: sp */
-	    p->p_sigpend.sp_set.__bits[0],		/* XXX: pending */
-	    0,						/* XXX: held */
-	    p->p_sigctx.ps_sigignore.__bits[0],		/* ignored */
-	    p->p_sigctx.ps_sigcatch.__bits[0],		/* caught */
+	    stext,					/* 26 start_code */
+	    etext,					/* 27 end_code */
+	    sstack,					/* 28 start_stack */
 
-	    (unsigned long)(intptr_t)l->l_wchan,
-	    ru->ru_nvcsw,
-	    ru->ru_nivcsw,
-	    p->p_exitsig,
-	    0);						/* XXX: processor */
+	    0,						/* XXX: 29 esp */
+	    0,						/* XXX: 30 eip */
 
-	mutex_exit(&p->p_smutex);
-	mutex_exit(&p->p_mutex);
-	mutex_exit(&proclist_lock);
+	    ki.p_siglist.__bits[0],			/* XXX: 31 pending */
+	    0,						/* XXX: 32 blocked */
+	    ki.p_sigignore.__bits[0],		/* 33 sigign */
+	    ki.p_sigcatch.__bits[0],		/* 34 sigcatch */
+
+	    ki.p_wchan,					/* 35 wchan */
+	    ki.p_uru_nvcsw,
+	    ki.p_uru_nivcsw,
+	    ki.p_exitsig,				/* 38 exit_signal */
+	    ki.p_cpuid);				/* 39 task_cpu */
+
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
+
+	uvmspace_free(vm);
 
 	if (len == 0)
 		goto out;
@@ -498,14 +520,15 @@ int
 procfs_docpuinfo(struct lwp *curl, struct proc *p,
     struct pfsnode *pfs, struct uio *uio)
 {
-	int len = LBFSZ;
-	char *bf = malloc(len, M_TEMP, M_WAITOK);
+	size_t len = LBFSZ;
+	char *bf = NULL;
 	int error;
 
-	if (procfs_getcpuinfstr(bf, &len) < 0) {
-		error = ENOSPC;
-		goto done;
-	}
+	do {
+		if (bf)
+			free(bf, M_TEMP);
+		bf = malloc(len, M_TEMP, M_WAITOK);
+	} while (procfs_getcpuinfstr(bf, &len) < 0);
 
 	if (len == 0) {
 		error = 0;
@@ -533,8 +556,8 @@ procfs_douptime(struct lwp *curl, struct proc *p,
 	microuptime(&runtime);
 	idle = curcpu()->ci_schedstate.spc_cp_time[CP_IDLE];
 	len = snprintf(bf, LBFSZ,
-	    "%lu.%02lu %" PRIu64 ".%02" PRIu64 "\n",
-	    runtime.tv_sec, runtime.tv_usec / 10000,
+	    "%lld.%02lu %" PRIu64 ".%02" PRIu64 "\n",
+	    (long long)runtime.tv_sec, (long)runtime.tv_usec / 10000,
 	    idle / hz, (((idle % hz) * 100) / hz) % 100);
 
 	if (len == 0)
@@ -546,56 +569,65 @@ out:
 	return error;
 }
 
+static int
+procfs_format_sfs(char **mtab, size_t *mlen, char *buf, size_t blen,
+    const struct statvfs *sfs, struct lwp *curl, int suser)
+{
+	const char *fsname;
+
+	/* Linux uses different names for some filesystems */
+	fsname = sfs->f_fstypename;
+	if (strcmp(fsname, "procfs") == 0)
+		fsname = "proc";
+	else if (strcmp(fsname, "ext2fs") == 0)
+		fsname = "ext2";
+
+	blen = snprintf(buf, blen, "%s %s %s %s%s%s%s%s%s 0 0\n",
+	    sfs->f_mntfromname, sfs->f_mntonname, fsname,
+	    (sfs->f_flag & ST_RDONLY) ? "ro" : "rw",
+	    (sfs->f_flag & ST_NOSUID) ? ",nosuid" : "",
+	    (sfs->f_flag & ST_NOEXEC) ? ",noexec" : "",
+	    (sfs->f_flag & ST_NODEV) ? ",nodev" : "",
+	    (sfs->f_flag & ST_SYNCHRONOUS) ? ",sync" : "",
+	    (sfs->f_flag & ST_NOATIME) ? ",noatime" : "");
+
+	*mtab = realloc(*mtab, *mlen + blen, M_TEMP, M_WAITOK);
+	memcpy(*mtab + *mlen, buf, blen);
+	*mlen += blen;
+	return sfs->f_mntonname[0] == '/' && sfs->f_mntonname[1] == '\0';
+}
+
 int
 procfs_domounts(struct lwp *curl, struct proc *p,
     struct pfsnode *pfs, struct uio *uio)
 {
 	char *bf, *mtab = NULL;
-	const char *fsname;
-	size_t len, mtabsz = 0;
-	struct mount *mp, *nmp;
-	struct statvfs *sfs;
-	int error = 0;
+	size_t mtabsz = 0;
+	mount_iterator_t *iter;
+	struct mount *mp;
+	int error = 0, root = 0;
+	struct cwdinfo *cwdi = curl->l_proc->p_cwdi;
 
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
-	mutex_enter(&mountlist_lock);
-	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
-	     mp = nmp) {
-		if (vfs_trybusy(mp, RW_READER, &mountlist_lock)) {
-			nmp = CIRCLEQ_NEXT(mp, mnt_list);
-			continue;
-		}
 
-		sfs = &mp->mnt_stat;
+	mountlist_iterator_init(&iter);
+	while ((mp = mountlist_iterator_next(iter)) != NULL) {
+		struct statvfs sfs;
 
-		/* Linux uses different names for some filesystems */
-		fsname = sfs->f_fstypename;
-		if (strcmp(fsname, "procfs") == 0)
-			fsname = "proc";
-		else if (strcmp(fsname, "ext2fs") == 0)
-			fsname = "ext2";
-
-		len = snprintf(bf, LBFSZ, "%s %s %s %s%s%s%s%s%s 0 0\n",
-			sfs->f_mntfromname,
-			sfs->f_mntonname,
-			fsname,
-			(mp->mnt_flag & MNT_RDONLY) ? "ro" : "rw",
-			(mp->mnt_flag & MNT_NOSUID) ? ",nosuid" : "",
-			(mp->mnt_flag & MNT_NOEXEC) ? ",noexec" : "",
-			(mp->mnt_flag & MNT_NODEV) ? ",nodev" : "",
-			(mp->mnt_flag & MNT_SYNCHRONOUS) ? ",sync" : "",
-			(mp->mnt_flag & MNT_NOATIME) ? ",noatime" : ""
-			);
-
-		mtab = realloc(mtab, mtabsz + len, M_TEMP, M_WAITOK);
-		memcpy(mtab + mtabsz, bf, len);
-		mtabsz += len;
-
-		mutex_enter(&mountlist_lock);
-		nmp = CIRCLEQ_NEXT(mp, mnt_list);
-		vfs_unbusy(mp, false);
+		if ((error = dostatvfs(mp, &sfs, curl, MNT_WAIT, 0)) == 0)
+			root |= procfs_format_sfs(&mtab, &mtabsz, bf, LBFSZ,
+			    &sfs, curl, 0);
 	}
-	mutex_exit(&mountlist_lock);
+	mountlist_iterator_destroy(iter);
+
+	/*
+	 * If we are inside a chroot that is not itself a mount point,
+	 * fake a root entry.
+	 */
+	if (!root && cwdi->cwdi_rdir)
+		(void)procfs_format_sfs(&mtab, &mtabsz, bf, LBFSZ,
+		    &cwdi->cwdi_rdir->v_mount->mnt_stat, curl, 1);
+
 	free(bf, M_TEMP);
 
 	if (mtabsz > 0) {
@@ -603,5 +635,104 @@ procfs_domounts(struct lwp *curl, struct proc *p,
 		free(mtab, M_TEMP);
 	}
 
+	return error;
+}
+
+/*
+ * Linux compatible /proc/version. Only active when the -o linux
+ * mountflag is used.
+ */
+int
+procfs_doversion(struct lwp *curl, struct proc *p,
+    struct pfsnode *pfs, struct uio *uio)
+{
+	char *bf;
+	char lostype[20], losrelease[20], lversion[80];
+	const char *postype, *posrelease, *pversion;
+	const char *emulname = curlwp->l_proc->p_emul->e_name;
+	int len;
+	int error = 0;
+	int nm[4];
+	size_t buflen;
+
+	CTASSERT(EMUL_LINUX_KERN_OSTYPE == EMUL_LINUX32_KERN_OSTYPE);
+	CTASSERT(EMUL_LINUX_KERN_OSRELEASE == EMUL_LINUX32_KERN_OSRELEASE);
+	CTASSERT(EMUL_LINUX_KERN_VERSION == EMUL_LINUX32_KERN_VERSION);
+
+	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
+
+	sysctl_lock(false);
+
+	if (strncmp(emulname, "linux", 5) == 0) {
+		/*
+		 * Lookup the emulation ostype, osrelease, and version.
+		 * Since compat_linux and compat_linux32 can be built as
+		 * modules, we use sysctl to obtain the values instead of
+		 * using the symbols directly.
+		 */
+
+		if (strcmp(emulname, "linux32") == 0) {
+			nm[0] = CTL_EMUL;
+			nm[1] = EMUL_LINUX32;
+			nm[2] = EMUL_LINUX32_KERN;
+		} else {
+			nm[0] = CTL_EMUL;
+			nm[1] = EMUL_LINUX;
+			nm[2] = EMUL_LINUX_KERN;
+		}
+
+		nm[3] = EMUL_LINUX_KERN_OSTYPE;
+		buflen = sizeof(lostype);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    lostype, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		nm[3] = EMUL_LINUX_KERN_OSRELEASE;
+		buflen = sizeof(losrelease);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    losrelease, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		nm[3] = EMUL_LINUX_KERN_VERSION;
+		buflen = sizeof(lversion);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    lversion, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		postype = lostype;
+		posrelease = losrelease;
+		pversion = lversion;
+	} else {
+		postype = ostype;
+		posrelease = osrelease;
+		strlcpy(lversion, version, sizeof(lversion));
+		if (strchr(lversion, '\n'))
+			*strchr(lversion, '\n') = '\0';
+		pversion = lversion;
+	}
+
+	len = snprintf(bf, LBFSZ,
+		"%s version %s (%s@localhost) (gcc version %s) %s\n",
+		postype, posrelease, emulname,
+#ifdef __VERSION__
+		__VERSION__,
+#else
+		"unknown",
+#endif
+		pversion);
+
+	if (len == 0)
+		goto out;
+
+	error = uiomove_frombuf(bf, len, uio);
+out:
+	free(bf, M_TEMP);
+	sysctl_unlock();
 	return error;
 }

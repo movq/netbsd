@@ -1,4 +1,4 @@
-/*	$NetBSD: siside.c,v 1.22 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: siside.c,v 1.37 2018/06/23 06:45:51 maxv Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siside.c,v 1.22 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siside.c,v 1.37 2018/06/23 06:45:51 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,19 +36,20 @@ __KERNEL_RCSID(0, "$NetBSD: siside.c,v 1.22 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_sis_reg.h>
 
-static void sis_chip_map(struct pciide_softc *, struct pci_attach_args *);
-static void sis_sata_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void sis_chip_map(struct pciide_softc *, const struct pci_attach_args *);
+static void sis_sata_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void sis_setup_channel(struct ata_channel *);
 static void sis96x_setup_channel(struct ata_channel *);
 
-static int  sis_hostbr_match(struct pci_attach_args *);
-static int  sis_south_match(struct pci_attach_args *);
+static int  sis_hostbr_match(const struct pci_attach_args *);
+static int  sis_south_match(const struct pci_attach_args *);
 
-static int  siside_match(struct device *, struct cfdata *, void *);
-static void siside_attach(struct device *, struct device *, void *);
+static int  siside_match(device_t, cfdata_t, void *);
+static void siside_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(siside, sizeof(struct pciide_softc),
-    siside_match, siside_attach, NULL, NULL);
+CFATTACH_DECL_NEW(siside, sizeof(struct pciide_softc),
+    siside_match, siside_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_sis_products[] =  {
 	{ PCI_PRODUCT_SIS_5597_IDE,
@@ -84,8 +80,7 @@ static const struct pciide_product_desc pciide_sis_products[] =  {
 };
 
 static int
-siside_match(struct device *parent, struct cfdata *match,
-    void *aux)
+siside_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -97,17 +92,27 @@ siside_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-siside_attach(struct device *parent, struct device *self, void *aux)
+siside_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+	pci_chipset_tag_t pc = pa->pa_pc;
+	pcitag_t tag = pa->pa_tag;
+	pcireg_t csr;
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_sis_products));
 
+	csr = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
+	if (csr & PCI_COMMAND_INTERRUPT_DISABLE) {
+		csr &= ~PCI_COMMAND_INTERRUPT_DISABLE;
+		pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG, csr);
+	}
 }
 
-static struct sis_hostbr_type {
+static const struct sis_hostbr_type {
 	u_int16_t id;
 	u_int8_t rev;
 	u_int8_t udma_mode;
@@ -153,7 +158,7 @@ static struct sis_hostbr_type {
 	{PCI_PRODUCT_SIS_740,   0x00, 5, "740", SIS_TYPE_SOUTH},
 	{PCI_PRODUCT_SIS_741,   0x00, 5, "741", SIS_TYPE_SOUTH},
 	{PCI_PRODUCT_SIS_745,   0x00, 5, "745", SIS_TYPE_100NEW},
-	{PCI_PRODUCT_SIS_746,   0x00, 6, "746", SIS_TYPE_SOUTH},
+	{PCI_PRODUCT_SIS_746,   0x00, 6, "746", SIS_TYPE_100NEW},
 	{PCI_PRODUCT_SIS_748,   0x00, 6, "748", SIS_TYPE_SOUTH},
 	{PCI_PRODUCT_SIS_750,   0x00, 6, "750", SIS_TYPE_SOUTH},
 	{PCI_PRODUCT_SIS_751,   0x00, 6, "751", SIS_TYPE_SOUTH},
@@ -170,35 +175,35 @@ static struct sis_hostbr_type {
 	{PCI_PRODUCT_SIS_965,   0x00, 6, "965", SIS_TYPE_133NEW},
 };
 
-static struct sis_hostbr_type *sis_hostbr_type_match;
+static const struct sis_hostbr_type *sis_hostbr_type_match;
 
 static int
-sis_hostbr_match(struct pci_attach_args *pa)
+sis_hostbr_match(const struct pci_attach_args *pa)
 {
 	int i;
-	pcireg_t id, reg;
+	pcireg_t id, masqid, reg;
 
-	if (PCI_VENDOR(pa->pa_id) != PCI_VENDOR_SIS)
+	id = pa->pa_id;
+
+	if (PCI_VENDOR(id) != PCI_VENDOR_SIS)
 		return 0;
-	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SIS_85C503) {
+	if (PCI_PRODUCT(id) == PCI_PRODUCT_SIS_85C503) {
 		reg = pci_conf_read(pa->pa_pc, pa->pa_tag, SIS96x_DETECT);
 		pci_conf_write(pa->pa_pc, pa->pa_tag, SIS96x_DETECT,
 		    reg | SIS96x_DETECT_MASQ);
-		id = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_ID_REG);
-		if (((PCI_PRODUCT(id) & 0xfff0) != 0x0960)
-		    && (PCI_PRODUCT(id) != 0x0018)) {
+		masqid = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_ID_REG);
+		if (((PCI_PRODUCT(masqid) & 0xfff0) != 0x0960)
+		    && (PCI_PRODUCT(masqid) != 0x0018)) {
 			pci_conf_write(pa->pa_pc, pa->pa_tag, SIS96x_DETECT,
 			    reg);
 		} else {
-			pa->pa_id = id;
+			id = masqid;
 		}
 	}
-		
+
 	sis_hostbr_type_match = NULL;
-	for (i = 0;
-	    i < sizeof(sis_hostbr_type) / sizeof(sis_hostbr_type[0]);
-	    i++) {
-		if (PCI_PRODUCT(pa->pa_id) == sis_hostbr_type[i].id &&
+	for (i = 0; i < __arraycount(sis_hostbr_type); i++) {
+		if (PCI_PRODUCT(id) == sis_hostbr_type[i].id &&
 		    PCI_REVISION(pa->pa_class) >= sis_hostbr_type[i].rev)
 			sis_hostbr_type_match = &sis_hostbr_type[i];
 	}
@@ -206,7 +211,7 @@ sis_hostbr_match(struct pci_attach_args *pa)
 }
 
 static int
-sis_south_match(struct pci_attach_args *pa)
+sis_south_match(const struct pci_attach_args *pa)
 {
 
 	return (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SIS &&
@@ -215,20 +220,19 @@ sis_south_match(struct pci_attach_args *pa)
 }
 
 static void
-sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+sis_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	u_int8_t sis_ctr0 = pciide_pci_read(sc->sc_pc, sc->sc_tag, SIS_CTRL0);
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
 	pcireg_t rev = PCI_REVISION(pa->pa_class);
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_normal("%s: Silicon Integrated Systems ",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "Silicon Integrated Systems ");
 	pci_find_device(NULL, sis_hostbr_match);
 	if (sis_hostbr_type_match) {
 		if (sis_hostbr_type_match->type == SIS_TYPE_SOUTH) {
@@ -237,7 +241,7 @@ sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			    SIS_REG_57) & 0x7f);
 			if (PCI_PRODUCT(pci_conf_read(sc->sc_pc, sc->sc_tag,
 			    PCI_ID_REG)) == SIS_PRODUCT_5518) {
-				aprint_normal("96X UDMA%d",
+				aprint_normal("96X UDMA%d ",
 				    sis_hostbr_type_match->udma_mode);
 				sc->sis_type = SIS_TYPE_133NEW;
 				sc->sc_wdcdev.sc_atac.atac_udma_cap =
@@ -258,7 +262,7 @@ sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			sc->sc_wdcdev.sc_atac.atac_udma_cap =
 		    	    sis_hostbr_type_match->udma_mode;
 		}
-		aprint_normal(sis_hostbr_type_match->name);
+		aprint_normal("%s", sis_hostbr_type_match->name);
 	} else {
 		aprint_normal("5597/5598");
 		if (rev >= 0xd0) {
@@ -271,8 +275,8 @@ sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	}
 	aprint_normal(" IDE controller (rev. 0x%02x)\n",
 	    PCI_REVISION(pa->pa_class));
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -289,6 +293,7 @@ sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	switch(sc->sis_type) {
 	case SIS_TYPE_NOUDMA:
 	case SIS_TYPE_66:
@@ -322,13 +327,12 @@ sis_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			continue;
 		if ((channel == 0 && (sis_ctr0 & SIS_CTRL0_CHAN0_EN) == 0) ||
 		    (channel == 1 && (sis_ctr0 & SIS_CTRL0_CHAN1_EN) == 0)) {
-			aprint_normal("%s: %s channel ignored (disabled)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "%s channel ignored (disabled)\n", cp->name);
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 
@@ -354,13 +358,13 @@ sis96x_setup_channel(struct ata_channel *chp)
 		    chp->ch_channel, drive);
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 		/* add timing values, setup DMA if needed */
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			if (pciide_pci_read(sc->sc_pc, sc->sc_tag,
 			    SIS96x_REG_CBL(chp->ch_channel)) & SIS96x_REG_CBL_33) {
@@ -370,7 +374,7 @@ sis96x_setup_channel(struct ata_channel *chp)
 			sis_tim |= sis_udma133new_tim[drvp->UDMA_mode];
 			sis_tim |= sis_pio133new_tim[drvp->PIO_mode];
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
-		} else if (drvp->drive_flags & DRIVE_DMA) {
+		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			/*
 			 * use Multiword DMA
 			 * Timings will be used for both PIO and DMA,
@@ -420,17 +424,17 @@ sis_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 		/* add timing values, setup DMA if needed */
-		if ((drvp->drive_flags & DRIVE_DMA) == 0 &&
-		    (drvp->drive_flags & DRIVE_UDMA) == 0)
+		if ((drvp->drive_flags & ATA_DRIVE_DMA) == 0 &&
+		    (drvp->drive_flags & ATA_DRIVE_UDMA) == 0)
 			goto pio;
 
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			if (pciide_pci_read(sc->sc_pc, sc->sc_tag,
 			    SIS_REG_CBL) & SIS_REG_CBL_33(chp->ch_channel)) {
@@ -504,12 +508,11 @@ pio:		switch (sc->sis_type) {
 }
 
 static void
-sis_sata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+sis_sata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
 	int channel;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -521,12 +524,12 @@ sis_sata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    PCIIDE_INTERFACE_PCI(0) | PCIIDE_INTERFACE_PCI(1);
 	}
 
-	aprint_normal("%s: Silicon Integrated Systems 180/96X SATA controller (rev. 0x%02x)\n",
-		      sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-		      PCI_REVISION(pa->pa_class));
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "Silicon Integrated Systems 180/96X SATA controller "
+	    "(rev. 0x%02x)\n", PCI_REVISION(pa->pa_class));
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -542,6 +545,7 @@ sis_sata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	sc->sc_wdcdev.sc_atac.atac_set_modes = sata_setup_channel;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -550,7 +554,6 @@ sis_sata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }

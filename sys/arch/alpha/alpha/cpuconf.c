@@ -1,4 +1,4 @@
-/* $NetBSD: cpuconf.c,v 1.30 2005/12/11 12:16:10 christos Exp $ */
+/* $NetBSD: cpuconf.c,v 1.36 2013/09/23 16:41:56 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpuconf.c,v 1.30 2005/12/11 12:16:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpuconf.c,v 1.36 2013/09/23 16:41:56 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -77,77 +70,70 @@ __KERNEL_RCSID(0, "$NetBSD: cpuconf.c,v 1.30 2005/12/11 12:16:10 christos Exp $"
 
 #include "opt_dec_3000_500.h"
 #ifdef DEC_3000_500
-extern void dec_3000_500_init __P((void));
+extern void dec_3000_500_init(void);
 #else
 #define	dec_3000_500_init	platform_not_configured
 #endif
 
 #include "opt_dec_3000_300.h"
 #ifdef DEC_3000_300
-extern void dec_3000_300_init __P((void));
+extern void dec_3000_300_init(void);
 #else
 #define	dec_3000_300_init	platform_not_configured
 #endif
 
 #include "opt_dec_axppci_33.h"
 #ifdef DEC_AXPPCI_33
-extern void dec_axppci_33_init __P((void));
+extern void dec_axppci_33_init(void);
 #else
 #define	dec_axppci_33_init	platform_not_configured
 #endif
 
 #include "opt_dec_kn8ae.h"
 #ifdef DEC_KN8AE
-extern void dec_kn8ae_init __P((void));
+extern void dec_kn8ae_init(void);
 #else
 #define	dec_kn8ae_init		platform_not_configured
 #endif
 
 #include "opt_dec_2100_a50.h"
 #ifdef DEC_2100_A50
-extern void dec_2100_a50_init __P((void));
+extern void dec_2100_a50_init(void);
 #else
 #define	dec_2100_a50_init	platform_not_configured
 #endif
 
 #include "opt_dec_kn20aa.h"
 #ifdef DEC_KN20AA
-extern void dec_kn20aa_init __P((void));
+extern void dec_kn20aa_init(void);
 #else
 #define	dec_kn20aa_init		platform_not_configured
 #endif
 
 #include "opt_dec_eb64plus.h"
 #ifdef DEC_EB64PLUS
-extern void dec_eb64plus_init __P((void));
+extern void dec_eb64plus_init(void);
 #else
 #define	dec_eb64plus_init	platform_not_configured
 #endif
 
 #include "opt_dec_eb164.h"
 #ifdef DEC_EB164
-extern void dec_eb164_init __P((void));
+extern void dec_eb164_init(void);
 #else
 #define	dec_eb164_init		platform_not_configured
 #endif
 
-#include "opt_avalon_a12.h"
-#ifdef AVALON_A12
-extern void avalon_a12_init __P((void));
-#else
-#define	avalon_a12_init		platform_not_configured
-#endif
-
 #include "opt_dec_kn300.h"
 #ifdef	DEC_KN300
-extern void dec_kn300_init __P((void));
+extern void dec_kn300_init(void);
 #else
 #define	dec_kn300_init		platform_not_configured
 #endif
 
 #include "opt_dec_550.h"
 #ifdef DEC_550
-extern void dec_550_init __P((void));
+extern void dec_550_init(void);
 #else
 #define	dec_550_init		platform_not_configured
 #endif
@@ -155,7 +141,7 @@ extern void dec_550_init __P((void));
 #include "opt_dec_1000.h"
 #include "opt_dec_1000a.h"
 #if defined(DEC_1000) || defined(DEC_1000A)
-extern void _dec_1000a_init __P((void));
+extern void _dec_1000a_init(void);
 #endif
 #ifdef DEC_1000A
 #define	dec_1000a_init		_dec_1000a_init
@@ -170,21 +156,21 @@ extern void _dec_1000a_init __P((void));
 
 #include "opt_dec_alphabook1.h"
 #ifdef DEC_ALPHABOOK1
-extern void dec_alphabook1_init __P((void));
+extern void dec_alphabook1_init(void);
 #else
 #define	dec_alphabook1_init	platform_not_configured
 #endif
 
 #include "opt_dec_eb66.h"
 #ifdef DEC_EB66
-extern void dec_eb66_init __P((void));
+extern void dec_eb66_init(void);
 #else
 #define	dec_eb66_init		platform_not_configured
 #endif
 
 #include "opt_dec_6600.h"
 #ifdef DEC_6600
-extern void dec_6600_init __P((void));
+extern void dec_6600_init(void);
 #else
 #define	dec_6600_init		platform_not_configured
 #endif
@@ -192,7 +178,7 @@ extern void dec_6600_init __P((void));
 #include "opt_dec_2100_a500.h"
 #include "opt_dec_2100a_a500.h"
 #if defined(DEC_2100_A500) || defined(DEC_2100A_A500)
-extern void _dec_2100_a500_init __P((void));
+extern void _dec_2100_a500_init(void);
 #endif
 #ifdef DEC_2100_A500
 #define	dec_2100_a500_init	_dec_2100_a500_init
@@ -207,14 +193,14 @@ extern void _dec_2100_a500_init __P((void));
 
 #include "opt_api_up1000.h"
 #ifdef API_UP1000
-extern void api_up1000_init __P((void));
+extern void api_up1000_init(void);
 #else
 #define	api_up1000_init		platform_not_configured
 #endif
 
 #include "opt_dec_2000_300.h"
 #ifdef DEC_2000_300
-extern void dec_2000_300_init __P((void));
+extern void dec_2000_300_init(void);
 #else
 #define	dec_2000_300_init	platform_not_configured
 #endif
@@ -226,7 +212,6 @@ static const struct cpuinit cpuinit[] = {
 	cpu_init(ST_DEC_3000_500, dec_3000_500_init, "DEC_3000_500"),
 	cpu_init(ST_DEC_2000_300, dec_2000_300_init, "DEC_2000_300"),
 	cpu_init(ST_DEC_3000_300, dec_3000_300_init, "DEC_3000_300"),
-	cpu_init(ST_AVALON_A12, avalon_a12_init, "AVALON_A12"),
 	cpu_init(ST_DEC_2100_A500, dec_2100_a500_init, "DEC_2100_A500"),
 	cpu_notsupp(ST_DEC_APXVME_64, "AXPvme 64"),
 	cpu_init(ST_DEC_AXPPCI_33, dec_axppci_33_init, "DEC_AXPPCI_33"),
@@ -248,6 +233,7 @@ static const struct cpuinit cpuinit[] = {
 	cpu_notsupp(ST_DEC_EV56_PBP, "EV56 Passive Backplane Board"),
 	cpu_notsupp(ST_DEC_ALPHAVME_320, "AlphaVME 320"),
 	cpu_init(ST_DEC_6600, dec_6600_init, "DEC_6600"),
+	cpu_init(ST_DEC_TITAN, dec_6600_init, "DEC_6600"), 
 	cpu_init(ST_API_NAUTILUS, api_up1000_init, "API_UP1000"),
 };
 static const int ncpuinit = (sizeof(cpuinit) / sizeof(cpuinit[0]));
@@ -267,7 +253,7 @@ platform_lookup(int systype)
 }
 
 void
-platform_not_configured()
+platform_not_configured(void)
 {
 	const struct cpuinit *c = platform_lookup(cputype);
 
@@ -276,12 +262,12 @@ platform_not_configured()
 	    cputype);
 	printf("Please build a kernel with \"options %s\" and reboot.\n",
 	    c->option);
-	printf("\n");   
+	printf("\n");
 	panic("platform not configured");
 }
 
 void
-platform_not_supported()
+platform_not_supported(void)
 {
 	const struct cpuinit *c = platform_lookup(cputype);
 

@@ -1,4 +1,4 @@
-/*      $NetBSD: sa1111.c,v 1.21 2008/01/08 02:07:52 matt Exp $	*/
+/*      $NetBSD: sa1111.c,v 1.24 2011/07/01 20:31:39 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.21 2008/01/08 02:07:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.24 2011/07/01 20:31:39 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa1111.c,v 1.21 2008/01/08 02:07:52 matt Exp $");
 #include <sys/malloc.h>
 #include <sys/uio.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/sa11x0/sa11x0_reg.h>
@@ -76,7 +69,7 @@ static void	sacc_intr_setpolarity(sacc_chipset_tag_t *, int , int);
 #endif
 
 int
-sacc_probe(struct device *parent, struct cfdata *match, void *aux)
+sacc_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct sa11x0_attach_args *sa = aux;
 	bus_space_handle_t ioh;
@@ -96,7 +89,7 @@ sacc_probe(struct device *parent, struct cfdata *match, void *aux)
 
 
 int
-sa1111_search(struct device *parent, struct cfdata *cf, const int *ldesc,
+sa1111_search(device_t parent, cfdata_t cf, const int *ldesc,
     void *aux)
 {
 	struct sa1111_attach_args aa;

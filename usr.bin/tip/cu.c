@@ -1,4 +1,4 @@
-/*	$NetBSD: cu.c,v 1.20 2006/12/14 17:09:43 christos Exp $	*/
+/*	$NetBSD: cu.c,v 1.23 2016/01/03 15:38:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -36,13 +36,13 @@
 #if 0
 static char sccsid[] = "@(#)cu.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cu.c,v 1.20 2006/12/14 17:09:43 christos Exp $");
+__RCSID("$NetBSD: cu.c,v 1.23 2016/01/03 15:38:29 christos Exp $");
 #endif /* not lint */
 
 #include "tip.h"
 
-static void cuhelp(void);
-static void cuusage(void);
+__dead static void cuhelp(void);
+__dead static void cuusage(void);
 
 /*
  * Botch the interface to look like cu's
@@ -54,8 +54,9 @@ cumain(int argc, char *argv[])
 	int parity = 0;		/* 0 is no parity */
 	int flow = -1;		/* -1 is "tandem" ^S/^Q */
 	static int helpme = 0, nostop = 0;
-	char useresc = '~';
-	static char sbuf[12], brbuf[16];
+	int useresc = '~';
+	static char sbuf[12];
+	int cmdlineBR;
 	extern char *optarg;
 	extern int optind;
 
@@ -80,9 +81,10 @@ cumain(int argc, char *argv[])
 	CU = NULL;
 	DV = NULL;
 	BR = DEFBR;
+	cmdlineBR = 0;
 
 	while((c = getopt_long(argc, argv,
-	    "E:F:P:a:p:c:l:s:hefot0123456789", longopts, NULL)) != -1) {
+	    "E:F:P:a:p:c:l:ns:hefot0123456789", longopts, NULL)) != -1) {
 
 		if (helpme == 1) cuhelp();
 
@@ -134,6 +136,9 @@ cumain(int argc, char *argv[])
 			else
 				(void)asprintf(&DV, "/dev/%s", optarg);
 			break;
+		case 'n':
+			useresc = -1;
+			break;
 		case 's':
 			BR = atoi(optarg);
 			break;
@@ -159,9 +164,8 @@ cumain(int argc, char *argv[])
 			break;
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
-			(void)snprintf(brbuf, sizeof(brbuf) -1, "%s%c",
-				 brbuf, c);
-			BR = atoi(brbuf);
+			cmdlineBR = cmdlineBR * 10 + (c - '0');
+			BR = cmdlineBR;
 			break;
 		default:
 			if (nostop == 0)
@@ -295,6 +299,7 @@ cuhelp(void)
 	    " -o: Use odd parity\n"
 	    " -P,--parity {even,odd,none}: use even, odd, no parity\n"
 	    " -l,--line line: Use this device (ttyXX)\n"
+	    " -n: Disable escape character processing\n"
 	    " -s,--speed,--baud speed,-#: Use this speed\n"
 	    " -t: Connect via hard-wired connection\n");
 	exit(0);

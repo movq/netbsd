@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isa.c,v 1.41 2007/10/19 12:00:17 ad Exp $	*/
+/*	$NetBSD: if_ep_isa.c,v 1.45 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.41 2007/10/19 12:00:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.45 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,10 +92,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.41 2007/10/19 12:00:17 ad Exp $");
 #include <dev/isa/isavar.h>
 #include <dev/isa/elink.h>
 
-int ep_isa_probe(struct device *, struct cfdata *, void *);
-void ep_isa_attach(struct device *, struct device *, void *);
+int ep_isa_probe(device_t , cfdata_t , void *);
+void ep_isa_attach(device_t , device_t , void *);
 
-CFATTACH_DECL(ep_isa, sizeof(struct ep_softc),
+CFATTACH_DECL_NEW(ep_isa, sizeof(struct ep_softc),
     ep_isa_probe, ep_isa_attach, NULL, NULL);
 
 static	void epaddcard(int, int, int, int);
@@ -134,8 +127,7 @@ static struct epcard {
 static int nepcards;
 
 static void
-epaddcard(bus, iobase, irq, model)
-	int bus, iobase, irq, model;
+epaddcard(int bus, int iobase, int irq, int model)
 {
 
 	if (nepcards >= MAXEPCARDS)
@@ -156,8 +148,7 @@ epaddcard(bus, iobase, irq, model)
  * calls we look for matching cards.
  */
 int
-ep_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+ep_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -361,9 +352,9 @@ good:
 }
 
 void
-ep_isa_attach(struct device *parent, struct device *self, void *aux)
+ep_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
@@ -371,10 +362,11 @@ ep_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map i/o space. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, 0x10, 0, &ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	sc->bustype = ELINK_BUS_ISA;
@@ -385,14 +377,14 @@ ep_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	chipset = (int)(long)ia->ia_aux;
 	if ((chipset & 0xfff0) == PROD_ID_3C509) {
-		printf(": 3Com 3C509 Ethernet\n");
+		aprint_normal(": 3Com 3C509 Ethernet\n");
 		epconfig(sc, ELINK_CHIPSET_3C509, NULL);
 	} else {
 		/*
 		 * XXX: Maybe a 3c515, but the check in ep_isa_probe looks
 		 * at the moment only for a 3c509.
 		 */
-		printf(": unknown 3Com Ethernet card: %04x\n", chipset);
+		aprint_error(": unknown 3Com Ethernet card: %04x\n", chipset);
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.1 2004/11/28 07:00:53 jmc Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.4 2014/01/03 16:50:54 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,8 +63,6 @@ typedef	uint64_t	Elf64_Addr;
 #define	ELF64_FSZ_ADDR	8
 typedef	uint64_t	Elf64_Off;
 #define	ELF64_FSZ_OFF	8
-typedef	int32_t		Elf64_Shalf;
-#define	ELF64_FSZ_SHALF	4
 
 #ifndef ELF64_FSZ_SWORD
 typedef	int32_t		Elf64_Sword;
@@ -86,10 +77,8 @@ typedef	int64_t		Elf64_Sxword;
 #define	ELF64_FSZ_XWORD	8
 typedef	uint64_t	Elf64_Xword;
 #define	ELF64_FSZ_XWORD	8
-typedef	uint32_t	Elf64_Half;
-#define	ELF64_FSZ_HALF	4
-typedef	uint16_t	Elf64_Quarter;
-#define	ELF64_FSZ_QUARTER 2
+typedef	uint16_t	Elf64_Half;
+#define	ELF64_FSZ_HALF 2
 
 /*
  * ELF Header
@@ -115,19 +104,19 @@ typedef struct {
 
 typedef struct {
 	unsigned char	e_ident[ELF_NIDENT];	/* Id bytes */
-	Elf64_Quarter	e_type;			/* file type */
-	Elf64_Quarter	e_machine;		/* machine type */
-	Elf64_Half	e_version;		/* version number */
+	Elf64_Half	e_type;			/* file type */
+	Elf64_Half	e_machine;		/* machine type */
+	Elf64_Word	e_version;		/* version number */
 	Elf64_Addr	e_entry;		/* entry point */
 	Elf64_Off	e_phoff;		/* Program hdr offset */
 	Elf64_Off	e_shoff;		/* Section hdr offset */
-	Elf64_Half	e_flags;		/* Processor flags */
-	Elf64_Quarter	e_ehsize;		/* sizeof ehdr */
-	Elf64_Quarter	e_phentsize;		/* Program header entry size */
-	Elf64_Quarter	e_phnum;		/* Number of program headers */
-	Elf64_Quarter	e_shentsize;		/* Section header entry size */
-	Elf64_Quarter	e_shnum;		/* Number of section headers */
-	Elf64_Quarter	e_shstrndx;		/* String table index */
+	Elf64_Word	e_flags;		/* Processor flags */
+	Elf64_Half	e_ehsize;		/* sizeof ehdr */
+	Elf64_Half	e_phentsize;		/* Program header entry size */
+	Elf64_Half	e_phnum;		/* Number of program headers */
+	Elf64_Half	e_shentsize;		/* Section header entry size */
+	Elf64_Half	e_shnum;		/* Number of section headers */
+	Elf64_Half	e_shstrndx;		/* String table index */
 } Elf64_Ehdr;
 
 /* e_ident offsets */
@@ -300,8 +289,8 @@ typedef struct {
 } Elf32_Phdr;
 
 typedef struct {
-	Elf64_Half	p_type;		/* entry type */
-	Elf64_Half	p_flags;	/* flags */
+	Elf64_Word	p_type;		/* entry type */
+	Elf64_Word	p_flags;	/* flags */
 	Elf64_Off	p_offset;	/* offset */
 	Elf64_Addr	p_vaddr;	/* virtual address */
 	Elf64_Addr	p_paddr;	/* physical address */
@@ -352,14 +341,14 @@ typedef struct {
 } Elf32_Shdr;
 
 typedef struct {
-	Elf64_Half	sh_name;	/* section name (.shstrtab index) */
-	Elf64_Half	sh_type;	/* section type */
+	Elf64_Word	sh_name;	/* section name (.shstrtab index) */
+	Elf64_Word	sh_type;	/* section type */
 	Elf64_Xword	sh_flags;	/* section flags */
 	Elf64_Addr	sh_addr;	/* virtual address */
 	Elf64_Off	sh_offset;	/* file offset */
 	Elf64_Xword	sh_size;	/* section size */
-	Elf64_Half	sh_link;	/* link to another */
-	Elf64_Half	sh_info;	/* misc info */
+	Elf64_Word	sh_link;	/* link to another */
+	Elf64_Word	sh_info;	/* misc info */
 	Elf64_Xword	sh_addralign;	/* memory alignment */
 	Elf64_Xword	sh_entsize;	/* table entry size */
 } Elf64_Shdr;
@@ -407,10 +396,10 @@ typedef struct {
 } Elf32_Sym;
 
 typedef struct {
-	Elf64_Half	st_name;	/* Symbol name (.symtab index) */
+	Elf64_Word	st_name;	/* Symbol name (.symtab index) */
 	Elf_Byte	st_info;	/* type / binding attrs */
 	Elf_Byte	st_other;	/* unused */
-	Elf64_Quarter	st_shndx;	/* section index of symbol */
+	Elf64_Half	st_shndx;	/* section index of symbol */
 	Elf64_Addr	st_value;	/* value of symbol */
 	Elf64_Xword	st_size;	/* size of symbol */
 } Elf64_Sym;
@@ -571,7 +560,7 @@ typedef struct {
 } Aux32Info;
 
 typedef struct {
-	Elf64_Half	a_type;				/* 32-bit id */
+	Elf64_Word	a_type;				/* 32-bit id */
 	Elf64_Xword	a_v;				/* 64-bit id */
 } Aux64Info;
 
@@ -625,9 +614,9 @@ typedef struct {
 } Elf32_Nhdr;
 
 typedef struct {
-	Elf64_Half n_namesz;
-	Elf64_Half n_descsz;
-	Elf64_Half n_type;
+	Elf64_Word n_namesz;
+	Elf64_Word n_descsz;
+	Elf64_Word n_type;
 } Elf64_Nhdr;
 
 #define	ELF_NOTE_TYPE_ABI_TAG		1
@@ -762,76 +751,5 @@ struct netbsd_elfcore_procinfo {
 
 #define	AuxInfo		Aux64Info
 #endif
-
-#ifdef _KERNEL
-
-#define ELF_AUX_ENTRIES	12		/* Size of aux array passed to loader */
-#define ELF32_NO_ADDR	(~(Elf32_Addr)0) /* Indicates addr. not yet filled in */
-#define ELF32_LINK_ADDR	((Elf32_Addr)-2) /* advises to use link address */
-#define ELF64_NO_ADDR	(~(Elf64_Addr)0) /* Indicates addr. not yet filled in */
-#define ELF64_LINK_ADDR	((Elf64_Addr)-2) /* advises to use link address */
-
-#if defined(ELFSIZE) && (ELFSIZE == 64)
-#define ELF_NO_ADDR	ELF64_NO_ADDR
-#define ELF_LINK_ADDR	ELF64_LINK_ADDR
-#elif defined(ELFSIZE) && (ELFSIZE == 32)
-#define ELF_NO_ADDR	ELF32_NO_ADDR
-#define ELF_LINK_ADDR	ELF32_LINK_ADDR
-#endif
-
-#ifndef ELF32_EHDR_FLAGS_OK
-#define	ELF32_EHDR_FLAGS_OK(eh)	1
-#endif
-
-#ifndef ELF64_EHDR_FLAGS_OK
-#define	ELF64_EHDR_FLAGS_OK(eh)	1
-#endif
-
-#if defined(ELFSIZE) && (ELFSIZE == 64)
-#define	ELF_EHDR_FLAGS_OK(eh)	ELF64_EHDR_FLAGS_OK(eh)
-#else
-#define	ELF_EHDR_FLAGS_OK(eh)	ELF32_EHDR_FLAGS_OK(eh)
-#endif
-
-#if defined(ELFSIZE)
-struct elf_args {
-        Elf_Addr  arg_entry;      /* program entry point */
-        Elf_Addr  arg_interp;     /* Interpreter load address */
-        Elf_Addr  arg_phaddr;     /* program header address */
-        Elf_Addr  arg_phentsize;  /* Size of program header */
-        Elf_Addr  arg_phnum;      /* Number of program headers */
-};
-#endif
-
-#ifndef _LKM
-#include "opt_execfmt.h"
-#endif
-
-#ifdef EXEC_ELF32
-int	exec_elf32_makecmds(struct proc *, struct exec_package *);
-int	elf32_copyargs(struct proc *, struct exec_package *, 
-    	    struct ps_strings *, char **, void *);
-
-int	coredump_elf32(struct lwp *, struct vnode *, struct ucred *);
-int	coredump_writenote_elf32(struct proc *, struct vnode *,
-	    struct ucred *, off_t, Elf32_Nhdr *, const char *, void *);
-
-int	elf32_check_header(Elf32_Ehdr *, int);
-#endif
-
-#ifdef EXEC_ELF64
-int	exec_elf64_makecmds(struct proc *, struct exec_package *);
-int	elf64_read_from(struct proc *, struct vnode *, u_long, caddr_t, int);
-int	elf64_copyargs(struct proc *, struct exec_package *, 
-	    struct ps_strings *, char **, void *);
-
-int	coredump_elf64 __P((struct lwp *, struct vnode *, struct ucred *));
-int	coredump_writenote_elf64 __P((struct proc *, struct vnode *,
-	    struct ucred *, off_t, Elf64_Nhdr *, const char *, void *));
-
-int	elf64_check_header(Elf64_Ehdr *, int);
-#endif
-
-#endif /* _KERNEL */
 
 #endif /* !_SYS_EXEC_ELF_H_ */

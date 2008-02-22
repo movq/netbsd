@@ -1,4 +1,4 @@
-.\" $NetBSD: piixpm.4,v 1.2 2006/05/07 02:01:26 xtraeme Exp $
+.\" $NetBSD: piixpm.4,v 1.7 2016/07/10 04:44:47 pgoyette Exp $
 .\"	$OpenBSD: piixpm.4,v 1.9 2006/01/18 03:06:33 brad Exp $
 .\"
 .\" Copyright (c) 2004, 2005 Alexander Yurchenko <grange@openbsd.org>
@@ -15,7 +15,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd May 6, 2006
+.Dd July 10, 2016
 .Dt PIIXPM 4
 .Os
 .Sh NAME
@@ -37,9 +37,13 @@ Supported chipsets:
 .Pp
 .Bl -bullet -compact -offset indent
 .It
-ATI SB200
+ATI SB200, SB300, SB400, SB600, SB700, SB800
 .It
 Intel 82371AB (PIIX4), 82440MX
+.It
+Serverworks OSB4, OSB5, OSB6, HT1000SB
+.It
+AMD HUDSON
 .El
 .Sh SEE ALSO
 .Xr iic 4 ,
@@ -49,18 +53,19 @@ Intel 82371AB (PIIX4), 82440MX
 The
 .Nm
 driver first appeared in
-.Ox 3.9 and then in
+.Ox 3.9
+and then in
 .Nx 4.0 .
 .Sh AUTHORS
 .An -nosplit
 The current
 .Nm
 driver was written by
-.An Alexander Yurchenko Aq grange@openbsd.org .
+.An Alexander Yurchenko Aq Mt grange@openbsd.org .
 It was ported to
 .Nx
 by
-.An Jared D. McNeill Aq jmcneill@netbsd.org .
+.An Jared D. McNeill Aq Mt jmcneill@netbsd.org .
 .Sh BUGS
 The driver doesn't support I2C commands with a data buffer size of more
 than 2 bytes.

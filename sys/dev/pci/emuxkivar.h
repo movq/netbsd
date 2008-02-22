@@ -1,4 +1,4 @@
-/*	$NetBSD: emuxkivar.h,v 1.10 2007/03/04 06:02:18 christos Exp $	*/
+/*	$NetBSD: emuxkivar.h,v 1.13 2011/11/23 23:07:35 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -224,7 +217,7 @@ struct emuxki_stream {
 #endif /* Not yet */
 
 struct emuxki_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	audio_device_t	sc_audv;
 	enum {
 		EMUXKI_SBLIVE = 0x00, EMUXKI_AUDIGY = 0x01,
@@ -240,6 +233,10 @@ struct emuxki_softc {
 	pci_chipset_tag_t	sc_pc;		/* PCI tag */
 	bus_dma_tag_t		sc_dmat;
 	void			*sc_ih;		/* interrupt handler */
+	kmutex_t		sc_intr_lock;
+	kmutex_t		sc_lock;
+	kmutex_t		sc_index_lock;
+	kmutex_t		sc_ac97_index_lock;
 
 	/* EMU10K1 device structures */
 	LIST_HEAD(, emuxki_mem) mem;
@@ -258,7 +255,7 @@ struct emuxki_softc {
 
 	struct ac97_host_if	hostif;
 	struct ac97_codec_if	*codecif;
-	struct device		*sc_audev;
+	device_t		sc_audev;
 
 	struct emuxki_voice	*pvoice, *rvoice, *lvoice;
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkheaders.c,v 1.13 2007/11/09 05:21:30 cube Exp $	*/
+/*	$NetBSD: mkheaders.c,v 1.29 2015/09/03 13:53:36 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,6 +44,9 @@
 #include "nbtool_config.h"
 #endif
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mkheaders.c,v 1.29 2015/09/03 13:53:36 uebayasi Exp $");
+
 #include <sys/param.h>
 #include <ctype.h>
 #include <errno.h>
@@ -58,12 +61,10 @@
 #include <crc_extern.h>
 
 static int emitcnt(struct nvlist *);
-static int emitlocs(void);
 static int emitopts(void);
-static int emitioconfh(void);
 static int emittime(void);
 static int herr(const char *, const char *, FILE *);
-static int defopts_print(const char *, void *, void *);
+static int defopts_print(const char *, struct defoptlist *, void *);
 static char *cntname(const char *);
 
 /*
@@ -72,9 +73,9 @@ static char *cntname(const char *);
  */
 
 /* Unlikely constant for undefined options */
-#define UNDEFINED ('n' << 24 | 0 << 20 | 't' << 12 | 0xdef)
+#define UNDEFINED ('n' << 24 | 0 << 20 | 't' << 12 | 0xdefU)
 /* Value for defined options with value UNDEFINED */
-#define	DEFINED (0xdef1 << 16 | 'n' << 8 | 0xed)
+#define	DEFINED (0xdef1U << 16 | 'n' << 8 | 0xed)
 
 /*
  * Make the various config-generated header files.
@@ -95,14 +96,21 @@ mkheaders(void)
 			return (1);
 	}
 
-	if (emitopts() || emitlocs() || emitioconfh() || emittime())
+	if (emitopts() || emitlocs() || emitioconfh())
+		return (1);
+
+	/*
+	 * If the minimum required version is ever bumped beyond 20090513,
+	 * emittime() can be removed.
+	 */
+	if (version <= 20090513 && emittime())
 		return (1);
 
 	return (0);
 }
 
 static void
-fprint_global(FILE *fp, const char *name, unsigned int value)
+fprint_global(FILE *fp, const char *name, long long value)
 {
 	/*
 	 * We have to doubt the founding fathers here.
@@ -116,12 +124,12 @@ fprint_global(FILE *fp, const char *name, unsigned int value)
 	fprintf(fp, "#ifdef _LOCORE\n"
 	    " .ifndef _KERNEL_OPT_%s\n"
 	    " .global _KERNEL_OPT_%s\n"
-	    " .equiv _KERNEL_OPT_%s,0x%x\n"
+	    " .equiv _KERNEL_OPT_%s,0x%llx\n"
 	    " .endif\n"
 	    "#else\n"
 	    "__asm(\" .ifndef _KERNEL_OPT_%s\\n"
 	    " .global _KERNEL_OPT_%s\\n"
-	    " .equiv _KERNEL_OPT_%s,0x%x\\n"
+	    " .equiv _KERNEL_OPT_%s,0x%llx\\n"
 	    " .endif\");\n"
 	    "#endif\n",
 	    name, name, name, value,
@@ -132,10 +140,14 @@ fprint_global(FILE *fp, const char *name, unsigned int value)
 static unsigned int
 global_hash(const char *str)
 {
-        unsigned int h;
+	unsigned long h;
 	char *ep;
 
-	/* If the value is a valid numeric, just use it */
+	/*
+	 * If the value is a valid numeric, just use it
+	 * We don't care about negative values here, we
+	 * just use the value as a hash.
+	 */
 	h = strtoul(str, &ep, 0);
 	if (*ep != 0)
 		/* Otherwise shove through a 32bit CRC function */
@@ -143,7 +155,7 @@ global_hash(const char *str)
 
 	/* Avoid colliding with the value used for undefined options. */
 	/* At least until I stop any options being set to zero */
-	return h != UNDEFINED ? h : DEFINED;
+	return (unsigned int)(h != UNDEFINED ? h : DEFINED);
 }
 
 static void
@@ -151,8 +163,8 @@ fprintcnt(FILE *fp, struct nvlist *nv)
 {
 	const char *name = cntname(nv->nv_name);
 
-	fprintf(fp, "#define\t%s\t%d\n", name, nv->nv_int);
-	fprint_global(fp, name, nv->nv_int);
+	fprintf(fp, "#define\t%s\t%lld\n", name, nv->nv_num);
+	fprint_global(fp, name, nv->nv_num);
 }
 
 static int
@@ -216,10 +228,11 @@ fprintstr(FILE *fp, const char *str)
  */
 static int
 /*ARGSUSED*/
-defopts_print(const char *name, void *value, void *arg)
+defopts_print(const char *name, struct defoptlist *value, void *arg)
 {
 	char tfname[BUFSIZ];
-	struct nvlist *nv, *option;
+	struct nvlist *option;
+	struct defoptlist *dl;
 	const char *opt_value;
 	int isfsoption;
 	FILE *fp;
@@ -228,39 +241,39 @@ defopts_print(const char *name, void *value, void *arg)
 	if ((fp = fopen(tfname, "w")) == NULL)
 		return (herr("open", tfname, NULL));
 
-	for (nv = value; nv != NULL; nv = nv->nv_next) {
-		isfsoption = OPT_FSOPT(nv->nv_name);
+	for (dl = value; dl != NULL; dl = dl->dl_next) {
+		isfsoption = OPT_FSOPT(dl->dl_name);
 
-		if (nv->nv_flags & NV_OBSOLETE) {
+		if (dl->dl_obsolete) {
 			fprintf(fp, "/* %s `%s' is obsolete */\n",
 			    isfsoption ? "file system" : "option",
-			    nv->nv_name);
-			fprint_global(fp, nv->nv_name, 0xdeadbeef);
+			    dl->dl_name);
+			fprint_global(fp, dl->dl_name, 0xdeadbeef);
 			continue;
 		}
 
-		if (((option = ht_lookup(opttab, nv->nv_name)) == NULL &&
-		    (option = ht_lookup(fsopttab, nv->nv_name)) == NULL) &&
-		    (nv->nv_str == NULL)) {
+		if (((option = ht_lookup(opttab, dl->dl_name)) == NULL &&
+		    (option = ht_lookup(fsopttab, dl->dl_name)) == NULL) &&
+		    (dl->dl_value == NULL)) {
 			fprintf(fp, "/* %s `%s' not defined */\n",
 			    isfsoption ? "file system" : "option",
-			    nv->nv_name);
-			fprint_global(fp, nv->nv_name, UNDEFINED);
+			    dl->dl_name);
+			fprint_global(fp, dl->dl_name, UNDEFINED);
 			continue;
 		}
 
-		opt_value = option != NULL ? option->nv_str : nv->nv_str;
+		opt_value = option != NULL ? option->nv_str : dl->dl_value;
 		if (isfsoption == 1)
 			/* For filesysteme we'd output the lower case name */
 			opt_value = NULL;
 
-		fprintf(fp, "#define\t%s", nv->nv_name);
+		fprintf(fp, "#define\t%s", dl->dl_name);
 		if (opt_value != NULL)
 			fprintstr(fp, opt_value);
 		else if (!isfsoption)
 			fprintstr(fp, "1");
 		fputc('\n', fp);
-		fprint_global(fp, nv->nv_name,
+		fprint_global(fp, dl->dl_name,
 		    opt_value == NULL ? 1 : global_hash(opt_value));
 	}
 
@@ -281,7 +294,7 @@ static int
 emitopts(void)
 {
 
-	return (ht_enumerate(optfiletab, defopts_print, NULL));
+	return (dlhash_enumerate(optfiletab, defopts_print, NULL));
 }
 
 /*
@@ -293,7 +306,7 @@ static int
 locators_print(const char *name, void *value, void *arg)
 {
 	struct attr *a;
-	struct nvlist *nv;
+	struct loclist *ll;
 	int i;
 	char *locdup, *namedup;
 	char *cp;
@@ -310,25 +323,25 @@ locators_print(const char *name, void *value, void *arg)
 		locdup = estrdup(name);
 		for (cp = locdup; *cp; cp++)
 			if (islower((unsigned char)*cp))
-				*cp = toupper((unsigned char)*cp);
-		for (i = 0, nv = a->a_locs; nv; nv = nv->nv_next, i++) {
-			if (strchr(nv->nv_name, ' ') != NULL ||
-			    strchr(nv->nv_name, '\t') != NULL)
+				*cp = (char)toupper((unsigned char)*cp);
+		for (i = 0, ll = a->a_locs; ll; ll = ll->ll_next, i++) {
+			if (strchr(ll->ll_name, ' ') != NULL ||
+			    strchr(ll->ll_name, '\t') != NULL)
 				/*
 				 * name contains a space; we can't generate
 				 * usable defines, so ignore it.
 				 */
 				continue;
-			namedup = estrdup(nv->nv_name);
+			namedup = estrdup(ll->ll_name);
 			for (cp = namedup; *cp; cp++)
 				if (islower((unsigned char)*cp))
-					*cp = toupper((unsigned char)*cp);
+					*cp = (char)toupper((unsigned char)*cp);
 				else if (*cp == ARRCHR)
 					*cp = '_';
 			fprintf(fp, "#define %sCF_%s %d\n", locdup, namedup, i);
-			if (nv->nv_str != NULL)
+			if (ll->ll_string != NULL)
 				fprintf(fp, "#define %sCF_%s_DEFAULT %s\n",
-				    locdup, namedup, nv->nv_str);
+				    locdup, namedup, ll->ll_string);
 			free(namedup);
 		}
 		/* assert(i == a->a_loclen) */
@@ -343,10 +356,10 @@ locators_print(const char *name, void *value, void *arg)
  * locators in the configuration.  Do this by enumerating the attribute
  * hash table and emitting all the locators for each attribute.
  */
-static int
+int
 emitlocs(void)
 {
-	char *tfname;
+	const char *tfname;
 	int rval;
 	FILE *tfp;
 	
@@ -370,17 +383,25 @@ emitlocs(void)
  * Build the "ioconf.h" file with extern declarations for all configured
  * cfdrivers.
  */
-static int
+int
 emitioconfh(void)
 {
 	const char *tfname;
 	FILE *tfp;
 	struct devbase *d;
+	struct devi *i;
 
 	tfname = "tmp_ioconf.h";
 	if ((tfp = fopen(tfname, "w")) == NULL)
 		return (herr("open", tfname, NULL));
 
+        fputs("\n/* pseudo-devices */\n", tfp);
+        TAILQ_FOREACH(i, &allpseudo, i_next) {
+                fprintf(tfp, "void %sattach(int);\n",
+                    i->i_base->d_name);
+        }
+
+        fputs("\n/* driver structs */\n", tfp);
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
 			continue;
@@ -514,13 +535,13 @@ static char *
 cntname(const char *src)
 {
 	char *dst;
-	unsigned char c;
+	char c;
 	static char buf[100];
 
 	dst = buf;
 	*dst++ = 'N';
 	while ((c = *src++) != 0)
-		*dst++ = islower(c) ? toupper(c) : c;
+		*dst++ = (char)(islower((u_char)c) ? toupper((u_char)c) : c);
 	*dst = 0;
 	return (buf);
 }

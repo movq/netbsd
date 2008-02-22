@@ -1,4 +1,4 @@
-/*	$NetBSD: if_el.c,v 1.79 2007/10/19 12:00:17 ad Exp $	*/
+/*	$NetBSD: if_el.c,v 1.96 2018/06/26 06:48:01 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1994, Matthew E. Kimmel.  Permission is hereby granted
@@ -19,11 +19,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.79 2007/10/19 12:00:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.96 2018/06/26 06:48:01 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -33,13 +31,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.79 2007/10/19 12:00:17 ad Exp $");
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+#include <net/bpf.h>
 
 #include <net/if_ether.h>
 
@@ -49,12 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.79 2007/10/19 12:00:17 ad Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
-#endif
-
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <sys/cpu.h>
@@ -75,16 +66,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.79 2007/10/19 12:00:17 ad Exp $");
  * per-line info and status
  */
 struct el_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 
 	struct ethercom sc_ethercom;	/* ethernet common */
 	bus_space_tag_t sc_iot;		/* bus space identifier */
 	bus_space_handle_t sc_ioh;	/* i/o handle */
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 /*
@@ -102,10 +91,10 @@ void elread(struct el_softc *, int);
 struct mbuf *elget(struct el_softc *sc, int);
 static inline void el_hardreset(struct el_softc *);
 
-int elprobe(struct device *, struct cfdata *, void *);
-void elattach(struct device *, struct device *, void *);
+int elprobe(device_t, cfdata_t, void *);
+void elattach(device_t, device_t, void *);
 
-CFATTACH_DECL(el, sizeof(struct el_softc),
+CFATTACH_DECL_NEW(el, sizeof(struct el_softc),
     elprobe, elattach, NULL, NULL);
 
 /*
@@ -115,8 +104,7 @@ CFATTACH_DECL(el, sizeof(struct el_softc),
  * (XXX - cgd -- needs help)
  */
 int
-elprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+elprobe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -203,9 +191,9 @@ elprobe(struct device *parent, struct cfdata *match,
  * assume that the IRQ given is correct.
  */
 void
-elattach(struct device *parent, struct device *self, void *aux)
+elattach(device_t parent, device_t self, void *aux)
 {
-	struct el_softc *sc = (void *)self;
+	struct el_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
@@ -213,13 +201,15 @@ elattach(struct device *parent, struct device *self, void *aux)
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 	u_int8_t i;
 
+	sc->sc_dev = self;
+
 	printf("\n");
 
-	DPRINTF(("Attaching %s...\n", sc->sc_dev.dv_xname));
+	DPRINTF(("Attaching %s...\n", device_xname(sc->sc_dev)));
 
 	/* Map i/o space. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, 16, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		return;
 	}
 
@@ -241,7 +231,7 @@ elattach(struct device *parent, struct device *self, void *aux)
 	elstop(sc);
 
 	/* Initialize ifnet structure. */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = elstart;
 	ifp->if_ioctl = elioctl;
@@ -255,16 +245,14 @@ elattach(struct device *parent, struct device *self, void *aux)
 	ether_ifattach(ifp, myaddr);
 
 	/* Print out some information for the user. */
-	printf("%s: address %s\n", self->dv_xname, ether_sprintf(myaddr));
+	printf("%s: address %s\n", device_xname(self), ether_sprintf(myaddr));
 
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, elintr, sc);
 
-#if NRND > 0
 	DPRINTF(("Attaching to random...\n"));
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-			  RND_TYPE_NET, 0);
-#endif
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_NET, RND_FLAG_DEFAULT);
 
 	DPRINTF(("elattach() finished.\n"));
 }
@@ -273,8 +261,7 @@ elattach(struct device *parent, struct device *self, void *aux)
  * Reset interface.
  */
 void
-elreset(sc)
-	struct el_softc *sc;
+elreset(struct el_softc *sc)
 {
 	int s;
 
@@ -289,8 +276,7 @@ elreset(sc)
  * Stop interface.
  */
 void
-elstop(sc)
-	struct el_softc *sc;
+elstop(struct el_softc *sc)
 {
 
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, EL_AC, 0);
@@ -301,8 +287,7 @@ elstop(sc)
  * case the board forgets.
  */
 static inline void
-el_hardreset(sc)
-	struct el_softc *sc;
+el_hardreset(struct el_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -321,8 +306,7 @@ el_hardreset(sc)
  * Initialize interface.
  */
 void
-elinit(sc)
-	struct el_softc *sc;
+elinit(struct el_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -365,8 +349,7 @@ elinit(sc)
  * interrupt level!
  */
 void
-elstart(ifp)
-	struct ifnet *ifp;
+elstart(struct ifnet *ifp)
 {
 	struct el_softc *sc = ifp->if_softc;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -397,11 +380,8 @@ elstart(ifp)
 		if (m0 == 0)
 			break;
 
-#if NBPFILTER > 0
 		/* Give the packet to the bpf, if any. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 
 		/* Disable the receiver. */
 		bus_space_write_1(iot, ioh, EL_AC, EL_AC_HOST);
@@ -414,7 +394,7 @@ elstart(ifp)
 #ifdef DIAGNOSTIC
 		if ((off & 0xffff) != off)
 			printf("%s: bogus off 0x%x\n",
-			    sc->sc_dev.dv_xname, off);
+			    device_xname(sc->sc_dev), off);
 #endif
 		bus_space_write_1(iot, ioh, EL_GPBL, off & 0xff);
 		bus_space_write_1(iot, ioh, EL_GPBH, (off >> 8) & 0xff);
@@ -484,8 +464,7 @@ elstart(ifp)
  * success, non-0 on failure.
  */
 static int
-el_xmit(sc)
-	struct el_softc *sc;
+el_xmit(struct el_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -514,8 +493,7 @@ el_xmit(sc)
  * Controller interrupt.
  */
 int
-elintr(arg)
-	void *arg;
+elintr(void *arg)
 {
 	struct el_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -568,9 +546,7 @@ elintr(arg)
 		if ((bus_space_read_1(iot, ioh, EL_AS) & EL_AS_RXBUSY) != 0)
 			break;
 
-#if NRND > 0
 		rnd_add_uint32(&sc->rnd_source, rxstat);
-#endif
 
 		DPRINTF(("<rescan> "));
 	}
@@ -584,9 +560,7 @@ elintr(arg)
  * Pass a packet to the higher levels.
  */
 void
-elread(sc, len)
-	struct el_softc *sc;
-	int len;
+elread(struct el_softc *sc, int len)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
@@ -594,7 +568,7 @@ elread(sc, len)
 	if (len <= sizeof(struct ether_header) ||
 	    len > ETHER_MAX_LEN) {
 		printf("%s: invalid packet size %d; dropping\n",
-		    sc->sc_dev.dv_xname, len);
+		    device_xname(sc->sc_dev), len);
 		ifp->if_ierrors++;
 		return;
 	}
@@ -606,18 +580,7 @@ elread(sc, len)
 		return;
 	}
 
-	ifp->if_ipackets++;
-
-#if NBPFILTER > 0
-	/*
-	 * Check if there's a BPF listener on this interface.
-	 * If so, hand off the raw packet to BPF.
-	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
-
-	(*ifp->if_input)(ifp, m);
+	if_percpuq_enqueue(ifp->if_percpuq, m);
 }
 
 /*
@@ -626,9 +589,7 @@ elread(sc, len)
  * units are present we copy into clusters.
  */
 struct mbuf *
-elget(sc, totlen)
-	struct el_softc *sc;
-	int totlen;
+elget(struct el_softc *sc, int totlen)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -639,7 +600,7 @@ elget(sc, totlen)
 	MGETHDR(m0, M_DONTWAIT, MT_DATA);
 	if (m0 == 0)
 		return (0);
-	m0->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m0, ifp);
 	m0->m_pkthdr.len = totlen;
 	len = MHLEN;
 	m = m0;
@@ -682,10 +643,7 @@ bad:
  * Process an ioctl request. This code needs some work - it looks pretty ugly.
  */
 int
-elioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+elioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct el_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -695,49 +653,53 @@ elioctl(ifp, cmd, data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 
+		elinit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			elinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
-			elinit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			elstop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			elinit(sc);
-		} else {
+			break;
+		default:
 			/*
 			 * Some other important flag might have changed, so
 			 * reset.
 			 */
 			elreset(sc);
+			break;
 		}
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -749,12 +711,11 @@ elioctl(ifp, cmd, data)
  * Device timeout routine.
  */
 void
-elwatchdog(ifp)
-	struct ifnet *ifp;
+elwatchdog(struct ifnet *ifp)
 {
 	struct el_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	sc->sc_ethercom.ec_if.if_oerrors++;
 
 	elreset(sc);

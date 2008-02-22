@@ -1,4 +1,4 @@
-/*	$NetBSD: athioctl.h,v 1.14 2007/03/04 06:01:50 christos Exp $	*/
+/*	$NetBSD: athioctl.h,v 1.17 2017/10/28 06:27:32 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -39,10 +39,17 @@
  */
 
 /*
- * Ioctl-related defintions for the Atheros Wireless LAN controller driver.
+ * Ioctl-related definitions for the Atheros Wireless LAN controller driver.
  */
 #ifndef _DEV_ATH_ATHIOCTL_H
 #define _DEV_ATH_ATHIOCTL_H
+
+#include <sys/types.h>
+#include <sys/ioccom.h>
+
+#include <net/if.h>
+
+#include <net80211/ieee80211_radiotap.h>
 
 struct ath_stats {
 	u_int32_t	ast_watchdog;	/* device reset by watchdog */

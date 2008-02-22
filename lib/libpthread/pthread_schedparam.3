@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_schedparam.3,v 1.4 2005/03/21 17:55:07 kleink Exp $
+.\" $NetBSD: pthread_schedparam.3,v 1.8 2017/07/03 21:32:51 wiz Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -10,9 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -53,7 +50,7 @@
 .\" EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_schedparam.3,v 1.7 2002/09/16 19:29:29 mini Exp $
-.Dd January 30, 2003
+.Dd July 9, 2010
 .Dt PTHREAD_SCHEDPARAM 3
 .Os
 .Sh NAME
@@ -74,16 +71,18 @@ The
 and
 .Fn pthread_getschedparam
 functions set and get the scheduling parameters of individual threads.
-The scheduling policy for a thread can either be
-.Dv SCHED_FIFO
-(first in, first out),
-.Dv SCHED_RR
-(round-robin),
-or
-.Dv SCHED_OTHER
-(system default).
+The scheduling policy for a thread can be:
+.Bl -tag -width SCHED_OTHER -offset indent
+.It Dv SCHED_FIFO
+First in, first out.
+.It Dv SCHED_RR
+Round-robin.
+.It Dv SCHED_OTHER
+The system default.
+.El
+.Pp
 The thread priority (accessed via
-.Va param-\*[Gt]sched_priority )
+.Va param->sched_priority )
 must be at least
 .Dv PTHREAD_MIN_PRIORITY
 and no more than
@@ -113,9 +112,9 @@ may fail if:
 Non-existent thread
 .Va thread .
 .El
+.Sh SEE ALSO
+.Xr pthread_attr_getschedparam 3 ,
+.Xr sched 3
 .Sh STANDARDS
-.Fn pthread_setschedparam
-and
-.Fn pthread_getschedparam
-conform to
-.St -p1003.1-96 .
+Both functions conform to
+.St -p1003.1-2001 .

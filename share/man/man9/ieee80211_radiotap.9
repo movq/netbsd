@@ -1,4 +1,4 @@
-.\" $NetBSD: ieee80211_radiotap.9,v 1.11 2007/03/26 04:32:14 dyoung Exp $
+.\" $NetBSD: ieee80211_radiotap.9,v 1.17 2017/07/03 21:28:48 wiz Exp $
 .\"
 .\" Copyright (c) 2004	Bruce M. Simpson <bms@spc.org>,
 .\"			Darron Broad <darron@kewl.org>.
@@ -91,8 +91,8 @@ typically defines a structure embedding an instance of
 .Vt "struct ieee80211_radiotap_header"
 at the beginning,
 with subsequent fields naturally aligned,
-and in the appropriate order.  Also, a driver defines
-a macro to set the bits of the
+and in the appropriate order.
+Also, a driver defines a macro to set the bits of the
 .Va it_present
 bitmap to indicate which fields exist and are filled in by the driver.
 .\"
@@ -218,7 +218,7 @@ This bit is reserved for any future extensions to the
 structure.
 A driver sets
 .Dv IEEE80211_RADIOTAP_EXT
-to extend the it_present bitmap by another 64 bits.
+to extend the it_present bitmap by another 32 bits.
 The bitmap can be extended by multiples of 32 bits to 96, 128, 160
 bits or longer, by setting
 .Dv IEEE80211_RADIOTAP_EXT
@@ -243,12 +243,12 @@ struct an_rx_radiotap_header {
 .Pp
 Bitmap indicating which fields are present in the above structure:
 .Bd -literal -offset indent
-#define AN_RX_RADIOTAP_PRESENT \\
-	((1 \*[Gt]\*[Gt] IEEE80211_RADIOTAP_FLAGS) | \\
-	 (1 \*[Gt]\*[Gt] IEEE80211_RADIOTAP_RATE) | \\
-	 (1 \*[Gt]\*[Gt] IEEE80211_RADIOTAP_CHANNEL) | \\
-	 (1 \*[Gt]\*[Gt] IEEE80211_RADIOTAP_DBM_ANTSIGNAL) | \\
-	 (1 \*[Gt]\*[Gt] IEEE80211_RADIOTAP_DBM_ANTNOISE))
+#define AN_RX_RADIOTAP_PRESENT \e
+	((1 >> IEEE80211_RADIOTAP_FLAGS) | \e
+	 (1 >> IEEE80211_RADIOTAP_RATE) | \e
+	 (1 >> IEEE80211_RADIOTAP_CHANNEL) | \e
+	 (1 >> IEEE80211_RADIOTAP_DBM_ANTSIGNAL) | \e
+	 (1 >> IEEE80211_RADIOTAP_DBM_ANTNOISE))
 .Ed
 .Sh SEE ALSO
 .Xr bpf 4 ,
@@ -266,12 +266,12 @@ and were later ported to
 The
 .Nm
 interface was designed and implemented by
-.An David Young Aq dyoung@pobox.com .
+.An David Young Aq Mt dyoung@pobox.com .
 .An David Young
 is the maintainer of the radiotap capture format.
 Contact him to add new capture fields.
 .Pp
 This manual page was written by
-.An Bruce M. Simpson Aq bms@FreeBSD.org
+.An Bruce M. Simpson Aq Mt bms@FreeBSD.org
 and
-.An Darron Broad Aq darron@kewl.org .
+.An Darron Broad Aq Mt darron@kewl.org .

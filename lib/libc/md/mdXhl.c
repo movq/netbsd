@@ -1,4 +1,4 @@
-/*	$NetBSD: mdXhl.c,v 1.7 2005/09/26 03:01:41 christos Exp $	*/
+/*	$NetBSD: mdXhl.c,v 1.13 2014/09/24 13:18:52 christos Exp $	*/
 
 /*
  * ----------------------------------------------------------------------------
@@ -15,10 +15,14 @@
  * Modified April 29, 1997 by Jason R. Thorpe <thorpej@NetBSD.org>
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #define	CONCAT(x,y)	__CONCAT(x,y)
 #define	MDNAME(x)	CONCAT(MDALGORITHM,x)
 
-#if !defined(_KERNEL) && defined(__weak_alias)
+#if !defined(_KERNEL) && defined(__weak_alias) && !defined(HAVE_NBTOOL_CONFIG_H)
 #define	WA(a,b)	__weak_alias(a,b)
 WA(MDNAME(End),CONCAT(_,MDNAME(End)))
 WA(MDNAME(File),CONCAT(_,MDNAME(File)))
@@ -38,16 +42,8 @@ WA(MDNAME(Data),CONCAT(_,MDNAME(Data)))
 #include <stdlib.h>
 #include <unistd.h>
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-
-
 char *
-MDNAME(End)(ctx, buf)
-	MDNAME(_CTX) *ctx;
-	char *buf;
+MDNAME(End)(MDNAME(_CTX) *ctx, char *buf)
 {
 	int i;
 	unsigned char digest[16];
@@ -72,19 +68,18 @@ MDNAME(End)(ctx, buf)
 }
 
 char *
-MDNAME(File)(filename, buf)
-	const char *filename;
-	char *buf;
+MDNAME(File)(const char *filename, char *buf)
 {
 	unsigned char buffer[BUFSIZ];
 	MDNAME(_CTX) ctx;
-	int f, i, j;
+	int f, j;
+	ssize_t i;
 
 	_DIAGASSERT(filename != 0);
 	/* buf may be NULL */
 
 	MDNAME(Init)(&ctx);
-	f = open(filename, O_RDONLY, 0666);
+	f = open(filename, O_RDONLY | O_CLOEXEC, 0666);
 	if (f < 0)
 		return NULL;
 
@@ -102,10 +97,7 @@ MDNAME(File)(filename, buf)
 }
 
 char *
-MDNAME(Data)(data, len, buf)
-	const unsigned char *data;
-	unsigned int len;
-	char *buf;
+MDNAME(Data)(const unsigned char *data, unsigned int len, char *buf)
 {
 	MDNAME(_CTX) ctx;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcio.c,v 1.21 2006/01/30 04:25:44 junyoung Exp $	 */
+/*	$NetBSD: pcio.c,v 1.30 2011/06/08 16:04:40 joerg Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -38,10 +38,6 @@
 #include "libi386.h"
 #include "bootinfo.h"
 
-extern void conputc(int);
-extern int congetc(void);
-extern int conisshift(void);
-extern int coniskey(void);
 extern struct x86_boot_params boot_params;
 
 struct btinfo_console btinfo_console;
@@ -71,6 +67,20 @@ static int getcomaddr(int);
 
 #define POLL_FREQ 10
 
+static void
+wait(int us)
+{
+	int prev = biosgetsystime();
+	int tgt = prev + (20 * us) / 1000000;
+	int new;
+
+	while ((new = biosgetsystime()) < tgt) {
+		if (new < prev) /* XXX timer wrapped */
+			break;
+		prev = new;
+	}
+}
+
 #ifdef SUPPORT_SERIAL
 static int
 getcomaddr(int idx)
@@ -87,6 +97,16 @@ getcomaddr(int idx)
 #endif
 
 void
+clear_pc_screen(void)
+{
+#ifdef SUPPORT_SERIAL
+	/* Clear the screen if we are on a glass tty. */
+	if (iodev == CONSDEV_PC)
+		conclr();
+#endif
+}
+
+void
 initio(int dev)
 {
 #ifdef SUPPORT_SERIAL
@@ -100,10 +120,10 @@ initio(int dev)
 
 	switch (dev) {
 	case CONSDEV_AUTO:
-		for(i = 0; i < 3; i++) {
+		for (i = 0; i < 3; i++) {
 			iodev = CONSDEV_COM0 + i;
 			btinfo_console.addr = getcomaddr(i);
-			if(!btinfo_console.addr)
+			if (!btinfo_console.addr)
 				break;
 			conputc('0' + i); /* to tell user what happens */
 			cominit_x();
@@ -147,7 +167,7 @@ ok:
 	case CONSDEV_COM3:
 		iodev = dev;
 		btinfo_console.addr = getcomaddr(iodev - CONSDEV_COM0);
-		if(!btinfo_console.addr)
+		if (!btinfo_console.addr)
 			goto nocom;
 		cominit_x();
 		break;
@@ -158,7 +178,7 @@ ok:
 		iodev = dev - CONSDEV_COM0KBD + CONSDEV_COM0;
 		i = iodev - CONSDEV_COM0;
 		btinfo_console.addr = getcomaddr(i);
-		if(!btinfo_console.addr)
+		if (!btinfo_console.addr)
 			goto nocom;
 		conputc('0' + i); /* to tell user what happens */
 		cominit_x();
@@ -200,6 +220,7 @@ nocom:
 	conputc('\015');
 	conputc('\n');
 	strncpy(btinfo_console.devname, iodev == CONSDEV_PC ? "pc" : "com", 16);
+
 #else /* !SUPPORT_SERIAL */
 	btinfo_console.devname[0] = 'p';
 	btinfo_console.devname[1] = 'c';
@@ -246,6 +267,8 @@ getchar(void)
 	default: /* to make gcc -Wall happy... */
 	case CONSDEV_PC:
 #endif
+		while (!coniskey())
+			;
 		c = congetc();
 #ifdef CONSOLE_KEYMAP
 		{
@@ -312,15 +335,19 @@ awaitkey(int timeout, int tell)
 
 	for (;;) {
 		if (tell && (i % POLL_FREQ) == 0) {
-			char numbuf[20];
-			int len, j;
+			char numbuf[32];
+			int len;
 
-			sprintf(numbuf, "%d ", i/POLL_FREQ);
-			len = strlen(numbuf);
-			for (j = 0; j < len; j++)
-				numbuf[len + j] = '\b';
-			numbuf[len + j] = '\0';
-			printf(numbuf);
+			len = snprintf(numbuf, sizeof(numbuf), "%d seconds. ",
+			    i/POLL_FREQ);
+			if (len > 0 && len < sizeof(numbuf)) {
+				char *p = numbuf;
+
+				printf("%s", numbuf);
+				while (*p)
+					*p++ = '\b';
+				printf("%s", numbuf);
+			}
 		}
 		if (iskey(1)) {
 			/* flush input buffer */
@@ -331,14 +358,21 @@ awaitkey(int timeout, int tell)
 			goto out;
 		}
 		if (i--)
-			delay(1000000 / POLL_FREQ);
+			wait(1000000 / POLL_FREQ);
 		else
 			break;
 	}
 
 out:
 	if (tell)
-		printf("0 \n");
+		printf("0 seconds.     \n");
 
 	return c;
+}
+
+void
+wait_sec(int sec)
+{
+
+	wait(sec * 1000000);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: int_fmtio.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: int_fmtio.h,v 1.3 2014/08/13 19:48:17 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 #ifndef _IA64_INT_FMTIO_H_
 #define _IA64_INT_FMTIO_H_
 
+#ifdef __INTPTR_FMTd__
+#include <sys/common_int_fmtio.h>
+#else
 /*
  * 7.8.1 Macros for format specifiers
  */
@@ -215,5 +211,7 @@
 #define	SCNxFAST64	"lx"	/* uint_fast64_t	*/
 #define	SCNxMAX		"lx"	/* uintmax_t		*/
 #define	SCNxPTR		"lx"	/* uintptr_t		*/
+
+#endif /* !__INTPTR_FMTd__ */
 
 #endif /* !_IA64_INT_FMTIO_H_ */

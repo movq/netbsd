@@ -1,6 +1,6 @@
-/*	$NetBSD: biosmemps2.S,v 1.2 2003/02/05 21:50:25 dsl Exp $	*/
+/*	$NetBSD: biosmemps2.S,v 1.7 2016/12/04 08:21:08 maxv Exp $	*/
 
-/*-
+/*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,66 +33,58 @@
 
 	.text
 
-/* int getextmemp2(void buffer)
-   call int 15 function 0xc7 - later PS/2s - RETURN MEMORY-MAP INFORMATION
-   return: 0=OK, nonzero=error
-   buffer: filled with memory-map table structure
-*/
+/*
+ * int getextmemps2(void *buffer)
+ *
+ * call int 15 function 0xc7 - later PS/2s - RETURN MEMORY-MAP INFORMATION
+ * return: 0=OK, nonzero=error
+ * buffer: filled with memory-map table structure
+ */
 ENTRY(getextmemps2)
 	.code32
-	pushl	%ebp
-	movl	%esp,%ebp
-	pushl	%ebx
-	pushl	%ecx
-	pushl	%edx
-	push	%esi
-	push	%edi
-
-	movl	8(%ebp), %edx	# parameter
+	movl	%eax,%edx
+	xorl	%eax,%eax
+	pusha
 
 	call	_C_LABEL(prot_to_real)
 	.code16
 
-	# do int15, function 0xc0 call to discover if C7h is supported
-	movb	$0xc0, %ah
+	/* do int15, function 0xc0 call to discover if C7h is supported */
+	movb	$0xc0,%ah
 	int	$0x15
-	setc	%bl
-	jc	out		# 0xc0 not supported if carry set
+	setc	%cl
+	jc	out		/* 0xc0 not supported if carry set */
 
-	# check feature byte 2, bit 4 to see if return memory map is supported
-	movb	%es:6(%bx), %al
-	andb	$0x10, %al
-	jnz	getmem		# 0xc7 supported
-	
-	# set %bl to indicate failure, and exit
-	movb	$2, %bl
+	/* check feature byte 2, bit 4 to see if return memory map is supported */
+	movb	%es:6(%bx),%al
+	andb	$0x10,%al
+	jnz	getmem		/* 0xc7 supported */
+
+	/* set %cl to indicate failure, and exit */
+	movb	$2,%cl
 	jmp	out
 
 getmem:
-	# move the parameter to right register
-	movl	%edx, %esi
-	andl	$0xf, %esi
-	shrl	$4, %edx
-	mov	%ds, %ax
-	add	%dx, %ax
-	mov	%ax, %ds
+	/* move the parameter to right register */
+	push	%ds
+	movl	%edx,%esi
+	andl	$0xf,%esi
+	shrl	$4,%edx
+	mov	%ds,%ax
+	add	%dx,%ax
+	mov	%ax,%ds
 
-	# actually call int15, function 0xc7 now
-	movb	$0xc7, %ah
+	/* actually call int15, function 0xc7 now */
+	movb	$0xc7,%ah
 	int	$0x15
-	setc	%bl		# save carry
+	setc	%cl		/* save carry */
+	pop	%ds
 
 out:
 	calll	_C_LABEL(real_to_prot)
 	.code32
 
-	xorl	%eax, %eax
-	movb	%bl, %al	# return value in %ax
-
-	pop	%edi
-	pop	%esi
-	popl	%edx
-	popl	%ecx
-	popl	%ebx
-	popl	%ebp
+	movb	%cl,28(%esp)
+	popa
 	ret
+

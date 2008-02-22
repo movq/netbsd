@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86960var.h,v 1.35 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: mb86960var.h,v 1.40 2015/04/13 16:33:24 riastradh Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -44,11 +44,7 @@
  * they are useful.
  */
 
-#include "rnd.h"
-
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /*
  * Default settings for fe driver specific options.
@@ -125,7 +121,7 @@ enum fe_type {
  * fe_softc: per line info and status
  */
 struct mb86960_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct ethercom sc_ec;		/* ethernet common */
 	struct ifmedia sc_media;	/* supported media information */
 
@@ -161,9 +157,7 @@ struct mb86960_softc {
 
 	uint8_t sc_enaddr[ETHER_ADDR_LEN];
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 
 	uint32_t sc_stat;	/* driver status */
 #define FE_STAT_ENABLED		0x0001	/* power enabled on interface */
@@ -199,6 +193,6 @@ void	mb86960_config(struct mb86960_softc *, int *, int, int);
 int	mb86960_intr(void *);
 int	mb86960_enable(struct mb86960_softc *);
 void	mb86960_disable(struct mb86960_softc *);
-int	mb86960_activate(struct device *, enum devact);
+int	mb86960_activate(device_t, enum devact);
 int	mb86960_detach(struct mb86960_softc *);
 void	mb86965_read_eeprom(bus_space_tag_t, bus_space_handle_t, uint8_t *);

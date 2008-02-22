@@ -1,4 +1,4 @@
-/*	$NetBSD: putenv.c,v 1.12 2003/08/07 16:43:42 agc Exp $	*/
+/*	$NetBSD: putenv.c,v 1.21 2015/01/20 18:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)putenv.c	8.2 (Berkeley) 3/27/94";
 #else
-__RCSID("$NetBSD: putenv.c,v 1.12 2003/08/07 16:43:42 agc Exp $");
+__RCSID("$NetBSD: putenv.c,v 1.21 2015/01/20 18:31:25 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -45,27 +45,38 @@ __RCSID("$NetBSD: putenv.c,v 1.12 2003/08/07 16:43:42 agc Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __weak_alias
-__weak_alias(putenv,_putenv)
-#endif
+#include "env.h"
+#include "local.h"
 
 int
-putenv(str)
-	const char *str;
+putenv(char *str)
 {
-	char *p, *equal;
-	int rval;
+	size_t l_name;
+	int rv;
 
 	_DIAGASSERT(str != NULL);
 
-	if ((p = strdup(str)) == NULL)
-		return (-1);
-	if ((equal = strchr(p, '=')) == NULL) {
-		(void)free(p);
-		return (-1);
+	l_name = __envvarnamelen(str, true);
+	if (l_name == 0) {
+		errno = EINVAL;
+		return -1;
 	}
-	*equal = '\0';
-	rval = setenv(p, equal + 1, 1);
-	(void)free(p);
-	return (rval);
+
+	rv = -1;
+	if (__writelockenv()) {
+		ssize_t offset;
+
+		offset = __getenvslot(str, l_name, true);
+		if (offset != -1) {
+			if (environ[offset] != NULL)
+				__freeenvvar(environ[offset]);
+			environ[offset] = str;
+
+			rv = 0;
+		}
+
+		(void)__unlockenv();
+	}
+
+	return rv;
 }

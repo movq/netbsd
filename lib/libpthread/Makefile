@@ -1,11 +1,19 @@
-#	$NetBSD: Makefile,v 1.50 2008/02/10 18:50:54 ad Exp $
+#	$NetBSD: Makefile,v 1.90 2018/06/09 23:45:56 christos Exp $
 #
 
-WARNS=	4
+NOSANITIZER=	# defined
+WARNS?=	5
+LIB=	pthread
 
 .include <bsd.own.mk>
 
-.if exists(${.CURDIR}/arch/${MACHINE_ARCH})
+.if defined(PTHREAD_MACHINE_ARCH) && !empty(PTHREAD_MACHINE_ARCH) && \
+    exists(${.CURDIR}/arch/${PTHREAD_MACHINE_ARCH})
+ARCHSUBDIR=	${PTHREAD_MACHINE_ARCH}
+.elif defined(PTHREAD_MACHINE_CPU) && !empty(PTHREAD_MACHINE_CPU) && \
+    exists(${.CURDIR}/arch/${PTHREAD_MACHINE_CPU})
+ARCHSUBDIR=	${PTHREAD_MACHINE_CPU}
+.elif exists(${.CURDIR}/arch/${MACHINE_ARCH})
 ARCHSUBDIR=	${MACHINE_ARCH}
 .elif exists(${.CURDIR}/arch/${MACHINE_CPU}) 
 ARCHSUBDIR=	${MACHINE_CPU}
@@ -22,24 +30,17 @@ INCSDIR=/usr/include
 ARCHDIR=	${.CURDIR}/arch/${ARCHSUBDIR}
 .PATH:	${ARCHDIR}
 
-CPPFLAGS+=	-I${ARCHDIR} -I${.CURDIR} -I${.OBJDIR} -D_LIBC
-CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__
+CPPFLAGS+=	-I${ARCHDIR} -I${.CURDIR} -I${.OBJDIR} -D_LIBC -D_REENTRANT
+CPPFLAGS+=	-I${.CURDIR}/../libc/include
+CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__ -D__LIBC_THREAD_STUBS
 
 # XXX: This crappy poke at libc's internals needs to be fixed.
-# We need to put this *after our own includes, so that our "assym.h"
-# gets picked, instead of the libc one
 CPPFLAGS+=-I${NETBSDSRCDIR}/sys -I${.CURDIR}/../libc
 
-DPSRCS+=	assym.h
-CLEANFILES+=	assym.h
-
-assym.h: ${ARCHDIR}/genassym.cf pthread.h pthread_int.h pthread_md.h
-	${_MKTARGET_CREATE}
-	${TOOL_GENASSYM} -- ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
-		< ${ARCHDIR}/genassym.cf > assym.h.tmp && \
-	mv -f assym.h.tmp assym.h
-
-LIB=	pthread
+# providing alternative MI implementations for creating an lwp is
+# possible by setting PTHREAD_MAKELWP.  Currently, alternatives are
+# set by the rumprun software stacks (see repo.rumpkernel.org)
+PTHREAD_MAKELWP?=	pthread_makelwp_netbsd.c
 
 #
 # NOTE: When you create a new file for libpthread, make sure that pthread.c
@@ -49,11 +50,17 @@ LIB=	pthread
 SRCS=	pthread.c 
 SRCS+=	pthread_attr.c
 SRCS+=	pthread_barrier.c
+# used by rumprun-posix to work around symbol collisions
+.if ${PTHREAD_CANCELSTUB:Uyes} != "no"
 SRCS+=	pthread_cancelstub.c
+.endif
 SRCS+=	pthread_cond.c
+SRCS+=	pthread_getcpuclockid.c
 SRCS+=	pthread_lock.c 
+SRCS+=	${PTHREAD_MAKELWP}
 SRCS+=	pthread_misc.c
 SRCS+=	pthread_mutex.c
+SRCS+=	pthread_once.c
 SRCS+=	pthread_rwlock.c
 SRCS+=	pthread_specific.c
 SRCS+=	pthread_spin.c
@@ -61,95 +68,166 @@ SRCS+=	pthread_tsd.c
 SRCS+=	res_state.c
 SRCS+=	sem.c
 # Architecture-dependent files
-SRCS+=	_context_u.S
-.if exists(${ARCHDIR}/pthread_md.c)
-SRCS+= pthread_md.c
+.if exists(${ARCHDIR}/pthread_md.S)
+SRCS+= pthread_md.S
 .endif
+.if exists(${ARCHDIR}/Makefile.inc)
+.include "${ARCHDIR}/Makefile.inc"
+.endif
+
+# The PTHREAD__COMPAT flag builds a libpthread that can be dropped
+# into a NetBSD 2/3/4 chroot with a NetBSD 5 or later kernel.
+# This makes threading work in the chroot, no other modifications
+# required.
+#
+.if defined(PTHREAD__COMPAT)
+SRCS+=		pthread_compat.c
+.PATH.c:	${.CURDIR}/../../common/lib/libc/arch/${ARCHSUBDIR}/atomic
+.PATH.S:	${.CURDIR}/../../common/lib/libc/arch/${ARCHSUBDIR}/atomic
+.PATH.c:	${.CURDIR}/../../common/lib/libc/atomic
+.PATH.c:	${.CURDIR}/../libc/misc
+.include "../../common/lib/libc/arch/${ARCHSUBDIR}/atomic/Makefile.inc"
+.endif
+
+ALIGN_FUNCTIONS=	${${ACTIVE_CC} == "gcc":? -falign-functions=32 :}
 
 # The TSD routines are used in the implementation of profiling, and so
 # can't be profiled themselves.
-COPTS.pthread_specific.c+=	-fomit-frame-pointer -falign-functions=32
+COPTS.pthread_specific.c+=	${ALIGN_FUNCTIONS}
 pthread_specific.po: pthread_specific.o
 	${_MKTARGET_CREATE}
 	cp pthread_specific.o pthread_specific.po
 
-# Internal spinlock routines are performance critical.  Don't profile them,
-# it's incompatibile with -fomit-frame-pointer.
-COPTS.pthread_lock.c+=	-fomit-frame-pointer -falign-functions=32
-pthread_lock.po: pthread_lock.o
-	${_MKTARGET_CREATE}
-	cp pthread_lock.o pthread_lock.po
+COPTS.pthread.c += -Wno-stack-protector -Wno-format-nonliteral
+COPTS.pthread_attr.c += -Wno-format-nonliteral
 
-COPTS.pthread_mutex.c+=	-fomit-frame-pointer -falign-functions=32
-pthread_mutex.po: pthread_mutex.o
-	${_MKTARGET_CREATE}
-	cp pthread_mutex.o pthread_mutex.po
-
-COPTS.pthread.c += -Wno-stack-protector
-
-_context_u.po: _context_u.o
-	${_MKTARGET_CREATE}
-	cp _context_u.o _context_u.po
-
-MAN+=	pthread.3 \
+MAN+=	affinity.3 pthread.3 \
 	pthread_attr.3 \
+	pthread_attr_get_np.3 \
+	pthread_attr_getdetachstate.3 \
+	pthread_attr_getguardsize.3 \
+	pthread_attr_getinheritsched.3 \
 	pthread_attr_getname_np.3 \
+	pthread_attr_getschedparam.3 \
+	pthread_attr_getscope.3 \
+	pthread_attr_getstack.3 \
 	pthread_attr_setcreatesuspend_np.3 \
-	pthread_attr_setname_np.3 \
-	pthread_barrier_destroy.3 pthread_barrier_init.3 \
-	pthread_barrier_wait.3 pthread_barrierattr.3 \
+	pthread_barrier.3 pthread_barrierattr.3 \
 	pthread_cancel.3 pthread_cleanup_push.3 \
-	pthread_cond_broadcast.3 pthread_cond_destroy.3 pthread_cond_init.3 \
-	pthread_cond_wait.3 \
-	pthread_condattr.3 pthread_create.3 pthread_detach.3 pthread_equal.3 \
+	pthread_cond.3 pthread_condattr.3 \
+	pthread_create.3 pthread_detach.3 pthread_equal.3 \
+	pthread_curcpu_np.3 \
 	pthread_exit.3 \
+	pthread_getcpuclockid.3 \
 	pthread_getname_np.3 \
 	pthread_getspecific.3 pthread_join.3 \
-	pthread_key_create.3 pthread_key_delete.3 pthread_kill.3 \
-	pthread_mutex_destroy.3 pthread_mutex_init.3 pthread_mutex_lock.3 \
-	pthread_mutex_unlock.3 pthread_mutexattr.3 \
-	pthread_once.3 pthread_rwlock_destroy.3 pthread_rwlock_init.3 \
-	pthread_rwlock_rdlock.3 pthread_rwlock_unlock.3 \
-	pthread_rwlock_wrlock.3 pthread_rwlockattr.3 \
+	pthread_key_create.3 pthread_kill.3 \
+	pthread_mutex.3 pthread_mutexattr.3 \
+	pthread_once.3 pthread_rwlock.3 pthread_rwlockattr.3 \
 	pthread_schedparam.3 pthread_self.3 \
-	pthread_setname_np.3 \
-	pthread_setspecific.3 pthread_sigmask.3 pthread_spin_destroy.3 \
-	pthread_spin_init.3 pthread_spin_lock.3 pthread_spin_unlock.3 \
-	pthread_suspend_np.3 pthread_testcancel.3 \
-	sched_yield.3
+	pthread_sigmask.3 pthread_spin.3 \
+	pthread_suspend_np.3 pthread_testcancel.3
+
+MLINKS+=	pthread_attr_get_np.3 pthread_getattr_np.3
+MLINKS+=	affinity.3 pthread_setaffinity_np.3
+MLINKS+=	affinity.3 pthread_getaffinity_np.3
 
 MLINKS+=	pthread_attr.3 pthread_attr_init.3
 MLINKS+=	pthread_attr.3 pthread_attr_destroy.3
-MLINKS+=	pthread_attr.3 pthread_attr_setdetachstate.3
-MLINKS+=	pthread_attr.3 pthread_attr_getdetachstate.3
-MLINKS+=	pthread_attr.3 pthread_attr_setschedparam.3
-MLINKS+=	pthread_attr.3 pthread_attr_getschedparam.3
+
+MLINKS+=	pthread_attr_getdetachstate.3 pthread_attr_setdetachstate.3
+MLINKS+=	pthread_attr_getguardsize.3 pthread_attr_setguardsize.3
+MLINKS+=	pthread_attr_getinheritsched.3 pthread_attr_setinheritsched.3
+MLINKS+=	pthread_attr_getname_np.3 pthread_attr_setname_np.3
+
+MLINKS+=	pthread_attr_getschedparam.3 pthread_attr_setschedparam.3 \
+		pthread_attr_getschedparam.3 pthread_attr_getschedpolicy.3 \
+		pthread_attr_getschedparam.3 pthread_attr_setschedpolicy.3
+
+MLINKS+=	pthread_attr_getscope.3 pthread_attr_setscope.3
+
+MLINKS+=	pthread_attr_getstack.3 pthread_attr_setstack.3 \
+		pthread_attr_getstack.3 pthread_attr_getstacksize.3 \
+		pthread_attr_getstack.3 pthread_attr_setstacksize.3 \
+		pthread_attr_getstack.3 pthread_attr_getstackaddr.3 \
+		pthread_attr_getstack.3 pthread_attr_setstackaddr.3
+
+MLINKS+=	pthread_cleanup_push.3 pthread_cleanup_pop.3
+
+MLINKS+=	pthread_barrier.3 pthread_barrier_init.3
+MLINKS+=	pthread_barrier.3 pthread_barrier_destroy.3
+MLINKS+=	pthread_barrier.3 pthread_barrier_wait.3
+
 MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_init.3
 MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_destroy.3
-MLINKS+=	pthread_cleanup_push.3 pthread_cleanup_pop.3
-MLINKS+=	pthread_cond_broadcast.3 pthread_cond_signal.3
-MLINKS+=	pthread_cond_wait.3 pthread_cond_timedwait.3
+MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_getpshared.3
+MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_setpshared.3
+
+MLINKS+=	pthread_cond.3 pthread_cond_init.3
+MLINKS+=	pthread_cond.3 pthread_cond_destroy.3
+MLINKS+=	pthread_cond.3 pthread_cond_broadcast.3
+MLINKS+=	pthread_cond.3 pthread_cond_wait.3
+MLINKS+=	pthread_cond.3 pthread_cond_signal.3
+MLINKS+=	pthread_cond.3 pthread_cond_timedwait.3
+
 MLINKS+=	pthread_condattr.3 pthread_condattr_init.3
 MLINKS+=	pthread_condattr.3 pthread_condattr_destroy.3
-MLINKS+=	pthread_mutex_lock.3 pthread_mutex_trylock.3
+MLINKS+=	pthread_condattr.3 pthread_condattr_setclock.3
+MLINKS+=	pthread_condattr.3 pthread_condattr_getclock.3
+MLINKS+=	pthread_condattr.3 pthread_condattr_getpshared.3
+MLINKS+=	pthread_condattr.3 pthread_condattr_setpshared.3
+
+MLINKS+=	pthread_getname_np.3 pthread_setname_np.3
+MLINKS+=	pthread_getspecific.3 pthread_setspecific.3
+MLINKS+=	pthread_key_create.3 pthread_key_delete.3
+
+MLINKS+=	pthread_mutex.3 pthread_mutex_init.3
+MLINKS+=	pthread_mutex.3 pthread_mutex_destroy.3
+MLINKS+=	pthread_mutex.3 pthread_mutex_lock.3
+MLINKS+=	pthread_mutex.3 pthread_mutex_trylock.3
+MLINKS+=	pthread_mutex.3 pthread_mutex_unlock.3
+MLINKS+=	pthread_mutex.3 pthread_mutex_timedlock.3
+MLINKS+=	pthread_mutex.3	pthread_mutex_getprioceiling.3
+MLINKS+=	pthread_mutex.3	pthread_mutex_setprioceiling.3 
+
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_init.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_destroy.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getpshared.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setpshared.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_settype.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_gettype.3
-MLINKS+=	pthread_rwlock_rdlock.3 pthread_rwlock_timedrdlock.3
-MLINKS+=	pthread_rwlock_rdlock.3 pthread_rwlock_tryrdlock.3
-MLINKS+=	pthread_rwlock_wrlock.3 pthread_rwlock_timedwrlock.3
-MLINKS+=	pthread_rwlock_wrlock.3 pthread_rwlock_trywrlock.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getprotocol.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setprotocol.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getprioceiling.3
+MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setprioceiling.3	
+
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_init.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_destroy.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_rdlock.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_wrlock.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_unlock.3
+
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_timedrdlock.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_timedwrlock.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_tryrdlock.3
+MLINKS+=	pthread_rwlock.3 pthread_rwlock_trywrlock.3
+
 MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_init.3
 MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_destroy.3
+MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_getpshared.3
+MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_setpshared.3
+
+MLINKS+=	pthread_spin.3 pthread_spin_init.3
+MLINKS+=	pthread_spin.3 pthread_spin_destroy.3
+MLINKS+=	pthread_spin.3 pthread_spin_lock.3
+MLINKS+=	pthread_spin.3 pthread_spin_trylock.3
+MLINKS+=	pthread_spin.3 pthread_spin_unlock.3
+
 MLINKS+=	pthread_schedparam.3 pthread_setschedparam.3
 MLINKS+=	pthread_schedparam.3 pthread_getschedparam.3
-MLINKS+=	pthread_spin_lock.3 pthread_spin_trylock.3
 MLINKS+=	pthread_suspend_np.3 pthread_resume_np.3
 MLINKS+=	pthread_testcancel.3 pthread_setcancelstate.3
 MLINKS+=	pthread_testcancel.3 pthread_setcanceltype.3
-
-pthread_switch.S _context_u.S: assym.h
 
 .include <bsd.lib.mk>
 
@@ -165,4 +243,4 @@ pthread_switch.S _context_u.S: assym.h
 # pthread_setspecific() and pthread_getspecific(), since the constness
 # of the argument to setspecific() has to be discarded *somewhere*
 # before returning it from getspecific().
-CFLAGS+= -Wno-cast-qual
+CWARNFLAGS+= -Wno-cast-qual

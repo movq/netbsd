@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.89 2007/10/17 19:57:46 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.97 2013/11/07 17:50:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -117,7 +117,7 @@ ASGLOBAL(start)
 | We will unscramble which PMEGs we actually need later.
 
 	movl	#(SEGMAP_BASE+0),%a0		| src
-	movl	#(SEGMAP_BASE+KERNBASE),%a1	| dst
+	movl	#(SEGMAP_BASE+KERNBASE3),%a1	| dst
 	movl	#(0x400000/NBSG),%d0		| count
 
 L_per_pmeg:
@@ -152,9 +152,10 @@ L_high_code:
 	movc	%d0,%dfc
 
 | Setup process zero user/kernel stacks.
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
+	lea	_C_LABEL(lwp0),%a0	| lwp0
+	movl	%a0@(L_PCB),%a1		| XXXuvm_lwp_getuarea
 	lea	%a1@(USPACE-4),%sp	| set SSP to last word
-	movl	#USRSTACK-4,%a2
+	movl	#USRSTACK3-4,%a2
 	movl	%a2,%usp		| init user SP
 
 | Note curpcb was already set in _bootstrap().
@@ -164,7 +165,7 @@ L_high_code:
 | is finished, to avoid spurrious interrupts.
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -173,8 +174,7 @@ L_high_code:
 	movw	#PSL_USER,%sp@-		| tf_sr for user mode
 	clrl	%sp@-			| tf_stackadj
 	lea	%sp@(-64),%sp		| tf_regs[16]
-	lea	_C_LABEL(lwp0),%a0	| proc0.p_md.md_regs = 
-	movl	%a1,%a0@(L_MD_REGS)	|   trapframe
+	movl	%a1,%a0@(L_MD_REGS)	| lwp0.p_md.md_regs = trapframe
 	jbsr	_C_LABEL(main)		| main(&trapframe)
 	PANIC("main() returned")
 
@@ -257,7 +257,7 @@ sun3_mmu_specific:
 	movsb BUSERR_REG,%d0		| get value of bus error register
 	movc %d1,%sfc			| restore %sfc
 	movl %sp@+,%d1			| restore %d1
-	andb #BUSERR_MMU,%d0 		| is this an MMU fault?
+	andb #BUSERR_MMU,%d0		| is this an MMU fault?
 	jeq Lisberr			| non-MMU bus error
 /* End of sun3 specific code. */
 
@@ -403,7 +403,7 @@ ASLOCAL(kbrkpt)
 	| (so debugger can change the stack pointer)
 	movl	%a6,%d1
 	cmpl	#_ASM_LABEL(tmpstk),%d1
-	jls	Lbrkpt2 		| already on tmpstk
+	jls	Lbrkpt2			| already on tmpstk
 	| Copy frame to the temporary stack
 	movl	%sp,%a0			| %a0=src
 	lea	_ASM_LABEL(tmpstk)-96,%a1	| %a1=dst
@@ -446,12 +446,6 @@ Lbrkpt2:
  *   %d0,%d1,%a0,%a1, sr, pc, vo
  */
 
-#define INTERRUPT_SAVEREG \
-	moveml	#0xC0C0,%sp@-
-
-#define INTERRUPT_RESTORE \
-	moveml	%sp@+,#0x0303
-
 /*
  * This is the common auto-vector interrupt handler,
  * for which the CPU provides the vector=0x18+level.
@@ -465,7 +459,7 @@ Lbrkpt2:
 GLOBAL(_isr_autovec)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_autovec)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 /* clock: see clock.c */
@@ -477,7 +471,7 @@ GLOBAL(_isr_autovec)
 GLOBAL(_isr_clock)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(clock_intr)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 | Handler for all vectored interrupts (i.e. VME interrupts)
@@ -489,11 +483,8 @@ GLOBAL(_isr_clock)
 GLOBAL(_isr_vectored)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_vectored)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
-
-#undef	INTERRUPT_SAVEREG
-#undef	INTERRUPT_RESTORE
 
 /* interrupt counters (needed by vmstat) */
 GLOBAL(intrnames)
@@ -646,16 +637,6 @@ GLOBAL(getsp)
 	movl	%d0,%a0
 	rts
 
-ENTRY(getsfc)
-	movc	%sfc,%d0
-	movl	%d0,%a0
-	rts
-
-ENTRY(getdfc)
-	movc	%dfc,%d0
-	movl	%d0,%a0
-	rts
-
 ENTRY(getvbr)
 	movc	%vbr,%a0
 	rts
@@ -691,35 +672,12 @@ ENTRY(_splraise)
 	clrl	%d0
 	movw	%sr,%d0
 	movl	%d0,%d1
-	andl	#PSL_HIGHIPL,%d1 	| old &= PSL_HIGHIPL
+	andl	#PSL_HIGHIPL,%d1	| old &= PSL_HIGHIPL
 	cmpl	%sp@(4),%d1		| (old - new)
 	bge	Lsplr
 	movl	%sp@(4),%d1
 	movw	%d1,%sr
 Lsplr:
-	rts
-
-/*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general regs
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR)	| save FP control regs
-Lm68881sdone:
-	rts
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi	| restore FP control regs
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general regs
-Lm68881rdone:
-	frestore %a0@			| restore state
 	rts
 
 /*
@@ -789,7 +747,7 @@ ENTRY(set_segmap_allctx)
 | Not using _C_LABEL() here because these symbols are never
 | referenced by any C code, and if the leading underscore
 | ever goes away, these lines turn into syntax errors...
-	.set	_KERNBASE,KERNBASE
+	.set	_KERNBASE3,KERNBASE3
 	.set	_MONSTART,SUN3_MONSTART
 	.set	_PROM_BASE,SUN3_PROM_BASE
 	.set	_MONEND,SUN3_MONEND

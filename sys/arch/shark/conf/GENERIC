@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.77 2008/02/09 22:18:11 jmmv Exp $
+#	$NetBSD: GENERIC,v 1.130 2017/09/14 07:58:43 mrg Exp $
 #
 # Generic Shark configuration.
 #
@@ -7,7 +7,7 @@ include	"arch/shark/conf/std.shark"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.77 $"
+#ident		"GENERIC-$Revision: 1.130 $"
 
 # estimated number of users
 maxusers	32
@@ -17,7 +17,6 @@ maxusers	32
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	HZ=64
 #options 	NTP		# NTP phase/frequency locked loop
-options 	NMBCLUSTERS=1024 # XXX, temporarily required
 #options 	BOOT_QUIETLY	# twiddle instead of normal boot msg output
 
 # CPU options
@@ -34,10 +33,6 @@ makeoptions	CPUFLAGS="-march=armv4 -mtune=strongarm"
 # properties and/or may set up devices incorrectly.
 options 	COMPAT_OLD_OFW
 
-# FPA options
-
-#options 	ARMFPE		# ARM Ltd FPE
-
 # File systems
 
 file-system	FFS		# UFS
@@ -53,8 +48,8 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay filesystem
-#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	CODA		# Coda file system (needs vcoda below)
@@ -63,12 +58,14 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+#options 	UFS_EXTATTR	# Extended attribute support for UFS1
 
 # Networking options
 
@@ -76,15 +73,10 @@ options 	NFSSERVER
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
-#options 	PFIL_HOOKS	# pfil(9) packet filter hooks (Required
 				# if you enable the pseudo-device ipl).
 
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -108,28 +100,16 @@ options 	NFS_BOOT_DHCP	# use NetBSD standard DHCP/NFS boot code
 
 # Compatibility options
 
-#options 	COMPAT_09	# NetBSD 0.9 compatibility.
-#options 	COMPAT_10	# NetBSD 1.0 compatibility.
-#options 	COMPAT_11	# NetBSD 1.1 compatibility.
-options 	COMPAT_12	# NetBSD 1.2 compatibility.
-options 	COMPAT_13	# NetBSD 1.3 compatibility.
-options 	COMPAT_14	# NetBSD 1.4 compatibility.
-options 	COMPAT_15	# NetBSD 1.5 compatibility.
-options 	COMPAT_16	# NetBSD 1.6 compatibility.
-options 	COMPAT_20	# NetBSD 2.0 compatibility.
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_43	# 4.3BSD compatibility.
+include 	"conf/compat_netbsd12.config"
+options 	COMPAT_NETBSD32	# allow running arm (e.g. non-earm) binaries
+
 options 	COMPAT_LINUX	# Linux compatibility.
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Shared memory options
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
-options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -148,11 +128,11 @@ options 	INSECURE		# disable kernel securelevel
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics, XXX temp required
-options 	LKM		# loadable kernel modules
-options 	KMEMSTATS	# kernel memory statistics, XXX temp required
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
+options 	MODULAR		# new style module(7) framework
+options 	MODULAR_DEFAULT_AUTOLOAD
 
 # Development and Debugging options
 
@@ -161,7 +141,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	DIAGNOSTIC	# internal consistency checks
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 options 	DDB		# in-kernel debugger
-options 	SYMTAB_SPACE=440000 	# reserve symbol space for DDB
+makeoptions	COPY_SYMTAB=1 	# reserve symbol space for DDB
 				# (needed because we boot netbsd.aout)
 #options 	DDB_ONPANIC=0	# don't run DDB at panictime
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
@@ -190,7 +170,7 @@ options 	WS_KERNEL_FG=WSCOL_GREEN
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# VT handling
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # see dev/pckbport/wskbdmap_mfii.c for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
@@ -251,7 +231,8 @@ pckbc*		at ofisa?
 pckbd*		at pckbc?
 pms*		at pckbc?
 vga*		at ofbus?
-igsfb*		at ofbus?
+igsfb*		at ofbus?	# IGS CyberPro in rev. 5 sharks
+chipsfb*	at ofbus?	# C&T 65550 in rev. 4 and earlier
 wsdisplay*	at wsemuldisplaydev?
 wskbd*		at pckbd? console ?
 wsmouse*	at pms? mux 0
@@ -275,19 +256,30 @@ audio*		at ess?
 opl*		at ess?
 midi*		at opl?
 
+spkr*		at audio?		# PC speaker (synthesized)
+
 # Joystick @OFW
 joy*		at ofisa?
 
-# Pull in optional local configuration
-include	"arch/shark/conf/GENERIC.local"
+# PCI @OFW
+#vlpci*		at ofbus?
+#pci*		at vlpci?
 
-pseudo-device	loop	1		# network loopback
+# Pull in optional local configuration
+cinclude "arch/shark/conf/GENERIC.local"
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
+pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
 #pseudo-device	sl			# CSLIP
 #pseudo-device	ppp			# PPP
 #pseudo-device	tun			# network tunneling over tty
-#pseudo-device	ipfilter 1		# ip filter
+#pseudo-device	ipfilter		# ip filter
 pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
@@ -295,39 +287,35 @@ pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-#pseudo-device	ccd	2		# concatenated disk devices
-pseudo-device	fss	4		# file system snapshot device
-#pseudo-device	cgd	4		# cryptographic disk devices
-pseudo-device	rnd			# /dev/random and /dev/urandom
+#pseudo-device	ccd			# concatenated disk devices
+pseudo-device	fss			# file system snapshot device
+#pseudo-device	cgd			# cryptographic disk devices
 
-#pseudo-device	md	1		# Ramdisk driver
+#pseudo-device	md			# Ramdisk driver
 #pseudo-device	profiler 1		# fiq based profiling device
-pseudo-device	sequencer 1		# MIDI sequencer
+pseudo-device	sequencer		# MIDI sequencer
 pseudo-device	openfirm		# /dev/openfirm
-#pseudo-device	vcoda	4		# coda kernel <-> cachemanager
+#pseudo-device	vcoda			# coda kernel <-> cachemanager
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	wsfont
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5
 
 options PAX_MPROTECT=0			# PaX mprotect(2) restrictions
-#options PAX_SEGVGUARD=0			# PaX Segmentation fault guard
 options PAX_ASLR=0			# PaX Address Space Layout Randomization

@@ -1,4 +1,4 @@
-/*	$NetBSD: aevar.h,v 1.2 2006/09/04 05:17:26 gdamore Exp $	*/
+/*	$NetBSD: aevar.h,v 1.7 2015/04/13 21:18:42 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,14 +33,10 @@
 #ifndef _MIPS_ATHEROS_DEV_AEVAR_H_
 #define	_MIPS_ATHEROS_DEV_AEVAR_H_
 
-#include "rnd.h"
-
 #include <sys/queue.h>
 #include <sys/callout.h>
 
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)
@@ -135,7 +124,7 @@ struct ae_stats {
  * Software state per device.
  */
 struct ae_softc {
-	struct device sc_dev;		/* generic device information */
+	device_t sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_size_t sc_size;		/* bus space size */
@@ -193,9 +182,7 @@ struct ae_softc {
 
 	int	sc_rxptr;		/* next ready RX descriptor/descsoft */
 
-#if NRND > 0
-	rndsource_element_t sc_rnd_source; /* random source */
-#endif
+	krndsource_t sc_rnd_source; /* random source */
 };
 #endif
 

@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $ */
+/* $NetBSD: autoconf.c,v 1.53 2014/01/20 15:05:13 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,9 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.53 2014/01/20 15:05:13 tsutsui Exp $");
+
+#include "pci.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,6 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $");
 #include <sys/conf.h>
 #include <dev/cons.h>
 
+#include <dev/pci/pcivar.h>
+
 #include <machine/autoconf.h>
 #include <machine/alpha.h>
 #include <machine/cpu.h>
@@ -62,15 +66,15 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.44 2007/12/03 15:33:04 ad Exp $");
 
 struct bootdev_data	*bootdev_data;
 
-void	parse_prom_bootdev __P((void));
-int	atoi __P((char *));
+void	parse_prom_bootdev(void);
+static inline int atoi(const char *);
 
 /*
  * cpu_configure:
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	parse_prom_bootdev();
@@ -87,24 +91,24 @@ cpu_configure()
 	(void)spl0();
 
 	/*
-	 * Note that bootstrapping is finished, and set the HWRPB up  
+	 * Note that bootstrapping is finished, and set the HWRPB up
 	 * to do restarts.
 	 */
 	hwrpb_restart_setup();
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 
 	if (booted_device == NULL)
 		printf("WARNING: can't figure what device matches \"%s\"\n",
 		    bootinfo.booted_dev);
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void
-parse_prom_bootdev()
+parse_prom_bootdev(void)
 {
 	static char hacked_boot_dev[128];
 	static struct bootdev_data bd;
@@ -163,36 +167,22 @@ parse_prom_bootdev()
 	bootdev_data = &bd;
 }
 
-int
-atoi(s)
-	char *s;
+static inline int
+atoi(const char *s)
 {
-	int n, neg;
-
-	n = 0;
-	neg = 0;
-
-	while (*s == '-') {
-		s++;
-		neg = !neg;
-	}
-
-	while (*s != '\0') {
-		if (*s < '0' && *s > '9')
-			break;
-
-		n = (10 * n) + (*s - '0');
-		s++;
-	}
-
-	return (neg ? -n : n);
+	return (int)strtoll(s, NULL, 10);
 }
 
 void
-device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+device_register(device_t dev, void *aux)
 {
+#if NPCI > 0
+	device_t parent = device_parent(dev);
+
+	if (parent != NULL && device_is_a(parent, "pci"))
+		device_pci_register(dev, aux);
+#endif
+
 	if (bootdev_data == NULL) {
 		/*
 		 * There is no hope.

@@ -1,4 +1,4 @@
-/*	$NetBSD: libkern.h,v 1.75 2008/02/17 22:49:11 matt Exp $	*/
+/*	$NetBSD: libkern.h,v 1.126 2017/12/09 00:51:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -34,6 +34,10 @@
 #ifndef _LIB_LIBKERN_LIBKERN_H_
 #define _LIB_LIBKERN_LIBKERN_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_diagnostic.h"
+#endif
+
 #include <sys/types.h>
 #include <sys/inttypes.h>
 #include <sys/null.h>
@@ -43,25 +47,33 @@
 #define LIBKERN_BODY
 #endif
 
-LIBKERN_INLINE int imax __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE int imin __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int max __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int min __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE long lmax __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE long lmin __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmax __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmin __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE int abs __P((int)) __attribute__ ((unused));
+LIBKERN_INLINE int imax(int, int) __unused;
+LIBKERN_INLINE int imin(int, int) __unused;
+LIBKERN_INLINE u_int max(u_int, u_int) __unused;
+LIBKERN_INLINE u_int min(u_int, u_int) __unused;
+LIBKERN_INLINE long lmax(long, long) __unused;
+LIBKERN_INLINE long lmin(long, long) __unused;
+LIBKERN_INLINE u_long ulmax(u_long, u_long) __unused;
+LIBKERN_INLINE u_long ulmin(u_long, u_long) __unused;
+LIBKERN_INLINE int abs(int) __unused;
+LIBKERN_INLINE long labs(long) __unused;
+LIBKERN_INLINE long long llabs(long long) __unused;
+LIBKERN_INLINE intmax_t imaxabs(intmax_t) __unused;
 
-LIBKERN_INLINE int isspace __P((int)) __unused;
-LIBKERN_INLINE int isascii __P((int)) __unused;
-LIBKERN_INLINE int isupper __P((int)) __unused;
-LIBKERN_INLINE int islower __P((int)) __unused;
-LIBKERN_INLINE int isalpha __P((int)) __unused;
-LIBKERN_INLINE int isdigit __P((int)) __unused;
-LIBKERN_INLINE int isxdigit __P((int)) __unused;
-LIBKERN_INLINE int toupper __P((int)) __unused;
-LIBKERN_INLINE int tolower __P((int)) __unused;
+LIBKERN_INLINE int isspace(int) __unused;
+LIBKERN_INLINE int isascii(int) __unused;
+LIBKERN_INLINE int isupper(int) __unused;
+LIBKERN_INLINE int islower(int) __unused;
+LIBKERN_INLINE int isalpha(int) __unused;
+LIBKERN_INLINE int isalnum(int) __unused;
+LIBKERN_INLINE int isdigit(int) __unused;
+LIBKERN_INLINE int isxdigit(int) __unused;
+LIBKERN_INLINE int iscntrl(int) __unused;
+LIBKERN_INLINE int isgraph(int) __unused;
+LIBKERN_INLINE int isprint(int) __unused;
+LIBKERN_INLINE int ispunct(int) __unused;
+LIBKERN_INLINE int toupper(int) __unused;
+LIBKERN_INLINE int tolower(int) __unused;
 
 #ifdef LIBKERN_BODY
 LIBKERN_INLINE int
@@ -111,6 +123,24 @@ abs(int j)
 	return(j < 0 ? -j : j);
 }
 
+LIBKERN_INLINE long
+labs(long j)
+{
+	return(j < 0 ? -j : j);
+}
+
+LIBKERN_INLINE long long
+llabs(long long j)
+{
+	return(j < 0 ? -j : j);
+}
+
+LIBKERN_INLINE intmax_t
+imaxabs(intmax_t j)
+{
+	return(j < 0 ? -j : j);
+}
+
 LIBKERN_INLINE int
 isspace(int ch)
 {
@@ -142,6 +172,12 @@ isalpha(int ch)
 }
 
 LIBKERN_INLINE int
+isalnum(int ch)
+{
+	return (isalpha(ch) || isdigit(ch));
+}
+
+LIBKERN_INLINE int
 isdigit(int ch)
 {
 	return (ch >= '0' && ch <= '9');
@@ -153,6 +189,30 @@ isxdigit(int ch)
 	return (isdigit(ch) ||
 	    (ch >= 'A' && ch <= 'F') ||
 	    (ch >= 'a' && ch <= 'f'));
+}
+
+LIBKERN_INLINE int
+iscntrl(int ch)
+{
+	return ((ch >= 0x00 && ch <= 0x1F) || ch == 0x7F);
+}
+
+LIBKERN_INLINE int
+isgraph(int ch)
+{
+	return (ch != ' ' && isprint(ch));
+}
+
+LIBKERN_INLINE int
+isprint(int ch)
+{
+	return (ch >= 0x20 && ch <= 0x7E);
+}
+
+LIBKERN_INLINE int
+ispunct(int ch)
+{
+	return (isprint(ch) && ch != ' ' && !isalnum(ch));
 }
 
 LIBKERN_INLINE int
@@ -174,16 +234,13 @@ tolower(int ch)
 
 #define	__NULL_STMT		do { } while (/* CONSTCOND */ 0)
 
+#define __KASSERTSTR  "kernel %sassertion \"%s\" failed: file \"%s\", line %d "
+
 #ifdef NDEBUG						/* tradition! */
 #define	assert(e)	((void)0)
 #else
-#ifdef __STDC__
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, #e))
-#else
-#define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, "e"))
-#endif
+			    kern_assert(__KASSERTSTR, "", #e, __FILE__, __LINE__))
 #endif
 
 #ifdef __COVERITY__
@@ -192,80 +249,137 @@ tolower(int ch)
 #endif
 #endif
 
+#ifndef	CTASSERT
+#define	CTASSERT(x)		__CTASSERT(x)
+#endif
+#ifndef	CTASSERT_SIGNED
+#define	CTASSERT_SIGNED(x)	__CTASSERT(((typeof(x))-1) < 0)
+#endif
+#ifndef	CTASSERT_UNSIGNED
+#define	CTASSERT_UNSIGNED(x)	__CTASSERT(((typeof(x))-1) >= 0)
+#endif
+
 #ifndef DIAGNOSTIC
 #define _DIAGASSERT(a)	(void)0
 #ifdef lint
-#define	KASSERT(e)	/* NOTHING */
+#define	KASSERTMSG(e, msg, ...)	/* NOTHING */
+#define	KASSERT(e)		/* NOTHING */
 #else /* !lint */
-#define	KASSERT(e)	((void)0)
+#define	KASSERTMSG(e, msg, ...)	((void)0)
+#define	KASSERT(e)		((void)0)
 #endif /* !lint */
 #else /* DIAGNOSTIC */
 #define _DIAGASSERT(a)	assert(a)
-#ifdef __STDC__
+#define	KASSERTMSG(e, msg, ...)		\
+			(__predict_true((e)) ? (void)0 :		    \
+			    kern_assert(__KASSERTSTR msg, "diagnostic ", #e,	    \
+				__FILE__, __LINE__, ## __VA_ARGS__))
+
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__, #e))
-#else
-#define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__,"e"))
-#endif
+			    kern_assert(__KASSERTSTR, "diagnostic ", #e,	    \
+				__FILE__, __LINE__))
 #endif
 
 #ifndef DEBUG
 #ifdef lint
-#define	KDASSERT(e)	/* NOTHING */
+#define	KDASSERTMSG(e,msg, ...)	/* NOTHING */
+#define	KDASSERT(e)		/* NOTHING */
 #else /* lint */
-#define	KDASSERT(e)	((void)0)
+#define	KDASSERTMSG(e,msg, ...)	((void)0)
+#define	KDASSERT(e)		((void)0)
 #endif /* lint */
 #else
-#ifdef __STDC__
+#define	KDASSERTMSG(e, msg, ...)	\
+			(__predict_true((e)) ? (void)0 :		    \
+			    kern_assert(__KASSERTSTR msg, "debugging ", #e,	    \
+				__FILE__, __LINE__, ## __VA_ARGS__))
+
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, #e))
-#else
-#define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, "e"))
+			    kern_assert(__KASSERTSTR, "debugging ", #e,	    \
+				__FILE__, __LINE__))
 #endif
-#endif
+
 /*
  * XXX: For compatibility we use SMALL_RANDOM by default.
  */
 #define SMALL_RANDOM
 
 #ifndef offsetof
+#if __GNUC_PREREQ__(4, 0)
+#define offsetof(type, member)	__builtin_offsetof(type, member)
+#else
 #define	offsetof(type, member) \
     ((size_t)(unsigned long)(&(((type *)0)->member)))
 #endif
+#endif
+
+/*
+ * Return the container of an embedded struct.  Given x = &c->f,
+ * container_of(x, T, f) yields c, where T is the type of c.  Example:
+ *
+ *	struct foo { ... };
+ *	struct bar {
+ *		int b_x;
+ *		struct foo b_foo;
+ *		...
+ *	};
+ *
+ *	struct bar b;
+ *	struct foo *fp = b.b_foo;
+ *
+ * Now we can get at b from fp by:
+ *
+ *	struct bar *bp = container_of(fp, struct bar, b_foo);
+ *
+ * The 0*sizeof((PTR) - ...) causes the compiler to warn if the type of
+ * *fp does not match the type of struct bar::b_foo.
+ * We skip the validation for coverity runs to avoid warnings.
+ */
+#ifdef __COVERITY__
+#define __validate_container_of(PTR, TYPE, FIELD) 0
+#define __validate_const_container_of(PTR, TYPE, FIELD) 0
+#else
+#define __validate_container_of(PTR, TYPE, FIELD)			\
+    (0 * sizeof((PTR) - &((TYPE *)(((char *)(PTR)) -			\
+    offsetof(TYPE, FIELD)))->FIELD))
+#define __validate_const_container_of(PTR, TYPE, FIELD)			\
+    (0 * sizeof((PTR) - &((const TYPE *)(((const char *)(PTR)) -	\
+    offsetof(TYPE, FIELD)))->FIELD))
+#endif
+
+#define	container_of(PTR, TYPE, FIELD)					\
+    ((TYPE *)(((char *)(PTR)) - offsetof(TYPE, FIELD))			\
+	+ __validate_container_of(PTR, TYPE, FIELD))
+#define	const_container_of(PTR, TYPE, FIELD)				\
+    ((const TYPE *)(((const char *)(PTR)) - offsetof(TYPE, FIELD))	\
+	+ __validate_const_container_of(PTR, TYPE, FIELD))
 
 #define	MTPRNG_RLEN		624
 struct mtprng_state {
-	unsigned int mt_idx; 
+	unsigned int mt_idx;
 	uint32_t mt_elem[MTPRNG_RLEN];
 	uint32_t mt_count;
 	uint32_t mt_sparse[3];
 };
 
-/* Prototypes for non-quad routines. */
-/* XXX notyet #ifdef _STANDALONE */
-int	 bcmp __P((const void *, const void *, size_t));
-void	 bzero __P((void *, size_t));
-/* #endif */
-
 /* Prototypes for which GCC built-ins exist. */
-void	*memcpy __P((void *, const void *, size_t));
-int	 memcmp __P((const void *, const void *, size_t));
-void	*memset __P((void *, int, size_t));
-#if __GNUC_PREREQ__(2, 95) && (__GNUC_PREREQ__(4, 0) || !defined(__vax__))
+void	*memcpy(void *, const void *, size_t);
+int	 memcmp(const void *, const void *, size_t);
+void	*memset(void *, int, size_t);
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	memcpy(d, s, l)		__builtin_memcpy(d, s, l)
 #define	memcmp(a, b, l)		__builtin_memcmp(a, b, l)
 #endif
-#if __GNUC_PREREQ__(2, 95) && !defined(__vax__)
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	memset(d, v, l)		__builtin_memset(d, v, l)
 #endif
 
-char	*strcpy __P((char *, const char *));
-int	 strcmp __P((const char *, const char *));
-size_t	 strlen __P((const char *));
+char	*strcpy(char *, const char *);
+int	 strcmp(const char *, const char *);
+size_t	 strlen(const char *);
+size_t	 strnlen(const char *, size_t);
 char	*strsep(char **, const char *);
-#if __GNUC_PREREQ__(2, 95)
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	strcpy(d, s)		__builtin_strcpy(d, s)
 #define	strcmp(a, b)		__builtin_strcmp(a, b)
 #define	strlen(a)		__builtin_strlen(a)
@@ -277,56 +391,110 @@ char	*strsep(char **, const char *);
 #endif
 
 /* These exist in GCC 3.x, but we don't bother. */
-char	*strcat __P((char *, const char *));
-char	*strncpy __P((char *, const char *, size_t));
-int	 strncmp __P((const char *, const char *, size_t));
-char	*strchr __P((const char *, int));
-char	*strrchr __P((const char *, int));
-
-char	*strstr __P((const char *, const char *));
+char	*strcat(char *, const char *);
+size_t	 strcspn(const char *, const char *);
+char	*strncpy(char *, const char *, size_t);
+char	*strncat(char *, const char *, size_t);
+int	 strncmp(const char *, const char *, size_t);
+char	*strchr(const char *, int);
+char	*strrchr(const char *, int);
+char	*strstr(const char *, const char *);
+char	*strpbrk(const char *, const char *);
+size_t	 strspn(const char *, const char *);
 
 /*
  * ffs is an instruction on vax.
  */
-int	 ffs __P((int));
+int	 ffs(int);
 #if __GNUC_PREREQ__(2, 95) && (!defined(__vax__) || __GNUC_PREREQ__(4,1))
 #define	ffs(x)		__builtin_ffs(x)
 #endif
 
-void	 __kernassert __P((const char *, const char *, int, const char *));
-unsigned int
-	bcdtobin __P((unsigned int));
-unsigned int
-	bintobcd __P((unsigned int));
+void	 kern_assert(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
 u_int32_t
-	inet_addr __P((const char *));
+	inet_addr(const char *);
 struct in_addr;
-int	inet_aton __P((const char *, struct in_addr *));
-char	*intoa __P((u_int32_t));
+int	inet_aton(const char *, struct in_addr *);
+char	*intoa(u_int32_t);
 #define inet_ntoa(a) intoa((a).s_addr)
-void	*memchr __P((const void *, int, size_t));
-void	*memmove __P((void *, const void *, size_t));
-int	 pmatch __P((const char *, const char *, const char **));
-u_int32_t arc4random __P((void));
-void	 arc4randbytes __P((void *, size_t));
+void	*memchr(const void *, int, size_t);
+void	*memmove(void *, const void *, size_t);
+int	 pmatch(const char *, const char *, const char **);
 #ifndef SMALL_RANDOM
-void	 srandom __P((unsigned long));
-char	*initstate __P((unsigned long, char *, size_t));
-char	*setstate __P((char *));
+void	 srandom(unsigned long);
+char	*initstate(unsigned long, char *, size_t);
+char	*setstate(char *);
 #endif /* SMALL_RANDOM */
-long	 random __P((void));
+long	 random(void);
+void	 mi_vector_hash(const void * __restrict, size_t, uint32_t,
+	    uint32_t[3]);
 void	 mtprng_init32(struct mtprng_state *, uint32_t);
 void	 mtprng_initarray(struct mtprng_state *, const uint32_t *, size_t);
 uint32_t mtprng_rawrandom(struct mtprng_state *);
 uint32_t mtprng_random(struct mtprng_state *);
-int	 scanc __P((u_int, const u_char *, const u_char *, int));
-int	 skpc __P((int, size_t, u_char *));
-int	 strcasecmp __P((const char *, const char *));
-size_t	 strlcpy __P((char *, const char *, size_t));
-size_t	 strlcat __P((char *, const char *, size_t));
-int	 strncasecmp __P((const char *, const char *, size_t));
-u_long	 strtoul __P((const char *, char **, int));
-long long strtoll __P((const char *, char **, int));
-unsigned long long strtoull __P((const char *, char **, int));
-uintmax_t strtoumax __P((const char *, char **, int));
+int	 scanc(u_int, const u_char *, const u_char *, int);
+int	 skpc(int, size_t, u_char *);
+int	 strcasecmp(const char *, const char *);
+size_t	 strlcpy(char *, const char *, size_t);
+size_t	 strlcat(char *, const char *, size_t);
+int	 strncasecmp(const char *, const char *, size_t);
+u_long	 strtoul(const char *, char **, int);
+long long strtoll(const char *, char **, int);
+unsigned long long strtoull(const char *, char **, int);
+intmax_t  strtoimax(const char *, char **, int);
+uintmax_t strtoumax(const char *, char **, int);
+intmax_t strtoi(const char * __restrict, char ** __restrict, int, intmax_t,
+    intmax_t, int *);
+uintmax_t strtou(const char * __restrict, char ** __restrict, int, uintmax_t,
+    uintmax_t, int *);
+void	 hexdump(void (*)(const char *, ...) __printflike(1, 2),
+    const char *, const void *, size_t);
+
+int	 snprintb(char *, size_t, const char *, uint64_t);
+int	 snprintb_m(char *, size_t, const char *, uint64_t, size_t);
+int	 kheapsort(void *, size_t, size_t, int (*)(const void *, const void *),
+		   void *);
+uint32_t crc32(uint32_t, const uint8_t *, size_t);
+#if __GNUC_PREREQ__(4, 5) \
+    && (defined(__alpha_cix__) || defined(__mips_popcount))
+#define	popcount	__builtin_popcount
+#define	popcountl	__builtin_popcountl
+#define	popcountll	__builtin_popcountll
+#define	popcount32	__builtin_popcount
+#define	popcount64	__builtin_popcountll
+#else
+unsigned int	popcount(unsigned int) __constfunc;
+unsigned int	popcountl(unsigned long) __constfunc;
+unsigned int	popcountll(unsigned long long) __constfunc;
+unsigned int	popcount32(uint32_t) __constfunc;
+unsigned int	popcount64(uint64_t) __constfunc;
+#endif
+
+void	*explicit_memset(void *, int, size_t);
+int	consttime_memequal(const void *, const void *, size_t);
+int	strnvisx(char *, size_t, const char *, size_t, int);
+#define VIS_OCTAL	0x01
+#define VIS_SAFE	0x20
+#define VIS_TRIM	0x40
+
+#ifdef notyet
+/*
+ * LZF hashtable/state size: on uncompressible data and on a system with
+ * a sufficiently large d-cache, a larger table produces a considerable
+ * speed benefit.  On systems with small memory and caches, however...
+ */
+#if defined(__vax__) || defined(__m68k__)
+#define LZF_HLOG 14
+#else
+#define LZF_HLOG 15
+#endif
+typedef const uint8_t *LZF_STATE[1 << LZF_HLOG];
+
+unsigned int lzf_compress_r (const void *const, unsigned int, void *,
+			     unsigned int, LZF_STATE);
+unsigned int lzf_decompress (const void *const, unsigned int, void *,
+			     unsigned int);
+#endif
+
 #endif /* !_LIB_LIBKERN_LIBKERN_H_ */

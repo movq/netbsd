@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.2 2003/01/18 11:09:37 thorpej Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.6 2013/07/17 03:01:27 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include "SYS.h"
+#include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: getcontext.S,v 1.2 2003/01/18 11:09:37 thorpej Exp $")
+	RCSID("$NetBSD: getcontext.S,v 1.6 2013/07/17 03:01:27 matt Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 #ifdef WEAK_ALIAS
@@ -47,8 +41,9 @@ WEAK_ALIAS(getcontext, _getcontext)
 #endif
 
 _SYSCALL(_getcontext,getcontext)
-	movl	%sp@(4),%a0
-	addql	#4,%a0@(96)		| adjust saved stack pointer
-	movl	%sp@,%a0@(100)		| adjust saved program counter
-	clrl	%a0@(36)		| arrange for return value of 0
+	movl	4(%sp),%a0
+	addql	#4,UC_MCONTEXT_SP(%a0)	| adjust saved stack pointer
+	movl	%sp@,UC_MCONTEXT_PC(%a0)| adjust saved program counter
+	clrl	UC_MCONTEXT_D0(%a0)	| arrange for return value of 0
 	rts
+END(_getcontext)

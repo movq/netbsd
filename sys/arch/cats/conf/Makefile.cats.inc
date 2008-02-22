@@ -1,35 +1,35 @@
-#	$NetBSD: Makefile.cats.inc,v 1.20 2008/01/19 18:10:13 he Exp $
+#	$NetBSD: Makefile.cats.inc,v 1.35 2015/08/24 14:04:24 uebayasi Exp $
 
-MACHINE_ARCH=	arm
+MACHINE_ARCH?=	arm
 CPPFLAGS+=	-D${MACHINE}
-
-.if (${OBJECT_FMT} == "ELF")
 
 .if defined(ABLEELF) && (${ABLEELF} == "1")
 # use a standard ELF format, adjusted to align areas
-LINKFLAGS=	-T ${THISARM}/conf/ldscript.elf
+KERNLDSCRIPT=	${THISARM}/conf/ldscript.elf
 
 .else
 # Need to convert the kernel from ELF to a.out so that the firmware
 # can load it.
 
-LINKFLAGS=	-T ldscript
+CFLAGS+=	-fno-unwind-tables
 
-SYSTEM_LD_HEAD_EXTRA+=; \
+LOADADDRESS=	0xF0000020
+
+KERNLDSCRIPT=	ldscript
+EXTRA_CLEAN+=	${KERNLDSCRIPT}
+
+${KERNLDSCRIPT}: \
+    ${ARM}/conf/kern.ldscript.head \
+    ${ARM}/conf/kern.ldscript.tail \
+    $S/conf/mkldscript.sh \
+    ${SYSTEM_OBJ}
 	( cat ${ARM}/conf/kern.ldscript.head ; \
 	  OBJDUMP=${OBJDUMP} ${HOST_SH} $S/conf/mkldscript.sh \
 		${SYSTEM_OBJ} ; \
-	  cat ${ARM}/conf/kern.ldscript.tail ) > ldscript
+	  cat ${ARM}/conf/kern.ldscript.tail ) > $@
 
 SYSTEM_LD_TAIL_EXTRA+=; \
-	echo \
-	 "${OBJCOPY} -O a.out-arm-netbsd \
-		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
-		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
-		$@ $@.aout"; \
-	${OBJCOPY} -O a.out-arm-netbsd \
-		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
-		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
-		$@ $@.aout
+	echo "${OBJCOPY} ${OBJCOPY_ELF2AOUT_FLAGS} $@ $@.aout"; \
+	${OBJCOPY} ${OBJCOPY_ELF2AOUT_FLAGS} $@ $@.aout
 .endif
-.endif
+

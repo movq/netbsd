@@ -1,4 +1,4 @@
-/* $NetBSD: escvar.h,v 1.6 2005/12/11 12:16:05 christos Exp $ */
+/* $NetBSD: escvar.h,v 1.8 2012/10/27 17:17:23 chs Exp $ */
 
 /*
  * Copyright (c) 1995 Daniel Widenfalk
@@ -151,7 +151,7 @@ struct nexus {
 #define ESC_NF_DEBUG		0x8000	/* As it says: DEBUG */
 
 struct	esc_softc {
-	struct	device		 sc_dev;	/* System required struct */
+	device_t		 sc_dev;	/* System required struct */
 	struct	scsipi_channel	 sc_channel;	/* For sub devices */
 	struct	scsipi_adapter	 sc_adapter;
 	irqhandler_t		 sc_ih;		/* Interrupt chain struct */
@@ -259,10 +259,10 @@ struct	esc_softc {
 #define ESC_SLOW_CABLE	 0x08	/* Cable is "unsafe" for fast scsi-2 */
 #define ESC_SLOW_START	 0x10	/* There are slow starters on the bus */
 
-void	escinitialize __P((struct esc_softc *sc));
-void	esc_minphys   __P((struct buf *bp));
-void	esc_scsi_request __P((struct scsipi_channel *,
-				scsipi_adapter_req_t, void *));
-void	escintr       __P((struct esc_softc *dev));
+void	escinitialize(struct esc_softc *sc);
+void	esc_minphys(struct buf *bp);
+void	esc_scsi_request(struct scsipi_channel *,
+				scsipi_adapter_req_t, void *);
+void	escintr(struct esc_softc *dev);
 
 #endif /* _ESCVAR_H_ */

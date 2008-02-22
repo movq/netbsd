@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.23 2006/04/09 20:01:40 christos Exp $	*/
+/*	$NetBSD: compress.c,v 1.26 2011/08/30 23:08:05 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)compress.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: compress.c,v 1.23 2006/04/09 20:01:40 christos Exp $");
+__RCSID("$NetBSD: compress.c,v 1.26 2011/08/30 23:08:05 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,19 +55,18 @@ __RCSID("$NetBSD: compress.c,v 1.23 2006/04/09 20:01:40 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
-void	compress(char *, char *, int);
-void	cwarn(const char *, ...) __attribute__((__format__(__printf__,1,2)));
-void	cwarnx(const char *, ...) __attribute__((__format__(__printf__,1,2)));
-void	decompress(char *, char *, int);
-int	permission(char *);
-void	setfile(char *, struct stat *);
-void	usage(int);
+static void	compress(const char *, const char *, int);
+static void	cwarn(const char *, ...) __printflike(1, 2);
+static void	cwarnx(const char *, ...) __printflike(1, 2);
+static void	decompress(const char *, const char *, int);
+static int	permission(const char *);
+static void	setfile(const char *, struct stat *);
+__dead static void	usage(int);
 
-int	main(int, char *[]);
 extern FILE *zopen(const char *fname, const char *mode, int bits);
 
-int eval, force, verbose;
-int isstdout, isstdin;
+static int eval, force, verbose;
+static int isstdout, isstdin;
 
 int
 main(int argc, char **argv)
@@ -198,10 +197,10 @@ main(int argc, char **argv)
 	exit (eval);
 }
 
-void
-compress(char *in, char *out, int bits)
+static void
+compress(const char *in, const char *out, int bits)
 {
-	int nr;
+	size_t nr;
 	struct stat isb, sb;
 	const char *error = NULL;
 	FILE *ifp, *ofp;
@@ -297,10 +296,10 @@ err:	if (ofp)
 		(void)fclose(ifp);
 }
 
-void
-decompress(char *in, char *out, int bits)
+static void
+decompress(const char *in, const char *out, int bits)
 {
-	int nr;
+	size_t nr;
 	struct stat sb;
 	FILE *ifp, *ofp;
 	int exists, isreg, oreg;
@@ -376,8 +375,8 @@ err:	if (ofp)
 		(void)fclose(ifp);
 }
 
-void
-setfile(char *name, struct stat *fs)
+static void
+setfile(const char *name, struct stat *fs)
 {
 	static struct timeval tv[2];
 
@@ -411,8 +410,8 @@ setfile(char *name, struct stat *fs)
 		cwarn("chflags: %s", name);
 }
 
-int
-permission(char *fname)
+static int
+permission(const char *fname)
 {
 	int ch, first;
 
@@ -425,7 +424,7 @@ permission(char *fname)
 	return (first == 'y');
 }
 
-void
+static void
 usage(int iscompress)
 {
 	if (iscompress)
@@ -437,7 +436,7 @@ usage(int iscompress)
 	exit(1);
 }
 
-void
+static void
 cwarnx(const char *fmt, ...)
 {
 	va_list ap;
@@ -448,7 +447,7 @@ cwarnx(const char *fmt, ...)
 	eval = 1;
 }
 
-void
+static void
 cwarn(const char *fmt, ...)
 {
 	va_list ap;

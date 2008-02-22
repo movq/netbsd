@@ -1,4 +1,4 @@
-/* $NetBSD: lpt_acpi.c,v 1.15 2007/10/19 11:59:35 ad Exp $ */
+/* $NetBSD: lpt_acpi.c,v 1.20 2018/06/24 12:25:33 jdolecek Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,36 +26,27 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_acpi.c,v 1.15 2007/10/19 11:59:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_acpi.c,v 1.20 2018/06/24 12:25:33 jdolecek Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/proc.h>
 #include <sys/termios.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/ic/lptvar.h>
 
-static int	lpt_acpi_match(struct device *, struct cfdata *, void *);
-static void	lpt_acpi_attach(struct device *, struct device *, void *);
+#include <dev/isa/isadmavar.h>
+
+static int	lpt_acpi_match(device_t, cfdata_t, void *);
+static void	lpt_acpi_attach(device_t, device_t, void *);
 
 struct lpt_acpi_softc {
 	struct lpt_softc sc_lpt;
 };
 
-CFATTACH_DECL(lpt_acpi, sizeof(struct lpt_acpi_softc), lpt_acpi_match,
+CFATTACH_DECL_NEW(lpt_acpi, sizeof(struct lpt_acpi_softc), lpt_acpi_match,
     lpt_acpi_attach, NULL, NULL);
 
 /*
@@ -71,8 +62,7 @@ static const char * const lpt_acpi_ids[] = {
  * lpt_acpi_match: autoconf(9) match routine
  */
 static int
-lpt_acpi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+lpt_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -86,9 +76,9 @@ lpt_acpi_match(struct device *parent, struct cfdata *match,
  * lpt_acpi_attach: autoconf(9) attach routine
  */
 static void
-lpt_acpi_attach(struct device *parent, struct device *self, void *aux)
+lpt_acpi_attach(device_t parent, device_t self, void *aux)
 {
-	struct lpt_acpi_softc *asc = (struct lpt_acpi_softc *)self;
+	struct lpt_acpi_softc *asc = device_private(self);
 	struct lpt_softc *sc = &asc->sc_lpt;
 	struct acpi_attach_args *aa = aux;
 	struct acpi_resources res;
@@ -96,11 +86,13 @@ lpt_acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_irq *irq;
 	ACPI_STATUS rv;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
+	sc->sc_dev = self;
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -108,31 +100,30 @@ lpt_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		aprint_error("%s: unable to find i/o register resource\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "unable to find i/o register resource\n");
 		goto out;
 	}
 
 	/* find our IRQ */
 	irq = acpi_res_irq(&res, 0);
 	if (irq == NULL) {
-		aprint_error("%s: unable to find irq resource\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to find irq resource\n");
 		goto out;
 	}
 
 	sc->sc_iot = aa->aa_iot;
 	if (bus_space_map(sc->sc_iot, io->ar_base, io->ar_length,
 		    0, &sc->sc_ioh)) {
-		aprint_error("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		goto out;
 	}
 
 	lpt_attach_subr(sc);
 
-	sc->sc_ih = isa_intr_establish(aa->aa_ic, irq->ar_irq,
+	sc->sc_ih = isa_intr_establish_xname(aa->aa_ic, irq->ar_irq,
 	    (irq->ar_type == ACPI_EDGE_SENSITIVE) ? IST_EDGE : IST_LEVEL,
-	    IPL_TTY, lptintr, sc);
+	    IPL_TTY, lptintr, sc, device_xname(self));
 
  out:
 	acpi_resource_cleanup(&res);

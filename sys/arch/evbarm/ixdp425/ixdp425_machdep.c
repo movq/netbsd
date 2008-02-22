@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425_machdep.c,v 1.16 2008/01/19 13:11:15 chris Exp $ */
+/*	$NetBSD: ixdp425_machdep.c,v 1.38 2018/03/13 06:18:36 ryo Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -65,12 +59,12 @@
  * SUCH DAMAGE.
  */
 
-/* Machine dependant functions for kernel setup for Intel IXP425 evaluation
+/* Machine dependent functions for kernel setup for Intel IXP425 evaluation
  * boards using RedBoot firmware.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.16 2008/01/19 13:11:15 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.38 2018/03/13 06:18:36 ryo Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -86,6 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.16 2008/01/19 13:11:15 chris E
 #include <sys/reboot.h>
 #include <sys/termios.h>
 #include <sys/ksyms.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -96,9 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.16 2008/01/19 13:11:15 chris E
 #include <ddb/db_extern.h>
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
+#include <arm/locore.h>
 #include <arm/undefined.h>
 
 #include <arm/arm32/machdep.h>
@@ -127,45 +121,21 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_machdep.c,v 1.16 2008/01/19 13:11:15 chris E
  */
 #define	KERNEL_VM_SIZE		0x0C000000
 
-
-/*
- * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
- * on where the ROM appears when you turn the MMU off.
- */
-
-u_int cpu_reset_address = 0x00000000;
-
-/* Define various stack sizes in pages */
-#define IRQ_STACK_SIZE	1
-#define ABT_STACK_SIZE	1
-#define UND_STACK_SIZE	1
-
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
 
-vm_offset_t physical_start;
-vm_offset_t physical_freestart;
-vm_offset_t physical_freeend;
-vm_offset_t physical_end;
+vaddr_t physical_start;
+vaddr_t physical_freestart;
+vaddr_t physical_freeend;
+vaddr_t physical_end;
 u_int free_pages;
-vm_offset_t pagetables_start;
-int physmem = 0;
 
 /* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;
-pv_addr_t irqstack;
-pv_addr_t undstack;
-pv_addr_t abtstack;
-pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
-vm_offset_t msgbufphys;
+paddr_t msgbufphys;
 
-extern u_int data_abort_handler_address;
-extern u_int prefetch_abort_handler_address;
-extern u_int undefined_handler_address;
 extern int end;
 
 #ifdef PMAP_DEBUG
@@ -184,12 +154,10 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-struct user *proc0paddr;
-
 /* Prototypes */
 
 void	consinit(void);
-u_int	cpu_get_control   __P((void));
+u_int	cpu_get_control(void);
 
 /*
  * Define the default console speed for the board.  This is generally
@@ -244,7 +212,7 @@ int kgdb_devmode = KGDB_DEVMODE;
 void
 cpu_reboot(int howto, char *bootstr)
 {
-	u_int32_t reg;
+	uint32_t reg;
 
 #ifdef DIAGNOSTIC
 	/* info */
@@ -257,6 +225,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -285,6 +254,8 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -411,7 +382,6 @@ initarm(void *arg)
 	u_int kerneldatasize;
 	u_int l1pagetable;
 	u_int freemempos;
-	pv_addr_t kernel_l1pt;
 
 	/*
 	 * Since we map v0xf0000000 == p0xc8000000, it's possible for
@@ -435,7 +405,7 @@ initarm(void *arg)
 	bootconfig.dram[0].address = 0x10000000;
 	bootconfig.dram[0].pages = ixp425_sdram_size() / PAGE_SIZE;
 
-	kerneldatasize = (u_int32_t)&end - (u_int32_t)KERNEL_TEXT_BASE;
+	kerneldatasize = (uint32_t)&end - (uint32_t)KERNEL_TEXT_BASE;
 
 #ifdef VERBOSE_INIT_ARM
         printf("kernsize=0x%x\n", kerneldatasize);
@@ -465,7 +435,7 @@ initarm(void *arg)
 
 	/* Tell the user about the memory */
 #ifdef VERBOSE_INIT_ARM
-	printf("physmemory: %d pages at 0x%08lx -> 0x%08lx\n", physmem,
+	printf("physmemory: %"PRIuPSIZE" pages at 0x%08lx -> 0x%08lx\n", physmem,
 	    physical_start, physical_end - 1);
 
 	printf("Allocating page tables\n");
@@ -500,8 +470,6 @@ initarm(void *arg)
 #endif
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = 0;
-	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0
@@ -680,7 +648,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa, true);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -688,8 +656,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -742,7 +709,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
+	uvm_md_init();
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);
@@ -751,8 +718,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Setup the IRQ system */
 #ifdef VERBOSE_INIT_ARM
@@ -760,16 +726,11 @@ initarm(void *arg)
 #endif
 	ixp425_intr_init();
 #ifdef VERBOSE_INIT_ARM
-	printf("\nAll initialize done!\nNow Starting NetBSD, Hear we go!\n");
+	printf("\nAll initialization done!\nNow Starting NetBSD, Here we go!\n");
 #endif
 
 #ifdef BOOTHOWTO
 	boothowto = BOOTHOWTO;
-#endif
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-	/* Firmware doesn't load symbols. */
-	ksyms_init(0, NULL, NULL);
 #endif
 
 #ifdef DDB

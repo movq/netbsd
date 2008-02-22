@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.y,v 1.10 2007/07/18 12:07:52 vanhu Exp $	*/
+/*	$NetBSD: parse.y,v 1.21 2018/05/28 20:34:45 maxv Exp $	*/
 
 /*	$KAME: parse.y,v 1.81 2003/07/01 04:01:48 itojun Exp $	*/
 
@@ -57,10 +57,6 @@
 #include "vchar.h"
 #include "extern.h"
 
-#ifndef IPPROTO_MH
-#define IPPROTO_MH		135
-#endif
-
 #define DEFAULT_NATT_PORT	4500
 
 #ifndef UDP_ENCAP_ESPINUDP
@@ -89,26 +85,26 @@ struct security_ctx {
 
 struct security_ctx sec_ctx;
 
-static u_int p_natt_type;
+static u_int p_natt_type, p_esp_frag;
 static struct addrinfo * p_natt_oa = NULL;
 
 static int p_aiflags = 0, p_aifamily = PF_UNSPEC;
 
-static struct addrinfo *parse_addr __P((char *, char *));
-static int fix_portstr __P((vchar_t *, vchar_t *, vchar_t *));
-static int setvarbuf __P((char *, int *, struct sadb_ext *, int, 
-    const void *, int));
-void parse_init __P((void));
-void free_buffer __P((void));
+static struct addrinfo *parse_addr(char *, char *);
+static int fix_portstr(int, vchar_t *, vchar_t *, vchar_t *);
+static int setvarbuf(char *, int *, struct sadb_ext *, int, 
+    const void *, int);
+void parse_init(void);
+void free_buffer(void);
 
-int setkeymsg0 __P((struct sadb_msg *, unsigned int, unsigned int, size_t));
-static int setkeymsg_spdaddr __P((unsigned int, unsigned int, vchar_t *,
-	struct addrinfo *, int, struct addrinfo *, int));
-static int setkeymsg_spdaddr_tag __P((unsigned int, char *, vchar_t *));
-static int setkeymsg_addr __P((unsigned int, unsigned int,
-	struct addrinfo *, struct addrinfo *, int));
-static int setkeymsg_add __P((unsigned int, unsigned int,
-	struct addrinfo *, struct addrinfo *));
+int setkeymsg0(struct sadb_msg *, unsigned int, unsigned int, size_t);
+static int setkeymsg_spdaddr(unsigned int, unsigned int, vchar_t *,
+	struct addrinfo *, int, struct addrinfo *, int);
+static int setkeymsg_spdaddr_tag(unsigned int, char *, vchar_t *);
+static int setkeymsg_addr(unsigned int, unsigned int,
+	struct addrinfo *, struct addrinfo *, int);
+static int setkeymsg_add(unsigned int, unsigned int,
+	struct addrinfo *, struct addrinfo *);
 %}
 
 %union {
@@ -119,7 +115,7 @@ static int setkeymsg_add __P((unsigned int, unsigned int,
 }
 
 %token EOT SLASH BLCL ELCL
-%token ADD GET DELETE DELETEALL FLUSH DUMP EXIT
+%token ADD UPDATE GET DELETE DELETEALL FLUSH DUMP EXIT
 %token PR_ESP PR_AH PR_IPCOMP PR_ESPUDP PR_TCP
 %token F_PROTOCOL F_AUTH F_ENC F_REPLAY F_COMP F_RAWCPI
 %token F_MODE MODE F_REQID
@@ -129,9 +125,10 @@ static int setkeymsg_add __P((unsigned int, unsigned int,
 %token ALG_COMP
 %token F_LIFETIME_HARD F_LIFETIME_SOFT
 %token F_LIFEBYTE_HARD F_LIFEBYTE_SOFT
+%token F_ESPFRAG
 %token DECSTRING QUOTEDSTRING HEXSTRING STRING ANY
 	/* SPD management */
-%token SPDADD SPDDELETE SPDDUMP SPDFLUSH
+%token SPDADD SPDUPDATE SPDDELETE SPDDUMP SPDFLUSH
 %token F_POLICY PL_REQUESTS
 %token F_AIFLAGS
 %token TAGGED
@@ -144,7 +141,7 @@ static int setkeymsg_add __P((unsigned int, unsigned int,
 %type <num> PR_ESP PR_AH PR_IPCOMP PR_ESPUDP PR_TCP
 %type <num> EXTENSION MODE
 %type <ulnum> DECSTRING
-%type <val> PL_REQUESTS portstr key_string
+%type <val> PL_REQUESTS portstr portstr_notempty key_string
 %type <val> policy_requests
 %type <val> QUOTEDSTRING HEXSTRING STRING
 %type <val> F_AIFLAGS
@@ -163,6 +160,7 @@ commands
 
 command
 	:	add_command
+	|	update_command
 	|	get_command
 	|	delete_command
 	|	deleteall_command
@@ -170,6 +168,7 @@ command
 	|	dump_command
 	|	exit_command
 	|	spdadd_command
+	|	spdupdate_command
 	|	spddelete_command
 	|	spddump_command
 	|	spdflush_command
@@ -183,6 +182,18 @@ add_command
 			int status;
 
 			status = setkeymsg_add(SADB_ADD, $5, $3, $4);
+			if (status < 0)
+				return -1;
+		}
+	;
+
+	/* update */
+update_command
+	:	UPDATE ipaddropts ipandport ipandport protocol_spec spi extension_spec algorithm_spec EOT
+		{
+			int status;
+
+			status = setkeymsg_add(SADB_UPDATE, $5, $3, $4);
 			if (status < 0)
 				return -1;
 		}
@@ -211,11 +222,27 @@ delete_command
 deleteall_command
 	:	DELETEALL ipaddropts ipaddr ipaddr protocol_spec EOT
 		{
-			int status;
-
-			status = setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1);
-			if (status < 0)
+#ifndef __linux__
+			if (setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1) < 0)
 				return -1;
+#else /* __linux__ */
+			/* linux strictly adheres to RFC2367, and returns
+			 * an error if we send an SADB_DELETE request without
+			 * an SPI. Therefore, we must first retrieve a list
+			 * of SPIs for all matching SADB entries, and then
+			 * delete each one separately. */
+			u_int32_t *spi;
+			int i, n;
+
+			spi = sendkeymsg_spigrep($5, $3, $4, &n);
+			for (i = 0; i < n; i++) {
+				p_spi = spi[i];
+				if (setkeymsg_addr(SADB_DELETE,
+							$5, $3, $4, 0) < 0)
+					return -1;
+			}
+			free(spi);
+#endif /* __linux__ */
 		}
 	;
 
@@ -483,7 +510,13 @@ auth_alg
 			p_alg_auth = $1;
 
 			p_key_auth_len = 0;
-			p_key_auth = NULL;
+			p_key_auth = "";
+			if (ipsec_check_keylen(SADB_EXT_SUPPORTED_AUTH,
+			    p_alg_auth,
+			    PFKEY_UNUNIT64(p_key_auth_len)) < 0) {
+				yyerror(ipsec_strerror());
+				return -1;
+			}
 		}
 	;
 
@@ -532,6 +565,14 @@ extension
 	|	F_MODE MODE { p_mode = $2; }
 	|	F_MODE ANY { p_mode = IPSEC_MODE_ANY; }
 	|	F_REQID DECSTRING { p_reqid = $2; }
+	|	F_ESPFRAG DECSTRING
+		{
+			if (p_natt_type == 0) {
+				yyerror("esp fragment size only valid for NAT-T");
+				return -1;
+			}
+			p_esp_frag = $2;
+		}
 	|	F_REPLAY DECSTRING
 		{
 			if ((p_ext & SADB_X_EXT_OLD) != 0) {
@@ -556,6 +597,7 @@ extension
 	/* definition about command for SPD management */
 	/* spdadd */
 spdadd_command
+	/* XXX merge with spdupdate ??? */
 	:	SPDADD ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
 		{
 			int status;
@@ -565,16 +607,9 @@ spdadd_command
 			last_msg_type = SADB_X_SPDADD;
 #endif
 
-			/* fixed port fields if ulp is icmpv6 */
-			if ($10.buf != NULL) {
-				if ( ($9 != IPPROTO_ICMPV6) &&
-					 ($9 != IPPROTO_MH))
-					return -1;
-				free($5.buf);
-				free($8.buf);
-				if (fix_portstr(&$10, &$5, &$8))
-					return -1;
-			}
+			/* fixed port fields if ulp is icmp */
+			if (fix_portstr($9, &$10, &$5, &$8))
+				return -1;
 
 			src = parse_addr($3.buf, $5.buf);
 			dst = parse_addr($6.buf, $8.buf);
@@ -607,22 +642,61 @@ spdadd_command
 		}
 	;
 
+spdupdate_command
+	/* XXX merge with spdadd ??? */
+	:	SPDUPDATE ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
+		{
+			int status;
+			struct addrinfo *src, *dst;
+
+#ifdef HAVE_PFKEY_POLICY_PRIORITY
+			last_msg_type = SADB_X_SPDUPDATE;
+#endif
+
+			/* fixed port fields if ulp is icmp */
+			if (fix_portstr($9, &$10, &$5, &$8))
+				return -1;
+
+			src = parse_addr($3.buf, $5.buf);
+			dst = parse_addr($6.buf, $8.buf);
+			if (!src || !dst) {
+				/* yyerror is already called */
+				return -1;
+			}
+			if (src->ai_next || dst->ai_next) {
+				yyerror("multiple address specified");
+				freeaddrinfo(src);
+				freeaddrinfo(dst);
+				return -1;
+			}
+
+			status = setkeymsg_spdaddr(SADB_X_SPDUPDATE, $9, &$12,
+			    src, $4, dst, $7);
+			freeaddrinfo(src);
+			freeaddrinfo(dst);
+			if (status < 0)
+				return -1;
+		}
+	|	SPDUPDATE TAGGED QUOTEDSTRING policy_spec EOT
+		{
+			int status;
+
+			status = setkeymsg_spdaddr_tag(SADB_X_SPDUPDATE,
+			    $3.buf, &$4);
+			if (status < 0)
+				return -1;
+		}
+	;
+
 spddelete_command
 	:	SPDDELETE ipaddropts STRING prefix portstr STRING prefix portstr upper_spec upper_misc_spec context_spec policy_spec EOT
 		{
 			int status;
 			struct addrinfo *src, *dst;
 
-			/* fixed port fields if ulp is icmpv6 */
-			if ($10.buf != NULL) {
-				if (($9 != IPPROTO_ICMPV6) &&
-					($9 != IPPROTO_MH))
-					return -1;
-				free($5.buf);
-				free($8.buf);
-				if (fix_portstr(&$10, &$5, &$8))
-					return -1;
-			}
+			/* fixed port fields if ulp is icmp */
+			if (fix_portstr($9, &$10, &$5, &$8))
+				return -1;
 
 			src = parse_addr($3.buf, $5.buf);
 			dst = parse_addr($6.buf, $8.buf);
@@ -717,7 +791,7 @@ ipandport
 				return -1;
 			}
 		}
-	|	STRING portstr
+	|	STRING portstr_notempty
 		{
 			$$ = parse_addr($1.buf, $2.buf);
 			if ($$ == NULL) {
@@ -742,7 +816,11 @@ portstr
 			}
 			$$.len = strlen($$.buf);
 		}
-	|	BLCL ANY ELCL
+	| portstr_notempty
+	;
+
+portstr_notempty
+	: 	BLCL ANY ELCL
 		{
 			$$.buf = strdup("0");
 			if (!$$.buf) {
@@ -861,11 +939,8 @@ exit_command
 %%
 
 int
-setkeymsg0(msg, type, satype, l)
-	struct sadb_msg *msg;
-	unsigned int type;
-	unsigned int satype;
-	size_t l;
+setkeymsg0(struct sadb_msg *msg, unsigned int type, unsigned int satype,
+    size_t l)
 {
 
 	msg->sadb_msg_version = PF_KEY_V2;
@@ -881,14 +956,8 @@ setkeymsg0(msg, type, satype, l)
 
 /* XXX NO BUFFER OVERRUN CHECK! BAD BAD! */
 static int
-setkeymsg_spdaddr(type, upper, policy, srcs, splen, dsts, dplen)
-	unsigned int type;
-	unsigned int upper;
-	vchar_t *policy;
-	struct addrinfo *srcs;
-	int splen;
-	struct addrinfo *dsts;
-	int dplen;
+setkeymsg_spdaddr(unsigned int type, unsigned int upper, vchar_t *policy,
+    struct addrinfo *srcs, int splen, struct addrinfo *dsts, int dplen)
 {
 	struct sadb_msg *msg;
 	char buf[BUFSIZ];
@@ -899,7 +968,6 @@ setkeymsg_spdaddr(type, upper, policy, srcs, splen, dsts, dplen)
 	int plen;
 	struct sockaddr *sa;
 	int salen;
-	struct sadb_x_policy *sp;
 #ifdef HAVE_POLICY_FWD
 	struct sadb_x_ipsecrequest *ps = NULL;
 	int saved_level, saved_id = 0;
@@ -914,7 +982,6 @@ setkeymsg_spdaddr(type, upper, policy, srcs, splen, dsts, dplen)
 	setkeymsg0(msg, type, SADB_SATYPE_UNSPEC, 0);
 	l = sizeof(struct sadb_msg);
 
-	sp = (struct sadb_x_policy*) (buf + l);
 	memcpy(buf + l, policy->buf, policy->len);
 	l += policy->len;
 
@@ -1032,18 +1099,14 @@ setkeymsg_spdaddr(type, upper, policy, srcs, splen, dsts, dplen)
 }
 
 static int
-setkeymsg_spdaddr_tag(type, tag, policy)
-	unsigned int type;
-	char *tag;
-	vchar_t *policy;
+setkeymsg_spdaddr_tag(unsigned int type, char *tag, vchar_t *policy)
 {
 	struct sadb_msg *msg;
 	char buf[BUFSIZ];
-	int l, l0;
+	int l;
 #ifdef SADB_X_EXT_TAG
 	struct sadb_x_tag m_tag;
 #endif
-	int n;
 
 	msg = (struct sadb_msg *)buf;
 
@@ -1053,9 +1116,6 @@ setkeymsg_spdaddr_tag(type, tag, policy)
 
 	memcpy(buf + l, policy->buf, policy->len);
 	l += policy->len;
-
-	l0 = l;
-	n = 0;
 
 #ifdef SADB_X_EXT_TAG
 	memset(&m_tag, 0, sizeof(m_tag));
@@ -1077,12 +1137,8 @@ setkeymsg_spdaddr_tag(type, tag, policy)
 
 /* XXX NO BUFFER OVERRUN CHECK! BAD BAD! */
 static int
-setkeymsg_addr(type, satype, srcs, dsts, no_spi)
-	unsigned int type;
-	unsigned int satype;
-	struct addrinfo *srcs;
-	struct addrinfo *dsts;
-	int no_spi;
+setkeymsg_addr(unsigned int type, unsigned int satype, struct addrinfo *srcs,
+    struct addrinfo *dsts, int no_spi)
 {
 	struct sadb_msg *msg;
 	char buf[BUFSIZ];
@@ -1223,11 +1279,8 @@ static u_int16_t get_port (struct addrinfo *addr)
 
 /* XXX NO BUFFER OVERRUN CHECK! BAD BAD! */
 static int
-setkeymsg_add(type, satype, srcs, dsts)
-	unsigned int type;
-	unsigned int satype;
-	struct addrinfo *srcs;
-	struct addrinfo *dsts;
+setkeymsg_add(unsigned int type, unsigned int satype, struct addrinfo *srcs,
+    struct addrinfo *dsts)
 {
 	struct sadb_msg *msg;
 	char buf[BUFSIZ];
@@ -1472,6 +1525,22 @@ setkeymsg_add(type, satype, srcs, dsts)
 				
 				memcpy(buf + l, &natt_port, len);
 				l += len;
+#ifdef SADB_X_EXT_NAT_T_FRAG
+				if (p_esp_frag) {
+					struct sadb_x_nat_t_frag esp_frag;
+
+					/* NATT_FRAG */
+					len = sizeof(struct sadb_x_nat_t_frag);
+					memset(&esp_frag, 0, len);
+					esp_frag.sadb_x_nat_t_frag_len = PFKEY_UNIT64(len);
+					esp_frag.sadb_x_nat_t_frag_exttype =
+						SADB_X_EXT_NAT_T_FRAG;
+					esp_frag.sadb_x_nat_t_frag_fraglen = p_esp_frag;
+
+					memcpy(buf + l, &esp_frag, len);
+					l += len;
+				}
+#endif
 			}
 #endif
 			msg->sadb_msg_len = PFKEY_UNIT64(l);
@@ -1489,9 +1558,7 @@ setkeymsg_add(type, satype, srcs, dsts)
 }
 
 static struct addrinfo *
-parse_addr(host, port)
-	char *host;
-	char *port;
+parse_addr(char *host, char *port)
 {
 	struct addrinfo hints, *res = NULL;
 	int error;
@@ -1510,36 +1577,53 @@ parse_addr(host, port)
 }
 
 static int
-fix_portstr(spec, sport, dport)
-	vchar_t *spec, *sport, *dport;
+fix_portstr(int ulproto, vchar_t *spec, vchar_t *sport, vchar_t *dport)
 {
-	const char *p, *p2 = "0";
-	char *q;
-	u_int l;
+	char sp[16], dp[16];
+	int a, b, c, d;
+	unsigned long u;
 
-	l = 0;
-	for (q = spec->buf; *q != ',' && *q != '\0' && l < spec->len; q++, l++)
-		;
-	if (*q != '\0') {
-		if (*q == ',') {
-			*q = '\0';
-			p2 = ++q;
-		}
-		for (p = p2; *p != '\0' && l < spec->len; p++, l++)
-			;
-		if (*p != '\0' || *p2 == '\0') {
+	if (spec->buf == NULL)
+		return 0;
+
+	switch (ulproto) {
+	case IPPROTO_ICMP:
+	case IPPROTO_ICMPV6:
+	case IPPROTO_MH:
+		if (sscanf(spec->buf, "%d,%d", &a, &b) == 2) {
+			sprintf(sp, "%d", a);
+			sprintf(dp, "%d", b);
+		} else if (sscanf(spec->buf, "%d", &a) == 1) {
+			sprintf(sp, "%d", a);
+		} else {
 			yyerror("invalid an upper layer protocol spec");
 			return -1;
 		}
+		break;
+	case IPPROTO_GRE:
+		if (sscanf(spec->buf, "%d.%d.%d.%d", &a, &b, &c, &d) == 4) {
+			sprintf(sp, "%d", (a << 8) + b);
+			sprintf(dp, "%d", (c << 8) + d);
+		} else if (sscanf(spec->buf, "%lu", &u) == 1) {
+			sprintf(sp, "%d", (int) (u >> 16));
+			sprintf(dp, "%d", (int) (u & 0xffff));
+		} else {
+			yyerror("invalid an upper layer protocol spec");
+			return -1;
+		}
+		break;
 	}
 
-	sport->buf = strdup(spec->buf);
+	free(sport->buf);
+	sport->buf = strdup(sp);
 	if (!sport->buf) {
 		yyerror("insufficient memory");
 		return -1;
 	}
 	sport->len = strlen(sport->buf);
-	dport->buf = strdup(p2);
+
+	free(dport->buf);
+	dport->buf = strdup(dp);
 	if (!dport->buf) {
 		yyerror("insufficient memory");
 		return -1;
@@ -1550,13 +1634,8 @@ fix_portstr(spec, sport, dport)
 }
 
 static int
-setvarbuf(buf, off, ebuf, elen, vbuf, vlen)
-	char *buf;
-	int *off;
-	struct sadb_ext *ebuf;
-	int elen;
-	const void *vbuf;
-	int vlen;
+setvarbuf(char *buf, int *off, struct sadb_ext *ebuf, int elen,
+    const void *vbuf, int vlen)
 {
 	memset(buf + *off, 0, PFKEY_UNUNIT64(ebuf->sadb_ext_len));
 	memcpy(buf + *off, (caddr_t)ebuf, elen);
@@ -1567,7 +1646,7 @@ setvarbuf(buf, off, ebuf, elen, vbuf, vlen)
 }
 
 void
-parse_init()
+parse_init(void)
 {
 	p_spi = 0;
 
@@ -1592,12 +1671,13 @@ parse_init()
 		freeaddrinfo (p_natt_oa);
 	p_natt_oa = NULL;
 	p_natt_type = 0;
+	p_esp_frag = 0;
 
 	return;
 }
 
 void
-free_buffer()
+free_buffer(void)
 {
 	/* we got tons of memory leaks in the parser anyways, leave them */
 

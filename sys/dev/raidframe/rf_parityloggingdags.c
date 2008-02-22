@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_parityloggingdags.c,v 1.18 2006/11/16 01:33:23 christos Exp $	*/
+/*	$NetBSD: rf_parityloggingdags.c,v 1.21 2014/03/23 09:30:59 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -31,10 +31,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_parityloggingdags.c,v 1.18 2006/11/16 01:33:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_parityloggingdags.c,v 1.21 2014/03/23 09:30:59 christos Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_raid_diagnostic.h"
+#endif
 
 #include "rf_archs.h"
-#include "opt_raid_diagnostic.h"
 
 #if RF_INCLUDE_PARITYLOGGING > 0
 
@@ -336,12 +339,9 @@ rf_CommonCreateParityLoggingSmallWriteDAG(
 	int     i, j, nNodes, totalNumNodes;
 	RF_ReconUnitNum_t which_ru;
 	int     (*func) (RF_DagNode_t * node), (*undoFunc) (RF_DagNode_t * node);
-	int     (*qfunc) (RF_DagNode_t * node);
-	const char   *name, *qname;
+	const char   *name;
 	RF_StripeNum_t parityStripeID = rf_RaidAddressToParityStripeID(&(raidPtr->Layout), asmap->raidAddress, &which_ru);
-#ifdef RAID_DIAGNOSTIC
-	long    nfaults = qfuncs ? 2 : 1;
-#endif /* RAID_DIAGNOSTIC */
+	long    nfaults __unused = qfuncs ? 2 : 1;
 
 	if (rf_dagDebug)
 		printf("[Creating parity-logging small-write DAG]\n");
@@ -456,18 +456,10 @@ rf_CommonCreateParityLoggingSmallWriteDAG(
 		func = pfuncs->simple;
 		undoFunc = rf_NullNodeUndoFunc;
 		name = pfuncs->SimpleName;
-		if (qfuncs) {
-			qfunc = qfuncs->simple;
-			qname = qfuncs->SimpleName;
-		}
 	} else {
 		func = pfuncs->regular;
 		undoFunc = rf_NullNodeUndoFunc;
 		name = pfuncs->RegularName;
-		if (qfuncs) {
-			qfunc = qfuncs->regular;
-			qname = qfuncs->RegularName;
-		}
 	}
 	/* initialize the xor nodes: params are {pda,buf} from {Rod,Wnd,Rop}
 	 * nodes, and raidPtr  */

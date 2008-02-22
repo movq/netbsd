@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_ms.c,v 1.7 2007/04/16 00:22:55 macallan Exp $	*/
+/*	$NetBSD: adb_ms.c,v 1.16 2014/10/29 00:48:12 macallan Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_ms.c,v 1.7 2007/04/16 00:22:55 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_ms.c,v 1.16 2014/10/29 00:48:12 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: adb_ms.c,v 1.7 2007/04/16 00:22:55 macallan Exp $");
  * State info, per mouse instance.
  */
 struct adbms_softc {
-	struct	device	sc_dev;
+	device_t	sc_dev;
 	struct adb_device *sc_adbdev;
 	struct adb_bus_accessops *sc_ops;
 
@@ -76,7 +76,7 @@ struct adbms_softc {
 	char		sc_devid[5];	/* device indentifier */
 	uint8_t		sc_us;		/* cmd to watch for */
 	int		sc_mb;		/* current button state */
-	struct device	*sc_wsmousedev;
+	device_t	sc_wsmousedev;
 	/* helpers for trackpads */
 	int		sc_down;
 	/*
@@ -104,10 +104,9 @@ struct adbms_softc {
 /*
  * Function declarations.
  */
-static int	adbms_match(struct device *, struct cfdata *, void *);
-static void	adbms_attach(struct device *, struct device *, void *);
+static int	adbms_match(device_t, cfdata_t, void *);
+static void	adbms_attach(device_t, device_t, void *);
 static void	ems_init(struct adbms_softc *);
-//static void	ms_processevent(adb_event_t *event, struct adbms_softc *);
 static void	init_trackpad(struct adbms_softc *);
 static void	adbms_init_mouse(struct adbms_softc *);
 static void	adbms_init_turbo(struct adbms_softc *);
@@ -116,7 +115,7 @@ static void	adbms_process_event(struct adbms_softc *, int, uint8_t *);
 static int	adbms_send_sync(struct adbms_softc *, uint8_t, int, uint8_t *);
 
 /* Driver definition. */
-CFATTACH_DECL(adbms, sizeof(struct adbms_softc),
+CFATTACH_DECL_NEW(adbms, sizeof(struct adbms_softc),
     adbms_match, adbms_attach, NULL, NULL);
 
 static int adbms_enable(void *);
@@ -141,7 +140,7 @@ const struct wsmouse_accessops adbms_accessops = {
 };
 
 static int
-adbms_match(struct device *parent, struct cfdata *cf, void *aux)
+adbms_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct adb_attach_args *aaa = aux;
 
@@ -152,12 +151,13 @@ adbms_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-adbms_attach(struct device *parent, struct device *self, void *aux)
+adbms_attach(device_t parent, device_t self, void *aux)
 {
-	struct adbms_softc *sc = (struct adbms_softc *)self;
+	struct adbms_softc *sc = device_private(self);
 	struct adb_attach_args *aaa = aux;
 	struct wsmousedev_attach_args a;
 
+	sc->sc_dev = self;
 	sc->sc_ops = aaa->ops;
 	sc->sc_adbdev = aaa->dev;
 	sc->sc_adbdev->cookie = sc;
@@ -179,17 +179,17 @@ adbms_attach(struct device *parent, struct device *self, void *aux)
 	/* print out the type of mouse we have */
 	switch (sc->sc_adbdev->handler_id) {
 	case ADBMS_100DPI:
-		printf("%d-button, %d dpi mouse\n", sc->sc_buttons,
-		    (int)(sc->sc_res));
+		printf("%d-button, %u dpi mouse\n", sc->sc_buttons,
+		    sc->sc_res);
 		break;
 	case ADBMS_200DPI:
 		sc->sc_res = 200;
-		printf("%d-button, %d dpi mouse\n", sc->sc_buttons,
-		    (int)(sc->sc_res));
+		printf("%d-button, %u dpi mouse\n", sc->sc_buttons,
+		    sc->sc_res);
 		break;
 	case ADBMS_MSA3:
-		printf("Mouse Systems A3 mouse, %d-button, %d dpi\n",
-		    sc->sc_buttons, (int)(sc->sc_res));
+		printf("Mouse Systems A3 mouse, %d-button, %u dpi\n",
+		    sc->sc_buttons, sc->sc_res);
 		break;
 	case ADBMS_USPEED:
 		printf("MicroSpeed mouse, default parameters\n");
@@ -235,8 +235,8 @@ adbms_attach(struct device *parent, struct device *self, void *aux)
 				printf("unknown device");
 				break;
 			}
-			printf(" <%s> %d-button, %d dpi\n", sc->sc_devid,
-			    sc->sc_buttons, (int)(sc->sc_res));
+			printf(" <%s> %d-button, %u dpi\n", sc->sc_devid,
+			    sc->sc_buttons, sc->sc_res);
 		}
 		break;
 	default:
@@ -390,6 +390,7 @@ adbms_init_mouse(struct adbms_softc *sc)
 		memcpy(buffer, sc->sc_buffer, len);
 
 		if (sc->sc_msg_len == 8) {
+			uint16_t res;
 			/* we have a true EMP device */
 #ifdef ADB_PRINT_EMP
 		
@@ -397,10 +398,11 @@ adbms_init_mouse(struct adbms_softc *sc)
 			    buffer[0], buffer[1], buffer[2], buffer[3],
 			    buffer[4], buffer[5], buffer[6], buffer[7]);
 #endif
+			memcpy(sc->sc_devid, &buffer[0], 4);
+			memcpy(&res, &buffer[4], sizeof(res));
+			sc->sc_res = res;
 			sc->sc_class = buffer[6];
 			sc->sc_buttons = buffer[7];
-			sc->sc_res = (int)*(short *)&buffer[4];
-				memcpy(sc->sc_devid, &(buffer[0]), 4);
 		} else if (buffer[0] == 0x9a &&
 		    ((buffer[1] == 0x20) || (buffer[1] == 0x21))) {
 			/*
@@ -482,7 +484,7 @@ adbms_handler(void *cookie, int len, uint8_t *data)
 
 #ifdef ADBMS_DEBUG
 	int i;
-	printf("%s: %02x - ", sc->sc_dev.dv_xname, sc->sc_us);
+	printf("%s: %02x - ", device_xname(sc->sc_dev), sc->sc_us);
 	for (i = 0; i < len; i++) {
 		printf(" %02x", data[i]);
 	}
@@ -562,8 +564,38 @@ adbms_process_event(struct adbms_softc *sc, int len, uint8_t *buffer)
 			break;
 	}
 
-	dx = ((int)(buffer[1] & 0x3f)) - ((buffer[1] & 0x40) ? 64 : 0);
-	dy = ((int)(buffer[0] & 0x3f)) - ((buffer[0] & 0x40) ? 64 : 0);
+	if (sc->sc_adbdev->handler_id != ADBMS_EXTENDED) {
+		dx = ((int)(buffer[1] & 0x3f)) - ((buffer[1] & 0x40) ? 64 : 0);
+		dy = ((int)(buffer[0] & 0x3f)) - ((buffer[0] & 0x40) ? 64 : 0);
+	} else {
+		/* EMP crap, additional motion bits */
+		int shift = 7, ddx, ddy, sign, smask;
+
+#ifdef ADBMS_DEBUG
+		printf("EMP packet:");
+		for (i = 0; i < len; i++)
+			printf(" %02x", buffer[i]);
+		printf("\n");
+#endif
+		dx = (int)buffer[1] & 0x7f;
+		dy = (int)buffer[0] & 0x7f;
+		for (i = 2; i < len; i++) {
+			ddx = (buffer[i] & 0x07);
+			ddy = (buffer[i] & 0x70) >> 4;
+			dx |= (ddx << shift);
+			dy |= (ddy << shift);
+			shift += 3;
+		}
+		sign = 1 << (shift - 1);
+		smask = 0xffffffff << shift;
+		if (dx & sign)
+			dx |= smask;
+		if (dy & sign)
+			dy |= smask;
+#ifdef ADBMS_DEBUG
+		printf("%d %d %08x %d\n", dx, dy, smask, shift);
+#endif
+	}
 
 	if (sc->sc_class == MSCLASS_TRACKPAD) {
 
@@ -613,7 +645,7 @@ adbms_mangle_2(struct adbms_softc *sc, int buttons)
 		/* finger up */
 		if (sc->sc_down) {
 			if (((sc->sc_x * sc->sc_x + 
-			    sc->sc_y * sc->sc_y) < 20) && 
+			    sc->sc_y * sc->sc_y) < 3) && 
 			    (sc->sc_wsmousedev)) {
 				/* 
 				 * if there wasn't much movement between
@@ -645,7 +677,7 @@ adbms_mangle_4(struct adbms_softc *sc, int buttons)
 		/* finger up */
 		if (sc->sc_down) {
 			if (((sc->sc_x * sc->sc_x + 
-			    sc->sc_y * sc->sc_y) < 20) && 
+			    sc->sc_y * sc->sc_y) < 3) && 
 			    (sc->sc_wsmousedev)) {
 				/* 
 				 * if there wasn't much movement between
@@ -690,7 +722,7 @@ adbms_disable(void *v)
 static void
 init_trackpad(struct adbms_softc *sc)
 {
-	struct sysctlnode *me = NULL, *node = NULL;
+	const struct sysctlnode *me = NULL, *node = NULL;
 	int cmd, addr, ret;
 	uint8_t buffer[16];
 	uint8_t b2[] = {0x99, 0x94, 0x19, 0xff, 0xb2, 0x8a, 0x1b, 0x50};
@@ -724,26 +756,25 @@ init_trackpad(struct adbms_softc *sc)
 	delay(1000);
 
 	/*
-	 * setup a sysctl node to control wether tapping the pad should
+	 * setup a sysctl node to control whether tapping the pad should
 	 * trigger mouse button events
 	 */
 
 	sc->sc_tapping = 1;
 	
-	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
+	ret = sysctl_createv(NULL, 0, NULL, &me,
 	    CTLFLAG_READWRITE,
-	    CTLTYPE_NODE, sc->sc_dev.dv_xname, NULL,
+	    CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 	    NULL, 0, NULL, 0,
 	    CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
-	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&node,
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
+	ret = sysctl_createv(NULL, 0, NULL, &node,
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
 	    CTLTYPE_INT, "tapping", "tapping the pad causes button events",
-	    sysctl_adbms_tap, 1, NULL, 0,
+	    sysctl_adbms_tap, 1, (void *)sc, 0,
 	    CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
-	if (node != NULL) {
-		node->sysctl_data = sc;
-	}	
+
+	(void)ret;
 }
 
 static int
@@ -757,7 +788,7 @@ adbms_wait(struct adbms_softc *sc, int timeout)
 		}
 	} else {
 		while ((sc->sc_msg_len == -1) && (cnt < timeout)) {
-			tsleep(&sc->sc_event, 0, "adbkbdio", hz);
+			tsleep(&sc->sc_event, 0, "adbmsio", hz);
 			cnt++;
 		}
 	}
@@ -793,12 +824,13 @@ sysctl_adbms_tap(SYSCTLFN_ARGS)
 		node.sysctl_data = &sc->sc_tapping;
 		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
 
-			sc->sc_tapping = (node.sysctl_idata == 0) ? 0 : 1;
+			sc->sc_tapping = (*(int *)node.sysctl_data == 0) ? 0 : 1;
 			return 0;
 		}
 		return EINVAL;
 	} else {
 
+		node.sysctl_data = &sc->sc_tapping;
 		node.sysctl_size = 4;
 		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 	}

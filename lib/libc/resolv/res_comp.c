@@ -1,4 +1,4 @@
-/*	$NetBSD: res_comp.c,v 1.8 2007/03/30 20:23:04 ghen Exp $	*/
+/*	$NetBSD: res_comp.c,v 1.13 2015/02/24 17:56:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- * 	This product includes software developed by the University of
- * 	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -73,9 +69,9 @@
 #if defined(LIBC_SCCS) && !defined(lint)
 #ifdef notdef
 static const char sccsid[] = "@(#)res_comp.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: res_comp.c,v 1.3.18.2 2005/07/28 07:38:11 marka Exp";
+static const char rcsid[] = "Id: res_comp.c,v 1.5 2005/07/28 06:51:50 marka Exp";
 #else
-__RCSID("$NetBSD: res_comp.c,v 1.8 2007/03/30 20:23:04 ghen Exp $");
+__RCSID("$NetBSD: res_comp.c,v 1.13 2015/02/24 17:56:20 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -86,6 +82,7 @@ __RCSID("$NetBSD: res_comp.c,v 1.8 2007/03/30 20:23:04 ghen Exp $");
 #include <sys/param.h>
 #include <netinet/in.h>
 #include <arpa/nameser.h>
+#include <assert.h>
 #include <ctype.h>
 #include <resolv.h>
 #include <stdio.h>
@@ -135,8 +132,8 @@ dn_comp(const char *src, u_char *dst, int dstsiz,
 	u_char **dnptrs, u_char **lastdnptr)
 {
 	return (ns_name_compress(src, dst, (size_t)dstsiz,
-				 (const u_char **)dnptrs,
-				 (const u_char **)lastdnptr));
+				 (void *)dnptrs,
+				 (void *)lastdnptr));
 }
 
 /*%
@@ -148,7 +145,8 @@ dn_skipname(const u_char *ptr, const u_char *eom) {
 
 	if (ns_name_skip(&ptr, eom) == -1)
 		return (-1);
-	return (ptr - saveptr);
+	_DIAGASSERT(__type_fit(int, ptr - saveptr));
+	return (int)(ptr - saveptr);
 }
 
 /*%

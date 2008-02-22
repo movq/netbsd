@@ -1,4 +1,4 @@
-/*	$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $	*/
+/*	$NetBSD: rdate.c,v 1.22 2017/08/26 19:26:32 ginsbach Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +34,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $");
+__RCSID("$NetBSD: rdate.c,v 1.22 2017/08/26 19:26:32 ginsbach Exp $");
 #endif /* lint */
 
 #include <sys/types.h>
@@ -57,18 +52,19 @@ __RCSID("$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $");
 #include <util.h>
 
 /* seconds from midnight Jan 1900 - 1970 */
-#define DIFFERENCE 2208988800UL
+#define DIFFERENCE 2208988800ULL
 
-	int	main(int, char **);
 static	void	usage(void);
 
 static void
 usage(void)
 {
-	(void) fprintf(stderr, "usage: %s [-psa] host\n", getprogname());
+	(void) fprintf(stderr, "usage: %s [-46aps] host\n", getprogname());
+	(void) fprintf(stderr, "  -4: use IPv4 addresses only\n");
+	(void) fprintf(stderr, "  -6: use IPv6 addresses only\n");
+	(void) fprintf(stderr, "  -a: use adjtime instead of instant change\n");
 	(void) fprintf(stderr, "  -p: just print, don't set\n");
 	(void) fprintf(stderr, "  -s: just set, don't print\n");
-	(void) fprintf(stderr, "  -a: use adjtime instead of instant change\n");
 }
 
 int
@@ -77,26 +73,36 @@ main(int argc, char *argv[])
 	int             pr = 0, silent = 0, s;
 	int		slidetime = 0;
 	int		adjustment;
+	uint32_t	data;
 	time_t          tim;
 	char           *hname;
 	const char     *emsg = NULL;
 	struct addrinfo	hints, *res, *res0;
 	int             c;
 	int		error;
+	int		family = AF_UNSPEC;
 
 	adjustment = 0;
-	while ((c = getopt(argc, argv, "psa")) != -1)
+	while ((c = getopt(argc, argv, "46aps")) != -1)
 		switch (c) {
+		case '4':
+			family = AF_INET;
+			break;
+
+		case '6':
+			family  = AF_INET6;
+			break;
+
+		case 'a':
+			slidetime++;
+			break;
+
 		case 'p':
 			pr++;
 			break;
 
 		case 's':
 			silent++;
-			break;
-
-		case 'a':
-			slidetime++;
 			break;
 
 		default:
@@ -111,7 +117,7 @@ main(int argc, char *argv[])
 	hname = argv[optind];
 
 	memset(&hints, 0, sizeof (hints));
-	hints.ai_family = PF_UNSPEC;
+	hints.ai_family = family;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_CANONNAME;
 	error = getaddrinfo(hname, "time", &hints, &res0);
@@ -137,11 +143,11 @@ main(int argc, char *argv[])
 	if (s < 0)
 		err(1, "%s", emsg);
 
-	if (read(s, &tim, sizeof(time_t)) != sizeof(time_t))
+	if (read(s, &data, sizeof(uint32_t)) != sizeof(uint32_t))
 		err(1, "Could not read data");
 
 	(void) close(s);
-	tim = ntohl(tim) - DIFFERENCE;
+	tim = ntohl(data) - DIFFERENCE;
 
 	if (!pr) {
 	    struct timeval  tv;

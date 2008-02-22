@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.115 2008/01/25 16:21:04 hannken Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.174 2017/06/24 12:14:21 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -65,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.115 2008/01/25 16:21:04 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.174 2017/06/24 12:14:21 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -75,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.115 2008/01/25 16:21:04 hannken Exp
 #include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/vnode.h>
+#include <sys/vnode_impl.h>
 #include <sys/stat.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
@@ -86,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.115 2008/01/25 16:21:04 hannken Exp
 #include <sys/tty.h>
 #include <sys/kauth.h>
 #include <sys/fstrans.h>
+#include <sys/module.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
@@ -99,8 +93,15 @@ const char	devout[] = "devout";
 const char	devioc[] = "devioc";
 const char	devcls[] = "devcls";
 
-vnode_t		*specfs_hash[SPECHSZ];
-kmutex_t	specfs_lock;
+#define	SPECHSZ	64
+#if	((SPECHSZ&(SPECHSZ-1)) == 0)
+#define	SPECHASH(rdev)	(((rdev>>5)+(rdev))&(SPECHSZ-1))
+#else
+#define	SPECHASH(rdev)	(((unsigned)((rdev>>5)+(rdev)))%SPECHSZ)
+#endif
+
+static vnode_t	*specfs_hash[SPECHSZ];
+extern struct mount *dead_rootmount;
 
 /*
  * This vnode operations vector is used for special device nodes
@@ -123,6 +124,8 @@ const struct vnodeopv_entry_desc spec_vnodeop_entries[] = {
 	{ &vop_setattr_desc, spec_setattr },		/* setattr */
 	{ &vop_read_desc, spec_read },			/* read */
 	{ &vop_write_desc, spec_write },		/* write */
+	{ &vop_fallocate_desc, spec_fallocate },	/* fallocate */
+	{ &vop_fdiscard_desc, spec_fdiscard },		/* fdiscard */
 	{ &vop_fcntl_desc, spec_fcntl },		/* fcntl */
 	{ &vop_ioctl_desc, spec_ioctl },		/* ioctl */
 	{ &vop_poll_desc, spec_poll },			/* poll */
@@ -158,6 +161,15 @@ const struct vnodeopv_entry_desc spec_vnodeop_entries[] = {
 const struct vnodeopv_desc spec_vnodeop_opv_desc =
 	{ &spec_vnodeop_p, spec_vnodeop_entries };
 
+static kauth_listener_t rawio_listener;
+
+/* Returns true if vnode is /dev/mem or /dev/kmem. */
+bool
+iskmemvp(struct vnode *vp)
+{
+	return ((vp->v_type == VCHR) && iskmemdev(vp->v_rdev));
+}
+
 /*
  * Returns true if dev is /dev/mem or /dev/kmem.
  */
@@ -169,6 +181,32 @@ iskmemdev(dev_t dev)
 
 	/* minor 14 is /dev/io on i386 with COMPAT_10 */
 	return (major(dev) == mem_no && (minor(dev) < 2 || minor(dev) == 14));
+}
+
+static int
+rawio_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
+    void *arg0, void *arg1, void *arg2, void *arg3)
+{
+	int result;
+
+	result = KAUTH_RESULT_DEFER;
+
+	if ((action != KAUTH_DEVICE_RAWIO_SPEC) &&
+	    (action != KAUTH_DEVICE_RAWIO_PASSTHRU))
+		return result;
+
+	/* Access is mandated by permissions. */
+	result = KAUTH_RESULT_ALLOW;
+
+	return result;
+}
+
+void
+spec_init(void)
+{
+
+	rawio_listener = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
+	    rawio_listener_cb, NULL);
 }
 
 /*
@@ -192,16 +230,8 @@ spec_node_init(vnode_t *vp, dev_t rdev)
 	 * the vnode to the hash table.
 	 */
 	sn = kmem_alloc(sizeof(*sn), KM_SLEEP);
-	if (sn == NULL) {
-		/* XXX */
-		panic("spec_node_init: unable to allocate memory");
-	}
 	sd = kmem_alloc(sizeof(*sd), KM_SLEEP);
-	if (sd == NULL) {
-		/* XXX */
-		panic("spec_node_init: unable to allocate memory");
-	}
-	mutex_enter(&specfs_lock);
+	mutex_enter(&device_lock);
 	vpp = &specfs_hash[SPECHASH(rdev)];
 	for (vp2 = *vpp; vp2 != NULL; vp2 = vp2->v_specnext) {
 		KASSERT(vp2->v_specnode != NULL);
@@ -231,12 +261,115 @@ spec_node_init(vnode_t *vp, dev_t rdev)
 	vp->v_specnode = sn;
 	vp->v_specnext = *vpp;
 	*vpp = vp;
-	mutex_exit(&specfs_lock);
+	mutex_exit(&device_lock);
 
 	/* Free the record we allocated if unused. */
 	if (sd != NULL) {
 		kmem_free(sd, sizeof(*sd));
 	}
+}
+
+/*
+ * Lookup a vnode by device number and return it referenced.
+ */
+int
+spec_node_lookup_by_dev(enum vtype type, dev_t dev, vnode_t **vpp)
+{
+	int error;
+	vnode_t *vp;
+
+	mutex_enter(&device_lock);
+	for (vp = specfs_hash[SPECHASH(dev)]; vp; vp = vp->v_specnext) {
+		if (type == vp->v_type && dev == vp->v_rdev) {
+			mutex_enter(vp->v_interlock);
+			/* If clean or being cleaned, then ignore it. */
+			if (vdead_check(vp, VDEAD_NOWAIT) == 0)
+				break;
+			mutex_exit(vp->v_interlock);
+		}
+	}
+	KASSERT(vp == NULL || mutex_owned(vp->v_interlock));
+	if (vp == NULL) {
+		mutex_exit(&device_lock);
+		return ENOENT;
+	}
+	/*
+	 * If it is an opened block device return the opened vnode.
+	 */
+	if (type == VBLK && vp->v_specnode->sn_dev->sd_bdevvp != NULL) {
+		mutex_exit(vp->v_interlock);
+		vp = vp->v_specnode->sn_dev->sd_bdevvp;
+		mutex_enter(vp->v_interlock);
+	}
+	mutex_exit(&device_lock);
+	error = vcache_vget(vp);
+	if (error != 0)
+		return error;
+	*vpp = vp;
+
+	return 0;
+}
+
+/*
+ * Lookup a vnode by file system mounted on and return it referenced.
+ */
+int
+spec_node_lookup_by_mount(struct mount *mp, vnode_t **vpp)
+{
+	int i, error;
+	vnode_t *vp, *vq;
+
+	mutex_enter(&device_lock);
+	for (i = 0, vq = NULL; i < SPECHSZ && vq == NULL; i++) {
+		for (vp = specfs_hash[i]; vp; vp = vp->v_specnext) {
+			if (vp->v_type != VBLK)
+				continue;
+			vq = vp->v_specnode->sn_dev->sd_bdevvp;
+			if (vq != NULL &&
+			    vq->v_specnode->sn_dev->sd_mountpoint == mp)
+				break;
+			vq = NULL;
+		}
+	}
+	if (vq == NULL) {
+		mutex_exit(&device_lock);
+		return ENOENT;
+	}
+	mutex_enter(vq->v_interlock);
+	mutex_exit(&device_lock);
+	error = vcache_vget(vq);
+	if (error != 0)
+		return error;
+	*vpp = vq;
+
+	return 0;
+
+}
+
+/*
+ * Get the file system mounted on this block device.
+ */
+struct mount *
+spec_node_getmountedfs(vnode_t *devvp)
+{
+	struct mount *mp;
+
+	KASSERT(devvp->v_type == VBLK);
+	mp = devvp->v_specnode->sn_dev->sd_mountpoint;
+
+	return mp;
+}
+
+/*
+ * Set the file system mounted on this block device.
+ */
+void
+spec_node_setmountedfs(vnode_t *devvp, struct mount *mp)
+{
+
+	KASSERT(devvp->v_type == VBLK);
+	KASSERT(devvp->v_specnode->sn_dev->sd_mountpoint == NULL || mp == NULL);
+	devvp->v_specnode->sn_dev->sd_mountpoint = mp;
 }
 
 /*
@@ -254,23 +387,22 @@ spec_node_revoke(vnode_t *vp)
 
 	KASSERT(vp->v_type == VBLK || vp->v_type == VCHR);
 	KASSERT(vp->v_specnode != NULL);
-	KASSERT((vp->v_iflag & VI_XLOCK) != 0);
 	KASSERT(sn->sn_gone == false);
 
-	mutex_enter(&specfs_lock);
+	mutex_enter(&device_lock);
 	KASSERT(sn->sn_opencnt <= sd->sd_opencnt);
 	if (sn->sn_opencnt != 0) {
 		sd->sd_opencnt -= (sn->sn_opencnt - 1);
 		sn->sn_opencnt = 1;
 		sn->sn_gone = true;
-		mutex_exit(&specfs_lock);
+		mutex_exit(&device_lock);
 
 		VOP_CLOSE(vp, FNONBLOCK, NOCRED);
 
-		mutex_enter(&specfs_lock);
+		mutex_enter(&device_lock);
 		KASSERT(sn->sn_opencnt == 0);
 	}
-	mutex_exit(&specfs_lock);
+	mutex_exit(&device_lock);
 }
 
 /*
@@ -292,7 +424,7 @@ spec_node_destroy(vnode_t *vp)
 	KASSERT(vp->v_specnode != NULL);
 	KASSERT(sn->sn_opencnt == 0);
 
-	mutex_enter(&specfs_lock);
+	mutex_enter(&device_lock);
 	/* Remove from the hash and destroy the node. */
 	vpp = &specfs_hash[SPECHASH(vp->v_rdev)];
 	for (vp2 = *vpp;; vp2 = vp2->v_specnext) {
@@ -313,7 +445,7 @@ spec_node_destroy(vnode_t *vp)
 	vp->v_specnode = NULL;
 	refcnt = sd->sd_refcnt--;
 	KASSERT(refcnt > 0);
-	mutex_exit(&specfs_lock);
+	mutex_exit(&device_lock);
 
 	/* If the device is no longer in use, destroy our record. */
 	if (refcnt == 1) {
@@ -330,7 +462,7 @@ spec_node_destroy(vnode_t *vp)
 int
 spec_lookup(void *v)
 {
-	struct vop_lookup_args /* {
+	struct vop_lookup_v2_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
@@ -339,6 +471,8 @@ spec_lookup(void *v)
 	*ap->a_vpp = NULL;
 	return (ENOTDIR);
 }
+
+typedef int (*spec_ioctl_t)(dev_t, u_long, void *, int, struct lwp *);
 
 /*
  * Open a special file.
@@ -356,17 +490,22 @@ spec_open(void *v)
 	struct vnode *vp;
 	dev_t dev;
 	int error;
-	struct partinfo pi;
 	enum kauth_device_req req;
 	specnode_t *sn;
 	specdev_t *sd;
-
+	spec_ioctl_t ioctl;
+	u_int gen;
+	const char *name;
+	struct partinfo pi;
+	
 	l = curlwp;
 	vp = ap->a_vp;
 	dev = vp->v_rdev;
 	sn = vp->v_specnode;
 	sd = sn->sn_dev;
-
+	name = NULL;
+	gen = 0;
+	
 	/*
 	 * Don't allow open if fs is mounted -nodev.
 	 */
@@ -395,18 +534,40 @@ spec_open(void *v)
 		 * Character devices can accept opens from multiple
 		 * vnodes.
 		 */
-		mutex_enter(&specfs_lock);
+		mutex_enter(&device_lock);
 		if (sn->sn_gone) {
-			mutex_exit(&specfs_lock);
+			mutex_exit(&device_lock);
 			return (EBADF);
 		}
 		sd->sd_opencnt++;
 		sn->sn_opencnt++;
-		mutex_exit(&specfs_lock);
+		mutex_exit(&device_lock);
 		if (cdev_type(dev) == D_TTY)
 			vp->v_vflag |= VV_ISTTY;
-		VOP_UNLOCK(vp, 0);
-		error = cdev_open(dev, ap->a_mode, S_IFCHR, l);
+		VOP_UNLOCK(vp);
+		do {
+			const struct cdevsw *cdev;
+
+			gen = module_gen;
+			error = cdev_open(dev, ap->a_mode, S_IFCHR, l);
+			if (error != ENXIO)
+				break;
+			
+			/* Check if we already have a valid driver */
+			mutex_enter(&device_lock);
+			cdev = cdevsw_lookup(dev);
+			mutex_exit(&device_lock);
+			if (cdev != NULL)
+				break;
+
+			/* Get device name from devsw_conv array */
+			if ((name = cdevsw_getname(major(dev))) == NULL)
+				break;
+			
+			/* Try to autoload device module */
+			(void) module_autoload(name, MODULE_CLASS_DRIVER);
+		} while (gen != module_gen);
+
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		break;
 
@@ -419,22 +580,50 @@ spec_open(void *v)
 		 * For block devices, permit only one open.  The buffer
 		 * cache cannot remain self-consistent with multiple
 		 * vnodes holding a block device open.
+		 *
+		 * Treat zero opencnt with non-NULL mountpoint as open.
+		 * This may happen after forced detach of a mounted device.
 		 */
-		mutex_enter(&specfs_lock);
+		mutex_enter(&device_lock);
 		if (sn->sn_gone) {
-			mutex_exit(&specfs_lock);
+			mutex_exit(&device_lock);
 			return (EBADF);
 		}
-		if (sd->sd_opencnt != 0) {
-			mutex_exit(&specfs_lock);
+		if (sd->sd_opencnt != 0 || sd->sd_mountpoint != NULL) {
+			mutex_exit(&device_lock);
 			return EBUSY;
 		}
 		sn->sn_opencnt = 1;
 		sd->sd_opencnt = 1;
 		sd->sd_bdevvp = vp;
-		mutex_exit(&specfs_lock);
+		mutex_exit(&device_lock);
+		do {
+			const struct bdevsw *bdev;
 
-		error = bdev_open(dev, ap->a_mode, S_IFBLK, l);
+			gen = module_gen;
+			error = bdev_open(dev, ap->a_mode, S_IFBLK, l);
+			if (error != ENXIO)
+				break;
+
+			/* Check if we already have a valid driver */
+			mutex_enter(&device_lock);
+			bdev = bdevsw_lookup(dev);
+			mutex_exit(&device_lock);
+			if (bdev != NULL)
+				break;
+
+			/* Get device name from devsw_conv array */
+			if ((name = bdevsw_getname(major(dev))) == NULL)
+				break;
+
+			VOP_UNLOCK(vp);
+
+                        /* Try to autoload device module */
+			(void) module_autoload(name, MODULE_CLASS_DRIVER);
+			
+			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+		} while (gen != module_gen);
+
 		break;
 
 	case VNON:
@@ -448,7 +637,7 @@ spec_open(void *v)
 		return 0;
 	}
 
-	mutex_enter(&specfs_lock);
+	mutex_enter(&device_lock);
 	if (sn->sn_gone) {
 		if (error == 0)
 			error = EBADF;
@@ -459,18 +648,17 @@ spec_open(void *v)
 			sd->sd_bdevvp = NULL;
 
 	}
-	mutex_exit(&specfs_lock);
+	mutex_exit(&device_lock);
 
 	if (cdev_type(dev) != D_DISK || error != 0)
 		return error;
 
-	if (vp->v_type == VCHR)
-		error = cdev_ioctl(vp->v_rdev, DIOCGPART, &pi, FREAD, curlwp);
-	else
-		error = bdev_ioctl(vp->v_rdev, DIOCGPART, &pi, FREAD, curlwp);
+	
+	ioctl = vp->v_type == VCHR ? cdev_ioctl : bdev_ioctl;
+	error = (*ioctl)(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, curlwp);
 	if (error == 0)
-		uvm_vnp_setsize(vp,
-		    (voff_t)pi.disklab->d_secsize * pi.part->p_size);
+		uvm_vnp_setsize(vp, (voff_t)pi.pi_secsize * pi.pi_size);
+
 	return 0;
 }
 
@@ -493,24 +681,22 @@ spec_read(void *v)
 	struct buf *bp;
 	daddr_t bn;
 	int bsize, bscale;
-	struct partinfo dpart;
+	struct partinfo pi;
 	int n, on;
 	int error = 0;
 
-#ifdef DIAGNOSTIC
-	if (uio->uio_rw != UIO_READ)
-		panic("spec_read mode");
-	if (&uio->uio_vmspace->vm_map != kernel_map &&
-	    uio->uio_vmspace != curproc->p_vmspace)
-		panic("spec_read proc");
-#endif
+	KASSERT(uio->uio_rw == UIO_READ);
+	KASSERTMSG(VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
+		   uio->uio_vmspace == curproc->p_vmspace,
+		"vmspace belongs to neither kernel nor curproc");
+
 	if (uio->uio_resid == 0)
 		return (0);
 
 	switch (vp->v_type) {
 
 	case VCHR:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_read(vp->v_rdev, uio, ap->a_ioflag);
 		vn_lock(vp, LK_SHARED | LK_RETRY);
 		return (error);
@@ -519,24 +705,22 @@ spec_read(void *v)
 		KASSERT(vp == vp->v_specnode->sn_dev->sd_bdevvp);
 		if (uio->uio_offset < 0)
 			return (EINVAL);
-		bsize = BLKDEV_IOSIZE;
-		if (bdev_ioctl(vp->v_rdev, DIOCGPART, &dpart, FREAD, l) == 0) {
-			if (dpart.part->p_fstype == FS_BSDFFS &&
-			    dpart.part->p_frag != 0 && dpart.part->p_fsize != 0)
-				bsize = dpart.part->p_frag *
-				    dpart.part->p_fsize;
-		}
+
+		if (bdev_ioctl(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, l) == 0)
+			bsize = pi.pi_bsize;
+		else
+			bsize = BLKDEV_IOSIZE;
+
 		bscale = bsize >> DEV_BSHIFT;
 		do {
 			bn = (uio->uio_offset >> DEV_BSHIFT) &~ (bscale - 1);
 			on = uio->uio_offset % bsize;
 			n = min((unsigned)(bsize - on), uio->uio_resid);
-			error = bread(vp, bn, bsize, NOCRED, &bp);
-			n = min(n, bsize - bp->b_resid);
+			error = bread(vp, bn, bsize, 0, &bp);
 			if (error) {
-				brelse(bp, 0);
 				return (error);
 			}
+			n = min(n, bsize - bp->b_resid);
 			error = uiomove((char *)bp->b_data + on, n, uio);
 			brelse(bp, 0);
 		} while (error == 0 && uio->uio_resid > 0 && n != 0);
@@ -567,22 +751,19 @@ spec_write(void *v)
 	struct buf *bp;
 	daddr_t bn;
 	int bsize, bscale;
-	struct partinfo dpart;
+	struct partinfo pi;
 	int n, on;
 	int error = 0;
 
-#ifdef DIAGNOSTIC
-	if (uio->uio_rw != UIO_WRITE)
-		panic("spec_write mode");
-	if (&uio->uio_vmspace->vm_map != kernel_map &&
-	    uio->uio_vmspace != curproc->p_vmspace)
-		panic("spec_write proc");
-#endif
+	KASSERT(uio->uio_rw == UIO_WRITE);
+	KASSERTMSG(VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
+		   uio->uio_vmspace == curproc->p_vmspace,
+		"vmspace belongs to neither kernel nor curproc");
 
 	switch (vp->v_type) {
 
 	case VCHR:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_write(vp->v_rdev, uio, ap->a_ioflag);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		return (error);
@@ -593,13 +774,12 @@ spec_write(void *v)
 			return (0);
 		if (uio->uio_offset < 0)
 			return (EINVAL);
-		bsize = BLKDEV_IOSIZE;
-		if (bdev_ioctl(vp->v_rdev, DIOCGPART, &dpart, FREAD, l) == 0) {
-			if (dpart.part->p_fstype == FS_BSDFFS &&
-			    dpart.part->p_frag != 0 && dpart.part->p_fsize != 0)
-				bsize = dpart.part->p_frag *
-				    dpart.part->p_fsize;
-		}
+
+		if (bdev_ioctl(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, l) == 0)
+			bsize = pi.pi_bsize;
+		else
+			bsize = BLKDEV_IOSIZE;
+
 		bscale = bsize >> DEV_BSHIFT;
 		do {
 			bn = (uio->uio_offset >> DEV_BSHIFT) &~ (bscale - 1);
@@ -608,9 +788,8 @@ spec_write(void *v)
 			if (n == bsize)
 				bp = getblk(vp, bn, bsize, 0, 0);
 			else
-				error = bread(vp, bn, bsize, NOCRED, &bp);
+				error = bread(vp, bn, bsize, B_MODIFY, &bp);
 			if (error) {
-				brelse(bp, 0);
 				return (error);
 			}
 			n = min(n, bsize - bp->b_resid);
@@ -631,6 +810,46 @@ spec_write(void *v)
 		panic("spec_write type");
 	}
 	/* NOTREACHED */
+}
+
+/*
+ * fdiscard, which on disk devices becomes TRIM.
+ */
+int
+spec_fdiscard(void *v)
+{
+	struct vop_fdiscard_args /* {
+		struct vnode *a_vp;
+		off_t a_pos;
+		off_t a_len;
+	} */ *ap = v;
+	struct vnode *vp;
+	dev_t dev;
+
+	vp = ap->a_vp;
+	dev = NODEV;
+
+	mutex_enter(vp->v_interlock);
+	if (vdead_check(vp, VDEAD_NOWAIT) == 0 && vp->v_specnode != NULL) {
+		dev = vp->v_rdev;
+	}
+	mutex_exit(vp->v_interlock);
+
+	if (dev == NODEV) {
+		return ENXIO;
+	}
+
+	switch (vp->v_type) {
+	    case VCHR:
+		// this is not stored for character devices
+		//KASSERT(vp == vp->v_specnode->sn_dev->sd_cdevvp);
+		return cdev_discard(dev, ap->a_pos, ap->a_len);
+	    case VBLK:
+		KASSERT(vp == vp->v_specnode->sn_dev->sd_bdevvp);
+		return bdev_discard(dev, ap->a_pos, ap->a_len);
+	    default:
+		panic("spec_fdiscard: not a device\n");
+	}
 }
 
 /*
@@ -657,11 +876,11 @@ spec_ioctl(void *v)
 
 	vp = ap->a_vp;
 	dev = NODEV;
-	mutex_enter(&vp->v_interlock);
-	if ((vp->v_iflag & VI_XLOCK) == 0 && vp->v_specnode) {
+	mutex_enter(vp->v_interlock);
+	if (vdead_check(vp, VDEAD_NOWAIT) == 0 && vp->v_specnode) {
 		dev = vp->v_rdev;
 	}
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 	if (dev == NODEV) {
 		return ENXIO;
 	}
@@ -701,11 +920,11 @@ spec_poll(void *v)
 
 	vp = ap->a_vp;
 	dev = NODEV;
-	mutex_enter(&vp->v_interlock);
-	if ((vp->v_iflag & VI_XLOCK) == 0 && vp->v_specnode) {
+	mutex_enter(vp->v_interlock);
+	if (vdead_check(vp, VDEAD_NOWAIT) == 0 && vp->v_specnode) {
 		dev = vp->v_rdev;
 	}
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 	if (dev == NODEV) {
 		return POLLERR;
 	}
@@ -779,9 +998,16 @@ spec_fsync(void *v)
 		off_t offhi;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
+	struct mount *mp;
+	int error;
 
 	if (vp->v_type == VBLK) {
-		vflushbuf(vp, (ap->a_flags & FSYNC_WAIT) != 0);
+		if ((mp = spec_node_getmountedfs(vp)) != NULL) {
+			error = VFS_FSYNC(mp, vp, ap->a_flags);
+			if (error != EOPNOTSUPP)
+				return error;
+		}
+		return vflushbuf(vp, ap->a_flags);
 	}
 	return (0);
 }
@@ -798,40 +1024,82 @@ spec_strategy(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct buf *bp = ap->a_bp;
+	dev_t dev;
 	int error;
 
-	KASSERT(vp == vp->v_specnode->sn_dev->sd_bdevvp);
+	dev = NODEV;
 
-	error = 0;
-	bp->b_dev = vp->v_rdev;
-	if (!(bp->b_flags & B_READ) &&
-	    (LIST_FIRST(&bp->b_dep)) != NULL && bioopsp)
-		bioopsp->io_start(bp);
+	/*
+	 * Extract all the info we need from the vnode, taking care to
+	 * avoid a race with VOP_REVOKE().
+	 */
 
-	if (!(bp->b_flags & B_READ))
-		error = fscow_run(bp, false);
-
-	if (error) {
-		bp->b_error = error;
-		biodone(bp);
-		return (error);
+	mutex_enter(vp->v_interlock);
+	if (vdead_check(vp, VDEAD_NOWAIT) == 0 && vp->v_specnode != NULL) {
+		KASSERT(vp == vp->v_specnode->sn_dev->sd_bdevvp);
+		dev = vp->v_rdev;
 	}
+	mutex_exit(vp->v_interlock);
 
+	if (dev == NODEV) {
+		error = ENXIO;
+		goto out;
+	}
+	bp->b_dev = dev;
+
+	if (!(bp->b_flags & B_READ)) {
+#ifdef DIAGNOSTIC
+		if (bp->b_vp && bp->b_vp->v_type == VBLK) {
+			struct mount *mp = spec_node_getmountedfs(bp->b_vp);
+
+			if (mp && (mp->mnt_flag & MNT_RDONLY)) {
+				printf("%s blk %"PRId64" written while ro!\n",
+				    mp->mnt_stat.f_mntonname, bp->b_blkno);
+			}
+		}
+#endif /* DIAGNOSTIC */
+		error = fscow_run(bp, false);
+		if (error)
+			goto out;
+	}
 	bdev_strategy(bp);
 
-	return (0);
+	return 0;
+
+out:
+	bp->b_error = error;
+	bp->b_resid = bp->b_bcount;
+	biodone(bp);
+
+	return error;
 }
 
 int
 spec_inactive(void *v)
 {
-	struct vop_inactive_args /* {
+	struct vop_inactive_v2_args /* {
 		struct vnode *a_vp;
-		struct proc *a_l;
+		struct bool *a_recycle;
 	} */ *ap = v;
 
-	VOP_UNLOCK(ap->a_vp, 0);
-	return (0);
+	KASSERT(ap->a_vp->v_mount == dead_rootmount);
+	*ap->a_recycle = true;
+
+	return 0;
+}
+
+int
+spec_reclaim(void *v)
+{
+	struct vop_reclaim_v2_args /* {
+		struct vnode *a_vp;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+
+	VOP_UNLOCK(vp);
+
+	KASSERT(vp->v_mount == dead_rootmount);
+	return 0;
 }
 
 /*
@@ -872,13 +1140,21 @@ spec_close(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct session *sess;
 	dev_t dev = vp->v_rdev;
-	int mode, error, flags, flags1, count;
+	int flags = ap->a_fflag;
+	int mode, error, count;
 	specnode_t *sn;
 	specdev_t *sd;
 
-	flags = vp->v_iflag;
+	mutex_enter(vp->v_interlock);
 	sn = vp->v_specnode;
 	sd = sn->sn_dev;
+	/*
+	 * If we're going away soon, make this non-blocking.
+	 * Also ensures that we won't wedge in vn_lock below.
+	 */
+	if (vdead_check(vp, VDEAD_NOWAIT) != 0)
+		flags |= FNONBLOCK;
+	mutex_exit(vp->v_interlock);
 
 	switch (vp->v_type) {
 
@@ -895,7 +1171,7 @@ spec_close(void *v)
 		 *
 		 * XXX V. fishy.
 		 */
-		mutex_enter(&proclist_lock);
+		mutex_enter(proc_lock);
 		sess = curlwp->l_proc->p_session;
 		if (sn->sn_opencnt == 1 && vp == sess->s_ttyvp) {
 			mutex_spin_enter(&tty_lock);
@@ -904,17 +1180,17 @@ spec_close(void *v)
 				sess->s_ttyp->t_pgrp = NULL;
 				sess->s_ttyp->t_session = NULL;
 				mutex_spin_exit(&tty_lock);
-				SESSRELE(sess);
-				mutex_exit(&proclist_lock);
+				/* Releases proc_lock. */
+				proc_sessrele(sess);
 			} else {
 				mutex_spin_exit(&tty_lock);
 				if (sess->s_ttyp->t_pgrp != NULL)
 					panic("spec_close: spurious pgrp ref");
-				mutex_exit(&proclist_lock);
+				mutex_exit(proc_lock);
 			}
 			vrele(vp);
 		} else
-			mutex_exit(&proclist_lock);
+			mutex_exit(proc_lock);
 
 		/*
 		 * If the vnode is locked, then we are in the midst
@@ -950,40 +1226,30 @@ spec_close(void *v)
 		panic("spec_close: not special");
 	}
 
-	mutex_enter(&specfs_lock);
+	mutex_enter(&device_lock);
 	sn->sn_opencnt--;
 	count = --sd->sd_opencnt;
 	if (vp->v_type == VBLK)
 		sd->sd_bdevvp = NULL;
-	mutex_exit(&specfs_lock);
+	mutex_exit(&device_lock);
 
-	if (count != 0)
+	if (count != 0 && (vp->v_type != VCHR || !(cdev_flags(dev) & D_MCLOSE)))
 		return 0;
-
-	flags1 = ap->a_fflag;
-
-	/*
-	 * if VI_XLOCK is set, then we're going away soon, so make this
-	 * non-blocking. Also ensures that we won't wedge in vn_lock below.
-	 */
-	if (flags & VI_XLOCK)
-		flags1 |= FNONBLOCK;
 
 	/*
 	 * If we're able to block, release the vnode lock & reacquire. We
 	 * might end up sleeping for someone else who wants our queues. They
-	 * won't get them if we hold the vnode locked. Also, if VI_XLOCK is
-	 * set, don't release the lock as we won't be able to regain it.
+	 * won't get them if we hold the vnode locked.
 	 */
-	if (!(flags1 & FNONBLOCK))
-		VOP_UNLOCK(vp, 0);
+	if (!(flags & FNONBLOCK))
+		VOP_UNLOCK(vp);
 
 	if (vp->v_type == VBLK)
-		error = bdev_close(dev, flags1, mode, curlwp);
+		error = bdev_close(dev, flags, mode, curlwp);
 	else
-		error = cdev_close(dev, flags1, mode, curlwp);
+		error = cdev_close(dev, flags, mode, curlwp);
 
-	if (!(flags1 & FNONBLOCK))
+	if (!(flags & FNONBLOCK))
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	return (error);
@@ -999,8 +1265,8 @@ spec_print(void *v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 
-	printf("dev %d, %d\n", major(ap->a_vp->v_rdev),
-	    minor(ap->a_vp->v_rdev));
+	printf("dev %llu, %llu\n", (unsigned long long)major(ap->a_vp->v_rdev),
+	    (unsigned long long)minor(ap->a_vp->v_rdev));
 	return 0;
 }
 

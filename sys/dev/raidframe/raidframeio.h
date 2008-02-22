@@ -1,4 +1,4 @@
-/*	$NetBSD: raidframeio.h,v 1.3 2005/12/11 12:23:37 christos Exp $ */
+/*	$NetBSD: raidframeio.h,v 1.9 2018/01/20 01:32:45 mrg Exp $ */
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,11 +69,10 @@
 
 #include "raidframevar.h"
 
-#define RAIDFRAME_CONFIGURE         _IOW ('r',  1, void *)	/* configure the driver */
+/* 1 was RAIDFRAME_CONFIGURE */
 #define RAIDFRAME_SHUTDOWN          _IO  ('r',  2)	/* shutdown the driver */
 #define RAIDFRAME_TUR               _IOW ('r',  3, dev_t)	/* debug only: test unit
 								 * ready */
-#define RAIDFRAME_TEST_ACC          _IOWR('r',  4, struct rf_test_acc)	/* run a test access */
 #define RAIDFRAME_FAIL_DISK         _IOW ('r',  5, struct rf_recon_req)	/* fail a disk &
 									 * optionally start
 									 * recon */
@@ -106,14 +98,14 @@
 #define RAIDFRAME_STOP_ATRACE       _IO  ('r', 13)	/* stop tracing accesses */
 #define RAIDFRAME_GET_SIZE          _IOR ('r', 14, int)	/* get size (# sectors)
 							 * in raid device */
-#define RAIDFRAME_GET_INFO          _IOWR('r', 15, RF_DeviceConfig_t *)	/* get configuration */
+/* 15 was RAIDFRAME_GET_INFO */
 #define RAIDFRAME_RESET_ACCTOTALS   _IO  ('r', 16)	/* reset AccTotals for
 							 * device */
 #define RAIDFRAME_GET_ACCTOTALS     _IOR ('r', 17, RF_AccTotals_t)	/* retrieve AccTotals
 									 * for device */
 #define RAIDFRAME_KEEP_ACCTOTALS    _IOW ('r', 18, int)	/* turn AccTotals on or
 							 * off for device */
-#define RAIDFRAME_GET_COMPONENT_LABEL _IOWR ('r', 19, RF_ComponentLabel_t *)
+#define RAIDFRAME_GET_COMPONENT_LABEL _IOWR ('r', 19, RF_ComponentLabel_t)
 #define RAIDFRAME_SET_COMPONENT_LABEL _IOW ('r', 20, RF_ComponentLabel_t)
 
 #define RAIDFRAME_INIT_LABELS _IOW ('r', 21, RF_ComponentLabel_t)
@@ -128,8 +120,18 @@
 #define RAIDFRAME_DELETE_COMPONENT _IOW ('r', 30, RF_SingleComponent_t)
 #define RAIDFRAME_INCORPORATE_HOT_SPARE _IOW ('r', 31, RF_SingleComponent_t)
 /* 'Extended' status versions */
-#define RAIDFRAME_CHECK_RECON_STATUS_EXT _IOWR('r',  32, RF_ProgressInfo_t *)
-#define RAIDFRAME_CHECK_PARITYREWRITE_STATUS_EXT _IOWR ('r', 33, RF_ProgressInfo_t *)
-#define RAIDFRAME_CHECK_COPYBACK_STATUS_EXT _IOWR ('r', 34, RF_ProgressInfo_t *)
+#define RAIDFRAME_CHECK_RECON_STATUS_EXT _IOWR('r',  32, RF_ProgressInfo_t)
+#define RAIDFRAME_CHECK_PARITYREWRITE_STATUS_EXT _IOWR ('r', 33, RF_ProgressInfo_t)
+#define RAIDFRAME_CHECK_COPYBACK_STATUS_EXT _IOWR ('r', 34, RF_ProgressInfo_t)
+/* 35 was RAIDFRAME_CONFIGURE */
+/* 36 was RAIDFRAME_GET_INFO */
+
+#define RAIDFRAME_PARITYMAP_STATUS  _IOR('r', 37, struct rf_pmstat)
+#define RAIDFRAME_PARITYMAP_GET_DISABLE _IOR('r', 38, int)
+#define RAIDFRAME_PARITYMAP_SET_DISABLE _IOW('r', 39, int)
+#define RAIDFRAME_PARITYMAP_SET_PARAMS _IOW('r', 40, struct rf_pmparams)
+#define RAIDFRAME_SET_LAST_UNIT _IOW('r', 41, int)
+#define RAIDFRAME_GET_INFO          _IOWR('r', 42, RF_DeviceConfig_t *)	/* get configuration */
+#define RAIDFRAME_CONFIGURE         _IOW ('r',  43, void *)	/* configure the driver */
 
 #endif				/* !_RF_RAIDFRAMEIO_H_ */

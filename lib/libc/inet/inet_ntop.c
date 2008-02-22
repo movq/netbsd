@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_ntop.c,v 1.5 2007/03/30 20:23:03 ghen Exp $	*/
+/*	$NetBSD: inet_ntop.c,v 1.12 2018/03/02 06:31:53 lukem Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -20,9 +20,9 @@
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
-static const char rcsid[] = "Id: inet_ntop.c,v 1.3.18.2 2005/11/03 23:02:22 marka Exp";
+static const char rcsid[] = "Id: inet_ntop.c,v 1.5 2005/11/03 22:59:52 marka Exp";
 #else
-__RCSID("$NetBSD: inet_ntop.c,v 1.5 2007/03/30 20:23:03 ghen Exp $");
+__RCSID("$NetBSD: inet_ntop.c,v 1.12 2018/03/02 06:31:53 lukem Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -66,11 +66,7 @@ static const char *inet_ntop6(const u_char *src, char *dst, socklen_t size);
  *	Paul Vixie, 1996.
  */
 const char *
-inet_ntop(af, src, dst, size)
-	int af;
-	const void *src;
-	char *dst;
-	socklen_t size;
+inet_ntop(int af, const void *src, char *dst, socklen_t size)
 {
 
 	_DIAGASSERT(src != NULL);
@@ -78,12 +74,12 @@ inet_ntop(af, src, dst, size)
 
 	switch (af) {
 	case AF_INET:
-		return (inet_ntop4(src, dst, size));
+		return inet_ntop4(src, dst, size);
 	case AF_INET6:
-		return (inet_ntop6(src, dst, size));
+		return inet_ntop6(src, dst, size);
 	default:
 		errno = EAFNOSUPPORT;
-		return (NULL);
+		return NULL;
 	}
 	/* NOTREACHED */
 }
@@ -100,10 +96,7 @@ inet_ntop(af, src, dst, size)
  *	Paul Vixie, 1996.
  */
 static const char *
-inet_ntop4(src, dst, size)
-	const u_char *src;
-	char *dst;
-	socklen_t size;
+inet_ntop4(const u_char *src, char *dst, socklen_t size)
 {
 	char tmp[sizeof "255.255.255.255"];
 	int l;
@@ -115,10 +108,10 @@ inet_ntop4(src, dst, size)
 	    src[0], src[1], src[2], src[3]);
 	if (l <= 0 || (socklen_t) l >= size) {
 		errno = ENOSPC;
-		return (NULL);
+		return NULL;
 	}
 	strlcpy(dst, tmp, size);
-	return (dst);
+	return dst;
 }
 
 /* const char *
@@ -128,10 +121,7 @@ inet_ntop4(src, dst, size)
  *	Paul Vixie, 1996.
  */
 static const char *
-inet_ntop6(src, dst, size)
-	const u_char *src;
-	char *dst;
-	socklen_t size;
+inet_ntop6(const u_char *src, char *dst, socklen_t size)
 {
 	/*
 	 * Note that int32_t and int16_t need only be "at least" large enough
@@ -199,7 +189,7 @@ inet_ntop6(src, dst, size)
 		/* Are we following an initial run of 0x00s or any real hex? */
 		if (i != 0) {
 			if (tp + 1 >= ep)
-				return (NULL);
+				goto out;
 			*tp++ = ':';
 		}
 		/* Is this address an encapsulated IPv4? */
@@ -207,36 +197,37 @@ inet_ntop6(src, dst, size)
 		    (best.len == 6 ||
 		    (best.len == 7 && words[7] != 0x0001) ||
 		    (best.len == 5 && words[5] == 0xffff))) {
-			if (!inet_ntop4(src+12, tp, (socklen_t)(ep - tp)))
-				return (NULL);
+			if (!inet_ntop4(src + 12, tp, (socklen_t)(ep - tp)))
+				goto out;
 			tp += strlen(tp);
 			break;
 		}
 		advance = snprintf(tp, (size_t)(ep - tp), "%x", words[i]);
 		if (advance <= 0 || advance >= ep - tp)
-			return (NULL);
+			goto out;
 		tp += advance;
 	}
 	/* Was it a trailing run of 0x00's? */
 	if (best.base != -1 && (best.base + best.len) == 
 	    (NS_IN6ADDRSZ / NS_INT16SZ)) {
 		if (tp + 1 >= ep)
-			return (NULL);
+			goto out;
 		*tp++ = ':';
 	}
 	if (tp + 1 >= ep)
-		return (NULL);
+		goto out;
 	*tp++ = '\0';
 
 	/*
 	 * Check for overflow, copy, and we're done.
 	 */
-	if ((size_t)(tp - tmp) > size) {
-		errno = ENOSPC;
-		return (NULL);
-	}
+	if ((size_t)(tp - tmp) > size)
+		goto out;
 	strlcpy(dst, tmp, size);
-	return (dst);
+	return dst;
+out:
+	errno = ENOSPC;
+	return NULL;
 }
 
 /*! \file */

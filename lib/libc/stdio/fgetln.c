@@ -1,4 +1,4 @@
-/*	$NetBSD: fgetln.c,v 1.14 2004/05/10 16:47:11 drochner Exp $	*/
+/*	$NetBSD: fgetln.c,v 1.17 2017/06/08 15:59:45 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -33,13 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)fgetline.c	8.1 (Berkeley) 6/4/93";
-#else
-__RCSID("$NetBSD: fgetln.c,v 1.14 2004/05/10 16:47:11 drochner Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: fgetln.c,v 1.17 2017/06/08 15:59:45 uwe Exp $");
 
 #include "namespace.h"
 
@@ -53,21 +47,18 @@ __weak_alias(fgetln,_fgetln)
 #endif
 
 /*
- * Get an input line.  The returned pointer often (but not always)
- * points into a stdio buffer.  Fgetline does not alter the text of
- * the returned line (which is thus not a C string because it will
- * not necessarily end with '\0'), but does allow callers to modify
- * it if they wish.  Thus, we set __SMOD in case the caller does.
+ * Get an input line.
+ * This now uses getdelim(3) for a code reduction.
+ * The upside is that strings are now always null-terminated, but relying
+ * on this is non portable - better to use the POSIX getdelim(3) function.
  */
 char *
-fgetln(fp, lenp)
-	FILE *fp;
-	size_t *lenp;
+fgetln(FILE *fp, size_t *lenp)
 {
-	char *cp;
-
+	char *p;
+	
 	FLOCKFILE(fp);
-	cp = __fgetstr(fp, lenp, '\n');
+	p = __fgetstr(fp, lenp, '\n');
 	FUNLOCKFILE(fp);
-	return cp;
+	return p;
 }

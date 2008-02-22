@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: newgrp.c,v 1.4 2007/10/17 21:07:49 christos Exp $");
+__RCSID("$NetBSD: newgrp.c,v 1.7 2011/09/16 15:39:27 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -59,7 +52,7 @@ __RCSID("$NetBSD: newgrp.c,v 1.4 2007/10/17 21:07:49 christos Exp $");
 
 #include "grutil.h"
 
-static void
+__dead static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: %s [-l] [group]\n", getprogname());
@@ -89,6 +82,7 @@ main(int argc, char *argv[])
 		errx(EXIT_FAILURE, "%s: unknown login class", pwd->pw_class);
 #endif
 
+	(void)setprogname(argv[0]);
 	lflag = 0;
 	while ((c = getopt(argc, argv, "-l")) != -1) {
 		switch (c) {

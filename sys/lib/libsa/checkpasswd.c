@@ -1,4 +1,4 @@
-/*	$NetBSD: checkpasswd.c,v 1.8 2007/11/24 13:20:54 isaki Exp $	*/
+/*	$NetBSD: checkpasswd.c,v 1.10 2016/09/05 21:11:11 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -43,7 +43,7 @@ getpass(const char *prompt)
 	char *lp;
 	static char buf[128]; /* == _PASSWORD_LEN */
 
-	printf(prompt);
+	printf("%s", prompt);
 
 	for (lp = buf;;) {
 		switch (c = getchar() & 0177) {
@@ -84,8 +84,10 @@ getpass(const char *prompt)
 			putchar('\n');
 			break;
 		default:
-			*lp++ = c;
-			putchar('*');
+			if ((size_t)(lp - buf) < sizeof(buf) - 1) {
+				*lp++ = c;
+				putchar('*');
+			}
 			break;
 		}
 	}

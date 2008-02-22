@@ -1,4 +1,4 @@
-/*	$NetBSD: samachdep.h,v 1.15 2007/03/04 05:59:50 christos Exp $	*/
+/*	$NetBSD: samachdep.h,v 1.20 2016/06/11 06:22:11 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -66,10 +66,6 @@ void printrominvo(void);
 void configure(void);
 int sctoaddr(int);
 
-/* clock.c */
-void read_bbc(void);
-u_char read_bbc_reg(int);
-
 /* cons.c */
 extern	int cons_scode;
 void cninit(void);
@@ -78,7 +74,6 @@ int cnputc(int);
 
 /* devopen.c */
 extern	u_int opendev;
-int atoi(char *);
 
 /* exec.c */
 void exec_hp300(char *, u_long, int);
@@ -103,7 +98,7 @@ void romout(int, char *);
 void _transfer(char *, int, int, int, char *, char *);
 
 /* tget.c */
-int tgets(char *);
+int tgets(char *, size_t);
 
 
 #define DELAY(n)							\
@@ -132,5 +127,4 @@ extern	struct fs_ops file_system_rawfs[];
 extern	struct fs_ops file_system_ufs[];
 extern	struct fs_ops file_system_nfs[];
 
-extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
-	    bootprog_maker[];
+extern	char bootprog_name[], bootprog_rev[], bootprog_kernrev[];

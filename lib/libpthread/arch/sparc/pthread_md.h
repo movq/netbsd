@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.5 2008/02/10 18:50:55 ad Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.8 2011/01/25 19:12:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,10 +32,10 @@
 /*
  * pthread__sp used for identifying thread
  */
-static inline long
+static inline unsigned long
 pthread__sp(void)
 {
-	long ret;
+	unsigned long ret;
 
 	__asm("mov %%sp, %0" : "=r" (ret));
 
@@ -50,47 +43,6 @@ pthread__sp(void)
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_O6])
-#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_PC])
-
-#define STACKSPACE 96	/* min stack frame XXX */
-
-/*
- * Conversions between struct reg and struct mcontext. Used by
- * libpthread_dbg.
- * XXX macros
- */
-
-#define PTHREAD_UCONTEXT_TO_REG(reg, uc) do {				\
-	memcpy((reg), &(uc)->uc_mcontext.__gregs, 			\
-	    (_REG_Y+1)*sizeof(__greg_t));				\
-	(reg)->r_global[0] = 0;						\
-	memcpy(&(reg)->r_global[1], &(uc)->uc_mcontext.__gregs[_REG_G1],\
-	     (_REG_O7-_REG_G1+1)*sizeof(__greg_t));			\
-	} while (/*CONSTCOND*/0)
-
-#define PTHREAD_REG_TO_UCONTEXT(uc, reg) do {				\
-	memcpy(&(uc)->uc_mcontext.__gregs, (reg), 			\
-	    (_REG_Y+1)*sizeof(__greg_t)); 				\
-	(uc)->uc_mcontext.__gregs[_REG_Y] = (reg)->r_y;			\
-	memcpy(&(uc)->uc_mcontext.__gregs[_REG_G1], &(reg)->r_global[1],\
-	    (_REG_O7-_REG_G1+1)*sizeof(__greg_t));			\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER;       	\
-	} while (/*CONSTCOND*/0)
-
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc) do {			\
-	memcpy((freg)->fr_regs,						\
-	    &(uc)->uc_mcontext.__fpregs.__fpu_fr.__fpu_regs,		\
-	    32*sizeof(u_int));						\
-	(freg)->fr_fsr = (uc)->uc_mcontext.__fpregs.__fpu_fsr;		\
-	} while (/*CONSTCOND*/0)
-
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg) do {       	       		\
-	memcpy(&(uc)->uc_mcontext.__fpregs.__fpu_fr.__fpu_regs,		\
-	    (freg)->fr_regs,						\
-	    32*sizeof(u_int));						\
-	(uc)->uc_mcontext.__fpregs.__fpu_fsr = (freg)->fr_fsr;		\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
-	} while (/*CONSTCOND*/0)
 
 /* Don't need additional memory barriers. */
 #define	PTHREAD__ATOMIC_IS_MEMBAR

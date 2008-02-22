@@ -1,3 +1,3 @@
-/* $NetBSD: locore.h,v 1.2 2002/06/05 06:18:38 simonb Exp $ */
+/* $NetBSD: locore.h,v 1.4 2014/03/31 11:25:49 martin Exp $ */
 
 #include <mips/locore.h>

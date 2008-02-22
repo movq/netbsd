@@ -1,4 +1,4 @@
-.\"	$NetBSD: regex.3,v 1.18 2003/12/29 17:36:12 wiz Exp $
+.\"	$NetBSD: regex.3,v 1.26 2018/02/26 14:04:43 kamil Exp $
 .\"
 .\" Copyright (c) 1992, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -65,7 +65,7 @@
 .\"
 .\"	@(#)regex.3	8.4 (Berkeley) 3/20/94
 .\"
-.Dd December 29, 2003
+.Dd February 26, 2018
 .Dt REGEX 3
 .Os
 .Sh NAME
@@ -73,7 +73,9 @@
 .Nm regcomp ,
 .Nm regexec ,
 .Nm regerror ,
-.Nm regfree
+.Nm regfree ,
+.Nm regasub ,
+.Nm regnsub
 .Nd regular-expression library
 .Sh LIBRARY
 .Lb libc
@@ -87,6 +89,10 @@
 .Fn regerror "int errcode" "const regex_t * restrict preg" "char * restrict errbuf" "size_t errbuf_size"
 .Ft void
 .Fn regfree "regex_t *preg"
+.Ft ssize_t
+.Fn regnsub "char *buf" "size_t bufsiz" "const char *sub" "const regmatch_t *rm" "const char *str"
+.Ft ssize_t
+.Fn regasub "char **buf" "const char *sub" "const regmatch_t *rm" "const char *sstr"
 .Sh DESCRIPTION
 These routines implement
 .St -p1003.2-92
@@ -105,7 +111,7 @@ frees any dynamically-allocated storage used by the internal form
 of an RE.
 .Pp
 The header
-.Em \*[Lt]regex.h\*[Gt]
+.In regex.h
 declares two structure types,
 .Fa regex_t
 and
@@ -335,8 +341,8 @@ Unused entries in the array\(emcorresponding either to subexpressions that
 did not participate in the match at all, or to subexpressions that do not
 exist in the RE (that is,
 .Fa i
-\*[Gt]
-.Fa preg-\*[Gt]re_nsub )
+>
+.Fa preg->re_nsub )
 \(emhave both
 .Fa rm_so
 and
@@ -394,11 +400,11 @@ and if the error code came from
 it should have been the result from the most recent
 .Fn regcomp
 using that
-.Fa regex_t . (
-.Fn regerror
+.Fa regex_t .
+.Po Fn regerror
 may be able to supply a more detailed message using information
 from the
-.Fa regex_t . )
+.Fa regex_t . Pc
 .Fn regerror
 places the NUL-terminated message into the buffer pointed to by
 .Fa errbuf ,
@@ -466,6 +472,49 @@ is undefined.
 None of these functions references global variables except for tables
 of constants;
 all are safe for use from multiple threads if the arguments are safe.
+.Pp
+The
+.Fn regnsub
+and
+.Fn regasub
+functions perform substitutions using
+.Xr sed 1
+like syntax.
+They return the length of the string that would have been created
+if there was enough space or
+.Dv \-1
+on error, setting
+.Dv errno .
+The result
+is being placed in
+.Fa buf
+which is user-supplied in
+.Fn regnsub
+and dynamically allocated in
+.Fn regasub .
+The
+.Fa sub
+argument contains a substitution string which might refer to the first
+9 regular expression strings using
+.Dq \e<n>
+to refer to the nth matched
+item, or
+.Dq &
+(which is equivalent to
+.Dq \e0 )
+to refer to the full match.
+The
+.Fa rm
+array must be at least 10 elements long, and should contain the result
+of the matches from a previous
+.Fn regexec
+call.
+Only 10 elements of the
+.Fa rm
+array can be used.
+The
+.Fa str
+argument contains the source string to apply the transformation to.
 .Sh IMPLEMENTATION CHOICES
 There are a number of decisions that
 .St -p1003.2-92
@@ -514,7 +563,9 @@ An empty string is not a legal RE.
 .Pp
 A `{' followed by a digit is considered the beginning of bounds for a
 bounded repetition, which must then follow the syntax for bounds.
-A `{' \fInot\fR followed by a digit is considered an ordinary character.
+A `{'
+.Em not
+followed by a digit is considered an ordinary character.
 .Pp
 `^' and `$' beginning and ending subexpressions in obsolete (``basic'')
 REs are anchors, not ordinary characters.
@@ -527,7 +578,8 @@ include the following:
 .Pp
 .Bl -tag -width XXXREG_ECOLLATE -compact
 .It Dv REG_NOMATCH
-regexec() failed to match
+.Fn regexec
+failed to match
 .It Dv REG_BADPAT
 invalid regular expression
 .It Dv REG_ECOLLATE
@@ -573,6 +625,13 @@ Originally written by Henry Spencer.
 Altered for inclusion in the
 .Bx 4.4
 distribution.
+.Pp
+The
+.Fn regnsub
+and
+.Fn regasub
+functions appeared in
+.Nx 8 .
 .Sh BUGS
 There is one known functionality bug.
 The implementation of internationalization is incomplete:

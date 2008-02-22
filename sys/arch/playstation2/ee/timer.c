@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.c,v 1.4 2007/12/03 15:34:07 ad Exp $	*/
+/*	$NetBSD: timer.c,v 1.8 2014/03/31 11:25:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.4 2007/12/03 15:34:07 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.8 2014/03/31 11:25:49 martin Exp $");
 
 #include "debug_playstation2.h"
 
@@ -69,7 +62,7 @@ STATIC int timer0_intr(void *);
  */
 
 void
-timer_init()
+timer_init(void)
 {
 
 	_reg_write_4(T0_MODE_REG, (T_MODE_EQUF | T_MODE_OVFF));
@@ -79,7 +72,7 @@ timer_init()
 }
 
 void
-timer_clock_init()
+timer_clock_init(void)
 {
 	/* clock interrupt (296.912MHz / 2 / 256) * 5760 = 100Hz */
 	intc_intr_establish(I_CH9_TIMER0, IPL_CLOCK, timer0_intr, 0);

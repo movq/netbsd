@@ -1,4 +1,4 @@
-.\"	$NetBSD: semctl.2,v 1.16 2004/05/13 10:20:58 wiz Exp $
+.\"	$NetBSD: semctl.2,v 1.21 2017/07/03 21:32:50 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Frank van der Linden
 .\" All rights reserved.
@@ -57,7 +57,7 @@ If required, it is a union of the following fields:
 .Bd -literal
     int     val;            /* value for SETVAL */
     struct  semid_ds *buf;  /* buffer for IPC_{STAT,SET} */
-    u_short *array;         /* array for GETALL \*[Am] SETALL */
+    u_short *array;         /* array for GETALL & SETALL */
 .Ed
 .Pp
 The
@@ -67,7 +67,7 @@ structure used in the
 and
 .Dv IPC_STAT
 commands is defined in
-.Aq Pa sys/sem.h
+.In sys/sem.h
 and contains the following members:
 .Bd -literal
     struct ipc_perm sem_perm; /* operation permissions */
@@ -81,7 +81,7 @@ The
 structure used inside the
 .Sy semid_ds
 structure is defined in
-.Aq Pa sys/ipc.h
+.In sys/ipc.h
 and contains the following members:
 .Bd -literal
     uid_t cuid;  /* creator user id */
@@ -150,7 +150,7 @@ has an effective user id equal to either
 .Va sem_perm.cuid
 or
 .Va sem_perm.uid
-in the data structure associated with the message queue.
+in the data structure associated with the semaphore.
 .It Dv IPC_RMID
 Remove the semaphores associated with
 .Fa semid
@@ -162,7 +162,7 @@ or
 values in the data structure associated with the semaphore can do this.
 .El
 .Pp
-The permission to read or change a message queue (see
+The permission to read or change a semaphore (see
 .Xr semop 2 )
 is determined by the
 .Va sem_perm.mode
@@ -198,6 +198,19 @@ set to reflect the error.
 .Fn semctl
 will fail if:
 .Bl -tag -width Er
+.It Bq Er EACCES
+The caller has no operation permission for this semaphore.
+.It Bq Er EFAULT
+.Fa arg.buf
+or
+.Fa arg.array
+specifies an invalid address.
+.It Bq Er EINVAL
+.Fa semid
+is not a valid message semaphore identifier.
+.Pp
+.Va cmd
+is not a valid command.
 .It Bq Er EPERM
 .Fa cmd
 is equal to
@@ -209,20 +222,14 @@ the effective uid match either the
 .Va sem_perm.uid
 or
 .Va sem_perm.cuid
-fields of the data structure associated with the message queue.
-.It Bq Er EACCES
-The caller has no operation permission for this semaphore.
-.It Bq Er EINVAL
-.Fa semid
-is not a valid message semaphore identifier.
-.Pp
-.Va cmd
-is not a valid command.
-.It Bq Er EFAULT
-.Fa arg.buf
+fields of the data structure associated with the semaphore.
+.It Bq Er ERANGE
+.Fa cmd
+is equal to
+.Dv SETVAL
 or
-.Fa arg.array
-specifies an invalid address.
+.Dv SETALL
+and the value to be set is greater than the system semaphore maximum value.
 .El
 .Sh SEE ALSO
 .Xr semget 2 ,

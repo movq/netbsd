@@ -1,4 +1,4 @@
-.\"	$NetBSD: login.conf.5,v 1.20 2006/10/14 18:52:39 christos Exp $
+.\"	$NetBSD: login.conf.5,v 1.31 2015/07/11 14:18:08 kamil Exp $
 .\"
 .\" Copyright (c) 1995,1996,1997 Berkeley Software Design, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\" BSDI login.conf.5,v 2.19 1998/02/19 23:39:39 prb Exp
 .\"
-.Dd October 14, 2006
+.Dd July 11, 2015
 .Dt LOGIN.CONF 5
 .Os
 .Sh NAME
@@ -66,7 +66,7 @@ A special class called
 will be used (if it exists) if the field in the password file is empty.
 .Sh CAPABILITIES
 Refer to
-.Xr getcap 3
+.Xr capfile 5
 for a description of the file layout.
 An example entry is:
 .Bd -literal -offset indent
@@ -83,15 +83,18 @@ file are either boolean or use a `=' to separate the capability
 from the value.
 The types are described after the capability table.
 .Bl -column minpasswordlen program default
-.Sy Name	Type	Default	Description
+.It Sy Name	Type	Default	Description
 .\"
 .sp
 .It Sy copyright Ta file Ta "" Ta
 File containing additional copyright information.
+(If the file exists,
+.Xr login 1
+displays it before the welcome message.)
 .\"
 .sp
 .It Sy coredumpsize Ta size Ta "" Ta
-Maximum coredump size limit.
+Maximum coredump size.
 .\"
 .sp
 .It Sy cputime Ta time Ta "" Ta
@@ -99,11 +102,11 @@ CPU usage limit.
 .\"
 .sp
 .It Sy datasize Ta size Ta "" Ta
-Maximum data size limit.
+Maximum data size.
 .\"
 .sp
 .It Sy filesize Ta size Ta "" Ta
-Maximum file size limit.
+Maximum file size.
 .\"
 .sp
 .It Sy host.allow Ta string Ta "" Ta
@@ -113,7 +116,7 @@ Access is instead denied from any hosts preceded
 by
 .Sq Li \&! .
 Patterns can contain the
-.Xr sh 1 -style
+.Xr sh 1 Ns -style
 .Sq Li *
 and
 .Sq Li \&?
@@ -161,15 +164,20 @@ Number of login attempts after which to start random back-off.
 .\"
 .sp
 .It Sy maxproc Ta number Ta "" Ta
-Maximum number of process.
+Maximum number of processes.
+.\"
+.sp
+.It Sy maxthread Ta number Ta "" Ta
+Maximum number of threads.
+The first thread of each process is not counted against this.
 .\"
 .sp
 .It Sy memorylocked Ta size Ta "" Ta
-Maximum locked in core memory size limit.
+Maximum locked in core memory size.
 .\"
 .sp
 .It Sy memoryuse Ta size Ta "" Ta
-Maximum in core memoryuse size limit.
+Maximum in core memoryuse size.
 .\"
 .sp
 .It Sy minpasswordlen Ta number Ta "" Ta
@@ -192,8 +200,8 @@ Maximum number of open file descriptors per process.
 .\"XX Length of time a password may be expired but not quite dead yet.
 .\"XX When set (for both the client and remote server machine when doing
 .\"XX remote authentication), a user is allowed to log in just one more
-.\"XX time after their password (but not account) has expired.  This allows
-.\"XX a grace period for updating their password.
+.\"XX time after their password (but not account) has expired.
+.\"XX This allows a grace period for updating their password.
 .\"
 .sp
 .It Sy passwordtime Ta time Ta "" Ta
@@ -221,11 +229,12 @@ Require home directory to login.
 .\"
 .sp
 .It Sy sbsize Ta size Ta "" Ta
-Maximum socket buffer size limit.
+Maximum socket buffer size.
 .\"
 .sp
 .It Sy setenv Ta list Ta "" Ta
-Comma separated list of environment variables and values to be set.
+Comma or whitespace separated list
+of environment variables and values to be set.
 Commas and whitespace can be escaped using \e\e.
 .\"
 .sp
@@ -237,7 +246,7 @@ environment variable will contain the shell specified in the password file.
 .\"
 .sp
 .It Sy stacksize Ta size Ta "" Ta
-Maximum stack size limit.
+Maximum stack size.
 .\"
 .sp
 .It Sy tc Ta string Ta "" Ta
@@ -262,8 +271,16 @@ See
 .Xr umask 2 .
 .\"
 .sp
+.It Sy vmemoryuse Ta size Ta "" Ta
+Maximum virtual address space size.
+.\"
+.sp
 .It Sy welcome Ta file Ta Li /etc/motd Ta
 File containing welcome message.
+.Xr login 1
+displays this and
+.Xr sshd 8
+sends this.
 .El
 .Pp
 The resource limit entries
@@ -276,8 +293,9 @@ The resource limit entries
 .Sy memoryuse ,
 .Sy openfiles ,
 .Sy sbsize ,
+.Sy stacksize
 and
-.Sy stacksize )
+.Sy vmemoryuse )
 actually specify both the maximum and current limits (see
 .Xr getrlimit 2 ) .
 The current limit is the one normally used,
@@ -297,21 +315,26 @@ and
 will never define capabilities which start with
 .Li x-
 or
-.Li X- ,
+.Li X- ;
 these are reserved for external use (unless included through contributed
 software).
 .Pp
 The argument types are defined as:
 .Bl -tag -width programxx
 .\"
+.It Sy bool
+If the name is present, then the boolean value is true;
+otherwise, it is false.
+.\"
 .It Sy file
 Path name to a text file.
 .\"
 .It Sy list
-A comma separated list of values.
+A comma or whitespace separated list of values.
 .\"
 .It Sy number
-A number.  A leading
+A number.
+A leading
 .Li 0x
 implies the number is expressed in hexadecimal.
 A leading
@@ -383,8 +406,8 @@ hashed database built with
 .Sh SEE ALSO
 .Xr cap_mkdb 1 ,
 .Xr login 1 ,
-.Xr getcap 3 ,
 .Xr login_cap 3 ,
+.Xr capfile 5 ,
 .Xr ttys 5 ,
 .Xr ftpd 8 ,
 .Xr sshd 8

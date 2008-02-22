@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.3 2007/10/27 15:36:21 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2016/07/13 13:10:55 shm Exp $
 #
 
 .include <bsd.own.mk>
 
+USE_FORT?= yes	# setuid
 PROG=	newgrp
 SRCS=	newgrp.c grutil.c
 BINOWN=	root
 BINMODE=4555
-WARNS=	4
 
 CPPFLAGS+=-DGRUTIL_ACCEPT_GROUP_NUMBERS
 CPPFLAGS+=-DGRUTIL_ALLOW_GROUP_ERRORS	# for POSIX.1 compliance

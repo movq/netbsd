@@ -1,4 +1,4 @@
-/* $NetBSD: compat_modf_ieee754.c,v 1.1 2006/06/27 18:16:47 drochner Exp $ */
+/* $NetBSD: compat_modf_ieee754.c,v 1.5 2016/10/07 11:10:44 christos Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -30,7 +30,8 @@
 #include <sys/types.h>
 #include <machine/ieee.h>
 #include <errno.h>
-#include <math.h>
+
+double modf(double, double *);
 
 /*
  * double modf(double val, double *iptr)
@@ -46,11 +47,13 @@ modf(double val, double *iptr)
 	u_int64_t frac;
 
 	/*
-	 * If input is Inf or NaN, return it and leave i alone.
+	 * If input is +/-Inf or NaN, return +/-0 or NaN.
 	 */
 	u.dblu_d = val;
-	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN)
-		return (u.dblu_d);
+	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN) {
+		*iptr = u.dblu_d;
+		return (0.0 / u.dblu_d);
+	}
 
 	/*
 	 * If input can't have a fractional part, return
@@ -90,7 +93,7 @@ modf(double val, double *iptr)
 	frac = ((u_int64_t)v.dblu_dbl.dbl_frach << 32) + v.dblu_dbl.dbl_fracl;
 	frac >>= DBL_FRACBITS - (u.dblu_dbl.dbl_exp - DBL_EXP_BIAS);
 	frac <<= DBL_FRACBITS - (u.dblu_dbl.dbl_exp - DBL_EXP_BIAS);
-	v.dblu_dbl.dbl_fracl = (unsigned int)frac & 0xffffffff;
+	v.dblu_dbl.dbl_fracl = (unsigned int)(frac & 0xffffffffULL);
 	v.dblu_dbl.dbl_frach = (unsigned int)(frac >> 32);
 	*iptr = v.dblu_d;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_rumpglue.c,v 1.2 2008/01/27 19:07:21 pooka Exp $	*/
+/*	$NetBSD: puffs_rumpglue.c,v 1.16 2016/01/26 23:12:17 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.2 2008/01/27 19:07:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.16 2016/01/26 23:12:17 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -38,12 +38,13 @@ __KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.2 2008/01/27 19:07:21 pooka Exp
 #include <sys/kthread.h>
 #include <sys/mount.h>
 
+#include <dev/putter/putter.h>
 #include <dev/putter/putter_sys.h>
 
-#include "rump.h"
-#include "rumpuser.h"
+#include <rump-sys/vfs.h>
 
-#include "puffs_rumpglue.h"
+#include <rump/rump.h>
+#include <rump/rumpuser.h>
 
 void putterattach(void); /* XXX: from autoconf */
 dev_type_open(puttercdopen);
@@ -80,31 +81,41 @@ readthread(void *arg)
 	kpause(NULL, 0, hz/4, NULL);
 
 	for (;;) {
-		ssize_t n;
+		size_t n;
 
 		off = 0;
-		fp = fd_getfile(pap->fdp, pap->fpfd);
-		FILE_USE(fp);
-		error = dofileread(pap->fpfd, fp, buf, BUFSIZE,
-		    &off, 0, &rv);
+		fp = fd_getfile(pap->fpfd);
+		if (fp == NULL)
+			error = EINVAL;
+		else
+			error = dofileread(pap->fpfd, fp, buf, BUFSIZE,
+			    &off, 0, &rv);
 		if (error) {
 			if (error == ENOENT && inited == 0)
 				goto retry;
 			if (error == ENXIO)
-				kthread_exit(0);
+				break;
 			panic("fileread failed: %d", error);
 		}
 		inited = 1;
 
 		while (rv) {
-			n = rumpuser_write(pap->comfd, buf, rv, &error);
-			if (n == -1)
+			struct rumpuser_iovec iov;
+
+			iov.iov_base = buf;
+			iov.iov_len = rv;
+
+			error = rumpuser_iovwrite(pap->comfd, &iov, 1,
+			    RUMPUSER_IOV_NOSEEK, &n);
+			if (error)
 				panic("fileread failed: %d", error);
 			if (n == 0)
 				panic("fileread failed: closed");
 			rv -= n;
 		}
 	}
+
+	kthread_exit(0);
 }
 
 /* Read requests from comfd and proxy them to /dev/puffs */
@@ -113,38 +124,69 @@ writethread(void *arg)
 {
 	struct ptargs *pap = arg;
 	struct file *fp;
+	struct putter_hdr *phdr;
 	register_t rv;
 	char *buf;
 	off_t off;
+	size_t toread;
 	int error;
 
 	buf = kmem_alloc(BUFSIZE, KM_SLEEP);
+	phdr = (struct putter_hdr *)buf;
 
 	for (;;) {
-		ssize_t n;
+		size_t n;
 
-		n = rumpuser_read(pap->comfd, buf, BUFSIZE, &error);
-		if (n <= 0)
-			panic("rumpuser_read %zd %d", n, error);
+		/*
+		 * Need to write everything to the "kernel" in one chunk,
+		 * so make sure we have it here.
+		 */
+		off = 0;
+		toread = sizeof(struct putter_hdr);
+		do {
+			struct rumpuser_iovec iov;
+
+			iov.iov_base = buf+off;
+			iov.iov_len = toread;
+			error = rumpuser_iovread(pap->comfd, &iov, 1,
+			    RUMPUSER_IOV_NOSEEK, &n);
+			if (error)
+				panic("rumpuser_read %zd %d", n, error);
+			if (n == 0)
+				goto out;
+			off += n;
+			if (off >= sizeof(struct putter_hdr))
+				toread = phdr->pth_framelen - off;
+			else
+				toread = off - sizeof(struct putter_hdr);
+		} while (toread);
 
 		off = 0;
-		fp = fd_getfile(pap->fdp, pap->fpfd);
-		FILE_USE(fp);
-		error = dofilewrite(pap->fpfd, fp, buf, n,
-		    &off, 0, &rv);
+		rv = 0;
+		fp = fd_getfile(pap->fpfd);
+		if (fp == NULL)
+			error = EINVAL;
+		else
+			error = dofilewrite(pap->fpfd, fp, buf,
+			    phdr->pth_framelen, &off, 0, &rv);
 		if (error == ENXIO)
-			kthread_exit(0);
-		KASSERT(rv == n);
+			goto out;
+		KASSERT(rv == phdr->pth_framelen);
 	}
+ out:
+
+	kthread_exit(0);
 }
 
 int
-puffs_rumpglue_init(int fd, int *newfd)
+rump_syspuffs_glueinit(int fd, int *newfd)
 {
 	struct ptargs *pap;
 	int rv;
 
-	rump_init();
+	if ((rv = rump_init()) != 0)
+		return rv;
+
 	putterattach();
 	rv = puttercdopen(makedev(178, 0), 0, 0, curlwp);
 	if (rv && rv != EMOVEFD)
@@ -155,8 +197,15 @@ puffs_rumpglue_init(int fd, int *newfd)
 	pap->fpfd = curlwp->l_dupfd;
 	pap->fdp = curlwp->l_proc->p_fd;
 
-	kthread_create(PRI_NONE, 0, NULL, readthread, pap, NULL, "rputter");
-	kthread_create(PRI_NONE, 0, NULL, writethread, pap, NULL, "wputter");
+	rv = kthread_create(PRI_NONE, 0, NULL, readthread, pap, NULL,
+	    "rputter");
+	if (rv)
+		return rv;
+
+	rv = kthread_create(PRI_NONE, 0, NULL, writethread, pap, NULL,
+	    "wputter");
+	if (rv)
+		return rv;
 
 	*newfd = curlwp->l_dupfd;
 	return 0;

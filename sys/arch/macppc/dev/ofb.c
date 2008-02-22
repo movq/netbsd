@@ -1,4 +1,4 @@
-/*	$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $	*/
+/*	$NetBSD: ofb.c,v 1.70 2016/05/23 01:45:41 chs Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.70 2016/05/23 01:45:41 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
 #include <sys/systm.h>
 #include <sys/kauth.h>
 #include <sys/lwp.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -56,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/grfioctl.h>
 
@@ -65,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
 #include <powerpc/oea/ofw_rasconsvar.h>
 
 struct ofb_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_pcitag;
@@ -84,10 +82,10 @@ struct ofb_softc {
 	struct vcons_data vd;
 };
 
-static int	ofbmatch(struct device *, struct cfdata *, void *);
-static void	ofbattach(struct device *, struct device *, void *);
+static int	ofbmatch(device_t, cfdata_t, void *);
+static void	ofbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ofb, sizeof(struct ofb_softc),
+CFATTACH_DECL_NEW(ofb, sizeof(struct ofb_softc),
     ofbmatch, ofbattach, NULL, NULL);
 
 const struct wsscreen_descr *_ofb_scrlist[] = {
@@ -127,7 +125,7 @@ extern int console_node;
 extern int console_instance;
 
 static int
-ofbmatch(struct device *parent, struct cfdata *match, void *aux)
+ofbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -142,15 +140,17 @@ ofbmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-ofbattach(struct device *parent, struct device *self, void *aux)
+ofbattach(device_t parent, device_t self, void *aux)
 {
-	struct ofb_softc *sc = (struct ofb_softc *)self;
+	struct ofb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct wsemuldisplaydev_attach_args a;
 	struct rasops_info *ri = &rascons_console_screen.scr_ri;
 	long defattr;
 	int console, node, sub;
 	char devinfo[256];
+
+	sc->sc_dev = self;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	printf(": %s\n", devinfo);
@@ -189,7 +189,7 @@ ofbattach(struct device *parent, struct device *self, void *aux)
 	vcons_init_screen(&sc->vd, &rascons_console_screen, 1, &defattr);
 	rascons_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
 	
-	printf("%s: %d x %d, %dbpp\n", self->dv_xname,
+	printf("%s: %d x %d, %dbpp\n", device_xname(self),
 	       ri->ri_width, ri->ri_height, ri->ri_depth);
 	
 	sc->sc_fbaddr = 0;
@@ -197,7 +197,7 @@ ofbattach(struct device *parent, struct device *self, void *aux)
 		OF_interpret("frame-buffer-adr", 0, 1, &sc->sc_fbaddr);
 	if (sc->sc_fbaddr == 0) {
 		printf("%s: Unable to find the framebuffer address.\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 	sc->sc_fbsize = round_page(ri->ri_stride * ri->ri_height);
@@ -317,17 +317,13 @@ ofb_mmap(void *v, void *vs, off_t offset, int prot)
 {
 	struct vcons_data *vd = v;
 	struct ofb_softc *sc = vd->cookie;
-	struct rasops_info *ri;
 	u_int32_t *ap = sc->sc_addrs;
-	struct lwp *me;
 	int i;
 
 	if (vd->active == NULL) {
-		printf("%s: no active screen.\n", sc->sc_dev.dv_xname);
+		printf("%s: no active screen.\n", device_xname(sc->sc_dev));
 		return -1;
 	}
-	
-	ri = &vd->active->scr_ri;
 	
 	/* framebuffer at offset 0 */
 	if ((offset >= 0) && (offset < sc->sc_fbsize))
@@ -338,13 +334,10 @@ ofb_mmap(void *v, void *vs, off_t offset, int prot)
 	 * restrict all other mappings to processes with superuser privileges
 	 * or the kernel itself
 	 */
-	me = curlwp;
-	if (me != NULL) {
-		if (kauth_authorize_generic(me->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) != 0) {
-			printf("%s: mmap() rejected.\n", sc->sc_dev.dv_xname);
-			return -1;
-		}
+	if (kauth_authorize_machdep(kauth_cred_get(), KAUTH_MACHDEP_UNMANAGEDMEM,
+	    NULL, NULL, NULL, NULL) != 0) {
+		printf("%s: mmap() rejected.\n", device_xname(sc->sc_dev));
+		return -1;
 	}
 
 	/* let them mmap() 0xa0000 - 0xbffff if it's not covered above */
@@ -448,10 +441,10 @@ ofb_putpalreg(struct ofb_softc *sc, int idx, uint8_t r, uint8_t g, uint8_t b)
 static void
 ofb_init_cmap(struct ofb_softc *sc)
 {
-	int idx, i;
+	int i;
+
 	/* mess with the palette only when we're running in 8 bit */
 	if (rascons_console_screen.scr_ri.ri_depth == 8) {
-		idx = 0;
 		for (i = 0; i < 256; i++) {
 			ofb_putpalreg(sc, i, rasops_cmap[(i * 3) + 0],
 			     rasops_cmap[(i * 3) + 1],

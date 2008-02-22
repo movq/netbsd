@@ -1,4 +1,4 @@
-/*	$NetBSD: vipw.c,v 1.12 2005/04/28 08:44:49 yamt Exp $	*/
+/*	$NetBSD: vipw.c,v 1.16 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)vipw.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: vipw.c,v 1.12 2005/04/28 08:44:49 yamt Exp $");
+__RCSID("$NetBSD: vipw.c,v 1.16 2011/08/31 16:25:00 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,16 +57,15 @@ __RCSID("$NetBSD: vipw.c,v 1.12 2005/04/28 08:44:49 yamt Exp $");
 #include <errno.h>
 #include <util.h>
 
-int	main __P((int, char **));
-static void	copyfile __P((int, int));
-static void	usage __P((void));
+static void	copyfile(int, int);
+__dead static void	usage(void);
 
-char mpwd[MAXPATHLEN], mpwdl[MAXPATHLEN];
+static char mpwd[MAXPATHLEN], mpwdl[MAXPATHLEN];
 
 int
 main(int argc, char *argv[])
 {
-	char *prefix;
+	const char *prefix;
 	int pfd, tfd;
 	struct stat begin, end;
 	int ch;
@@ -118,7 +117,7 @@ main(int argc, char *argv[])
 		if (begin.st_mtime == end.st_mtime &&
 		    begin.st_mtimensec == end.st_mtimensec) {
 			warnx("no changes made");
-			pw_error((char *)NULL, 0, 0);
+			pw_error(NULL, 0, 0);
 		}
 		if (pw_mkdb(NULL, 0) == 0)
 			break;

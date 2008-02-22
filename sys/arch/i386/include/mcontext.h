@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.6 2003/10/08 22:43:01 thorpej Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.14 2018/02/15 15:53:56 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,6 +39,7 @@
 #define _UC_SETSTACK	0x00010000
 #define _UC_CLRSTACK	0x00020000
 #define _UC_VM		0x00040000
+#define	_UC_TLSBASE	0x00080000
 
 /*
  * Layout of mcontext_t according to the System V Application Binary Interface,
@@ -86,48 +80,47 @@ typedef struct {
 	union {
 		struct {
 			int	__fp_state[27];	/* Environment and registers */
-			int	__fp_status;	/* Software status word */
-		} __fpchip_state;
-		struct {
-			char	__fp_emul[246];
-			char	__fp_epad[2];
-		} __fp_emul_space;
+		} __fpchip_state;	/* x87 regs in fsave format */
 		struct {
 			char	__fp_xmm[512];
-		} __fp_xmm_state;
+		} __fp_xmm_state;	/* x87 and xmm regs in fxsave format */
 		int	__fp_fpregs[128];
 	} __fp_reg_set;
-	long	__fp_wregs[33];			/* Weitek? */
+	int 	__fp_pad[33];			/* Historic padding */
 } __fpregset_t;
+__CTASSERT(sizeof (__fpregset_t) == 512 + 33 * 4);
 
 typedef struct {
 	__gregset_t	__gregs;
 	__fpregset_t	__fpregs;
+	__greg_t	_mc_tlsbase;
 } mcontext_t;
 
 #define _UC_FXSAVE	0x20	/* FP state is in FXSAVE format in XMM space */
 
-#define _UC_MACHINE_PAD	5	/* Padding appended to ucontext_t */
+#define _UC_MACHINE_PAD	4	/* Padding appended to ucontext_t */
 
 #define _UC_UCONTEXT_ALIGN	(~0xf)
-
-#ifdef _KERNEL_OPT
-#include "opt_vm86.h"
-#ifdef VM86
-/*#include <machine/psl.h>*/
-#define PSL_VM 0x00020000
-#define _UC_MACHINE_SP(uc) ((uc)->uc_mcontext.__gregs[_REG_UESP] + \
-	((uc)->uc_mcontext.__gregs[_REG_EFL] & PSL_VM ? \
-	 ((uc)->uc_mcontext.__gregs[_REG_SS] << 4) : 0))
-#endif /* VM86 */
-#endif /* _KERNEL_OPT */
 
 #ifndef _UC_MACHINE_SP
 #define _UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_UESP])
 #endif
+#define _UC_MACHINE_FP(uc)	((uc)->uc_mcontext.__gregs[_REG_EBP])
 #define _UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_EIP])
 #define _UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_EAX])
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
+
+#define	__UCONTEXT_SIZE	776
+
+static __inline void *
+__lwp_getprivate_fast(void)
+{
+	void *__tmp;
+
+	__asm volatile("movl %%gs:0, %0" : "=r" (__tmp));
+
+	return __tmp;
+}
 
 #endif	/* !_I386_MCONTEXT_H_ */

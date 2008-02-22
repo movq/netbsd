@@ -1,4 +1,4 @@
-/* $NetBSD: mavb.c,v 1.5 2008/01/26 22:06:16 jmcneill Exp $ */
+/* $NetBSD: mavb.c,v 1.10 2015/02/17 11:25:43 macallan Exp $ */
 /* $OpenBSD: mavb.c,v 1.6 2005/04/15 13:05:14 mickey Exp $ */
 
 /*
@@ -21,10 +21,10 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/callout.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 
@@ -117,7 +117,9 @@ static const struct audio_format mavb_formats[MAVB_NFORMATS] = {
 };
 
 struct mavb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 	bus_space_tag_t sc_st;
 	bus_space_handle_t sc_sh;
 	bus_dma_tag_t sc_dmat;
@@ -151,23 +153,26 @@ struct mavb_codecvar {
 };
 
 static stream_filter_t *mavb_factory
-    (int (*)(stream_fetcher_t *, audio_stream_t *, int));
+    (struct audio_softc *,
+     int (*)(struct audio_softc *, stream_fetcher_t *, audio_stream_t *, int));
 static void mavb_dtor(stream_filter_t *);
 
 /* XXX I'm going to complain every time I have to copy this macro */
-#define DEFINE_FILTER(name)	\
-static int \
-name##_fetch_to(stream_fetcher_t *, audio_stream_t *, int); \
-stream_filter_t *name(struct audio_softc *, \
-    const audio_params_t *, const audio_params_t *); \
-stream_filter_t * \
-name(struct audio_softc *sc, const audio_params_t *from, \
-    const audio_params_t *to) \
-{ \
-	return mavb_factory(name##_fetch_to); \
-} \
-static int \
-name##_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
+#define DEFINE_FILTER(name)						\
+static int								\
+name##_fetch_to(struct audio_softc *, stream_fetcher_t *,		\
+		audio_stream_t *, int);					\
+stream_filter_t *name(struct audio_softc *,				\
+    const audio_params_t *, const audio_params_t *);			\
+stream_filter_t *							\
+name(struct audio_softc *sc, const audio_params_t *from,		\
+    const audio_params_t *to)						\
+{									\
+	return mavb_factory(sc, name##_fetch_to);			\
+}									\
+static int								\
+name##_fetch_to(struct audio_softc *asc, stream_fetcher_t *self,	\
+    audio_stream_t *dst, int max_used)
 
 DEFINE_FILTER(mavb_16to24)
 {
@@ -176,7 +181,7 @@ DEFINE_FILTER(mavb_16to24)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(asc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -197,7 +202,7 @@ DEFINE_FILTER(mavb_mts)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(asc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -212,11 +217,11 @@ DEFINE_FILTER(mavb_mts)
 }
 
 static stream_filter_t *
-mavb_factory(int (*fetch_to)(stream_fetcher_t *, audio_stream_t *, int))
+mavb_factory(struct audio_softc *asc, int (*fetch_to)(struct audio_softc *, stream_fetcher_t *, audio_stream_t *, int))
 {
 	struct mavb_codecvar *this;
 
-	this = malloc(sizeof(*this), M_DEVBUF, M_WAITOK | M_ZERO);
+	this = kmem_zalloc(sizeof(*this), KM_SLEEP);
 	this->base.base.fetch_to = fetch_to;
 	this->base.dtor = mavb_dtor;
 	this->base.set_fetcher = stream_filter_set_fetcher;
@@ -228,20 +233,21 @@ mavb_factory(int (*fetch_to)(stream_fetcher_t *, audio_stream_t *, int))
 static void
 mavb_dtor(stream_filter_t *this)
 {
+
 	if (this != NULL)
-		free(this, M_DEVBUF);
+		kmem_free(this, sizeof(struct mavb_codecvar));
 }
 
-typedef u_int64_t ad1843_addr_t;
+typedef uint64_t ad1843_addr_t;
 
-u_int16_t ad1843_reg_read(struct mavb_softc *, ad1843_addr_t);
-u_int16_t ad1843_reg_write(struct mavb_softc *, ad1843_addr_t, u_int16_t);
+uint16_t ad1843_reg_read(struct mavb_softc *, ad1843_addr_t);
+uint16_t ad1843_reg_write(struct mavb_softc *, ad1843_addr_t, uint16_t);
 void ad1843_dump_regs(struct mavb_softc *);
 
-int mavb_match(struct device *, struct cfdata *, void *);
-void mavb_attach(struct device *, struct device *, void *);
+int mavb_match(device_t, cfdata_t, void *);
+void mavb_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mavb, sizeof(struct mavb_softc),
+CFATTACH_DECL_NEW(mavb, sizeof(struct mavb_softc),
     mavb_match, mavb_attach, NULL, NULL);
     
 int mavb_open(void *, int);
@@ -263,6 +269,7 @@ int mavb_trigger_output(void *, void *, void *, int, void (*)(void *),
 			void *, const audio_params_t *);
 int mavb_trigger_input(void *, void *, void *, int, void (*)(void *),
 		       void *, const audio_params_t *);
+void mavb_get_locks(void *, kmutex_t **, kmutex_t **);
 
 struct audio_hw_if mavb_sa_hw_if = {
 	mavb_open,
@@ -292,6 +299,7 @@ struct audio_hw_if mavb_sa_hw_if = {
 	mavb_trigger_output,
 	mavb_trigger_input,
 	NULL,
+	mavb_get_locks,
 };
 
 struct audio_device mavb_device = {
@@ -303,7 +311,8 @@ struct audio_device mavb_device = {
 int
 mavb_open(void *hdl, int flags)
 {
-	return (0);
+
+	return 0;
 }
 
 void
@@ -322,20 +331,21 @@ mavb_query_encoding(void *hdl, struct audio_encoding *ae)
 static int
 mavb_set_play_rate(struct mavb_softc *sc, u_long sample_rate)
 {
+
 	if (sample_rate < 4000 || sample_rate > 48000)
-		return (EINVAL);
+		return EINVAL;
 
 	if (sc->sc_play_rate != sample_rate) {
 		ad1843_reg_write(sc, AD1843_CLOCK2_SAMPLE_RATE, sample_rate);
 		sc->sc_play_rate = sample_rate;
 	}
-	return (0);
+	return 0;
 }
 
 static int
 mavb_set_play_format(struct mavb_softc *sc, u_int encoding)
 {
-	u_int16_t value;
+	uint16_t value;
 	u_int format;
 
 	switch(encoding) {
@@ -352,7 +362,7 @@ mavb_set_play_format(struct mavb_softc *sc, u_int encoding)
 		format = AD1843_ALAW;
 		break;
 	default:
-		return (EINVAL);
+		return EINVAL;
 	}
 
 	if (sc->sc_play_format != format) {
@@ -362,7 +372,7 @@ mavb_set_play_format(struct mavb_softc *sc, u_int encoding)
 		ad1843_reg_write(sc, AD1843_SERIAL_INTERFACE, value);
 		sc->sc_play_format = format;
 	}
-	return (0);
+	return 0;
 }
 
 int
@@ -376,18 +386,18 @@ mavb_set_params(void *hdl, int setmode, int usemode,
 	int error;
 
 	DPRINTF(1, ("%s: mavb_set_params: sample=%u precision=%d "
-	    "channels=%d\n", sc->sc_dev.dv_xname, play->sample_rate,
+	    "channels=%d\n", device_xname(sc->sc_dev), play->sample_rate,
 	    play->precision, play->channels));
 
 	if (setmode & AUMODE_PLAY) {
 		if (play->sample_rate < 4000 || play->sample_rate > 48000)
-			return (EINVAL);
+			return EINVAL;
 
 		p = play;
 		fil = pfil;
 		if (auconv_set_converter(sc->sc_formats, MAVB_NFORMATS,
 		    AUMODE_PLAY, p, TRUE, fil) < 0)
-			return (EINVAL);
+			return EINVAL;
 
 		fil->append(fil, mavb_16to24, p);
 		if (p->channels == 1)
@@ -397,26 +407,27 @@ mavb_set_params(void *hdl, int setmode, int usemode,
 		
 		error = mavb_set_play_rate(sc, p->sample_rate);
 		if (error)
-			return (error);
+			return error;
 
 		error = mavb_set_play_format(sc, p->encoding);
 		if (error)
-			return (error);
+			return error;
 	}
 
 #if 0
 	if (setmode & AUMODE_RECORD) {
 		if (rec->sample_rate < 4000 || rec->sample_rate > 48000)
-			return (EINVAL);
+			return EINVAL;
 	}
 #endif
 
-	return (0);
+	return 0;
 }
 
 int
 mavb_round_blocksize(void *hdl, int bs, int mode, const audio_params_t *p)
 {
+
 	/* Block size should be a multiple of 32.  */
 	return (bs + 0x1f) & ~0x1f;
 }
@@ -426,23 +437,25 @@ mavb_halt_output(void *hdl)
 {
 	struct mavb_softc *sc = (struct mavb_softc *)hdl;
 
-	DPRINTF(1, ("%s: mavb_halt_output called\n", sc->sc_dev.dv_xname));
+	DPRINTF(1, ("%s: mavb_halt_output called\n", device_xname(sc->sc_dev)));
 
 	bus_space_write_8(sc->sc_st, sc->sc_sh, MAVB_CHANNEL2_CONTROL, 0);
-	return (0);
+	return 0;
 }
 
 int
 mavb_halt_input(void *hdl)
 {
-	return (0);
+
+	return 0;
 }
 
 int
 mavb_getdev(void *hdl, struct audio_device *ret)
 {
+
 	*ret = mavb_device;
-	return (0);
+	return 0;
 }
 
 int
@@ -451,9 +464,9 @@ mavb_set_port(void *hdl, struct mixer_ctrl *mc)
 	struct mavb_softc *sc = (struct mavb_softc *)hdl;
 	u_char left, right;
 	ad1843_addr_t reg;
-	u_int16_t value;
+	uint16_t value;
 
-	DPRINTF(1, ("%s: mavb_set_port: dev=%d\n", sc->sc_dev.dv_xname,
+	DPRINTF(1, ("%s: mavb_set_port: dev=%d\n", device_xname(sc->sc_dev),
 	    mc->dev));
 
 	switch (mc->dev) {
@@ -562,10 +575,10 @@ mavb_set_port(void *hdl, struct mixer_ctrl *mc)
 		break;
 
 	default:
-		return (EINVAL);
+		return EINVAL;
 	}
 
-	return (0);
+	return 0;
 }
 
 int
@@ -574,9 +587,9 @@ mavb_get_port(void *hdl, struct mixer_ctrl *mc)
 	struct mavb_softc *sc = (struct mavb_softc *)hdl;
 	u_char left, right;
 	ad1843_addr_t reg;
-	u_int16_t value;
+	uint16_t value;
 
-	DPRINTF(1, ("%s: mavb_get_port: dev=%d\n", sc->sc_dev.dv_xname,
+	DPRINTF(1, ("%s: mavb_get_port: dev=%d\n", device_xname(sc->sc_dev),
 	    mc->dev));
 
 	switch (mc->dev) {
@@ -624,7 +637,7 @@ mavb_get_port(void *hdl, struct mixer_ctrl *mc)
 		break;
 	case AD1843_MONO_GAIN:
 		if (mc->un.value.num_channels != 1)
-			return (EINVAL);
+			return EINVAL;
 
 		value = ad1843_reg_read(sc, AD1843_MISC_SETTINGS);
 		left = (value & AD1843_MNM_MASK) >> AD1843_MNM_SHIFT;
@@ -658,10 +671,10 @@ mavb_get_port(void *hdl, struct mixer_ctrl *mc)
 		break;
 		
 	default:
-		return (EINVAL);
+		return EINVAL;
 	}
 
-	return (0);
+	return 0;
 }
 
 int
@@ -710,16 +723,16 @@ mavb_query_devinfo(void *hdl, struct mixer_devinfo *di)
 
 	case AD1843_DAC1_GAIN:
 		di->type = AUDIO_MIXER_VALUE;
-		di->mixer_class = AD1843_INPUT_CLASS;
+		di->mixer_class = AD1843_OUTPUT_CLASS;
 		di->next = AD1843_DAC1_MUTE;
-		strlcpy(di->label.name, AudioNdac "1", sizeof di->label.name);
+		strlcpy(di->label.name, AudioNmaster, sizeof di->label.name);
 		di->un.v.num_channels = 2;
 		strlcpy(di->un.v.units.name, AudioNvolume,
 		    sizeof di->un.v.units.name);
 		break;
 	case AD1843_DAC1_MUTE:
 		di->type = AUDIO_MIXER_ENUM;
-		di->mixer_class = AD1843_INPUT_CLASS;
+		di->mixer_class = AD1843_OUTPUT_CLASS;
 		di->prev = AD1843_DAC1_GAIN;
 		strlcpy(di->label.name, AudioNmute, sizeof di->label.name);
 		di->un.e.num_mem = 2;
@@ -818,10 +831,10 @@ mavb_query_devinfo(void *hdl, struct mixer_devinfo *di)
 		break;
 
 	default:
-		return (EINVAL);
+		return EINVAL;
 	}
 
-	return (0);
+	return 0;
 }
 
 size_t
@@ -834,7 +847,8 @@ mavb_round_buffersize(void *hdl, int dir, size_t bufsize)
 int
 mavb_get_props(void *hdl)
 {
-	return (AUDIO_PROP_FULLDUPLEX | AUDIO_PROP_INDEPENDENT);
+
+	return AUDIO_PROP_FULLDUPLEX | AUDIO_PROP_INDEPENDENT;
 }
 
 static void
@@ -842,10 +856,12 @@ mavb_dma_output(struct mavb_softc *sc)
 {
 	bus_space_tag_t st = sc->sc_st;
 	bus_space_handle_t sh = sc->sc_sh;
-	u_int64_t write_ptr;
-	u_int64_t depth;
+	uint64_t write_ptr;
+	uint64_t depth;
 	uint8_t *src, *dst;
 	int count;
+
+	KASSERT(mutex_owned(&sc->sc_intr_lock));
 
 	write_ptr = bus_space_read_8(st, sh, MAVB_CHANNEL2_WRITE_PTR);
 	depth = bus_space_read_8(st, sh, MAVB_CHANNEL2_DEPTH);
@@ -880,7 +896,7 @@ mavb_trigger_output(void *hdl, void *start, void *end, int blksize,
 	struct mavb_softc *sc = (struct mavb_softc *)hdl;
 
 	DPRINTF(1, ("%s: mavb_trigger_output: start=%p end=%p "
-	    "blksize=%d intr=%p(%p)\n", sc->sc_dev.dv_xname,
+	    "blksize=%d intr=%p(%p)\n", device_xname(sc->sc_dev),
 	    start, end, blksize, intr, intrarg));
 
 	sc->sc_blksize = blksize;
@@ -901,7 +917,8 @@ mavb_trigger_output(void *hdl, void *start, void *end, int blksize,
 
 	bus_space_write_8(sc->sc_st, sc->sc_sh, MAVB_CHANNEL2_CONTROL,
 	    MAVB_CHANNEL_DMA_ENABLE | MAVB_CHANNEL_INT_50);
-	return (0);
+
+	return 0;
 }
 
 int
@@ -909,17 +926,27 @@ mavb_trigger_input(void *hdl, void *start, void *end, int blksize,
 		   void (*intr)(void *), void *intrarg,
 		   const audio_params_t *param)
 {
-	return (0);
+
+	return 0;
+}
+
+void
+mavb_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
+{
+	struct mavb_softc *sc = (struct mavb_softc *)hdl;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
 }
 
 static void
 mavb_button_repeat(void *hdl)
 {
 	struct mavb_softc *sc = (struct mavb_softc *)hdl;
-	u_int64_t intmask, control;
-	u_int16_t value, left, right;
+	uint64_t intmask, control;
+	uint16_t value, left, right;
 
-	DPRINTF(1, ("%s: mavb_repeat called\n", sc->sc_dev.dv_xname));
+	DPRINTF(1, ("%s: mavb_repeat called\n", device_xname(sc->sc_dev)));
 
 #define  MAVB_CONTROL_VOLUME_BUTTONS \
     (MAVB_CONTROL_VOLUME_BUTTON_UP | MAVB_CONTROL_VOLUME_BUTTON_DOWN)
@@ -966,11 +993,13 @@ static int
 mavb_intr(void *arg)
 {
 	struct mavb_softc *sc = arg;
-	u_int64_t stat, intmask;
+	uint64_t stat, intmask;
+
+	mutex_spin_enter(&sc->sc_intr_lock);
 
 	stat = bus_space_read_8(sc->sc_st, sc->sc_isash, MACE_ISA_INT_STATUS);
 	DPRINTF(MAVB_DEBUG_INTR, ("%s: mavb_intr: stat = 0x%llx\n",
-            sc->sc_dev.dv_xname, stat));
+            device_xname(sc->sc_dev), stat));
 
 	if (stat & MACE_ISA_INT_AUDIO_SC) {
 		/* Disable volume button interrupts.  */
@@ -987,24 +1016,32 @@ mavb_intr(void *arg)
 	if (stat & MACE_ISA_INT_AUDIO_DMA2)
 		mavb_dma_output(sc);
 
+	mutex_spin_exit(&sc->sc_intr_lock);
+
 	return 1;
 }
 
 int
-mavb_match(struct device *parent, struct cfdata *match, void *aux)
+mavb_match(device_t parent, cfdata_t match, void *aux)
 {
-	return (1);
+
+	return 1;
 }
 
 void
-mavb_attach(struct device *parent, struct device *self, void *aux)
+mavb_attach(device_t parent, device_t self, void *aux)
 {
-	struct mavb_softc *sc = (void *)self;
+	struct mavb_softc *sc = device_private(self);
 	struct mace_attach_args *maa = aux;
 	bus_dma_segment_t seg;
-	u_int64_t control;
-	u_int16_t value;
+	uint64_t control;
+	uint16_t value;
 	int rseg, err;
+
+	sc->sc_dev = self;
+
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	sc->sc_st = maa->maa_st;
 	if (bus_space_subregion(sc->sc_st, maa->maa_sh, maa->maa_offset,
@@ -1128,12 +1165,12 @@ mavb_attach(struct device *parent, struct device *self, void *aux)
 
 	callout_init(&sc->sc_volume_button_ch, 0);
 
-	audio_attach_mi(&mavb_sa_hw_if, sc, &sc->sc_dev);
+	audio_attach_mi(&mavb_sa_hw_if, sc, self);
 
 	return;
 }
 
-u_int16_t
+uint16_t
 ad1843_reg_read(struct mavb_softc *sc, ad1843_addr_t addr)
 {
 	bus_space_write_8(sc->sc_st, sc->sc_sh, MAVB_CODEC_CONTROL,
@@ -1143,8 +1180,8 @@ ad1843_reg_read(struct mavb_softc *sc, ad1843_addr_t addr)
 	return bus_space_read_8(sc->sc_st, sc->sc_sh, MAVB_CODEC_STATUS);
 }
 
-u_int16_t
-ad1843_reg_write(struct mavb_softc *sc, ad1843_addr_t addr, u_int16_t value)
+uint16_t
+ad1843_reg_write(struct mavb_softc *sc, ad1843_addr_t addr, uint16_t value)
 {
 	bus_space_write_8(sc->sc_st, sc->sc_sh, MAVB_CODEC_CONTROL,
 	    (addr & MAVB_CODEC_ADDRESS_MASK) << MAVB_CODEC_ADDRESS_SHIFT |
@@ -1156,7 +1193,7 @@ ad1843_reg_write(struct mavb_softc *sc, ad1843_addr_t addr, u_int16_t value)
 void
 ad1843_dump_regs(struct mavb_softc *sc)
 {
-	u_int16_t addr;
+	uint16_t addr;
 
 	for (addr = 0; addr < AD1843_NREGS; addr++)
 		printf("%d: 0x%04x\n", addr, ad1843_reg_read(sc, addr));

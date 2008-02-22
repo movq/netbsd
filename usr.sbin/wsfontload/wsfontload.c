@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.12 2006/08/17 23:42:37 uwe Exp $ */
+/* $NetBSD: wsfontload.c,v 1.21 2017/06/23 18:40:03 macallan Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,8 +33,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <err.h>
-#include <malloc.h>
 
 #include <dev/wscons/wsconsio.h>
 
@@ -51,7 +45,7 @@
 #define DEFBITORDER	WSDISPLAY_FONTORDER_L2R
 #define DEFBYTEORDER	WSDISPLAY_FONTORDER_L2R
 
-static void usage(void);
+__dead static void usage(void);
 static int getencoding(char *);
 static const char *rgetencoding(int);
 static const char *rgetfontorder(int);
@@ -74,6 +68,7 @@ static struct {
 	{"pcvt", WSDISPLAY_FONTENC_PCVT},
 	{"iso7", WSDISPLAY_FONTENC_ISO7},
 	{"iso2", WSDISPLAY_FONTENC_ISO2},
+	{"koi8r", WSDISPLAY_FONTENC_KOI8_R},
 };
 
 static void
@@ -81,8 +76,8 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: %s [-f wsdev] [-w width] [-h height] [-e encoding]"
-		" [-N name] [-b] [-B] [fontfile]\n",
+		"usage: %s [-Bbv] [-e encoding] [-f wsdev] [-h height]"
+		" [-N name] [-w width] [fontfile]\n",
 		      getprogname());
 	exit(1);
 }
@@ -93,7 +88,7 @@ usage(void)
 static const char *
 rgetfontorder(int fontorder)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(fontorders) / sizeof(fontorders[0]); i++)
 		if (fontorders[i].val == fontorder)
@@ -108,7 +103,7 @@ rgetfontorder(int fontorder)
 static const char *
 rgetencoding(int enc)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (encodings[i].val == enc)
@@ -123,15 +118,16 @@ rgetencoding(int enc)
 static int
 getencoding(char *name)
 {
-	int i;
+	size_t i;
+	int j;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (!strcmp(name, encodings[i].name))
 			return (encodings[i].val);
 
-	if (sscanf(name, "%d", &i) != 1)
+	if (sscanf(name, "%d", &j) != 1)
 		errx(1, "invalid encoding");
-	return (i);
+	return (j);
 }
 
 int
@@ -139,9 +135,12 @@ main(int argc, char **argv)
 {
 	const char *wsdev;
 	struct wsdisplay_font f;
+	struct stat st;
 	int c, res, wsfd, ffd, verbose = 0;
 	size_t len;
+	int use_embedded_name = 1;
 	void *buf;
+	char nbuf[65];
 
 	wsdev = DEFDEV;
 	f.fontwidth = DEFWIDTH;
@@ -172,6 +171,7 @@ main(int argc, char **argv)
 			break;
 		case 'N':
 			f.name = optarg;
+			use_embedded_name = 0;
 			break;
 		case 'b':
 			f.bitorder = WSDISPLAY_FONTORDER_R2L;
@@ -210,6 +210,41 @@ main(int argc, char **argv)
 	if (!f.stride)
 		f.stride = (f.fontwidth + 7) / 8;
 	len = f.fontheight * f.numchars * f.stride;
+	if ((ffd != 0) && (fstat(ffd, &st) == 0)) {
+		if ((off_t)len != st.st_size) {
+			uint32_t foo = 0;
+			char b[65];
+			len = st.st_size;
+			/* read header */
+			read(ffd, b, 4);
+			if (strncmp(b, "WSFT", 4) != 0)
+				errx(1, "invalid wsf file ");
+			read(ffd, b, 64);
+			if (use_embedded_name) {
+				b[64] = 0;
+				strcpy(nbuf, b);
+				f.name = nbuf;
+			}
+			read(ffd, &foo, 4);
+			f.firstchar = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.numchars = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.encoding = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.fontwidth = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.fontheight = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.stride = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.bitorder = le32toh(foo);
+			read(ffd, &foo, 4);
+			f.byteorder = le32toh(foo);
+			len = f.numchars * f.fontheight * f.stride;
+		}
+	}
+
 	if (!len)
 		errx(1, "invalid font size");
 
@@ -219,7 +254,7 @@ main(int argc, char **argv)
 	res = read(ffd, buf, len);
 	if (res < 0)
 		err(4, "read font");
-	if (res != len)
+	if ((size_t)res != len)
 		errx(4, "short read");
 
 	f.data = buf;

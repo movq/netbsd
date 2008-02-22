@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.10 2007/03/04 06:00:12 christos Exp $ */
+/*	$NetBSD: svr4_machdep.c,v 1.16 2017/07/30 16:13:24 maxv Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,28 +30,26 @@
  */
 
 /* 
- * This does not implement COMPAT_SVR4 for MIPS yet. For now we only
- * have enough definitions to get some svr4_* files needed by COMPAT_IRIX
- * to build.  
+ * This does not implement COMPAT_SVR4 for MIPS. XXX: should be removed.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.10 2007/03/04 06:00:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.16 2017/07/30 16:13:24 maxv Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/proc.h>
+#include <sys/cpu.h>
 #include <sys/exec.h>
-#include <sys/user.h>
+#include <sys/exec_elf.h> 
 #include <sys/kernel.h>
+#include <sys/mount.h> 
+#include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
-#include <sys/mount.h> 
 #include <sys/syscallargs.h>
-#include <sys/exec_elf.h> 
+#include <sys/sysctl.h>
+#include <sys/systm.h>
  
 #include <uvm/uvm_extern.h>
-#include <sys/sysctl.h>
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_ucontext.h>
@@ -67,9 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.10 2007/03/04 06:00:12 christos E
 #include <compat/svr4/svr4_util.h>
 #include <compat/svr4/svr4_exec.h>
 
-#include <machine/cpu.h>
-#include <machine/psl.h>
-#include <machine/reg.h>
+#include <mips/psl.h>
+#include <mips/reg.h>
+
 #include <machine/vmparam.h>
 
 /* 
@@ -77,10 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.10 2007/03/04 06:00:12 christos E
  * XXX This should be filled later 
  */
 int
-svr4_setmcontext(l, mc, flags)
-	struct lwp *l;
-	svr4_mcontext_t *mc;
-	unsigned long flags;
+svr4_setmcontext(struct lwp *l, svr4_mcontext_t *mc, unsigned long flags)
 {
 	printf("Warning: svr4_setmcontext() called\n");
 	return 0;
@@ -94,4 +82,16 @@ svr4_getmcontext(l, mc, flags)
 {    
 	printf("Warning: svr4_getmcontext() called\n");
 	return NULL;
+}
+
+void
+svr4_md_init(void)
+{
+
+}
+
+void
+svr4_md_fini(void)
+{
+
 }

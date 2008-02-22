@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.h,v 1.7 2005/12/11 12:19:27 christos Exp $	*/
+/*	$NetBSD: iommu.h,v 1.9 2013/09/06 17:43:19 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,13 +52,13 @@
  * within the I/O Mapper.  This 2048 entry, page descriptor table is located
  * at physical address 0x60000000 in the sun3x architecture and can be
  * manipulated by the CPU with normal read and write cycles.
- * 
+ *
  * In addition to describing an address mapping, a page descriptor entry also
  * indicates whether the DVMA page is read-only, should be inhibited from
  * caching by system caches, and whether or not DMA write transfers to it will
  * be completed in 16 byte aligned blocks.  (This last item is used for cache
  * optimization in sun3x systems with special DMA caches.)
- * 
+ *
  * Since not every DMA device is capable of addressing all 24 bits of the
  * DVMA address space, each is wired so that the end of its address space is
  * always flush against the end of the DVMA address space.  That is, a device

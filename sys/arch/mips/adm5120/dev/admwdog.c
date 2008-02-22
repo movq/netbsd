@@ -1,4 +1,4 @@
-/* $NetBSD: admwdog.c,v 1.1 2007/03/20 08:52:02 dyoung Exp $ */
+/* $NetBSD: admwdog.c,v 1.4 2012/10/27 17:18:01 chs Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -12,9 +12,6 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -32,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: admwdog.c,v 1.1 2007/03/20 08:52:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: admwdog.c,v 1.4 2012/10/27 17:18:01 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: admwdog.c,v 1.1 2007/03/20 08:52:02 dyoung Exp $");
 #include <sys/wdog.h>
 #include <sys/kernel.h>	/* for hz */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/sysmon/sysmonvar.h>
 
@@ -122,7 +119,7 @@ admwdog_attach(struct admsw_softc *sc)
 	/* deactivate watchdog */
 	admwdog_write(sc, 0);
 
-	smw->smw_name = device_xname(&sc->sc_dev);
+	smw->smw_name = device_xname(sc->sc_dev);
 	smw->smw_cookie = sc;
 	smw->smw_setmode = admwdog_setmode;
 	smw->smw_tickle = admwdog_tickle;

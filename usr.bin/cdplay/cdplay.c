@@ -1,4 +1,4 @@
-/* 	$NetBSD: cdplay.c,v 1.38 2007/01/24 10:36:33 abs Exp $	*/
+/* 	$NetBSD: cdplay.c,v 1.49 2015/06/17 00:01:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cdplay.c,v 1.38 2007/01/24 10:36:33 abs Exp $");
+__RCSID("$NetBSD: cdplay.c,v 1.49 2015/06/17 00:01:59 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -69,6 +69,7 @@ __RCSID("$NetBSD: cdplay.c,v 1.38 2007/01/24 10:36:33 abs Exp $");
 #include <util.h>
 
 enum cmd {
+	CMD_ANALOG,
 	CMD_CLOSE,
 	CMD_DIGITAL,
 	CMD_EJECT,
@@ -90,24 +91,25 @@ enum cmd {
 	CMD_VOLUME,
 };
 
-struct cmdtab {
+static struct cmdtab {
 	enum cmd	command;
 	const char	*name;
-	unsigned int	min;
+	u_int	min;
 	const char	*args;
 } const cmdtab[] = {
-	{ CMD_HELP,	"?",	   1, 0 },
+	{ CMD_ANALOG,	"analog",  1, NULL },
 	{ CMD_CLOSE,	"close",   1, NULL },
 	{ CMD_DIGITAL,	"digital", 1, "fpw" },
 	{ CMD_EJECT,	"eject",   1, NULL },
+	{ CMD_HELP,	"?",	   1, 0 },
 	{ CMD_HELP,	"help",    1, NULL },
 	{ CMD_INFO,	"info",    1, NULL },
 	{ CMD_NEXT,	"next",    1, NULL },
 	{ CMD_PAUSE,	"pause",   2, NULL },
-	{ CMD_PLAY,	"play",    1, "min1:sec1[.fram1] [min2:sec2[.fram2]]" },
-	{ CMD_PLAY,	"play",    1, "track1[.index1] [track2[.index2]]" },
-	{ CMD_PLAY,	"play",    1, "tr1 m1:s1[.f1] [[tr2] [m2:s2[.f2]]]" },
 	{ CMD_PLAY,	"play",    1, "[#block [len]]" },
+	{ CMD_PLAY,	"play",    1, "min1:sec1[.fram1] [min2:sec2[.fram2]]" },
+	{ CMD_PLAY,	"play",    1, "tr1 m1:s1[.f1] [[tr2] [m2:s2[.f2]]]" },
+	{ CMD_PLAY,	"play",    1, "track1[.index1] [track2[.index2]]" },
 	{ CMD_PREV,	"prev",    2, NULL },
 	{ CMD_QUIT,	"quit",    1, NULL },
 	{ CMD_RESET,	"reset",   4, NULL },
@@ -134,17 +136,18 @@ struct cmdtab {
 
 #define	CD_MAX_TRACK	99	/* largest 2 digit BCD number */
 
-struct cd_toc_entry toc_buffer[CD_MAX_TRACK + 1];
+static struct cd_toc_entry toc_buffer[CD_MAX_TRACK + 1];
 
-const char *cdname;
-int     fd = -1;
-int     msf = 1;
-int	shuffle;
-int	interactive = 1;
-int	digital = 0;
-int	tbvalid = 0;
-struct	itimerval itv_timer;
-struct {
+static const char *cdname;
+static int     fd = -1;
+static int     msf = 1;
+static int	shuffle;
+static int	interactive = 1;
+static int	digital = 0;
+static int	tbvalid = 0;
+static struct	itimerval itv_timer;
+
+static struct {
 	const char *auname;
 	u_char *audata, *aubuf;
 	int afd;
@@ -155,40 +158,40 @@ struct {
 	int read_errors;
 }      da;
 
-History *hist;
-HistEvent he;
-EditLine *elptr;
+static History *hist;
+static HistEvent he;
+static EditLine *elptr;
 
-int	get_vol(int *, int *);
-int	get_status(int *, int *, int *, int *, int *);
-void	help(void);
-int	info(const char *);
-void	lba2msf(u_long, u_int *, u_int *, u_int *);
-int 	main(int, char **);
-u_int	msf2lba(u_int, u_int, u_int);
-int	opencd(void);
-int	openaudio(void);
-const char   *parse(char *, int *);
-int	play(const char *, int);
-int	play_blocks(int, int);
-int	play_digital(int, int);
-int	play_msf(int, int, int, int, int, int);
-int	play_track(int, int, int, int);
-int	print_status(const char *);
-void	print_track(struct cd_toc_entry *);
-const char	*prompt(void);
-int	readaudio(int, int, int, u_char *);
-int	read_toc_entrys(int);
-int	run(int, const char *);
-int	setvol(int, int);
-void	sig_timer(int);
-int	skip(int, int);
-const char	*strstatus(int);
-void 	usage(void);
+static int	get_status(int *, int *, int *, int *, int *);
+static void	help(void);
+static int	info(void);
+static void	lba2msf(u_long, u_int *, u_int *, u_int *);
+static u_int	msf2lba(u_int, u_int, u_int);
+static int	opencd(void);
+static int	openaudio(void);
+static const char   *parse(char *, int *);
+static int	play(const char *, int);
+static int	play_blocks(int, int);
+static int	play_digital(u_int, u_int);
+static int	play_msf(u_int, u_int, u_int, u_int, u_int, u_int);
+static int	play_track(int, int, int, int);
+static int	print_status(void);
+static void	print_track(struct cd_toc_entry *);
+static const char	*prompt(void);
+static int	readaudio(int, int, int, u_char *);
+static int	read_toc_entries(size_t);
+static int	run(int, const char *);
+static int	start_analog(void);
+static int	start_digital(const char *);
+static int	setvol(int, int);
+static void	sig_timer(int);
+static int	skip(int, int);
+static const char	*strstatus(int);
+__dead static void 	usage(void);
 
-void	toc2msf(u_int, u_int *, u_int *, u_int *);
-int	toc2lba(u_int);
-void	addmsf(u_int *, u_int *, u_int *, u_int, u_int, u_int);
+static void	toc2msf(u_int, u_int *, u_int *, u_int *);
+static int	toc2lba(u_int);
+static void	addmsf(u_int *, u_int *, u_int *, u_int, u_int, u_int);
 
 int
 main(int argc, char **argv)
@@ -196,11 +199,13 @@ main(int argc, char **argv)
 	const char *arg;
 	char buf[80], *p;
 	static char defdev[16];
-	int cmd, len, c;
+	int cmd, c;
+	size_t len;
 	char *line;
 	const char *elline;
-	int scratch, rv;
+	int scratch;
 	struct sigaction sa_timer;
+	const char *use_digital = NULL; /* historical default */
 
 	cdname = getenv("MUSIC_CD");
 	if (cdname == NULL)
@@ -216,10 +221,14 @@ main(int argc, char **argv)
 	if (!da.auname)
 		da.auname = "/dev/sound";
 
+	use_digital = getenv("CDPLAY_DIGITAL");
+
 	while ((c = getopt(argc, argv, "a:f:h")) != -1)
 		switch (c) {
 		case 'a':
 			da.auname = optarg;
+			if (!use_digital)
+				use_digital = "";
 			continue;
 		case 'f':
 			cdname = optarg;
@@ -242,8 +251,16 @@ main(int argc, char **argv)
 	}
 
 	opencd();
-	srandom((u_long)time(NULL));
 	da.afd = -1;
+
+	sigemptyset(&sa_timer.sa_mask);
+	sa_timer.sa_handler = sig_timer;
+	sa_timer.sa_flags = SA_RESTART;
+	if (sigaction(SIGALRM, &sa_timer, NULL) < 0)
+		err(EXIT_FAILURE, "sigaction()");
+
+	if (use_digital)
+		start_digital(use_digital);
 
 	if (argc > 0) {
 		interactive = 0;
@@ -275,12 +292,6 @@ main(int argc, char **argv)
 	el_set(elptr, EL_SIGNAL, 1);
 	el_source(elptr, NULL);
 
-	sigemptyset(&sa_timer.sa_mask);
-	sa_timer.sa_handler = sig_timer;
-	sa_timer.sa_flags = SA_RESTART;
-	if ((rv = sigaction(SIGALRM, &sa_timer, NULL)) < 0)
-		err(EXIT_FAILURE, "sigaction()");
-
 	for (;;) {
 		line = NULL;
 		arg = NULL;
@@ -295,7 +306,7 @@ main(int argc, char **argv)
 				}
 			} else {
 				cmd = CMD_QUIT;
-				warnx("\r\n");
+				fprintf(stderr, "\r\n");
 				arg = NULL;
 				break;
 			}
@@ -307,23 +318,22 @@ main(int argc, char **argv)
 			fd = -1;
 		}
 	}
-
+	/*NOTREACHED*/
 	el_end(elptr);
 	history_end(hist);
 	exit(EXIT_SUCCESS);
-	/* NOTREACHED */
 }
 
-void
+static void
 usage(void)
 {
 
-	fprintf(stderr, "usage: cdplay [-a audio_device] [-f cd_device] [command ...]\n");
+	fprintf(stderr, "Usage: %s [-a audio_device] [-f cd_device] [command ...]\n", getprogname());
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
 
-void
+static void
 help(void)
 {
 	const struct cmdtab *c, *mc;
@@ -345,7 +355,76 @@ help(void)
 	    "The plain target address is taken as a synonym for play.\n");
 }
 
-int
+static int
+start_digital(const char *arg)
+{
+
+	int fpw, intv_usecs, hz_usecs, rv;
+
+	fpw = atoi(arg);
+	if (fpw > 0)
+		da.fpw = fpw;
+	else
+		da.fpw = 5;
+	da.read_errors = 0;
+
+	/* real rate: 75 frames per second */
+	intv_usecs = 13333 * da.fpw;
+	/*
+	 * interrupt earlier for safety, by a value which
+	 * doesn't hurt interactice response if we block
+	 * in the signal handler
+	 */
+	intv_usecs -= 50000;
+	hz_usecs = (int)(1000000 / sysconf(_SC_CLK_TCK));
+	if (intv_usecs < hz_usecs) {
+		/* can't have a shorter interval, increase
+		   buffer size to compensate */
+		da.fpw += (hz_usecs - intv_usecs) / 13333;
+		intv_usecs = hz_usecs;
+	}
+
+	da.aubuf = malloc(da.fpw * CDDA_SIZE);
+	if (da.aubuf == NULL) {
+		warn("Not enough memory for audio buffers");
+		return (1);
+	}
+	if (da.afd == -1 && !openaudio()) {
+		warn("Cannot open audio device");
+		return (1);
+	}
+	itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec =
+		intv_usecs / 1000000;
+	itv_timer.it_interval.tv_usec = itv_timer.it_value.tv_usec =
+		intv_usecs % 1000000;
+	rv = setitimer(ITIMER_REAL, &itv_timer, NULL);
+	if (rv == 0) {
+		digital = 1;
+	} else
+		warn("setitimer in CMD_DIGITAL");
+	msf = 0;
+	tbvalid = 0;
+	return rv;
+}
+
+static int
+start_analog(void)
+{
+	int rv;
+	if (shuffle == 1)
+		itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec = 1;
+	else
+		itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec = 0;
+	itv_timer.it_interval.tv_usec = itv_timer.it_value.tv_usec = 0;
+	digital = 0;
+	rv = setitimer(ITIMER_REAL, &itv_timer, NULL);
+	free(da.audata);
+	close(da.afd);
+	da.afd = -1;
+	return rv;
+}
+
+static int
 run(int cmd, const char *arg)
 {
 	int l, r, rv;
@@ -362,11 +441,11 @@ run(int cmd, const char *arg)
 
 	switch (cmd) {
 	case CMD_INFO:
-		rv = info(arg);
+		rv = info();
 		break;
 
 	case CMD_STATUS:
-		rv = print_status(arg);
+		rv = print_status();
 		break;
 
 	case CMD_PAUSE:
@@ -407,14 +486,15 @@ run(int cmd, const char *arg)
 		if (digital)
 			da.playing = 0;
 		if (shuffle)
-			run(CMD_SHUFFLE, NULL);
+			rv = run(CMD_SHUFFLE, NULL);
 		if (ioctl(fd, CDIOCALLOW) < 0)
 			warn("ioctl(CDIOCALLOW)");
 		IOCTL_SIMPLE(fd, CDIOCEJECT);
 		break;
 
 	case CMD_CLOSE:
-		ioctl(fd, CDIOCALLOW);
+		if (ioctl(fd, CDIOCALLOW) < 0)
+			warn("ioctl(CDIOCALLOW)");
 		IOCTL_SIMPLE(fd, CDIOCCLOSE);
 		if (interactive && fd == -1)
 			opencd();
@@ -482,47 +562,22 @@ run(int cmd, const char *arg)
 		break;
 
 	case CMD_DIGITAL:
-		if (digital == 0) {
-			int fpw;
-
-			fpw = atoi(arg);
-			if (fpw > 0)
-				da.fpw = fpw;
-			else
-				da.fpw = 5;
-			da.read_errors = 0;
-			da.aubuf = malloc(da.fpw * CDDA_SIZE);
-			if (da.aubuf == NULL) {
-				warn("Not enough memory for audio buffers");
-				return (1);
-			}
-			if (da.afd == -1 && !openaudio()) {
-				warn("Cannot open audio device");
-				return (1);
-			}
-			itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec = da.fpw / 75;
-			itv_timer.it_interval.tv_usec = itv_timer.it_value.tv_usec =
-			    (da.fpw * 6666) % 1000000;
-			rv = setitimer(ITIMER_REAL, &itv_timer, NULL);
-			if (rv == 0) {
-				digital = 1;
-			} else
-				warnx("setitimer in CMD_DIGITAL");
-			msf = 0;
-			tbvalid = 0;
-		} else {
-			if (shuffle == 1)
-				itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec = 1;
-			else
-				itv_timer.it_interval.tv_sec = itv_timer.it_value.tv_sec = 0;
-			itv_timer.it_interval.tv_usec = itv_timer.it_value.tv_usec = 0;
-			digital = 0;
-			rv = setitimer(ITIMER_REAL, &itv_timer, NULL);
-			free(da.audata);
-			close(da.afd);
-			da.afd = -1;
+		if (digital == 0)
+			rv = start_digital(arg);
+		else {
+			warnx("Already in digital mode");
+			rv = 1;
 		}
-		return (0);
+		break;
+
+	case CMD_ANALOG:
+		if (digital == 1)
+			rv = start_analog();
+		else {
+			warnx("Already in analog mode");
+			rv = 1;
+		}
+		break;
 
 	case CMD_SKIP:
 		if (!interactive)
@@ -531,7 +586,7 @@ run(int cmd, const char *arg)
 		if (!shuffle)
 			warnx("`skip' valid only in shuffle mode");
 		else
-			skip(0, 1);
+			rv = skip(0, 1);
 		break;
 
 	case CMD_SET:
@@ -582,11 +637,12 @@ run(int cmd, const char *arg)
 	return (rv);
 }
 
-int
+static int
 play(const char *arg, int fromuser)
 {
-	int rv, n, start, end, istart, iend, blk, len, relend;
-	u_int tr1, tr2, m1, m2, s1, s2, f1, f2, tm, ts, tf;
+	int start, end, istart, iend, blk, len, relend;
+	ssize_t rv;
+	u_int n, tr1, tr2, m1, m2, s1, s2, f1, f2, tm, ts, tf;
 	struct ioc_toc_header h;
 
 	if (shuffle && fromuser) {
@@ -596,15 +652,15 @@ play(const char *arg, int fromuser)
 
 	if ((rv = ioctl(fd, CDIOREADTOCHEADER, &h)) <  0) {
 		warn("ioctl(CDIOREADTOCHEADER)");
-		return (rv);
+		return (int)(rv);
 	}
 
 	end = 0;
 	istart = iend = 1;
 	n = h.ending_track - h.starting_track + 1;
-	rv = read_toc_entrys((n + 1) * sizeof(struct cd_toc_entry));
+	rv = read_toc_entries((n + 1) * sizeof(struct cd_toc_entry));
 	if (rv < 0)
-		return (rv);
+		return (int)(rv);
 
 	if (arg == NULL || *arg == '\0') {
 		/* Play the whole disc */
@@ -636,71 +692,71 @@ play(const char *arg, int fromuser)
 		 */
 		relend = 1;
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (8 == sscanf(arg, "%d %d:%d.%d %d %d:%d.%d", &tr1, &m1,
+		if (8 == sscanf(arg, "%u %u:%u.%u %u %u:%u.%u", &tr1, &m1,
 		    &s1, &f1, &tr2, &m2, &s2, &f2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (7 == sscanf(arg, "%d %d:%d %d %d:%d.%d", &tr1, &m1, &s1,
+		if (7 == sscanf(arg, "%u %u:%u %u %u:%u.%u", &tr1, &m1, &s1,
 		    &tr2, &m2, &s2, &f2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (7 == sscanf(arg, "%d %d:%d.%d %d %d:%d", &tr1, &m1, &s1,
+		if (7 == sscanf(arg, "%u %u:%u.%u %u %u:%u", &tr1, &m1, &s1,
 		    &f1, &tr2, &m2, &s2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (7 == sscanf(arg, "%d %d:%d.%d %d:%d.%d", &tr1, &m1, &s1,
+		if (7 == sscanf(arg, "%u %u:%u.%u %u:%u.%u", &tr1, &m1, &s1,
 		    &f1, &m2, &s2, &f2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (6 == sscanf(arg, "%d %d:%d.%d %d:%d", &tr1, &m1, &s1, &f1,
+		if (6 == sscanf(arg, "%u %u:%u.%u %u:%u", &tr1, &m1, &s1, &f1,
 		    &m2, &s2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (6 == sscanf(arg, "%d %d:%d %d:%d.%d", &tr1, &m1, &s1, &m2,
+		if (6 == sscanf(arg, "%u %u:%u %u:%u.%u", &tr1, &m1, &s1, &m2,
 		    &s2, &f2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (6 == sscanf(arg, "%d %d:%d.%d %d %d", &tr1, &m1, &s1, &f1,
+		if (6 == sscanf(arg, "%u %u:%u.%u %u %u", &tr1, &m1, &s1, &f1,
 		    &tr2, &m2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (6 == sscanf(arg, "%d %d:%d %d %d:%d", &tr1, &m1, &s1, &tr2,
+		if (6 == sscanf(arg, "%u %u:%u %u %u:%u", &tr1, &m1, &s1, &tr2,
 		    &m2, &s2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (5 == sscanf(arg, "%d %d:%d %d:%d", &tr1, &m1, &s1, &m2,
+		if (5 == sscanf(arg, "%u %u:%u %u:%u", &tr1, &m1, &s1, &m2,
 		    &s2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (5 == sscanf(arg, "%d %d:%d %d %d", &tr1, &m1, &s1, &tr2,
+		if (5 == sscanf(arg, "%u %u:%u %u %u", &tr1, &m1, &s1, &tr2,
 		    &m2))
 			goto Play_Relative_Addresses;
 
 		relend=0;
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (5 == sscanf(arg, "%d %d:%d.%d %d", &tr1, &m1, &s1, &f1,
+		if (5 == sscanf(arg, "%u %u:%u.%u %u", &tr1, &m1, &s1, &f1,
 		    &tr2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (4 == sscanf(arg, "%d %d:%d %d", &tr1, &m1, &s1, &tr2))
+		if (4 == sscanf(arg, "%u %u:%u %u", &tr1, &m1, &s1, &tr2))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (4 == sscanf(arg, "%d %d:%d.%d", &tr1, &m1, &s1, &f1))
+		if (4 == sscanf(arg, "%u %u:%u.%u", &tr1, &m1, &s1, &f1))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
-		if (3 == sscanf(arg, "%d %d:%d", &tr1, &m1, &s1))
+		if (3 == sscanf(arg, "%u %u:%u", &tr1, &m1, &s1))
 			goto Play_Relative_Addresses;
 
 		tr2 = m2 = s2 = f2 = f1 = 0;
@@ -805,10 +861,11 @@ Clean_up:
 	return (0);
 }
 
-void
+static void
+/*ARGSUSED*/
 sig_timer(int sig)
 {
-	int aulen, auwr, fpw;
+	int aulen, fpw;
 	sigset_t anymore;
 
 	sigpending(&anymore);
@@ -828,7 +885,7 @@ sig_timer(int sig)
 		if (fpw > 0) {
 			aulen = readaudio(fd, da.lba_current, fpw, da.aubuf);
 			if (aulen > 0) {
-				auwr = write(da.afd, da.aubuf, aulen);
+				(void)write(da.afd, da.aubuf, aulen);
 				da.lba_current += fpw;
 			}
 		}
@@ -837,11 +894,13 @@ sig_timer(int sig)
 	}
 	if (shuffle)
 		skip(0, 0);
+#if 0
 	sched_yield();
+#endif
 	setitimer(ITIMER_REAL, &itv_timer, NULL);
 }
 
-int
+static int
 skip(int dir, int fromuser)
 {
 	char str[16];
@@ -858,8 +917,9 @@ skip(int dir, int fromuser)
 	if (dir == 0 || shuffle != 0) {
 		if (fromuser || (rv != CD_AS_PLAY_IN_PROGRESS &&
 		    rv != CD_AS_PLAY_PAUSED))
-			trk = shuffle < 0 ? (-shuffle) : (h.starting_track +
-			    arc4random() % (h.ending_track - h.starting_track + 1));
+			trk = shuffle < 0 ? (-shuffle) :
+			    (int)((h.starting_track +
+			    arc4random() % (h.ending_track - h.starting_track + 1)));
 		else
 			return (0);
 	} else {
@@ -878,7 +938,7 @@ skip(int dir, int fromuser)
 	return (play(str, 0));
 }
 
-const char *
+static const char *
 strstatus(int sts)
 {
 	const char *str;
@@ -910,8 +970,8 @@ strstatus(int sts)
 	return (str);
 }
 
-int
-print_status(const char *arg)
+static int
+print_status(void)
 {
 	struct cd_sub_channel_info data;
 	struct ioc_read_subchannel ss;
@@ -932,9 +992,12 @@ print_status(const char *arg)
 	else
 		printf("shuffle play:\t%s\n", (shuffle != 0) ? "on" : "off");
 	if (digital)
-		printf("digital xfer:\tto %s (%d frames per wakeup, %ld.%03lds period)\n",
-		    da.auname, da.fpw, itv_timer.it_interval.tv_sec,
-		    itv_timer.it_interval.tv_usec);
+		printf("digital xfer:\tto %s "
+		       "(%d frames per wakeup, %lld.%06lds period)\n",
+		    da.auname, da.fpw, 
+		    (long long)itv_timer.it_interval.tv_sec,
+		    
+		    (long)itv_timer.it_interval.tv_usec);
 	else
 		printf("digital xfer:\toff\n");
 
@@ -944,7 +1007,7 @@ print_status(const char *arg)
 	ss.address_format = msf ? CD_MSF_FORMAT : CD_LBA_FORMAT;
 	ss.data_format = CD_MEDIA_CATALOG;
 
-	if (!digital && ioctl(fd, CDIOCREADSUBCHANNEL, (char *) &ss) >= 0) {
+	if (!digital && ioctl(fd, CDIOCREADSUBCHANNEL, &ss) >= 0) {
 		printf("media catalog:\t%sactive",
 		    ss.data->what.media_catalog.mc_valid ? "" : "in");
 		if (ss.data->what.media_catalog.mc_valid &&
@@ -968,8 +1031,8 @@ print_status(const char *arg)
 ;	return (0);
 }
 
-int
-info(const char *arg)
+static int
+info(void)
 {
 	struct ioc_toc_header h;
 	int rc, i, n;
@@ -980,7 +1043,7 @@ info(const char *arg)
 	}
 
 	n = h.ending_track - h.starting_track + 1;
-	rc = read_toc_entrys((n + 1) * sizeof(struct cd_toc_entry));
+	rc = read_toc_entries((n + 1) * sizeof(struct cd_toc_entry));
 	if (rc < 0)
 		return (rc);
 
@@ -996,26 +1059,26 @@ info(const char *arg)
 	return (0);
 }
 
-void
+static void
 lba2msf(u_long lba, u_int *m, u_int *s, u_int *f)
 {
 
 	lba += 150;		/* block start offset */
 	lba &= 0xffffff;	/* negative lbas use only 24 bits */
-	*m = lba / (60 * 75);
+	*m = (u_int)(lba / (60 * 75));
 	lba %= (60 * 75);
-	*s = lba / 75;
-	*f = lba % 75;
+	*s = (u_int)(lba / 75);
+	*f = (u_int)(lba % 75);
 }
 
-u_int
+static u_int
 msf2lba(u_int m, u_int s, u_int f)
 {
 
 	return (((m * 60) + s) * 75 + f) - 150;
 }
 
-void
+static void
 print_track(struct cd_toc_entry *e)
 {
 	int block, next, len;
@@ -1026,8 +1089,8 @@ print_track(struct cd_toc_entry *e)
 		printf("%2d:%02d.%02d  ", e->addr.msf.minute,
 		    e->addr.msf.second, e->addr.msf.frame);
 
-		block = msf2lba(e->addr.msf.minute, e->addr.msf.second,
-		    e->addr.msf.frame);
+		block = msf2lba((u_int)e->addr.msf.minute,
+		    (u_int)e->addr.msf.second, (u_int)e->addr.msf.frame);
 	} else {
 		block = e->addr.lba;
 		lba2msf(block, &m, &s, &f);
@@ -1040,8 +1103,8 @@ print_track(struct cd_toc_entry *e)
 		return;
 	}
 	if (msf)
-		next = msf2lba(e[1].addr.msf.minute, e[1].addr.msf.second,
-		    e[1].addr.msf.frame);
+		next = msf2lba((u_int)e[1].addr.msf.minute,
+		    (u_int)e[1].addr.msf.second, (u_int)e[1].addr.msf.frame);
 	else
 		next = e[1].addr.lba;
 	len = next - block;
@@ -1055,7 +1118,7 @@ print_track(struct cd_toc_entry *e)
 	    (e->control & 4) ? "data" : "audio");
 }
 
-int
+static int
 play_track(int tstart, int istart, int tend, int iend)
 {
 	struct ioc_play_track t;
@@ -1064,25 +1127,33 @@ play_track(int tstart, int istart, int tend, int iend)
 	if (digital) {
 		tstart--;
 		if (msf) {
-			return (play_msf(toc_buffer[tstart].addr.msf.minute,
-				toc_buffer[tstart].addr.msf.second, toc_buffer[tstart].addr.msf.frame,
-				toc_buffer[tend].addr.msf.minute, toc_buffer[tend].addr.msf.second,
-				toc_buffer[tend].addr.msf.frame));
+			return play_msf(
+			    (u_int)toc_buffer[tstart].addr.msf.minute,
+			    (u_int)toc_buffer[tstart].addr.msf.second,
+			    (u_int)toc_buffer[tstart].addr.msf.frame,
+			    (u_int)toc_buffer[tend].addr.msf.minute,
+			    (u_int)toc_buffer[tend].addr.msf.second,
+			    (u_int)toc_buffer[tend].addr.msf.frame);
 		} else
-			return (play_digital(toc_buffer[tstart].addr.lba,
-				toc_buffer[tend].addr.lba));
+			return play_digital(toc_buffer[tstart].addr.lba,
+			    toc_buffer[tend].addr.lba);
 	}
 	t.start_track = tstart;
 	t.start_index = istart;
 	t.end_track = tend;
 	t.end_index = iend;
 
-	if ((rv = ioctl(fd, CDIOCPLAYTRACKS, &t)) < 0)
+	if ((rv = ioctl(fd, CDIOCPLAYTRACKS, &t)) < 0) {
+		int oerrno = errno;
+		if (errno == EINVAL && start_digital("") == 0)
+			return play_track(tstart, istart, tend, iend);
+		errno = oerrno;
 		warn("ioctl(CDIOCPLAYTRACKS)");
+	}
 	return (rv);
 }
 
-int
+static int
 play_blocks(int blk, int len)
 {
 	struct ioc_play_blocks t;
@@ -1096,17 +1167,19 @@ play_blocks(int blk, int len)
 	return (rv);
 }
 
-int
-play_digital(start, end)
-	int start, end;
+static int
+play_digital(u_int start, u_int end)
 {
 	da.lba_start = start;
 	da.lba_end = --end;
 	da.changed = da.playing = 1;
+	if (!interactive)
+		while (da.playing)
+			sleep(1);
 	return (0);
 }
 
-int
+static int
 setvol(int left, int right)
 {
 	struct ioc_vol v;
@@ -1122,15 +1195,15 @@ setvol(int left, int right)
 	return (rv);
 }
 
-int
-read_toc_entrys(int len)
+static int
+read_toc_entries(size_t len)
 {
 	struct ioc_read_toc_entry t;
 	int rv;
 
 	t.address_format = msf ? CD_MSF_FORMAT : CD_LBA_FORMAT;
 	t.starting_track = 0;
-	t.data_len = len;
+	t.data_len = (int)len;
 	t.data = toc_buffer;
 
 	if ((rv = ioctl(fd, CDIOREADTOCENTRYS, &t)) < 0)
@@ -1139,9 +1212,9 @@ read_toc_entrys(int len)
 	return (rv);
 }
 
-int
-play_msf(int start_m, int start_s, int start_f, int end_m, int end_s,
-	 int end_f)
+static int
+play_msf(u_int start_m, u_int start_s, u_int start_f, u_int end_m, u_int end_s,
+	 u_int end_f)
 {
 	struct ioc_play_msf a;
 	int rv;
@@ -1161,7 +1234,7 @@ play_msf(int start_m, int start_s, int start_f, int end_m, int end_s,
 	return (rv);
 }
 
-int
+static int
 get_status(int *trk, int *idx, int *min, int *sec, int *frame)
 {
 	struct ioc_read_subchannel s;
@@ -1169,7 +1242,8 @@ get_status(int *trk, int *idx, int *min, int *sec, int *frame)
 	struct ioc_toc_header h;
 	u_int mm, ss, ff;
 	int rv;
-	int lba, i, n, rc;
+	int i, n, rc;
+	uint32_t lba;
 
 	if (!tbvalid) {
 		if ((rc = ioctl(fd, CDIOREADTOCHEADER, &h)) < 0) {
@@ -1178,7 +1252,7 @@ get_status(int *trk, int *idx, int *min, int *sec, int *frame)
 		}
 
 		n = h.ending_track - h.starting_track + 1;
-		rc = read_toc_entrys((n + 1) * sizeof(struct cd_toc_entry));
+		rc = read_toc_entries((n + 1) * sizeof(struct cd_toc_entry));
 		if (rc < 0)
 			return (rc);
 	}
@@ -1228,19 +1302,19 @@ get_status(int *trk, int *idx, int *min, int *sec, int *frame)
 	return (s.data->header.audio_status);
 }
 
-const char *
+static const char *
 prompt(void)
 {
 
 	return ("cdplay> ");
 }
 
-const char *
+static const char *
 parse(char *buf, int *cmd)
 {
 	const struct cmdtab *c, *mc;
 	char *p, *q;
-	int len;
+	size_t len;
 
 	for (p = buf; isspace((unsigned char)*p); p++)
 		continue;
@@ -1274,7 +1348,7 @@ parse(char *buf, int *cmd)
 		}
 		/* Try short hand forms then... */
 		if (len >= c->min && strncasecmp(buf, c->name, len) == 0) {
-			if (*cmd != -1 && *cmd != c->command) {
+			if (*cmd != -1 && *cmd != (int)c->command) {
 				warnx("ambiguous command");
 				return (0);
 			}
@@ -1292,7 +1366,7 @@ parse(char *buf, int *cmd)
 	return (p);
 }
 
-int
+static int
 opencd(void)
 {
 	char devbuf[80];
@@ -1316,15 +1390,15 @@ opencd(void)
 	return (1);
 }
 
-int
-openaudio()
+static int
+openaudio(void)
 {
 	audio_info_t ai;
 	audio_encoding_t ae;
 	int rc, aei;
 
 	if (da.afd > -1)
-	return (1);
+		return (1);
 	da.afd = open(da.auname, O_WRONLY);
 	if (da.afd < 0) {
 		warn("openaudio");
@@ -1346,7 +1420,7 @@ openaudio()
 		da.afd = -1;
 		return (0);
 	}
-	ai.mode = AUMODE_PLAY;
+	ai.mode = AUMODE_PLAY_ALL;
 	ai.play.sample_rate = 44100;
 	ai.play.channels = 2;
 	ai.play.precision = 16;
@@ -1362,10 +1436,8 @@ openaudio()
 	return (1);
 }
 
-int
-readaudio(afd, lba, blocks, data)
-	int afd, lba, blocks;
-	u_char *data;
+static int
+readaudio(int afd, int lba, int blocks, u_char *data)
 {
 	struct scsireq sc;
 	int rc;
@@ -1373,12 +1445,12 @@ readaudio(afd, lba, blocks, data)
 	memset(&sc, 0, sizeof(sc));
 	sc.cmd[0] = 0xBE;
 	sc.cmd[1] = 1 << 2;
-	sc.cmd[2] = (lba >> 24) & 0xff;
-	sc.cmd[3] = (lba >> 16) & 0xff;
-	sc.cmd[4] = (lba >> 8) & 0xff;
+	sc.cmd[2] = ((u_int)lba >> 24) & 0xff;
+	sc.cmd[3] = ((u_int)lba >> 16) & 0xff;
+	sc.cmd[4] = ((u_int)lba >> 8) & 0xff;
 	sc.cmd[5] = lba & 0xff;
-	sc.cmd[6] = (blocks >> 16) & 0xff;
-	sc.cmd[7] = (blocks >> 8) & 0xff;
+	sc.cmd[6] = ((u_int)blocks >> 16) & 0xff;
+	sc.cmd[7] = ((u_int)blocks >> 8) & 0xff;
 	sc.cmd[8] = blocks & 0xff;
 	sc.cmd[9] = 1 << 4;
 	sc.cmd[10] = 0;
@@ -1387,11 +1459,11 @@ readaudio(afd, lba, blocks, data)
 	sc.datalen = CDDA_SIZE * blocks;
 	sc.senselen = sizeof(sc.sense);
 	sc.flags = SCCMD_READ;
-	sc.timeout = da.fpw * 15;
+	sc.timeout = 10000; /* 10s */
 	rc = ioctl(afd, SCIOCCOMMAND, &sc);
 	if (rc < 0 || sc.retsts != SCCMD_OK) {
 		if (da.read_errors < 10) {
-			warnx("scsi cmd failed: retsts %d status %d\n",
+			warnx("scsi cmd failed: retsts %d status %d",
 			    sc.retsts, sc.status);
 		}
 		da.read_errors++;
@@ -1400,7 +1472,7 @@ readaudio(afd, lba, blocks, data)
 	return CDDA_SIZE * blocks;
 }
 
-void
+static void
 toc2msf(u_int i, u_int *m, u_int *s, u_int *f)
 {
 	struct cd_toc_entry *ctep;
@@ -1418,7 +1490,7 @@ toc2msf(u_int i, u_int *m, u_int *s, u_int *f)
 	}
 }
 
-int
+static int
 toc2lba(u_int i)
 {
 	struct cd_toc_entry *ctep;
@@ -1430,15 +1502,15 @@ toc2lba(u_int i)
 
 	if (msf) {
 		return msf2lba(
-		    ctep->addr.msf.minute,
-		    ctep->addr.msf.second,
-		    ctep->addr.msf.frame);
+		    (u_int)ctep->addr.msf.minute,
+		    (u_int)ctep->addr.msf.second,
+		    (u_int)ctep->addr.msf.frame);
 	} else {
 		return (ctep->addr.lba);
 	}
 }
 
-void
+static void
 addmsf(u_int *m, u_int *s, u_int *f, u_int m2, u_int s2, u_int f2)
 {
 	*f += f2;

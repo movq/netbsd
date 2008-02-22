@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.12 2003/08/07 16:42:56 agc Exp $	*/
+/*	$NetBSD: signal.c,v 1.14 2016/06/03 23:57:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)signal.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: signal.c,v 1.12 2003/08/07 16:42:56 agc Exp $");
+__RCSID("$NetBSD: signal.c,v 1.14 2016/06/03 23:57:37 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,9 +51,7 @@ __weak_alias(signal,_signal)
 sigset_t __sigintr;		/* shared with siginterrupt */
 
 sig_t
-signal(s, a)
-	int s;
-	sig_t a;
+signal(int s, sig_t a)
 {
 	struct sigaction sa, osa;
 
@@ -65,4 +63,20 @@ signal(s, a)
 	if (sigaction(s, &sa, &osa) < 0)
 		return (SIG_ERR);
 	return (osa.sa_handler);
+}
+
+void 
+(*bsd_signal(int sig, void (*func)(int)))(int) 
+{
+	struct sigaction act, oact;
+
+	act.sa_handler = func;
+	act.sa_flags = SA_RESTART;
+
+	sigemptyset(&act.sa_mask);
+	sigaddset(&act.sa_mask, sig);
+	if (sigaction(sig, &act, &oact) < 0)
+		return (SIG_ERR);
+
+	return (oact.sa_handler);
 }

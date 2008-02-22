@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.4 2005/12/11 12:18:16 christos Exp $	*/
+/*	$NetBSD: boot.c,v 1.10 2014/02/14 16:04:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -99,8 +92,8 @@ char *kernelnames[] = {
 };
 
 
-static char *devsplit __P((char *, char *));
-int main __P((int, char **));
+static char *devsplit(char *, char *);
+int main(int, char **);
 
 /*
  * This gets arguments from the first stage boot lader, calls PROM routines
@@ -108,9 +101,7 @@ int main __P((int, char **));
  * that new program.
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	char *name, **namep, *dev, *kernel;
 	char bootname[PATH_MAX], bootpath[PATH_MAX];
@@ -118,8 +109,8 @@ main(argc, argv)
 	u_long marks[MARK_MAX];
 	struct btinfo_symtab bi_syms;
 	struct btinfo_bootpath bi_bpath;
-	extern void prom_init __P((void));
-	void (*entry) __P((int, char **, char **, u_int, char *));
+	extern void prom_init(void);
+	void (*entry)(int, char **, char **, u_int, char *);
 
 	prom_init();
 
@@ -127,7 +118,6 @@ main(argc, argv)
 	printf("\n");
 	printf("NetBSD/mipsco " NETBSD_VERS " " BOOT_TYPE_NAME 
 	       " Bootstrap, Revision %s\n", bootprog_rev);
-	printf("(%s, %s)\n\n", bootprog_maker, bootprog_date);
 
 	/* initialise bootinfo structure early */
 	bi_init(BOOTINFO_ADDR);
@@ -143,7 +133,9 @@ main(argc, argv)
 			--argc;
 		}
 
-	}
+	} else
+		kernel = NULL;
+
 	if (dev == NULL) {
 		(void) devsplit(argv[0], bootname);
 		dev = bootname;
@@ -166,7 +158,7 @@ main(argc, argv)
 			}
 		}
 	}
-	if (!win)
+	if (!win || !kernel)
 		goto fail;
 
 	strncpy(bi_bpath.bootpath, kernel, BTINFO_BOOTPATH_LEN);
@@ -193,8 +185,7 @@ fail:
  * strip out device name and kernel name
  */
 static char *
-devsplit(fname, devname)
-	char *fname, *devname;
+devsplit(char *fname, char *devname)
 {
 	char *src, *dst;
 

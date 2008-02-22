@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.1 2006/02/23 19:44:02 garbled Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.5 2014/03/29 19:28:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.1 2006/02/23 19:44:02 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.5 2014/03/29 19:28:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -83,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.1 2006/02/23 19:44:02 garbled Exp
 #include <sys/extent.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 #include <machine/intr.h>
 
@@ -113,7 +106,7 @@ struct powerpc_bus_dma_tag eisa_bus_dma_tag = {
 };
 
 void
-eisa_attach_hook(struct device *parent, struct device *self,
+eisa_attach_hook(device_t parent, device_t self,
     struct eisabus_attach_args *eba)
 {
 	/* Nothing to do. */
@@ -147,15 +140,14 @@ eisa_intr_map(eisa_chipset_tag_t ec, u_int irq, eisa_intr_handle_t *ihp)
 }
 
 const char *
-eisa_intr_string(eisa_chipset_tag_t ec, eisa_intr_handle_t ih)
+eisa_intr_string(eisa_chipset_tag_t ec, eisa_intr_handle_t ih, char *buf,
+    size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
 	if (ih == 0 || (ih & 0xff) >= I8259_INTR_NUM || ih == 2)
 		panic("eisa_intr_string: bogus handle 0x%x", ih);
 
-	snprintf(irqstr, sizeof(irqstr), "irq %d", ih);
-	return (irqstr);
+	snprintf(buf, len, "irq %d", ih);
+	return buf;
 	
 }
 

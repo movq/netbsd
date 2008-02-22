@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cv3dreg.h,v 1.9 2007/03/05 19:48:19 he Exp $	*/
+/*	$NetBSD: grf_cv3dreg.h,v 1.13 2016/06/17 07:41:56 phx Exp $	*/
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -35,7 +35,7 @@
 #define _GRF_CV3DREG_H
 
 /*
- * This is derived from ciruss driver source
+ * This is derived from Cirrus driver source.
  */
 
 /* Extension to grfvideo_mode to support text modes.
@@ -54,10 +54,6 @@ struct grfcv3dtext_mode {
 	unsigned short	fdstart;
 	unsigned short	fdend;
 };
-
-/* maximum console size */
-#define MAXROWS 200
-#define MAXCOLS 200
 
 /* read VGA register */
 #define vgar(ba, reg) \
@@ -105,7 +101,6 @@ struct grfcv3dtext_mode {
 #define vgaw16(ba, reg, val) \
 	*((volatile unsigned short *) (((volatile char *)ba)+reg)) = val
 
-/* XXX This is totaly untested */
 #define	Select_Zorro2_FrameBuffer(flag) \
 	do { \
 		*(((volatile char *)cv3d_vcode_switch_base) + \
@@ -548,6 +543,7 @@ static inline unsigned char RGfx(volatile void *, short);
 	do {	\
 		unsigned char tmp;\
 		tmp = vgar(ba, ACT_ADDRESS_RESET);\
+		__USE(tmp);\
 		vgaw(ba, ACT_ADDRESS_W, idx);\
 		vgaw(ba, ACT_ADDRESS_W, val);\
 	} while (0)
@@ -563,8 +559,7 @@ static inline unsigned char RGfx(volatile void *, short);
 /* Gfx engine busy wait */
 
 static inline void
-GfxBusyWait (ba)
-	volatile void *ba;
+GfxBusyWait (volatile void *ba)
 {
 	int test;
 
@@ -576,8 +571,7 @@ GfxBusyWait (ba)
 
 
 static inline void
-GfxFifoWait(ba)
-	volatile void *ba;
+GfxFifoWait(volatile void *ba)
 {
 #if 0	/* XXX */
 	int test;
@@ -597,9 +591,7 @@ GfxFifoWait(ba)
  */
 
 static inline unsigned char
-RAttr(ba, idx)
-	volatile void *ba;
-	short idx;
+RAttr(volatile void *ba, short idx)
 {
 
 	vgaw(ba, ACT_ADDRESS_W, idx);
@@ -608,27 +600,21 @@ RAttr(ba, idx)
 }
 
 static inline unsigned char
-RSeq(ba, idx)
-	volatile void *ba;
-	short idx;
+RSeq(volatile void *ba, short idx)
 {
 	vgaw(ba, SEQ_ADDRESS, idx);
 	return vgar(ba, SEQ_ADDRESS_R);
 }
 
 static inline unsigned char
-RCrt(ba, idx)
-	volatile void *ba;
-	short idx;
+RCrt(volatile void *ba, short idx)
 {
 	vgaw(ba, CRT_ADDRESS, idx);
 	return vgar(ba, CRT_ADDRESS_R);
 }
 
 static inline unsigned char
-RGfx(ba, idx)
-	volatile void *ba;
-	short idx;
+RGfx(volatile void *ba, short idx)
 {
 	vgaw(ba, GCT_ADDRESS, idx);
 	return vgar(ba, GCT_ADDRESS_R);

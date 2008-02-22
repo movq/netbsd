@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses_window.3,v 1.11 2007/10/25 20:42:08 jdc Exp $
+.\"	$NetBSD: curses_window.3,v 1.16 2013/10/15 22:15:17 roy Exp $
 .\"
 .\" Copyright (c) 2002
 .\"	Brett Lymn (blymn@NetBSD.org, brett_lymn@yahoo.com.au)
@@ -30,7 +30,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd October 24, 2007
+.Dd October 15, 2013
 .Dt CURSES_WINDOW 3
 .Os
 .Sh NAME
@@ -143,6 +143,11 @@ A window may deleted and all resources freed by calling the
 .Fn delwin
 function with the pointer to the window to be deleted in
 .Fa win .
+If
+.Fa win
+is
+.Dv NULL ,
+then no action occurs.
 .Pp
 A window can be moved to a new position by calling the
 .Fn mvwin
@@ -155,18 +160,28 @@ positions are the new origin of the window on the screen.
 If the new position would cause the any part of the window to lie outside
 the screen, it is an error and the window is not moved.
 .Pp
-A subwindow can be moved relative to the parent window by calling the
+A mapping of a region relative to the parent window may be created by
+calling the
 .Fn mvderwin
 function, the
 .Fa y
 and
 .Fa x
 positions are relative to the origin of the parent window.
+The screen offset of
+.Fa win
+is not updated, the characters beginning at
+.Fa y ,
+.Fa x
+for the area the size of
+.Fa win
+will be displayed at the screen offset of
+.Fa win .
 If the given window in
 .Fa win
 is not a subwindow then an error will be returned.
 If the new position would cause the any part of the window to lie outside
-the parent window, it is an error and the window is not moved.
+the parent window, it is an error and the mapping is not updated.
 .Pp
 The
 .Fn newwin
@@ -226,7 +241,8 @@ resizes the specified window to the new number of lines and columns
 given, all internal curses structures are resized.
 Any subwindows of the specified window will also be resized if any part
 of them falls outside the new parent window size.
-The application must redraw the window after it has been resized.  Note that
+The application must redraw the window after it has been resized.
+Note that
 .Dv curscr
 and
 .Dv stdscr
@@ -245,6 +261,7 @@ The function completed successfully.
 An error occurred in the function.
 .El
 .Sh SEE ALSO
+.Xr curses_fileio 3 ,
 .Xr curses_pad 3 ,
 .Xr curses_screen 3
 .Sh STANDARDS

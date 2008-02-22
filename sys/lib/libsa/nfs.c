@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.c,v 1.42 2007/11/24 13:20:56 isaki Exp $	*/
+/*	$NetBSD: nfs.c,v 1.48 2014/03/20 03:13:18 christos Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -111,11 +111,11 @@ struct nfs_iodesc {
 
 struct nfs_iodesc nfs_root_node;
 
-int	nfs_getrootfh __P((struct iodesc *, char *, u_char *));
-int	nfs_lookupfh __P((struct nfs_iodesc *, const char *, int,
-	    struct nfs_iodesc *));
-int	nfs_readlink __P((struct nfs_iodesc *, char *));
-ssize_t	nfs_readdata __P((struct nfs_iodesc *, off_t, void *, size_t));
+int	nfs_getrootfh(struct iodesc *, char *, u_char *);
+int	nfs_lookupfh(struct nfs_iodesc *, const char *, int,
+	    struct nfs_iodesc *);
+int	nfs_readlink(struct nfs_iodesc *, char *);
+ssize_t	nfs_readdata(struct nfs_iodesc *, off_t, void *, size_t);
 
 /*
  * Fetch the root file handle (call mount daemon)
@@ -151,12 +151,12 @@ nfs_getrootfh(struct iodesc *d, char *path, u_char *fhp)
 	args = &sdata.d;
 	repl = &rdata.d;
 
-	bzero(args, sizeof(*args));
+	(void)memset(args, 0, sizeof(*args));
 	len = strlen(path);
 	if ((size_t)len > sizeof(args->path))
 		len = sizeof(args->path);
 	args->len = htonl(len);
-	bcopy(path, args->path, len);
+	(void)memcpy(args->path, path, len);
 	len = 4 + roundup(len, 4);
 
 	cc = rpc_call(d, RPCPROG_MNT, RPCMNT_VER1, RPCMNT_MOUNT,
@@ -173,7 +173,7 @@ nfs_getrootfh(struct iodesc *d, char *path, u_char *fhp)
 		errno = ntohl(repl->errno);
 		return -1;
 	}
-	bcopy(repl->fh, fhp, sizeof(repl->fh));
+	(void)memcpy(fhp, repl->fh, sizeof(repl->fh));
 	return 0;
 }
 
@@ -214,11 +214,11 @@ nfs_lookupfh(struct nfs_iodesc *d, const char *name, int len,
 	args = &sdata.d;
 	repl = &rdata.d;
 
-	bzero(args, sizeof(*args));
-	bcopy(d->fh, args->fh, sizeof(args->fh));
+	(void)memset(args, 0, sizeof(*args));
+	(void)memcpy(args->fh, d->fh, sizeof(args->fh));
 	if ((size_t)len > sizeof(args->name))
 		len = sizeof(args->name);
-	bcopy(name, args->name, len);
+	(void)memcpy(args->name, name, len);
 	args->len = htonl(len);
 	len = 4 + roundup(len, 4);
 	len += NFS_FHSIZE;
@@ -235,8 +235,8 @@ nfs_lookupfh(struct nfs_iodesc *d, const char *name, int len,
 		/* saerrno.h now matches NFS error numbers. */
 		return ntohl(repl->errno);
 	}
-	bcopy( repl->fh, &newfd->fh, sizeof(newfd->fh));
-	bcopy(&repl->fa, &newfd->fa, sizeof(newfd->fa));
+	(void)memcpy(&newfd->fh, repl->fh, sizeof(newfd->fh));
+	(void)memcpy(&newfd->fa, &repl->fa, sizeof(newfd->fa));
 	return 0;
 }
 
@@ -262,7 +262,7 @@ nfs_readlink(struct nfs_iodesc *d, char *buf)
 		printf("readlink: called\n");
 #endif
 
-	bcopy(d->fh, sdata.fh, NFS_FHSIZE);
+	(void)memcpy(sdata.fh, d->fh, NFS_FHSIZE);
 	cc = rpc_call(d->iodesc, NFS_PROG, NFS_VER2, NFSPROC_READLINK,
 	              sdata.fh, NFS_FHSIZE,
 	              &rdata.d, sizeof(rdata.d));
@@ -279,7 +279,7 @@ nfs_readlink(struct nfs_iodesc *d, char *buf)
 	if (rdata.d.len > NFS_MAXPATHLEN)
 		return ENAMETOOLONG;
 
-	bcopy(rdata.d.path, buf, rdata.d.len);
+	(void)memcpy(buf, rdata.d.path, rdata.d.len);
 	buf[rdata.d.len] = 0;
 	return 0;
 }
@@ -309,7 +309,7 @@ nfs_readdata(struct nfs_iodesc *d, off_t off, void *addr, size_t len)
 	args = &sdata.d;
 	repl = &rdata.d;
 
-	bcopy(d->fh, args->fh, NFS_FHSIZE);
+	(void)memcpy(args->fh, d->fh, NFS_FHSIZE);
 	args->off = htonl((n_long)off);
 	if (len > NFSREAD_SIZE)
 		len = NFSREAD_SIZE;
@@ -339,7 +339,7 @@ nfs_readdata(struct nfs_iodesc *d, off_t off, void *addr, size_t len)
 		errno = EBADRPC;
 		return -1;
 	}
-	bcopy(repl->data, addr, x);
+	(void)memcpy(addr, repl->data, x);
 	return x;
 }
 
@@ -382,7 +382,7 @@ nfs_mount(int sock, struct in_addr ip, char *path)
  * Open a file.
  * return zero or error number
  */
-int
+__compactcall int
 nfs_open(const char *path, struct open_file *f)
 {
 	struct nfs_iodesc *newfd, *currfd;
@@ -472,8 +472,8 @@ nfs_open(const char *path, struct open_file *f)
 				goto out;
 			}
 
-			bcopy(cp, &namebuf[link_len], len + 1);
-			bcopy(linkbuf, namebuf, link_len);
+			(void)memcpy(&namebuf[link_len], cp, len + 1);
+			(void)memcpy(namebuf, linkbuf, link_len);
 
 			/*
 			 * If absolute pathname, restart at root.
@@ -520,6 +520,7 @@ out:
 #endif
 	if (!error) {
 		f->f_fsdata = (void *)currfd;
+		fsmod = "nfs";
 		return 0;
 	}
 
@@ -536,7 +537,7 @@ out:
 	return error;
 }
 
-int
+__compactcall int
 nfs_close(struct open_file *f)
 {
 	struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
@@ -556,7 +557,7 @@ nfs_close(struct open_file *f)
 /*
  * read a portion of a file
  */
-int
+__compactcall int
 nfs_read(struct open_file *f, void *buf, size_t size, size_t *resid)
 {
 	struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
@@ -603,13 +604,13 @@ ret:
 /*
  * Not implemented.
  */
-int
+__compactcall int
 nfs_write(struct open_file *f, void *buf, size_t size, size_t *resid)
 {
 	return EROFS;
 }
 
-off_t
+__compactcall off_t
 nfs_seek(struct open_file *f, off_t offset, int where)
 {
 	struct nfs_iodesc *d = (struct nfs_iodesc *)f->f_fsdata;
@@ -636,7 +637,7 @@ nfs_seek(struct open_file *f, off_t offset, int where)
 const int nfs_stat_types[8] = {
 	0, S_IFREG, S_IFDIR, S_IFBLK, S_IFCHR, S_IFLNK, 0 };
 
-int
+__compactcall int
 nfs_stat(struct open_file *f, struct stat *sb)
 {
 	struct nfs_iodesc *fp = (struct nfs_iodesc *)f->f_fsdata;
@@ -654,3 +655,12 @@ nfs_stat(struct open_file *f, struct stat *sb)
 
 	return 0;
 }
+
+#if defined(LIBSA_ENABLE_LS_OP)
+#include "ls.h"
+__compactcall void
+nfs_ls(struct open_file *f, const char *pattern)
+{
+	lsunsup("nfs");
+}
+#endif

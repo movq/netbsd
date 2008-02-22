@@ -1,4 +1,4 @@
-/*	$NetBSD: driver.c,v 1.16 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: driver.c,v 1.18 2013/11/26 01:17:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: driver.c,v 1.16 2004/11/24 11:57:09 blymn Exp $");
+__RCSID("$NetBSD: driver.c,v 1.18 2013/11/26 01:17:00 christos Exp $");
 
 #include <ctype.h>
 #include "form.h"
@@ -284,13 +284,14 @@ form_driver(FORM *form, int c)
 			break;
 		
 		case REQ_SFIRST_FIELD:
-			fieldp = CIRCLEQ_FIRST(&form->sorted_fields);
+			fieldp = TAILQ_FIRST(&form->sorted_fields);
 			form->cur_field = fieldp->index;
 			update_field = 1;
 			break;
 		
 		case REQ_SLAST_FIELD:
-			fieldp = CIRCLEQ_LAST(&form->sorted_fields);
+			fieldp = TAILQ_LAST(&form->sorted_fields,
+			    _formi_sort_head);
 			form->cur_field = fieldp->index;
 			update_field = 1;
 			break;
@@ -442,8 +443,8 @@ form_driver(FORM *form, int c)
 		  /* if we have no error, reset the various offsets */
 		fieldp = form->fields[form->cur_field];
 		fieldp->start_char = 0;
-		fieldp->start_line = fieldp->lines;
-		fieldp->cur_line = fieldp->lines;
+		fieldp->start_line = fieldp->alines;
+		fieldp->cur_line = fieldp->alines;
 		fieldp->row_xpos = 0;
 		fieldp->cursor_ypos = 0;
 		_formi_init_field_xpos(fieldp);

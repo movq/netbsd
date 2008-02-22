@@ -1,4 +1,4 @@
-/* $NetBSD: rtwvar.h,v 1.36 2007/12/25 18:33:39 perry Exp $ */
+/* $NetBSD: rtwvar.h,v 1.47 2018/04/19 21:50:08 christos Exp $ */
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of David Young may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY David Young ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -94,18 +91,14 @@ enum rtw_rfchipid {
 	RTW_RFCHIPID_MAXIM = 4,
 	RTW_RFCHIPID_GCT = 5
 };
-
 /* sc_flags */
-#define RTW_F_ENABLED		0x00000001	/* chip is enabled */
 #define RTW_F_DIGPHY		0x00000002	/* digital PHY */
 #define RTW_F_DFLANTB		0x00000004	/* B antenna is default */
 #define RTW_F_ANTDIV		0x00000010	/* h/w antenna diversity */
 #define RTW_F_9356SROM		0x00000020	/* 93c56 SROM */
-#define RTW_F_SLEEP		0x00000040	/* chip is asleep */
-#define RTW_F_INVALID		0x00000080	/* chip is absent */
-#define	RTW_F_DK_VALID		0x00000100	/* keys in DK0-DK3 are valid */
-#define	RTW_C_RXWEP_40		0x00000200	/* h/w decrypts 40-bit WEP */
-#define	RTW_C_RXWEP_104		0x00000400	/* h/w decrypts 104-bit WEP */
+#define	RTW_F_DK_VALID		0x00000040	/* keys in DK0-DK3 are valid */
+#define	RTW_C_RXWEP_40		0x00000080	/* h/w decrypts 40-bit WEP */
+#define	RTW_C_RXWEP_104		0x00000100	/* h/w decrypts 104-bit WEP */
 	/* all PHY flags */
 #define RTW_F_ALLPHY		(RTW_F_DIGPHY|RTW_F_DFLANTB|RTW_F_ANTDIV)
 enum rtw_access {RTW_ACCESS_NONE = 0,
@@ -115,8 +108,50 @@ enum rtw_access {RTW_ACCESS_NONE = 0,
 struct rtw_regs {
 	bus_space_tag_t		r_bt;
 	bus_space_handle_t	r_bh;
+	bus_size_t		r_sz;
 	enum rtw_access		r_access;
 };
+
+/*
+ * Bus barrier
+ *
+ * Complete outstanding read and/or write ops on [reg0, reg1]
+ * ([reg1, reg0]) before starting new ops on the same region. See
+ * acceptable bus_space_barrier(9) for the flag definitions.
+ */
+static __inline void
+rtw_barrier(const struct rtw_regs *r, int reg0, int reg1, int flags)
+{
+	bus_space_barrier(r->r_bt, r->r_bh, MIN(reg0, reg1),
+	    MAX(reg0, reg1) - MIN(reg0, reg1) + 4, flags);
+}
+
+/*
+ * Barrier convenience macros.
+ */
+/* sync */
+#define RTW_SYNC(regs, reg0, reg1)				\
+	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_READ|BUS_SPACE_BARRIER_WRITE)
+
+/* write-before-write */
+#define RTW_WBW(regs, reg0, reg1)				\
+	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE)
+
+/* write-before-read */
+#define RTW_WBR(regs, reg0, reg1)				\
+	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_WRITE)
+
+/* read-before-read */
+#define RTW_RBR(regs, reg0, reg1)				\
+	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_READ)
+
+/* read-before-write */
+#define RTW_RBW(regs, reg0, reg1)				\
+	rtw_barrier(regs, reg0, reg1, BUS_SPACE_BARRIER_READ)
+
+#define RTW_WBRW(regs, reg0, reg1)				\
+		rtw_barrier(regs, reg0, reg1,			\
+		    BUS_SPACE_BARRIER_WRITE)
 
 #define RTW_SR_GET(sr, ofs) \
     (((sr)->sr_content[(ofs)/2] >> (((ofs) % 2 == 0) ? 0 : 8)) & 0xff)
@@ -278,8 +313,8 @@ struct rtw_tx_radiotap_header {
 enum rtw_attach_state {FINISHED, FINISH_DESCMAP_LOAD, FINISH_DESCMAP_CREATE,
 	FINISH_DESC_MAP, FINISH_DESC_ALLOC, FINISH_RXMAPS_CREATE,
 	FINISH_TXMAPS_CREATE, FINISH_RESET, FINISH_READ_SROM, FINISH_PARSE_SROM,
-	FINISH_RF_ATTACH, FINISH_ID_STA, FINISH_TXDESCBLK_SETUP,
-	FINISH_TXCTLBLK_SETUP, DETACHED};
+	FINISH_RF_ATTACH, FINISH_ID_STA, FINISH_LED_ATTACH,
+	FINISH_TXDESCBLK_SETUP, FINISH_TXCTLBLK_SETUP, DETACHED};
 
 struct rtw_mtbl {
 	int			(*mt_newstate)(struct ieee80211com *,
@@ -421,11 +456,15 @@ struct rtw_led_state {
 
 struct rtw_softc {
 	device_t		sc_dev;
+	device_suspensor_t	sc_suspensor;
+	pmf_qual_t		sc_qual;
+
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	struct rtw_regs		sc_regs;
 	bus_dma_tag_t		sc_dmat;
 	uint32_t		sc_flags;
+	void			*sc_soft_ih;
 
 	enum rtw_attach_state	sc_attach_state;
 	enum rtw_rfchipid	sc_rfchipid;
@@ -459,11 +498,9 @@ struct rtw_softc {
 	/* interrupt acknowledge hook */
 	void (*sc_intr_ack)(struct rtw_regs *);
 
-	int			(*sc_enable)(struct rtw_softc *);
-	void			(*sc_disable)(struct rtw_softc *);
 	struct rtw_mtbl		sc_mtbl;
 
-	void *			sc_radiobpf;
+	struct bpf_if *		sc_radiobpf;
 
 	struct callout		sc_scan_ch;
 	u_int			sc_cur_chan;
@@ -507,11 +544,10 @@ void rtw_attach(struct rtw_softc *);
 int rtw_detach(struct rtw_softc *);
 int rtw_intr(void *);
 
-void rtw_disable(struct rtw_softc *);
-int rtw_enable(struct rtw_softc *);
+bool rtw_suspend(device_t, const pmf_qual_t *);
+bool rtw_resume(device_t, const pmf_qual_t *);
 
 int rtw_activate(device_t, enum devact);
-void rtw_shutdown(void *);
 
 const char *rtw_pwrstate_string(enum rtw_pwrstate);
 

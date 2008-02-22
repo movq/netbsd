@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_parse.c,v 1.15 2006/04/04 21:27:42 christos Exp $	*/
+/*	$NetBSD: rpc_parse.c,v 1.22 2016/01/23 02:33:09 dholland Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_parse.c 1.8 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_parse.c,v 1.15 2006/04/04 21:27:42 christos Exp $");
+__RCSID("$NetBSD: rpc_parse.c,v 1.22 2016/01/23 02:33:09 dholland Exp $");
 #endif
 #endif
 
@@ -56,24 +56,24 @@ __RCSID("$NetBSD: rpc_parse.c,v 1.15 2006/04/04 21:27:42 christos Exp $");
 
 #define ARGNAME "arg"
 
-static void isdefined __P((definition *));
-static void def_struct __P((definition *));
-static void def_program __P((definition *));
-static void def_enum __P((definition *));
-static void def_const __P((definition *));
-static void def_union __P((definition *));
-static void check_type_name __P((char *, int));
-static void def_typedef __P((definition *));
-static void get_declaration __P((declaration *, defkind));
-static void get_prog_declaration __P((declaration *, defkind, int));
-static void get_type __P((char **, char **, defkind));
-static void unsigned_dec __P((char **));
+static void isdefined(definition *);
+static void def_struct(definition *);
+static void def_program(definition *);
+static void def_enum(definition *);
+static void def_const(definition *);
+static void def_union(definition *);
+static void check_type_name(const char *, int);
+static void def_typedef(definition *);
+static void get_declaration(declaration *, defkind);
+static void get_prog_declaration(declaration *, defkind, int);
+static void get_type(const char **, const char **, defkind);
+static void unsigned_dec(const char **);
 
 /*
  * return the next definition you see
  */
 definition *
-get_definition()
+get_definition(void)
 {
 	definition *defp;
 	token   tok;
@@ -103,7 +103,7 @@ get_definition()
 		free(defp);
 		return (NULL);
 	default:
-		error("definition keyword expected");
+		error("Expected definition keyword");
 	}
 	scan(TOK_SEMICOLON, &tok);
 	isdefined(defp);
@@ -111,15 +111,13 @@ get_definition()
 }
 
 static void
-isdefined(defp)
-	definition *defp;
+isdefined(definition *defp)
 {
 	STOREVAL(&defined, defp);
 }
 
 static void
-def_struct(defp)
-	definition *defp;
+def_struct(definition *defp)
 {
 	token   tok;
 	declaration dec;
@@ -146,8 +144,7 @@ def_struct(defp)
 }
 
 static void
-def_program(defp)
-	definition *defp;
+def_program(definition *defp)
 {
 	token   tok;
 	declaration dec;
@@ -178,7 +175,7 @@ def_program(defp)
 			get_type(&plist->res_prefix, &plist->res_type,
 			    DEF_PROGRAM);
 			if (streq(plist->res_type, "opaque")) {
-				error("illegal result type");
+				error("Illegal result type");
 			}
 			scan(TOK_IDENT, &tok);
 			plist->proc_name = tok.str;
@@ -210,10 +207,10 @@ def_program(defp)
 			}
 			/* multiple arguments are only allowed in newstyle */
 			if (!newstyle && num_args > 1) {
-				error("only one argument is allowed");
+				error("Only one argument is allowed");
 			}
 			if (isvoid && num_args > 1) {
-				error("illegal use of void in program definition");
+				error("Illegal use of void in program definition");
 			}
 			*tailp = NULL;
 			scan(TOK_RPAREN, &tok);
@@ -251,8 +248,7 @@ def_program(defp)
 
 
 static void
-def_enum(defp)
-	definition *defp;
+def_enum(definition *defp)
 {
 	token   tok;
 	enumval_list *elist;
@@ -281,8 +277,7 @@ def_enum(defp)
 }
 
 static void
-def_const(defp)
-	definition *defp;
+def_const(definition *defp)
 {
 	token   tok;
 
@@ -295,8 +290,7 @@ def_const(defp)
 }
 
 static void
-def_union(defp)
-	definition *defp;
+def_union(definition *defp)
 {
 	token   tok;
 	declaration dec;
@@ -356,7 +350,7 @@ def_union(defp)
 	}
 }
 
-static char *reserved_words[] = {
+static const char *const reserved_words[] = {
 	"array",
 	"bytes",
 	"destroy",
@@ -372,7 +366,7 @@ static char *reserved_words[] = {
 	NULL
 };
 
-static char *reserved_types[] = {
+static const char *const reserved_types[] = {
 	"opaque",
 	"string",
 	NULL
@@ -380,34 +374,26 @@ static char *reserved_types[] = {
 /* check that the given name is not one that would eventually result in
    xdr routines that would conflict with internal XDR routines. */
 static void
-check_type_name(name, new_type)
-	int     new_type;
-	char   *name;
+check_type_name(const char *name, int new_type)
 {
 	int     i;
-	char    tmp[100];
 
 	for (i = 0; reserved_words[i] != NULL; i++) {
 		if (strcmp(name, reserved_words[i]) == 0) {
-			sprintf(tmp,
-			    "illegal (reserved) name :\'%s\' in type definition", name);
-			error(tmp);
+			error("Illegal (reserved) name '%s' in type definition", name);
 		}
 	}
 	if (new_type) {
 		for (i = 0; reserved_types[i] != NULL; i++) {
 			if (strcmp(name, reserved_types[i]) == 0) {
-				sprintf(tmp,
-				    "illegal (reserved) name :\'%s\' in type definition", name);
-				error(tmp);
+				error("Illegal (reserved) name '%s' in type definition", name);
 			}
 		}
 	}
 }
 
 static void
-def_typedef(defp)
-	definition *defp;
+def_typedef(definition *defp)
 {
 	declaration dec;
 
@@ -422,9 +408,7 @@ def_typedef(defp)
 }
 
 static void
-get_declaration(dec, dkind)
-	declaration *dec;
-	defkind dkind;
+get_declaration(declaration *dec, defkind dkind)
 {
 	token   tok;
 
@@ -443,7 +427,7 @@ get_declaration(dec, dkind)
 	dec->name = tok.str;
 	if (peekscan(TOK_LBRACKET, &tok)) {
 		if (dec->rel == REL_POINTER) {
-			error("no array-of-pointer declarations -- use typedef");
+			error("No array-of-pointer declarations -- use typedef");
 		}
 		dec->rel = REL_VECTOR;
 		scan_num(&tok);
@@ -452,11 +436,11 @@ get_declaration(dec, dkind)
 	} else
 		if (peekscan(TOK_LANGLE, &tok)) {
 			if (dec->rel == REL_POINTER) {
-				error("no array-of-pointer declarations -- use typedef");
+				error("No array-of-pointer declarations -- use typedef");
 			}
 			dec->rel = REL_ARRAY;
 			if (peekscan(TOK_RANGLE, &tok)) {
-				dec->array_max = "(u_int)~0";
+				dec->array_max = "(unsigned int)~0";
 				/* unspecified size, use * max */
 			} else {
 				scan_num(&tok);
@@ -466,21 +450,18 @@ get_declaration(dec, dkind)
 		}
 	if (streq(dec->type, "opaque")) {
 		if (dec->rel != REL_ARRAY && dec->rel != REL_VECTOR) {
-			error("array declaration expected");
+			error("Array declaration expected");
 		}
 	} else
 		if (streq(dec->type, "string")) {
 			if (dec->rel != REL_ARRAY) {
-				error("variable-length array declaration expected");
+				error("Variable-length array declaration expected");
 			}
 		}
 }
 
 static void
-get_prog_declaration(dec, dkind, num)
-	declaration *dec;
-	defkind dkind;
-	int     num;		/* arg number */
+get_prog_declaration(declaration *dec, defkind dkind, int num /* arg number */)
 {
 	token   tok;
 	char    name[255];	/* argument name */
@@ -503,29 +484,29 @@ get_prog_declaration(dec, dkind, num)
 		sprintf(name, "%s%d", ARGNAME, num);	/* default name of
 							 * argument */
 
-	dec->name = (char *) strdup(name);
+	dec->name = strdup(name);
 
 	if (streq(dec->type, "void")) {
 		return;
 	}
 	if (streq(dec->type, "opaque")) {
-		error("opaque -- illegal argument type");
+		error("Opaque -- illegal argument type");
 	}
 	if (peekscan(TOK_STAR, &tok)) {
 		if (streq(dec->type, "string")) {
-			error("pointer to string not allowed in program arguments\n");
+			error("Pointer to string not allowed in program arguments\n");
 		}
 		dec->rel = REL_POINTER;
 		if (peekscan(TOK_IDENT, &tok))	/* optional name of argument */
-			dec->name = (char *) strdup(tok.str);
+			dec->name = strdup(tok.str);
 	}
 	if (peekscan(TOK_LANGLE, &tok)) {
 		if (!streq(dec->type, "string")) {
-			error("arrays cannot be declared as arguments to procedures -- use typedef");
+			error("Arrays cannot be declared as arguments to procedures -- use typedef");
 		}
 		dec->rel = REL_ARRAY;
 		if (peekscan(TOK_RANGLE, &tok)) {
-			dec->array_max = "(u_int)~0";
+			dec->array_max = "(unsigned int)~0";
 			/* unspecified size, use max */
 		} else {
 			scan_num(&tok);
@@ -538,7 +519,7 @@ get_prog_declaration(dec, dkind, num)
 						 * type of argument - make it
 						 * string<> */
 			dec->rel = REL_ARRAY;
-			dec->array_max = "(u_int)~0";
+			dec->array_max = "(unsigned int)~0";
 			/* unspecified size, use max */
 		}
 	}
@@ -547,10 +528,7 @@ get_prog_declaration(dec, dkind, num)
 
 
 static void
-get_type(prefixp, typep, dkind)
-	char  **prefixp;
-	char  **typep;
-	defkind dkind;
+get_type(const char **prefixp, const char **typep, defkind dkind)
 {
 	token   tok;
 
@@ -578,9 +556,13 @@ get_type(prefixp, typep, dkind)
 		*typep = "long";
 		(void) peekscan(TOK_INT, &tok);
 		break;
+	case TOK_HYPER:
+		*typep = "longlong_t";
+		(void) peekscan(TOK_INT, &tok);
+		break;
 	case TOK_VOID:
 		if (dkind != DEF_UNION && dkind != DEF_PROGRAM) {
-			error("voids allowed only inside union and program definitions with one argument");
+			error("Void is allowed only inside union and program definitions with one argument");
 		}
 		*typep = tok.str;
 		break;
@@ -591,16 +573,16 @@ get_type(prefixp, typep, dkind)
 	case TOK_FLOAT:
 	case TOK_DOUBLE:
 	case TOK_BOOL:
+	case TOK_QUAD:
 		*typep = tok.str;
 		break;
 	default:
-		error("expected type specifier");
+		error("Type specifier expected");
 	}
 }
 
 static void
-unsigned_dec(typep)
-	char  **typep;
+unsigned_dec(const char **typep)
 {
 	token   tok;
 
@@ -618,6 +600,11 @@ unsigned_dec(typep)
 	case TOK_LONG:
 		get_token(&tok);
 		*typep = "u_long";
+		(void) peekscan(TOK_INT, &tok);
+		break;
+	case TOK_HYPER:
+		get_token(&tok);
+		*typep = "u_longlong_t";
 		(void) peekscan(TOK_INT, &tok);
 		break;
 	case TOK_INT:

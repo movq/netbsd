@@ -1,4 +1,4 @@
-/*	$NetBSD: s_scalbn.S,v 1.7 2003/08/07 16:44:43 agc Exp $	*/
+/*	$NetBSD: s_scalbn.S,v 1.11 2013/05/20 20:27:43 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -38,11 +38,16 @@
 ;_sccsid:
 ;.asciz	"from: @(#)support.s	5.2 (Berkeley) 5/17/90"
 
-RCSID("$NetBSD: s_scalbn.S,v 1.7 2003/08/07 16:44:43 agc Exp $")
+RCSID("$NetBSD: s_scalbn.S,v 1.11 2013/05/20 20:27:43 mlelstv Exp $")
+
+WEAK_ALIAS(scalbn,_scalbn)
+WEAK_ALIAS(ldexp,_scalbn)
+STRONG_ALIAS(_scalbln,_scalbn)
+WEAK_ALIAS(scalbln,_scalbln)
 
 | scalbn(x, N)
 | returns  x * (2**N), for integer values N.
-ENTRY(scalbn)
+ENTRY(_scalbn)
 	fmoved	%sp@(4),%fp0
 	fscalel	%sp@(12),%fp0
 #ifndef __SVR4_ABI__

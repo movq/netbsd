@@ -1,4 +1,4 @@
-/*	$NetBSD: getusershell.c,v 1.26 2006/10/15 16:14:46 christos Exp $	*/
+/*	$NetBSD: getusershell.c,v 1.29 2012/03/13 21:13:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)getusershell.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getusershell.c,v 1.26 2006/10/15 16:14:46 christos Exp $");
+__RCSID("$NetBSD: getusershell.c,v 1.29 2012/03/13 21:13:36 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -140,7 +133,7 @@ _files_start(struct files_state *state)
 	_DIAGASSERT(state != NULL);
 
 	if (state->fp == NULL) {
-		state->fp = fopen(_PATH_SHELLS, "r");
+		state->fp = fopen(_PATH_SHELLS, "re");
 		if (state->fp == NULL)
 			return NS_UNAVAIL;
 	} else {
@@ -196,7 +189,8 @@ _files_getusershell(void *nsrv, void *nscb, va_list ap)
 			return rv;
 	}
 
-	while (fgets(curshell, sizeof(curshell) - 1, _files_state.fp) != NULL) {
+	while (fgets(curshell, (int)sizeof(curshell) - 1, _files_state.fp)
+	    != NULL) {
 		sp = cp = curshell;
 		while (*cp != '#' && *cp != '/' && *cp != '\0')
 			cp++;

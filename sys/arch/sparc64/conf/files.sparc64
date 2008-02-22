@@ -1,4 +1,4 @@
-#	$NetBSD: files.sparc64,v 1.118 2008/02/20 21:43:35 drochner Exp $
+#	$NetBSD: files.sparc64,v 1.154 2017/12/19 14:34:08 nakayama Exp $
 
 # @(#)files.sparc64	8.1 (Berkeley) 7/19/93
 # sparc64-specific configuration info
@@ -8,11 +8,16 @@ maxpartitions 8
 
 maxusers 2 8 1024
 
-defflag	opt_sparc_arch.h	SUN4U
+defflag	opt_sparc_arch.h	SUN4U SUN4V
 
 define mainbus {}
-device mainbus: mainbus
+device mainbus: mainbus, ofw_subr
 attach mainbus at root
+
+define upa {}
+device upa: upa
+attach upa at mainbus
+file	arch/sparc64/dev/upa.c
 
 device pcons
 attach pcons at mainbus
@@ -27,42 +32,83 @@ file	arch/sparc64/dev/sbus.c			sbus
 
 device	psycho: pcibus, sysmon_power, sysmon_taskq
 attach	psycho at mainbus
+device	schizo: pcibus
+attach	schizo at mainbus
+device	pyro: pcibus
+attach	pyro at mainbus
+device	vpci: pcibus
+attach	vpci at mainbus
 include "dev/pci/files.pci"
-file	arch/sparc64/dev/psycho.c		psycho
-file	arch/sparc64/dev/pci_machdep.c		psycho
+file	arch/sparc64/dev/psycho.c		psycho needs-flag
+file	arch/sparc64/dev/schizo.c		schizo
+file	arch/sparc64/dev/pyro.c			pyro
+file	arch/sparc64/dev/vpci.c			vpci
+file	arch/sparc64/dev/pci_machdep.c		psycho | schizo | pyro | vpci
+
+define  central {}
+device	central: central
+attach	central at mainbus
+file	arch/sparc64/dev/central.c		central
+
+define  fhc {}
+device	fhc: fhc
+attach	fhc at mainbus with fhc_mainbus
+attach	fhc at central with fhc_central
+file	arch/sparc64/dev/fhc.c			fhc
+file	arch/sparc64/dev/fhc_central.c		fhc_central
+file	arch/sparc64/dev/fhc_mainbus.c		fhc_mainbus
 
 # IOMMU is for both
-file	arch/sparc64/dev/iommu.c		sbus | psycho
+file	arch/sparc64/dev/iommu.c		sbus | psycho | schizo | pyro | vpci
 
 include "dev/ata/files.ata"
 
 device ebus {[addr = -1]}: pcibus
 attach ebus at pci
 file	arch/sparc64/dev/ebus.c			ebus
+attach ebus at mainbus with ebus_mainbus
+file	arch/sparc64/dev/ebus_mainbus.c		ebus_mainbus
+
+device	vbus {}
+attach	vbus at mainbus
+file	arch/sparc64/dev/vbus.c			vbus
+
+device	cbus {}
+attach	cbus at vbus
+file	arch/sparc64/dev/cbus.c			cbus
 
 device clock: mk48txx
 attach clock at sbus with mkclock_sbus
 attach clock at ebus with mkclock_ebus
+attach clock at fhc with mkclock_fhc
 file	arch/sparc64/dev/mkclock.c		clock
 
 device rtc: mc146818
 attach rtc at ebus with rtc_ebus
 file	arch/sparc64/dev/rtc.c			rtc
 
-device psm: sysmon_envsys, sysmon_power
+device psm: sysmon_power
 attach psm at ebus
 file	arch/sparc64/dev/psm.c			psm
 
 device timer
 attach timer at mainbus, sbus
 
-device power
-attach power at sbus, ebus
-file	arch/sparc64/dev/power.c		power
+device	tda: sysmon_envsys
+attach	tda at iic
+file	arch/sparc64/dev/tda.c			tda
 
-device envctrl: sysmon_envsys, pcf8584, i2cbus
-attach envctrl at ebus
-file	arch/sparc64/dev/envctrl.c	envctrl
+device pcfiic: pcf8584, i2cbus
+attach pcfiic at ebus
+file	arch/sparc64/dev/pcfiic_ebus.c		pcfiic
+
+device ecadc: sysmon_envsys
+attach ecadc at iic
+file	arch/sparc64/dev/pcf8591_envctrl.c	ecadc
+
+device lom: sysmon_envsys, sysmon_wdog
+attach lom at ebus
+file	arch/sparc64/dev/lom.c			lom
 
 device cpu
 attach cpu at mainbus
@@ -72,6 +118,8 @@ device	auxio
 attach	auxio at ebus with auxio_ebus
 attach	auxio at sbus with auxio_sbus
 file	arch/sparc64/dev/auxio.c		auxio
+file	arch/sparc64/dev/auxio_sbus.c		auxio_sbus
+file	arch/sparc64/dev/auxio_ebus.c		auxio_ebus
 
 defflag	opt_auxio.h	BLINK
 
@@ -101,6 +149,7 @@ file	arch/sparc64/sparc64/rbus_machdep.c	cardbus
 
 device zs {channel = -1}
 attach zs at sbus
+attach zs at fhc with zs_fhc
 file	arch/sparc64/dev/zs.c			zs needs-flag
 file	dev/ic/z8530sc.c			zs
 
@@ -112,6 +161,11 @@ file	arch/sparc64/dev/sab.c			sab | sabtty needs-flag
 # "com" attachments for the kbd/mouse of the U5/U10/...
 attach com at ebus with com_ebus
 file	arch/sparc64/dev/com_ebus.c		com_ebus
+
+# ebus PS/2 keyboard attachment for Tadpole SPARCle, etc.
+include "dev/pckbport/files.pckbport"
+attach pckbc at ebus with pckbc_ebus
+file	arch/sparc64/dev/pckbc_ebus.c		pckbc_ebus
 
 device zstty {}: tty
 attach zstty at zs
@@ -143,11 +197,15 @@ device cgfourteen
 attach cgfourteen at sbus
 file	arch/sparc64/dev/cgfourteen.c	cgfourteen needs-flag
 
-device ffb: wsemuldisplaydev, rasops8, rasops16, rasops24, rasops32, fb, vcons
+device ffb: wsemuldisplaydev, rasops32, fb, vcons, i2cexec, i2c_bitbang, ddc_read_edid, edid, videomode
 file	arch/sparc64/dev/ffb.c			ffb
-
-attach ffb at mainbus with ffb_mainbus
+defflag opt_ffb.h FFB_DEBUG FFB_SYNC
+attach ffb at mainbus,upa with ffb_mainbus
 file	arch/sparc64/dev/ffb_mainbus.c		ffb_mainbus
+
+device gfb: wsemuldisplaydev, rasops32, fb, vcons
+file	arch/sparc64/dev/gfb.c			gfb
+attach gfb at mainbus
 
 # CP1500/1400 watchdog timer
 device	pldwdog: sysmon_wdog
@@ -176,17 +234,19 @@ file	arch/sparc/fpu/fpu_subr.c
 
 file	arch/sparc/sparc/promlib.c
 file	arch/sparc64/sparc64/autoconf.c
+file	arch/sparc64/sparc64/cache.c
 file	arch/sparc64/sparc64/clock.c
+file	arch/sparc64/sparc64/core_machdep.c	coredump
 file	arch/sparc64/sparc64/emul.c
 file	arch/sparc64/sparc64/intr.c
 file	arch/sparc64/sparc64/kgdb_machdep.c	kgdb
-file	arch/sparc64/sparc64/kobj_machdep.c	modular
-# sparc/sparc/locore.s is handled specially in the makefile,
+file	arch/sparc/sparc/kobj_machdep.c		modular & !exec_elf64
+file	arch/sparc64/sparc64/kobj_machdep.c	modular & exec_elf64
+# sparc64/sparc64/locore.s is handled specially in the makefile,
 # because it must come first in the "ld" command line.
 file	arch/sparc64/sparc64/machdep.c
 file	arch/sparc64/sparc64/process_machdep.c
 file	arch/sparc64/sparc64/procfs_machdep.c	procfs
-file	arch/sparc64/sparc64/mem.c
 file	arch/sparc/sparc/openprom.c
 file	arch/sparc/sparc/openfirm.c
 file	arch/sparc64/sparc64/ofw_machdep.c
@@ -197,10 +257,14 @@ file	arch/sparc64/sparc64/trap.c
 file	arch/sparc64/sparc64/vm_machdep.c
 file	arch/sparc64/sparc64/ipifuncs.c		multiprocessor
 file	arch/sparc64/sparc64/lock_stubs.s
+file	arch/sparc64/sparc64/hvcall.S		sun4v
+file	arch/sparc64/sparc64/mdesc.c		sun4v
 
 file	arch/sparc64/sparc64/db_interface.c	ddb | kgdb
-file	arch/sparc64/sparc64/db_trace.c	ddb
+file	arch/sparc64/sparc64/db_machdep.c	ddb
+file	arch/sparc64/sparc64/db_trace.c		ddb
 file	arch/sparc64/sparc64/db_disasm.c	ddb
+file	arch/sparc64/sparc64/db_tlb_access.S	ddb
 
 # USB Support
 include "dev/usb/files.usb"
@@ -210,6 +274,9 @@ include "dev/bluetooth/files.bluetooth"
 
 # IEEE1394 Support
 include "dev/ieee1394/files.ieee1394"
+
+# Stack-less Just-In-Time compiler
+include "external/bsd/sljit/conf/files.sljit"
 
 #
 # Compatibility modules
@@ -247,8 +314,15 @@ file	dev/md_root.c			memory_disk_hooks
 
 include "arch/sparc64/conf/majors.sparc64"
 
-# special compiler settings (no optimization if 32bit kernel)
-file	uvm/uvm_bio.c compile-with "${CC_NOOPT}"
+# Virtual rtc
+device	vrtc
+attach	vrtc at vbus
+file	arch/sparc64/dev/vrtc.c			vrtc
 
-# OpenFirmware convenience stuff
-file  dev/ofw/ofw_subr.c
+define	ldc
+file	arch/sparc64/dev/ldc.c			ldc
+
+# Virtual disk
+device	vdsk: ldc, scsi
+attach	vdsk at cbus
+file	arch/sparc64/dev/vdsk.c			vdsk

@@ -1,4 +1,4 @@
-/*	$NetBSD: clkctrl.c,v 1.3 2005/11/16 03:00:23 uwe Exp $	*/
+/*	$NetBSD: clkctrl.c,v 1.5 2011/07/17 23:32:37 mrg Exp $	*/
 
 /*
  * Copyright (c) 2005 Michael Lorenz
@@ -11,13 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clkctrl.c,v 1.3 2005/11/16 03:00:23 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clkctrl.c,v 1.5 2011/07/17 23:32:37 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,17 +38,17 @@ __KERNEL_RCSID(0, "$NetBSD: clkctrl.c,v 1.3 2005/11/16 03:00:23 uwe Exp $");
 
 #include <sparc/sparc/vaddrs.h>
 
-static int clkctrl_match(struct device *, struct cfdata *, void *);
-static void clkctrl_attach(struct device *, struct device *, void *);
+static int clkctrl_match(device_t, cfdata_t, void *);
+static void clkctrl_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(clkctrl, sizeof(struct device),
+CFATTACH_DECL_NEW(clkctrl, 0,
      clkctrl_match, clkctrl_attach, NULL, NULL);
 
 static void tadpole_cpu_sleep(struct cpu_info *);
 volatile uint8_t *clkctrl_reg = NULL;
 
 static int
-clkctrl_match(struct device *parent, struct cfdata *cf, void *aux)
+clkctrl_match(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -66,7 +59,7 @@ clkctrl_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-clkctrl_attach(struct device *parent, struct device *self, void *aux)
+clkctrl_attach(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;

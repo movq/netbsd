@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.3 2006/09/22 13:38:32 kochi Exp $	*/
+/*	$NetBSD: main.c,v 1.11 2016/08/04 18:07:43 scole Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,7 +30,7 @@
 #include <sys/cdefs.h>
 
 #include <lib/libsa/stand.h>
-
+#include <lib/libsa/loadfile.h>
 
 #include <machine/sal.h>
 #include <machine/pal.h>
@@ -39,17 +39,21 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <efifsdev.h>
+
+#include <machine/efilib.h>
 
 #include "bootstrap.h"
 #include "efiboot.h"
 
 extern char bootprog_name[];
 extern char bootprog_rev[];
-extern char bootprog_date[];
-extern char bootprog_maker[];
 
 struct efi_devdesc	currdev;	/* our current device */
 struct arch_switch	archsw;		/* MI/MD interface boundary */
+
+vaddr_t ia64_unwindtab;
+vsize_t ia64_unwindtablen;
 
 extern u_int64_t	ia64_pal_entry;
 
@@ -116,13 +120,13 @@ main(int argc, CHAR16 *argv[])
 	/*
 	 * Initialise the block cache
 	 */
-	bcache_init(32, 512);		/* 16k XXX tune this */
+	/* bcache_init(32, 512); */		/* 16k XXX tune this */
 
 	find_pal_proc();
 
 	efifs_dev_init();
-	
-        /*	efinet_init_driver(); XXX enable net boot. */
+
+	efinet_init_driver();
 
 	/* Get our loaded image protocol interface structure. */
 	BS->HandleProtocol(IH, &imgid, (VOID**)&img);
@@ -131,7 +135,6 @@ main(int argc, CHAR16 *argv[])
 
 	printf("\n");
 	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 
 	i = efifs_get_unit(img->DeviceHandle);
 	if (i >= 0) {
@@ -146,6 +149,8 @@ main(int argc, CHAR16 *argv[])
 		currdev.d_kind.netif.unit = 0;		/* XXX */
 		currdev.d_type = DEVT_NET;
 
+		/* XXX overwrite disk ops with nfs ops */
+		memcpy(&file_system[0], &file_system[1], sizeof(struct fs_ops));
 	}
 
 
@@ -271,7 +276,8 @@ guid_to_string(EFI_GUID *guid)
 {
 	static char buf[40];
 
-	sprintf(buf, "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+	snprintf(buf, sizeof(buf),
+	    "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 	    guid->Data1, guid->Data2, guid->Data3, guid->Data4[0],
 	    guid->Data4[1], guid->Data4[2], guid->Data4[3], guid->Data4[4],
 	    guid->Data4[5], guid->Data4[6], guid->Data4[7]);
@@ -424,7 +430,7 @@ print_trs(int type)
 	for (i = 0; i <= maxtr; i++) {
 		char lbuf[128];
 
-		bzero(&buf, sizeof(buf));
+		memset(&buf, 0, sizeof(buf));
 		res = ia64_call_pal_stacked(PAL_VM_TR_READ, i, type,
 					    (u_int64_t) &buf);
 		if (res.pal_status != 0)
@@ -442,7 +448,8 @@ print_trs(int type)
 			buf.pte &= ~PTE_DIRTY;
 		if (!(res.pal_result[0] & 8))
 			buf.pte &= ~PTE_MA_MASK;
-		sprintf(lbuf, "%03d %06x %013lx %013lx %4s %d  %d  %d  %d %d "
+		snprintf(lbuf, sizeof(lbuf),
+		    "%03d %06x %013lx %013lx %4s %d  %d  %d  %d %d "
 		    "%-3s %d %06x\n", i, buf.rr.rr_rid, buf.ifa >> 12,
 		    (buf.pte & PTE_PPN_MASK) >> 12,
 		    psnames[(buf.itir & ITIR_PS_MASK) >> 2],
@@ -497,9 +504,8 @@ static int
 command_hcdp(int argc, char *argv[])
 {
 	struct dig64_hcdp_table *tbl;
-	struct dig64_hcdp_entry *ent;
-	struct dig64_gas *gas;
-	int i;
+	union dev_desc *desc;
+	int i, m, n;
 
 	tbl = efi_get_table(&hcdp);
 	if (tbl == NULL) {
@@ -510,11 +516,7 @@ command_hcdp(int argc, char *argv[])
 		printf("HCDP table has invalid signature\n");
 		return (CMD_OK);
 	}
-	if (tbl->length < sizeof(*tbl) - sizeof(*tbl->entry)) {
-		printf("HCDP table too short\n");
-		return (CMD_OK);
-	}
-	printf("HCDP table at 0x%016lx\n", (u_long)tbl);
+	printf("HCDP table at 0x%lx\n", (u_long)tbl);
 	printf("Signature  = %s\n", hcdp_string(tbl->signature, 4));
 	printf("Length     = %u\n", tbl->length);
 	printf("Revision   = %u\n", tbl->revision);
@@ -525,33 +527,108 @@ command_hcdp(int argc, char *argv[])
 	printf("Creator Id = %s\n", hcdp_string(tbl->creator_id, 4));
 	printf("Creator rev= %u\n", tbl->creator_rev);
 	printf("Entries    = %u\n", tbl->entries);
-	for (i = 0; i < tbl->entries; i++) {
-		ent = tbl->entry + i;
-		printf("Entry #%d:\n", i + 1);
-		printf("    Type      = %u\n", ent->type);
-		printf("    Databits  = %u\n", ent->databits);
-		printf("    Parity    = %u\n", ent->parity);
-		printf("    Stopbits  = %u\n", ent->stopbits);
-		printf("    PCI seg   = %u\n", ent->pci_segment);
-		printf("    PCI bus   = %u\n", ent->pci_bus);
-		printf("    PCI dev   = %u\n", ent->pci_device);
-		printf("    PCI func  = %u\n", ent->pci_function);
-		printf("    Interrupt = %u\n", ent->interrupt);
-		printf("    PCI flag  = %u\n", ent->pci_flag);
-		printf("    Baudrate  = %lu\n",
-		    ((u_long)ent->baud_high << 32) + (u_long)ent->baud_low);
-		gas = &ent->address;
-		printf("    Addr space= %u\n", gas->addr_space);
-		printf("    Bit width = %u\n", gas->bit_width);
-		printf("    Bit offset= %u\n", gas->bit_offset);
-		printf("    Address   = 0x%016lx\n",
-		    ((u_long)gas->addr_high << 32) + (u_long)gas->addr_low);
-		printf("    PCI type  = %u\n", ent->pci_devid);
-		printf("    PCI vndr  = %u\n", ent->pci_vendor);
-		printf("    IRQ       = %u\n", ent->irq);
-		printf("    PClock    = %u\n", ent->pclock);
-		printf("    PCI iface = %u\n", ent->pci_interface);
+	n = 0;
+	m = tbl->length - sizeof(struct dig64_hcdp_table);
+	i = 1;
+	while (n < m) {
+		printf("Entry #%d:\n", i);
+		desc = (union dev_desc *)((char *)tbl->entry + n);
+		printf("    Type      = %u\n", desc->type);
+		if (desc->type == DIG64_ENTRYTYPE_TYPE0 ||
+		    desc->type == DIG64_ENTRYTYPE_TYPE1) {
+			struct dig64_hcdp_entry *ent = &desc->uart;
+			struct dig64_gas *gas;
+			printf("    Databits  = %u\n", ent->databits);
+			printf("    Parity    = %u\n", ent->parity);
+			printf("    Stopbits  = %u\n", ent->stopbits);
+			printf("    PCI seg   = %u\n", ent->pci_segment);
+			printf("    PCI bus   = %u\n", ent->pci_bus);
+			printf("    PCI dev   = %u\n", ent->pci_device);
+			printf("    PCI func  = %u\n", ent->pci_function);
+			printf("    Interrupt = %u\n", ent->interrupt);
+			printf("    PCI flag  = %u\n", ent->pci_flag);
+			printf("    Baudrate  = %lu\n",
+			    ((u_long)ent->baud_high << 32) +
+			    (u_long)ent->baud_low);
+			gas = &ent->address;
+			printf("    Addr space= %u\n", gas->addr_space);
+			printf("    Bit width = %u\n", gas->bit_width);
+			printf("    Bit offset= %u\n", gas->bit_offset);
+			printf("    Address   = 0x%lx\n",
+			    ((u_long)gas->addr_high << 32) +
+			    (u_long)gas->addr_low);
+			printf("    PCI type  = %u\n", ent->pci_devid);
+			printf("    PCI vndr  = %u\n", ent->pci_vendor);
+			printf("    IRQ       = %u\n", ent->irq);
+			printf("    PClock    = %u\n", ent->pclock);
+			printf("    PCI iface = %u\n", ent->pci_interface);
+
+			n += sizeof(struct dig64_hcdp_entry);
+		} else {
+			struct dig64_pcdp_entry *pcdp = &desc->pcdp;
+
+			if (tbl->revision < 3) {
+				printf("PCDP not support\n");
+				return (CMD_OK);
+			}
+
+			printf("    Length    = %u\n", pcdp->length);
+			printf("    Index EFI = %u\n", pcdp->index);
+			printf("    Interconn = %u", pcdp->specs.type);
+
+			switch (pcdp->specs.type) {
+			case DIG64_PCDP_SPEC_ACPI:
+			{
+				struct dig64_acpi_spec *acpi =
+				    &pcdp->specs.acpi;
+
+				printf("(ACPI)\n");
+				printf("    Length    = %u\n", acpi->length);
+				printf("    ACPI_UID  = %x\n", acpi->uid);
+				printf("    ACPI_HID  = %x\n", acpi->hid);
+				printf("    ACPI GSI  = %x\n", acpi->acpi_gsi);
+				printf("    MMIO_TRA  = %lx\n", acpi->mmio_tra);
+				printf("    IOPort_TRA= %lx\n",
+				    acpi->ioport_tra);
+				printf("    Flags     = %x\n", acpi->flags);
+				break;
+			}
+			case DIG64_PCDP_SPEC_PCI:
+			{
+				struct dig64_pci_spec *pci = &pcdp->specs.pci;
+
+				printf("(PCI)\n");
+				printf("    Length    = %u\n", pci->length);
+				printf("    Seg GrpNum= %u\n", pci->sgn);
+				printf("    Bus       = %u\n", pci->bus);
+				printf("    Device    = %u\n", pci->device);
+				printf("    Function  = %u\n", pci->function);
+				printf("    Device ID = %u\n", pci->device_id);
+				printf("    Vendor ID = %u\n", pci->vendor_id);
+				printf("    ACPI GSI  = %x\n", pci->acpi_gsi);
+				printf("    MMIO_TRA  = %lx\n", pci->mmio_tra);
+				printf("    IOPort_TRA= %lx\n",
+				    pci->ioport_tra);
+				printf("    Flags     = %x\n", pci->flags);
+				break;
+			}
+			}
+
+			n += pcdp->length;
+		}
 	}
 	printf("<EOT>\n");
 	return (CMD_OK);
 }
+
+struct bootblk_command commands[] = {
+        COMMON_COMMANDS,
+        { "quit",       "exit the loader",      command_quit },
+        { "memmap",	"print memory map",	command_memmap },
+        { "configuration", "print configuration tables", command_configuration },
+        { "sal",	"print SAL System Table", command_sal },
+        { "itr",	"print instruction TRs", command_itr },
+        { "dtr",	"print data TRs",	command_dtr },
+        { "hcdp",	"Dump HCDP info",	command_hcdp },
+        { NULL,         NULL,                   NULL         },
+};

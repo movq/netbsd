@@ -1,4 +1,4 @@
-/*	$NetBSD: data.c,v 1.5 2005/12/14 17:35:40 wiz Exp $	*/
+/*	$NetBSD: data.c,v 1.8 2016/01/07 19:49:45 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1999 Lennart Augustsson <augustss@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: data.c,v 1.5 2005/12/14 17:35:40 wiz Exp $");
+__RCSID("$NetBSD: data.c,v 1.8 2016/01/07 19:49:45 jakllsch Exp $");
 
 #include <assert.h>
 #include <stdlib.h>
@@ -52,15 +52,17 @@ hid_get_data(const void *p, const hid_item_t *h)
 	if (hsize == 0)
 		return (0);
 	offs = hpos / 8;
-	end = (hpos + hsize) / 8 - offs;
+	end = (hpos + hsize + 7) / 8 - offs;
 	data = 0;
-	for (i = 0; i <= end; i++)
+	for (i = 0; i < end; i++)
 		data |= buf[offs + i] << (i*8);
 	data >>= hpos % 8;
-	data &= (1 << hsize) - 1;
-	if (h->logical_minimum < 0 && (data & (1<<(hsize-1)))) {
-		/* Need to sign extend */
-		data |= 0xffffffff & ~((1<<hsize)-1);
+	if (hsize < 32) {
+		data &= (1 << hsize) - 1;
+		if (h->logical_minimum < 0 && (data & (1<<(hsize-1)))) {
+			/* Need to sign extend */
+			data |= 0xffffffff & ~((1<<hsize)-1);
+		}
 	}
 	return (int)(data);
 }
@@ -93,7 +95,7 @@ hid_set_data(void *p, const hid_item_t *h, int data)
 	offs = hpos / 8;
 	end = (hpos + hsize) / 8 - offs;
 
-	for (i = 0; i <= end; i++)
+	for (i = 0; i < end; i++)
 		buf[offs + i] = (buf[offs + i] & ((uint32_t)mask >> (i*8))) |
 			(((uint32_t)data >> (i*8)) & 0xff);
 }

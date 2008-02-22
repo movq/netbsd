@@ -1,4 +1,4 @@
-/*	$NetBSD: auconv.h,v 1.14 2005/12/11 12:20:53 christos Exp $	*/
+/*	$NetBSD: auconv.h,v 1.21 2017/12/16 16:09:36 nat Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 extern void stream_filter_set_fetcher(stream_filter_t *, stream_fetcher_t *);
 extern void stream_filter_set_inputbuffer(stream_filter_t *, audio_stream_t *);
 extern stream_filter_t *auconv_nocontext_filter_factory
-	(int (*)(stream_fetcher_t *, audio_stream_t *, int));
+	(int (*)(struct audio_softc *, stream_fetcher_t *, audio_stream_t *, int));
 extern void auconv_nocontext_filter_dtor(struct stream_filter *);
 #define FILTER_LOOP_PROLOGUE(SRC, SRCFRAME, DST, DSTFRAME, MAXUSED) \
 do { \
@@ -69,8 +62,28 @@ extern stream_filter_factory_t change_sign16;
 extern stream_filter_factory_t swap_bytes;
 extern stream_filter_factory_t swap_bytes_change_sign16;
 /* Byte expansion/contraction */
-extern stream_filter_factory_t linear8_to_linear16;
-extern stream_filter_factory_t linear16_to_linear8;
+extern stream_filter_factory_t linear32_32_to_linear32;
+extern stream_filter_factory_t linear32_32_to_linear24;
+extern stream_filter_factory_t linear32_32_to_linear16;
+extern stream_filter_factory_t linear24_24_to_linear32;
+extern stream_filter_factory_t linear24_24_to_linear24;
+extern stream_filter_factory_t linear24_24_to_linear16;
+extern stream_filter_factory_t linear16_16_to_linear32;
+extern stream_filter_factory_t linear16_16_to_linear24;
+extern stream_filter_factory_t linear16_16_to_linear16;
+extern stream_filter_factory_t linear8_8_to_linear32;
+extern stream_filter_factory_t linear8_8_to_linear24;
+extern stream_filter_factory_t linear8_8_to_linear16;
+extern stream_filter_factory_t linearN_to_linear8;
+extern stream_filter_factory_t null_filter;
+
+#define linear32_32_to_linear8 linearN_to_linear8
+#define linear24_24_to_linear8 linearN_to_linear8
+#define linear16_16_to_linear8 linearN_to_linear8
+#define linear8_8_to_linear8 linearN_to_linear8
+#define linear16_to_linear8 linearN_to_linear8
+#define linear8_to_linear16 linear8_8_to_linear16
+
 /* sampling rate conversion (aurateconv.c) */
 extern stream_filter_factory_t aurateconv;
 

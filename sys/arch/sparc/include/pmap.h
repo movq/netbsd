@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.82 2008/01/02 11:48:29 ad Exp $ */
+/*	$NetBSD: pmap.h,v 1.92 2013/10/19 19:40:23 mrg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -50,7 +50,7 @@
 #include "opt_sparc_arch.h"
 #endif
 
-#include <machine/pte.h>
+#include <sparc/pte.h>
 
 /*
  * Pmap structure.
@@ -178,8 +178,6 @@ struct segmap {
 	int8_t	sg_nwired;		/* number of wired pages */
 };
 
-typedef struct pmap *pmap_t;
-
 #if 0
 struct kvm_cpustate {
 	int		kvm_npmemarr;
@@ -192,8 +190,6 @@ struct kvm_cpustate {
 #ifdef _KERNEL
 
 #define PMAP_NULL	((pmap_t)0)
-
-extern struct pmap	kernel_pmap_store;
 
 /*
  * Bounds on managed physical addresses. Used by (MD) users
@@ -241,11 +237,10 @@ extern psize_t		vm_num_phys;
 int	pmap_dumpsize(void);
 int	pmap_dumpmmu(int (*)(dev_t, daddr_t, void *, size_t), daddr_t);
 
-#define	pmap_kernel()	(&kernel_pmap_store)
 #define	pmap_resident_count(pm)	((pm)->pm_stats.resident_count)
 #define	pmap_wired_count(pm)	((pm)->pm_stats.wired_count)
 
-#define PMAP_PREFER(fo, ap, sz, td)	pmap_prefer((fo), (ap))
+#define PMAP_PREFER(fo, ap, sz, td)	pmap_prefer((fo), (ap), (sz), (td))
 
 #define PMAP_EXCLUDE_DECLS	/* tells MI pmap.h *not* to include decls */
 
@@ -254,10 +249,9 @@ int	pmap_dumpmmu(int (*)(dev_t, daddr_t, void *, size_t), daddr_t);
 void		pmap_activate(struct lwp *);
 void		pmap_deactivate(struct lwp *);
 void		pmap_bootstrap(int nmmu, int nctx, int nregion);
-void		pmap_prefer(vaddr_t, vaddr_t *);
+void		pmap_prefer(vaddr_t, vaddr_t *, size_t, int);
 int		pmap_pa_exists(paddr_t);
 void		pmap_unwire(pmap_t, vaddr_t);
-void		pmap_collect(pmap_t);
 void		pmap_copy(pmap_t, pmap_t, vaddr_t, vsize_t, vaddr_t);
 pmap_t		pmap_create(void);
 void		pmap_destroy(pmap_t);
@@ -266,18 +260,18 @@ vaddr_t		pmap_map(vaddr_t, paddr_t, paddr_t, int);
 #define		pmap_phys_address(x) (x)
 void		pmap_reference(pmap_t);
 void		pmap_remove(pmap_t, vaddr_t, vaddr_t);
-#define		pmap_update(pmap)		/* nothing (yet) */
+#define		pmap_update(pmap)		__USE(pmap)
 void		pmap_virtual_space(vaddr_t *, vaddr_t *);
 #ifdef PMAP_GROWKERNEL
 vaddr_t		pmap_growkernel(vaddr_t);
 #endif
 void		pmap_redzone(void);
 void		kvm_uncache(char *, int);
-struct user;
 int		mmu_pagein(struct pmap *pm, vaddr_t, int);
 void		pmap_writetext(unsigned char *, int);
 void		pmap_globalize_boot_cpuinfo(struct cpu_info *);
 void		pmap_remove_all(struct pmap *pm);
+#define 	pmap_mmap_flags(x)	0	/* dummy so far */
 
 /* SUN4/SUN4C SPECIFIC DECLARATIONS */
 
@@ -285,11 +279,11 @@ void		pmap_remove_all(struct pmap *pm);
 bool		pmap_clear_modify4_4c(struct vm_page *);
 bool		pmap_clear_reference4_4c(struct vm_page *);
 void		pmap_copy_page4_4c(paddr_t, paddr_t);
-int		pmap_enter4_4c(pmap_t, vaddr_t, paddr_t, vm_prot_t, int);
+int		pmap_enter4_4c(pmap_t, vaddr_t, paddr_t, vm_prot_t, u_int);
 bool		pmap_extract4_4c(pmap_t, vaddr_t, paddr_t *);
 bool		pmap_is_modified4_4c(struct vm_page *);
 bool		pmap_is_referenced4_4c(struct vm_page *);
-void		pmap_kenter_pa4_4c(vaddr_t, paddr_t, vm_prot_t);
+void		pmap_kenter_pa4_4c(vaddr_t, paddr_t, vm_prot_t, u_int);
 void		pmap_kremove4_4c(vaddr_t, vsize_t);
 void		pmap_kprotect4_4c(vaddr_t, vsize_t, vm_prot_t);
 void		pmap_page_protect4_4c(struct vm_page *, vm_prot_t);
@@ -305,11 +299,11 @@ bool		pmap_clear_reference4m(struct vm_page *);
 void		pmap_copy_page4m(paddr_t, paddr_t);
 void		pmap_copy_page_viking_mxcc(paddr_t, paddr_t);
 void		pmap_copy_page_hypersparc(paddr_t, paddr_t);
-int		pmap_enter4m(pmap_t, vaddr_t, paddr_t, vm_prot_t, int);
+int		pmap_enter4m(pmap_t, vaddr_t, paddr_t, vm_prot_t, u_int);
 bool		pmap_extract4m(pmap_t, vaddr_t, paddr_t *);
 bool		pmap_is_modified4m(struct vm_page *);
 bool		pmap_is_referenced4m(struct vm_page *);
-void		pmap_kenter_pa4m(vaddr_t, paddr_t, vm_prot_t);
+void		pmap_kenter_pa4m(vaddr_t, paddr_t, vm_prot_t, u_int);
 void		pmap_kremove4m(vaddr_t, vsize_t);
 void		pmap_kprotect4m(vaddr_t, vsize_t, vm_prot_t);
 void		pmap_page_protect4m(struct vm_page *, vm_prot_t);
@@ -351,11 +345,11 @@ void		pmap_zero_page_hypersparc(paddr_t);
 
 extern bool	(*pmap_clear_modify_p)(struct vm_page *);
 extern bool	(*pmap_clear_reference_p)(struct vm_page *);
-extern int	(*pmap_enter_p)(pmap_t, vaddr_t, paddr_t, vm_prot_t, int);
+extern int	(*pmap_enter_p)(pmap_t, vaddr_t, paddr_t, vm_prot_t, u_int);
 extern bool	 (*pmap_extract_p)(pmap_t, vaddr_t, paddr_t *);
 extern bool	(*pmap_is_modified_p)(struct vm_page *);
 extern bool	(*pmap_is_referenced_p)(struct vm_page *);
-extern void	(*pmap_kenter_pa_p)(vaddr_t, paddr_t, vm_prot_t);
+extern void	(*pmap_kenter_pa_p)(vaddr_t, paddr_t, vm_prot_t, u_int);
 extern void	(*pmap_kremove_p)(vaddr_t, vsize_t);
 extern void	(*pmap_kprotect_p)(vaddr_t, vsize_t, vm_prot_t);
 extern void	(*pmap_page_protect_p)(struct vm_page *, vm_prot_t);
@@ -396,6 +390,32 @@ extern void	(*pmap_protect_p)(pmap_t, vaddr_t, vaddr_t, vm_prot_t);
 #define tlb_flush_all_real()		sta(ASI_SRMMUFP_LN, ASI_SRMMUFP, 0)
 
 #endif /* SUN4M || SUN4D */
+
+#define __HAVE_VM_PAGE_MD
+
+/*
+ * For each managed physical page, there is a list of all currently
+ * valid virtual mappings of that page.  Since there is usually one
+ * (or zero) mapping per page, the table begins with an initial entry,
+ * rather than a pointer; this head entry is empty iff its pv_pmap
+ * field is NULL.
+ */
+struct vm_page_md {
+	struct pvlist {
+		struct	pvlist *pv_next;	/* next pvlist, if any */
+		struct	pmap *pv_pmap;		/* pmap of this va */
+		vaddr_t	pv_va;			/* virtual address */
+		int	pv_flags;		/* flags (below) */
+	} pvlisthead;
+};
+#define VM_MDPAGE_PVHEAD(pg)	(&(pg)->mdpage.pvlisthead)
+
+#define VM_MDPAGE_INIT(pg) do {				\
+	(pg)->mdpage.pvlisthead.pv_next = NULL;		\
+	(pg)->mdpage.pvlisthead.pv_pmap = NULL;		\
+	(pg)->mdpage.pvlisthead.pv_va = 0;		\
+	(pg)->mdpage.pvlisthead.pv_flags = 0;		\
+} while(/*CONSTCOND*/0)
 
 #endif /* _KERNEL */
 

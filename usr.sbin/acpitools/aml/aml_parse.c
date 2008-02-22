@@ -1,4 +1,4 @@
-/*	$NetBSD: aml_parse.c,v 1.1 2007/01/14 04:36:13 christos Exp $	*/
+/*	$NetBSD: aml_parse.c,v 1.4 2013/10/19 17:16:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 Doug Rabson
@@ -30,7 +30,7 @@
  *	$FreeBSD: src/usr.sbin/acpi/amldb/aml/aml_parse.c,v 1.7 2001/10/23 14:54:15 takawata Exp $
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: aml_parse.c,v 1.1 2007/01/14 04:36:13 christos Exp $");
+__RCSID("$NetBSD: aml_parse.c,v 1.4 2013/10/19 17:16:37 christos Exp $");
 
 #include <sys/param.h>
 
@@ -61,7 +61,6 @@ __RCSID("$NetBSD: aml_parse.c,v 1.1 2007/01/14 04:36:13 christos Exp $");
 #else /* _KERNEL */
 #include <sys/systm.h>
 #include <sys/bus.h>
-#include <machine/bus.h>
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 #ifndef ACPI_NO_OSDFUNC_INLINE
@@ -762,12 +761,10 @@ static void
 aml_parse_fieldlist(struct aml_environ *env, struct aml_field *template,
     int indent)
 {
-	u_int32_t	offset;
 
-	offset = 0;
 	while (env->dp < env->end) {
 		aml_print_indent(indent);
-		offset = aml_parse_field(env, template);
+		(void)aml_parse_field(env, template);
 		if (env->dp < env->end) {
 			AML_DEBUGPRINT(",\n");
 		} else {
@@ -799,7 +796,7 @@ aml_parse_deffield(struct aml_environ *env, int indent)
 	aml_print_namestring(name = aml_parse_namestring(env));
 	fieldtemplate.type = aml_t_field;
 	flags = aml_parse_bytedata(env);
-	fieldtemplate.flags = fieldtemplate.flags = flags;
+	fieldtemplate.flags = flags;
 
 	*copy = *env;
 	env->dp = copy->end = start + pkglength;

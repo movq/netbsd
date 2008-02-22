@@ -1,62 +1,48 @@
+#	$NetBSD: Makefile,v 1.6 2017/04/09 22:50:02 christos Exp $	
+
 S=	${.CURDIR}/../../../../..
 
-VERSIONFILE= ${.CURDIR}/version
+.include "../Makefile.booters"
 
-.include <../Makefile.booters>
+PROGS=		loader.sym loader.efi
 
-PROG=		loader.sym
+MAN.loader.sym=		# no man
+MAN.loader.efi=		# no man
 
-MAN=#		Tell bsd.prog.mk that loader.sym is not a man page.
-
-INTERNALPROG=
-
-
-SRCS=		start.S conf.c efimd.c vers.c main.c
-
-CPPFLAGS+=	-I${IA64_STAND_DIR}/efi/include
-CPPFLAGS+=	-I${IA64_STAND_DIR}/efi/include/${MACHINE_ARCH}
 CPPFLAGS+=	-I${IA64_STAND_DIR}/efi/libefi/
-CPPFLAGS+=	-I${IA64_STAND_DIR}/efi/libshell/
 CPPFLAGS+=	-I${IA64_STAND_DIR}/common/
 CPPFLAGS+=	-I${S}
+CPPFLAGS+=	-DLOADER -DLIBKERN_OPTIMISE_SPACE -DHEAP_VARIABLE
 
-CPPFLAGS+=	-DLOADER
-
-CPPFLAGS+= 	-DLIBKERN_OPTIMISE_SPACE \
-		-DHEAP_VARIABLE  
-
-
-# Pick up FreeBSD glue
-#CPPFLAGS+= -I${.CURDIR}/../../
-
-# Always add MI sources 
+# Always add MI sources
 .PATH: ${.CURDIR}/../../common
 .include "${.CURDIR}/../../common/Makefile.inc"
 
+.include "${S}/conf/newvers_stand.mk"
 
-FILES=		loader.efi
+# need to do this after common stuff pulled in
+SRCS.loader.sym:=	start.S conf.c efimd.c main.c ${SRCS}
 
+# XXX verify
+BINDIR?=	/usr/mdec
 
 LDSCRIPT=	${.CURDIR}/ldscript.${MACHINE_ARCH}
 LDFLAGS=	-Wl,-T${LDSCRIPT} -shared -symbolic -nostdlib
 
-${PROG}: ${LDSCRIPT}
+loader.sym: ${LDSCRIPT}
 
-CLEANFILES=	vers.c loader.efi ${OBJS}
+CLEANFILES+=	${OBJS}
 
 NEWVERSWHAT=	"EFI boot" ${MACHINE_ARCH}
 
-vers.c: ${VERSIONFILE} ${SOURCES}
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
-
-loader.efi: ${PROG}
-	if [ `${OBJDUMP} -t ${.ALLSRC} | fgrep '*UND*' | wc -l` != 0 ]; then \
-		${OBJDUMP} -t ${.ALLSRC} | fgrep '*UND*'; \
+loader.efi: loader.sym
+	if [ `${OBJDUMP} -t loader.sym | fgrep '*UND*' | wc -l` != 0 ]; then \
+		${OBJDUMP} -t loader.sym | fgrep '*UND*'; \
 		exit 1; \
 	fi
 	${OBJCOPY} -j .data -j .dynamic -j .dynstr -j .dynsym -j .hash \
 	    -j .rela.dyn -j .reloc -j .sdata -j .text \
-	    --target=efi-app-${MACHINE_ARCH} ${.ALLSRC} ${.TARGET}
+	    --target=efi-app-${MACHINE_ARCH} loader.sym ${.TARGET}
 	@echo link finished.
 
 all: loader.efi
@@ -65,9 +51,10 @@ all: loader.efi
 .include "${IA64_STAND_DIR}/efi/libefi/Makefile.inc"
 LIBEFI=		${EFILIB}
 
-DPADD=		${LIBEFI} ${LIBLIST}	
+DPADD=		${LIBEFI} ${LIBLIST}
 
 # Cross dependencies between LIBEFI and LIB(SA|KERN). Need to elaborate below.
-LDADD=		${LIBEFI} ${LIBLIST} ${LIBEFI} ${LIBLIST} 
+LDADD=		${LIBEFI} ${LIBLIST} ${LIBEFI} ${LIBLIST}
+
 
 .include <bsd.prog.mk>

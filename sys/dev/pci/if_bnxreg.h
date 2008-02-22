@@ -1,5 +1,5 @@
-/*	$NetBSD: if_bnxreg.h,v 1.6 2008/02/06 16:50:38 joerg Exp $	*/
-/*	$OpenBSD: if_bnxreg.h,v 1.17 2006/11/20 21:26:27 brad Exp $	*/
+/*	$NetBSD: if_bnxreg.h,v 1.19 2018/06/03 10:01:22 maxv Exp $	*/
+/*	$OpenBSD: if_bnxreg.h,v 1.33 2009/09/05 16:02:28 claudio Exp $  */
 
 /*-
  * Copyright (c) 2006 Broadcom Corporation
@@ -32,55 +32,29 @@
  * $FreeBSD: src/sys/dev/bce/if_bcereg.h,v 1.4 2006/05/04 00:34:07 mjacob Exp $
  */
 
-#undef BNX_DEBUG
-
-#ifndef	_BNX_H_DEFINED
-#define _BNX_H_DEFINED
-
-#ifdef _KERNEL_OPT
-#include "bpfilter.h"
-#include "opt_inet.h"
-#endif
-
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/sockio.h>
-#include <sys/mbuf.h>
-#include <sys/malloc.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
-#include <sys/socket.h>
-#include <sys/sysctl.h>
-
-#include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_media.h>
-#include <net/if_ether.h>
-
-#ifdef INET
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/in_var.h>
-#include <netinet/ip.h>
-#include <netinet/if_inarp.h>
-#endif
-
-#include <net/if_vlanvar.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
-
-#include <dev/pci/pcireg.h>
-#include <dev/pci/pcivar.h>
-#include <dev/pci/pcidevs.h>
-
-#include <dev/mii/mii.h>
-#include <dev/mii/miivar.h>
-#include <dev/mii/miidevs.h>
-#include <dev/mii/brgphyreg.h>
-
 #define ETHER_ALIGN	2
+
+/* General controller flags -- bnx_flags element in bnx_softc */
+#define BNX_PCIX_FLAG                   0x01
+#define BNX_PCI_32BIT_FLAG              0x02
+#define BNX_ONE_TDMA_FLAG               0x04            /* Deprecated */
+#define BNX_NO_WOL_FLAG                 0x08
+#define BNX_USING_DAC_FLAG              0x10
+#define BNX_USING_MSI_FLAG              0x20
+#define BNX_MFW_ENABLE_FLAG             0x40
+#define BNX_ACTIVE_FLAG                 0x80
+#define BNX_ALLOC_PKTS_FLAG             0x100
+#define BNX_PCIE_FLAG             	0x200
+
+/* PHY specific flags -- bnx_phy_flags element in bnx_softc */
+#define BNX_PHY_SERDES_FLAG                     0x001
+#define BNX_PHY_CRC_FIX_FLAG                    0x002
+#define BNX_PHY_PARALLEL_DETECT_FLAG            0x004
+#define BNX_PHY_2_5G_CAPABLE_FLAG               0x008
+#define BNX_PHY_INT_MODE_MASK_FLAG              0x300
+#define BNX_PHY_INT_MODE_AUTO_POLLING_FLAG      0x100
+#define BNX_PHY_INT_MODE_LINK_READY_FLAG        0x200
+#define BNX_PHY_IEEE_CLAUSE_45_FLAG             0x400
 
 /****************************************************************************/
 /* Debugging macros and definitions.                                        */
@@ -191,11 +165,11 @@
 
 #else
 
-#define DBPRINT(level, format, args...)
-#define DBRUN(m, args...)
-#define DBRUNLV(level, args...)
-#define DBRUNCP(cp, args...)
-#define DBRUNIF(cond, args...)
+#define DBPRINT(level, format, ...)
+#define DBRUN(m, ...)
+#define DBRUNLV(level, ...)
+#define DBRUNCP(cp, ...)
+#define DBRUNIF(cond, ...)
 #define DB_RANDOMFALSE(defects)
 #define DB_OR_RANDOMFALSE(percent)
 #define DB_AND_RANDOMFALSE(percent)
@@ -217,15 +191,19 @@
 
 #define HP_VENDORID					0x103C
 
-#define PCI_ANY_ID					(u_int16_t) (~0U)
+#define PCI_ANY_ID					(uint16_t) (~0U)
 
 /* chip num:16-31, rev:12-15, metal:4-11, bond_id:0-3 */
 
-#define BNX_CHIP_NUM(sc)			(((sc)->bnx_chipid) & 0xffff0000)
+#define _BNX_CHIP_NUM(chipid)			((chipid) & 0xffff0000)
+#define BNX_CHIP_NUM(sc)			_BNX_CHIP_NUM((sc)->bnx_chipid)
 #define BNX_CHIP_NUM_5706			0x57060000
 #define BNX_CHIP_NUM_5708			0x57080000
+#define BNX_CHIP_NUM_5709			0x57090000
+#define BNX_CHIP_NUM_5716			0x57160000
 
-#define BNX_CHIP_REV(sc)			(((sc)->bnx_chipid) & 0x0000f000)
+#define _BNX_CHIP_REV(chipid)			((chipid) & 0x0000f000)
+#define BNX_CHIP_REV(sc)			_BNX_CHIP_REV((sc)->bnx_chipid)
 #define BNX_CHIP_REV_Ax				0x00000000
 #define BNX_CHIP_REV_Bx				0x00001000
 #define BNX_CHIP_REV_Cx				0x00002000
@@ -233,13 +211,24 @@
 #define BNX_CHIP_METAL(sc)			(((sc)->bnx_chipid) & 0x00000ff0)
 #define BNX_CHIP_BOND(bp)			(((sc)->bnx_chipid) & 0x0000000f)
 
-#define BNX_CHIP_ID(sc)				(((sc)->bnx_chipid) & 0xfffffff0)
+#define _BNX_CHIP_ID(chipid)			((chipid) & 0xfffffff0)
+#define BNX_CHIP_ID(sc)				_BNX_CHIP_ID((sc)->bnx_chipid)
+
 #define BNX_CHIP_ID_5706_A0			0x57060000
 #define BNX_CHIP_ID_5706_A1			0x57060010
 #define BNX_CHIP_ID_5706_A2			0x57060020
+#define BNX_CHIP_ID_5706_A3			0x57060030
 #define BNX_CHIP_ID_5708_A0			0x57080000
 #define BNX_CHIP_ID_5708_B0			0x57081000
 #define BNX_CHIP_ID_5708_B1			0x57081010
+#define BNX_CHIP_ID_5708_B2			0x57081020
+#define BNX_CHIP_ID_5709_A0			0x57090000
+#define BNX_CHIP_ID_5709_A1			0x57090010
+#define BNX_CHIP_ID_5709_B0			0x57091000
+#define BNX_CHIP_ID_5709_B1			0x57091010
+#define BNX_CHIP_ID_5709_B2			0x57091020
+#define BNX_CHIP_ID_5709_C0			0x57092000
+#define BNX_CHIP_ID_5716_C0			0x57162000
 
 #define BNX_CHIP_BOND_ID(sc)		(((sc)->bnx_chipid) & 0xf)
 
@@ -248,21 +237,15 @@
 
 
 /* shorthand one */
-#define BNX_ASICREV(x)			((x) >> 28)
-#define BNX_ASICREV_BCM5700		0x06
-
-/* chip revisions */
-#define BNX_CHIPREV(x)			((x) >> 24)
-#define BNX_CHIPREV_5700_AX		0x70
-#define BNX_CHIPREV_5700_BX		0x71
-#define BNX_CHIPREV_5700_CX		0x72
-#define BNX_CHIPREV_5701_AX		0x00
+#define BNXNUM(sc)			(BNX_CHIP_NUM(sc) >> 16)
+#define BNXREV(sc)			(BNX_CHIP_REV(sc) >> 12)
+#define BNXMETAL(sc)			(BNX_CHIP_METAL(sc) >> 4)
 
 struct bnx_type {
-	u_int16_t		bnx_vid;
-	u_int16_t		bnx_did;
-	u_int16_t		bnx_svid;
-	u_int16_t		bnx_sdid;
+	uint16_t		bnx_vid;
+	uint16_t		bnx_did;
+	uint16_t		bnx_svid;
+	uint16_t		bnx_sdid;
 	char			*bnx_name;
 };
 
@@ -314,6 +297,11 @@ struct bnx_type {
 #define ST_MICRO_FLASH_PAGE_SIZE		256
 #define ST_MICRO_FLASH_BASE_TOTAL_SIZE	65536
 
+#define BCM5709_FLASH_PAGE_BITS                        8
+#define BCM5709_FLASH_PHY_PAGE_SIZE            (1 << BCM5709_FLASH_PAGE_BITS)
+#define BCM5709_FLASH_BYTE_ADDR_MASK   (BCM5709_FLASH_PHY_PAGE_SIZE-1)
+#define BCM5709_FLASH_PAGE_SIZE                        256
+
 #define NVRAM_TIMEOUT_COUNT				30000
 #define BNX_FLASHDESC_MAX				64
 
@@ -325,17 +313,20 @@ struct bnx_type {
 #define FLASH_BACKUP_STRAP_MASK			(0xf << 26)
 
 struct flash_spec {
-	u_int32_t strapping;
-	u_int32_t config1;
-	u_int32_t config2;
-	u_int32_t config3;
-	u_int32_t write1;
-	u_int32_t buffered;
-	u_int32_t page_bits;
-	u_int32_t page_size;
-	u_int32_t addr_mask;
-	u_int32_t total_size;
-	const u_int8_t  *name;
+	uint32_t strapping;
+	uint32_t config1;
+	uint32_t config2;
+	uint32_t config3;
+	uint32_t write1;
+#define BNX_NV_BUFFERED		0x00000001
+#define BNX_NV_TRANSLATE	0x00000002
+#define BNX_NV_WREN		0x00000004
+	uint32_t flags;
+	uint32_t page_bits;
+	uint32_t page_size;
+	uint32_t addr_mask;
+	uint32_t total_size;
+	const uint8_t  *name;
 };
 
 
@@ -345,21 +336,21 @@ struct flash_spec {
 /* information which can be accessed by the driver.                         */
 /****************************************************************************/
 
-/* 
+/*
  * This value (in milliseconds) determines the frequency of the driver
  * issuing the PULSE message code.  The firmware monitors this periodic
- * pulse to determine when to switch to an OS-absent mode. 
+ * pulse to determine when to switch to an OS-absent mode.
  */
 #define DRV_PULSE_PERIOD_MS                 250
 
-/* 
+/*
  * This value (in milliseconds) determines how long the driver should
  * wait for an acknowledgement from the firmware before timing out.  Once
  * the firmware has timed out, the driver will assume there is no firmware
  * running and there won't be any firmware-driver synchronization during a
- * driver reset. 
+ * driver reset.
  */
-#define FW_ACK_TIME_OUT_MS                  100
+#define FW_ACK_TIME_OUT_MS                  1000
 
 
 #define BNX_DRV_RESET_SIGNATURE				0x00000000
@@ -426,6 +417,9 @@ struct flash_spec {
 
 #define BNX_DRV_PULSE_MB			0x00000010
 #define BNX_DRV_PULSE_SEQ_MASK			 0x00007fff
+
+#define BNX_MB_ARGS_0				0x00000014
+#define BNX_MB_ARGS_1				0x00000018
 
 /* Indicate to the firmware not to go into the
  * OS absent when it is not getting driver pulse.
@@ -654,28 +648,10 @@ struct flash_spec {
 
 #define HOST_VIEW_SHMEM_BASE			0x167c00
 
-/*
- * PCI registers defined in the PCI 2.2 spec.
- */
-#define BNX_PCI_BAR0			0x10
-#define BNX_PCI_PCIX_CMD		0x40
-
 /****************************************************************************/
 /* Convenience definitions.                                                 */
 /****************************************************************************/
-#define	BNX_PRINTF(sc, fmt, args...)	aprint_error_dev(sc->bnx_dev, fmt, ##args)
-
-#define REG_WR(sc, reg, val)		bus_space_write_4(sc->bnx_btag, sc->bnx_bhandle, reg, val)
-#define REG_WR16(sc, reg, val)		bus_space_write_2(sc->bnx_btag, sc->bnx_bhandle, reg, val)
-#define REG_RD(sc, reg)			bus_space_read_4(sc->bnx_btag, sc->bnx_bhandle, reg)
-#define REG_RD_IND(sc, offset)		bnx_reg_rd_ind(sc, offset)
-#define REG_WR_IND(sc, offset, val)	bnx_reg_wr_ind(sc, offset, val)
-#define CTX_WR(sc, cid_addr, offset, val)	bnx_ctx_wr(sc, cid_addr, offset, val)
-#define BNX_SETBIT(sc, reg, x)		REG_WR(sc, reg, (REG_RD(sc, reg) | (x)))
-#define BNX_CLRBIT(sc, reg, x)		REG_WR(sc, reg, (REG_RD(sc, reg) & ~(x)))
-#define	PCI_SETBIT(pc, tag, reg, x)	pci_conf_write(pc, tag, reg, (pci_conf_read(pc, tag, reg) | (x)))
-#define PCI_CLRBIT(pc, tag, reg, x)	pci_conf_write(pc, tag, reg, (pci_conf_read(pc, tag, reg) & ~(x)))
-
+#define	BNX_PRINTF(sc, fmt, ...)	aprint_error_dev(sc->bnx_dev, fmt, __VA_ARGS__)
 #define BNX_STATS(x)			(u_long) stats->stat_ ## x ## _lo
 
 /*
@@ -694,11 +670,16 @@ struct flash_spec {
  *  tx_bd definition
  */
 struct tx_bd {
-	u_int32_t tx_bd_haddr_hi;
-	u_int32_t tx_bd_haddr_lo;
-	u_int32_t tx_bd_mss_nbytes;
-	u_int16_t tx_bd_flags;
-	u_int16_t tx_bd_vlan_tag;
+	uint32_t tx_bd_haddr_hi;
+	uint32_t tx_bd_haddr_lo;
+	uint32_t tx_bd_mss_nbytes;
+#if BYTE_ORDER == BIG_ENDIAN
+	uint16_t tx_bd_vlan_tag;
+	uint16_t tx_bd_flags;
+#else
+	uint16_t tx_bd_flags;
+	uint16_t tx_bd_vlan_tag;
+#endif
 		#define TX_BD_FLAGS_CONN_FAULT		(1<<0)
 		#define TX_BD_FLAGS_TCP_UDP_CKSUM	(1<<1)
 		#define TX_BD_FLAGS_IP_CKSUM		(1<<2)
@@ -719,10 +700,10 @@ struct tx_bd {
  *  rx_bd definition
  */
 struct rx_bd {
-	u_int32_t rx_bd_haddr_hi;
-	u_int32_t rx_bd_haddr_lo;
-	u_int32_t rx_bd_len;
-	u_int32_t rx_bd_flags;
+	uint32_t rx_bd_haddr_hi;
+	uint32_t rx_bd_haddr_lo;
+	uint32_t rx_bd_len;
+	uint32_t rx_bd_flags;
 		#define RX_BD_FLAGS_NOPUSH		(1<<0)
 		#define RX_BD_FLAGS_DUMMY		(1<<1)
 		#define RX_BD_FLAGS_END			(1<<2)
@@ -735,7 +716,7 @@ struct rx_bd {
  *  status_block definition
  */
 struct status_block {
-	u_int32_t status_attn_bits;
+	uint32_t status_attn_bits;
 		#define STATUS_ATTN_BITS_LINK_STATE		(1L<<0)
 		#define STATUS_ATTN_BITS_TX_SCHEDULER_ABORT	(1L<<1)
 		#define STATUS_ATTN_BITS_TX_BD_READ_ABORT	(1L<<2)
@@ -766,57 +747,57 @@ struct status_block {
 		#define STATUS_ATTN_BITS_GRC_ABORT		(1L<<27)
 		#define STATUS_ATTN_BITS_PARITY_ERROR		(1L<<31)
 
-	u_int32_t status_attn_bits_ack;
+	uint32_t status_attn_bits_ack;
 #if BYTE_ORDER == BIG_ENDIAN
-	u_int16_t status_tx_quick_consumer_index0;
-	u_int16_t status_tx_quick_consumer_index1;
-	u_int16_t status_tx_quick_consumer_index2;
-	u_int16_t status_tx_quick_consumer_index3;
-	u_int16_t status_rx_quick_consumer_index0;
-	u_int16_t status_rx_quick_consumer_index1;
-	u_int16_t status_rx_quick_consumer_index2;
-	u_int16_t status_rx_quick_consumer_index3;
-	u_int16_t status_rx_quick_consumer_index4;
-	u_int16_t status_rx_quick_consumer_index5;
-	u_int16_t status_rx_quick_consumer_index6;
-	u_int16_t status_rx_quick_consumer_index7;
-	u_int16_t status_rx_quick_consumer_index8;
-	u_int16_t status_rx_quick_consumer_index9;
-	u_int16_t status_rx_quick_consumer_index10;
-	u_int16_t status_rx_quick_consumer_index11;
-	u_int16_t status_rx_quick_consumer_index12;
-	u_int16_t status_rx_quick_consumer_index13;
-	u_int16_t status_rx_quick_consumer_index14;
-	u_int16_t status_rx_quick_consumer_index15;
-	u_int16_t status_completion_producer_index;
-	u_int16_t status_cmd_consumer_index;
-	u_int16_t status_idx;
-	u_int16_t status_unused;
+	uint16_t status_tx_quick_consumer_index0;
+	uint16_t status_tx_quick_consumer_index1;
+	uint16_t status_tx_quick_consumer_index2;
+	uint16_t status_tx_quick_consumer_index3;
+	uint16_t status_rx_quick_consumer_index0;
+	uint16_t status_rx_quick_consumer_index1;
+	uint16_t status_rx_quick_consumer_index2;
+	uint16_t status_rx_quick_consumer_index3;
+	uint16_t status_rx_quick_consumer_index4;
+	uint16_t status_rx_quick_consumer_index5;
+	uint16_t status_rx_quick_consumer_index6;
+	uint16_t status_rx_quick_consumer_index7;
+	uint16_t status_rx_quick_consumer_index8;
+	uint16_t status_rx_quick_consumer_index9;
+	uint16_t status_rx_quick_consumer_index10;
+	uint16_t status_rx_quick_consumer_index11;
+	uint16_t status_rx_quick_consumer_index12;
+	uint16_t status_rx_quick_consumer_index13;
+	uint16_t status_rx_quick_consumer_index14;
+	uint16_t status_rx_quick_consumer_index15;
+	uint16_t status_completion_producer_index;
+	uint16_t status_cmd_consumer_index;
+	uint16_t status_idx;
+	uint16_t status_unused;
 #elif BYTE_ORDER == LITTLE_ENDIAN
-	u_int16_t status_tx_quick_consumer_index1;
-	u_int16_t status_tx_quick_consumer_index0;
-	u_int16_t status_tx_quick_consumer_index3;
-	u_int16_t status_tx_quick_consumer_index2;
-	u_int16_t status_rx_quick_consumer_index1;
-	u_int16_t status_rx_quick_consumer_index0;
-	u_int16_t status_rx_quick_consumer_index3;
-	u_int16_t status_rx_quick_consumer_index2;
-	u_int16_t status_rx_quick_consumer_index5;
-	u_int16_t status_rx_quick_consumer_index4;
-	u_int16_t status_rx_quick_consumer_index7;
-	u_int16_t status_rx_quick_consumer_index6;
-	u_int16_t status_rx_quick_consumer_index9;
-	u_int16_t status_rx_quick_consumer_index8;
-	u_int16_t status_rx_quick_consumer_index11;
-	u_int16_t status_rx_quick_consumer_index10;
-	u_int16_t status_rx_quick_consumer_index13;
-	u_int16_t status_rx_quick_consumer_index12;
-	u_int16_t status_rx_quick_consumer_index15;
-	u_int16_t status_rx_quick_consumer_index14;
-	u_int16_t status_cmd_consumer_index;
-	u_int16_t status_completion_producer_index;
-	u_int16_t status_unused;
-	u_int16_t status_idx;
+	uint16_t status_tx_quick_consumer_index1;
+	uint16_t status_tx_quick_consumer_index0;
+	uint16_t status_tx_quick_consumer_index3;
+	uint16_t status_tx_quick_consumer_index2;
+	uint16_t status_rx_quick_consumer_index1;
+	uint16_t status_rx_quick_consumer_index0;
+	uint16_t status_rx_quick_consumer_index3;
+	uint16_t status_rx_quick_consumer_index2;
+	uint16_t status_rx_quick_consumer_index5;
+	uint16_t status_rx_quick_consumer_index4;
+	uint16_t status_rx_quick_consumer_index7;
+	uint16_t status_rx_quick_consumer_index6;
+	uint16_t status_rx_quick_consumer_index9;
+	uint16_t status_rx_quick_consumer_index8;
+	uint16_t status_rx_quick_consumer_index11;
+	uint16_t status_rx_quick_consumer_index10;
+	uint16_t status_rx_quick_consumer_index13;
+	uint16_t status_rx_quick_consumer_index12;
+	uint16_t status_rx_quick_consumer_index15;
+	uint16_t status_rx_quick_consumer_index14;
+	uint16_t status_cmd_consumer_index;
+	uint16_t status_completion_producer_index;
+	uint16_t status_unused;
+	uint16_t status_idx;
 #endif
 };
 
@@ -825,86 +806,86 @@ struct status_block {
  *  statistics_block definition
  */
 struct statistics_block {
-	u_int32_t stat_IfHCInOctets_hi;
-	u_int32_t stat_IfHCInOctets_lo;
-	u_int32_t stat_IfHCInBadOctets_hi;
-	u_int32_t stat_IfHCInBadOctets_lo;
-	u_int32_t stat_IfHCOutOctets_hi;
-	u_int32_t stat_IfHCOutOctets_lo;
-	u_int32_t stat_IfHCOutBadOctets_hi;
-	u_int32_t stat_IfHCOutBadOctets_lo;
-	u_int32_t stat_IfHCInUcastPkts_hi;
-	u_int32_t stat_IfHCInUcastPkts_lo;
-	u_int32_t stat_IfHCInMulticastPkts_hi;
-	u_int32_t stat_IfHCInMulticastPkts_lo;
-	u_int32_t stat_IfHCInBroadcastPkts_hi;
-	u_int32_t stat_IfHCInBroadcastPkts_lo;
-	u_int32_t stat_IfHCOutUcastPkts_hi;
-	u_int32_t stat_IfHCOutUcastPkts_lo;
-	u_int32_t stat_IfHCOutMulticastPkts_hi;
-	u_int32_t stat_IfHCOutMulticastPkts_lo;
-	u_int32_t stat_IfHCOutBroadcastPkts_hi;
-	u_int32_t stat_IfHCOutBroadcastPkts_lo;
-	u_int32_t stat_emac_tx_stat_dot3statsinternalmactransmiterrors;
-	u_int32_t stat_Dot3StatsCarrierSenseErrors;
-	u_int32_t stat_Dot3StatsFCSErrors;
-	u_int32_t stat_Dot3StatsAlignmentErrors;
-	u_int32_t stat_Dot3StatsSingleCollisionFrames;
-	u_int32_t stat_Dot3StatsMultipleCollisionFrames;
-	u_int32_t stat_Dot3StatsDeferredTransmissions;
-	u_int32_t stat_Dot3StatsExcessiveCollisions;
-	u_int32_t stat_Dot3StatsLateCollisions;
-	u_int32_t stat_EtherStatsCollisions;
-	u_int32_t stat_EtherStatsFragments;
-	u_int32_t stat_EtherStatsJabbers;
-	u_int32_t stat_EtherStatsUndersizePkts;
-	u_int32_t stat_EtherStatsOverrsizePkts;
-	u_int32_t stat_EtherStatsPktsRx64Octets;
-	u_int32_t stat_EtherStatsPktsRx65Octetsto127Octets;
-	u_int32_t stat_EtherStatsPktsRx128Octetsto255Octets;
-	u_int32_t stat_EtherStatsPktsRx256Octetsto511Octets;
-	u_int32_t stat_EtherStatsPktsRx512Octetsto1023Octets;
-	u_int32_t stat_EtherStatsPktsRx1024Octetsto1522Octets;
-	u_int32_t stat_EtherStatsPktsRx1523Octetsto9022Octets;
-	u_int32_t stat_EtherStatsPktsTx64Octets;
-	u_int32_t stat_EtherStatsPktsTx65Octetsto127Octets;
-	u_int32_t stat_EtherStatsPktsTx128Octetsto255Octets;
-	u_int32_t stat_EtherStatsPktsTx256Octetsto511Octets;
-	u_int32_t stat_EtherStatsPktsTx512Octetsto1023Octets;
-	u_int32_t stat_EtherStatsPktsTx1024Octetsto1522Octets;
-	u_int32_t stat_EtherStatsPktsTx1523Octetsto9022Octets;
-	u_int32_t stat_XonPauseFramesReceived;
-	u_int32_t stat_XoffPauseFramesReceived;
-	u_int32_t stat_OutXonSent;
-	u_int32_t stat_OutXoffSent;
-	u_int32_t stat_FlowControlDone;
-	u_int32_t stat_MacControlFramesReceived;
-	u_int32_t stat_XoffStateEntered;
-	u_int32_t stat_IfInFramesL2FilterDiscards;
-	u_int32_t stat_IfInRuleCheckerDiscards;
-	u_int32_t stat_IfInFTQDiscards;
-	u_int32_t stat_IfInMBUFDiscards;
-	u_int32_t stat_IfInRuleCheckerP4Hit;
-	u_int32_t stat_CatchupInRuleCheckerDiscards;
-	u_int32_t stat_CatchupInFTQDiscards;
-	u_int32_t stat_CatchupInMBUFDiscards;
-	u_int32_t stat_CatchupInRuleCheckerP4Hit;
-	u_int32_t stat_GenStat00;
-	u_int32_t stat_GenStat01;
-	u_int32_t stat_GenStat02;
-	u_int32_t stat_GenStat03;
-	u_int32_t stat_GenStat04;
-	u_int32_t stat_GenStat05;
-	u_int32_t stat_GenStat06;
-	u_int32_t stat_GenStat07;
-	u_int32_t stat_GenStat08;
-	u_int32_t stat_GenStat09;
-	u_int32_t stat_GenStat10;
-	u_int32_t stat_GenStat11;
-	u_int32_t stat_GenStat12;
-	u_int32_t stat_GenStat13;
-	u_int32_t stat_GenStat14;
-	u_int32_t stat_GenStat15;
+	uint32_t stat_IfHCInOctets_hi;
+	uint32_t stat_IfHCInOctets_lo;
+	uint32_t stat_IfHCInBadOctets_hi;
+	uint32_t stat_IfHCInBadOctets_lo;
+	uint32_t stat_IfHCOutOctets_hi;
+	uint32_t stat_IfHCOutOctets_lo;
+	uint32_t stat_IfHCOutBadOctets_hi;
+	uint32_t stat_IfHCOutBadOctets_lo;
+	uint32_t stat_IfHCInUcastPkts_hi;
+	uint32_t stat_IfHCInUcastPkts_lo;
+	uint32_t stat_IfHCInMulticastPkts_hi;
+	uint32_t stat_IfHCInMulticastPkts_lo;
+	uint32_t stat_IfHCInBroadcastPkts_hi;
+	uint32_t stat_IfHCInBroadcastPkts_lo;
+	uint32_t stat_IfHCOutUcastPkts_hi;
+	uint32_t stat_IfHCOutUcastPkts_lo;
+	uint32_t stat_IfHCOutMulticastPkts_hi;
+	uint32_t stat_IfHCOutMulticastPkts_lo;
+	uint32_t stat_IfHCOutBroadcastPkts_hi;
+	uint32_t stat_IfHCOutBroadcastPkts_lo;
+	uint32_t stat_emac_tx_stat_dot3statsinternalmactransmiterrors;
+	uint32_t stat_Dot3StatsCarrierSenseErrors;
+	uint32_t stat_Dot3StatsFCSErrors;
+	uint32_t stat_Dot3StatsAlignmentErrors;
+	uint32_t stat_Dot3StatsSingleCollisionFrames;
+	uint32_t stat_Dot3StatsMultipleCollisionFrames;
+	uint32_t stat_Dot3StatsDeferredTransmissions;
+	uint32_t stat_Dot3StatsExcessiveCollisions;
+	uint32_t stat_Dot3StatsLateCollisions;
+	uint32_t stat_EtherStatsCollisions;
+	uint32_t stat_EtherStatsFragments;
+	uint32_t stat_EtherStatsJabbers;
+	uint32_t stat_EtherStatsUndersizePkts;
+	uint32_t stat_EtherStatsOverrsizePkts;
+	uint32_t stat_EtherStatsPktsRx64Octets;
+	uint32_t stat_EtherStatsPktsRx65Octetsto127Octets;
+	uint32_t stat_EtherStatsPktsRx128Octetsto255Octets;
+	uint32_t stat_EtherStatsPktsRx256Octetsto511Octets;
+	uint32_t stat_EtherStatsPktsRx512Octetsto1023Octets;
+	uint32_t stat_EtherStatsPktsRx1024Octetsto1522Octets;
+	uint32_t stat_EtherStatsPktsRx1523Octetsto9022Octets;
+	uint32_t stat_EtherStatsPktsTx64Octets;
+	uint32_t stat_EtherStatsPktsTx65Octetsto127Octets;
+	uint32_t stat_EtherStatsPktsTx128Octetsto255Octets;
+	uint32_t stat_EtherStatsPktsTx256Octetsto511Octets;
+	uint32_t stat_EtherStatsPktsTx512Octetsto1023Octets;
+	uint32_t stat_EtherStatsPktsTx1024Octetsto1522Octets;
+	uint32_t stat_EtherStatsPktsTx1523Octetsto9022Octets;
+	uint32_t stat_XonPauseFramesReceived;
+	uint32_t stat_XoffPauseFramesReceived;
+	uint32_t stat_OutXonSent;
+	uint32_t stat_OutXoffSent;
+	uint32_t stat_FlowControlDone;
+	uint32_t stat_MacControlFramesReceived;
+	uint32_t stat_XoffStateEntered;
+	uint32_t stat_IfInFramesL2FilterDiscards;
+	uint32_t stat_IfInRuleCheckerDiscards;
+	uint32_t stat_IfInFTQDiscards;
+	uint32_t stat_IfInMBUFDiscards;
+	uint32_t stat_IfInRuleCheckerP4Hit;
+	uint32_t stat_CatchupInRuleCheckerDiscards;
+	uint32_t stat_CatchupInFTQDiscards;
+	uint32_t stat_CatchupInMBUFDiscards;
+	uint32_t stat_CatchupInRuleCheckerP4Hit;
+	uint32_t stat_GenStat00;
+	uint32_t stat_GenStat01;
+	uint32_t stat_GenStat02;
+	uint32_t stat_GenStat03;
+	uint32_t stat_GenStat04;
+	uint32_t stat_GenStat05;
+	uint32_t stat_GenStat06;
+	uint32_t stat_GenStat07;
+	uint32_t stat_GenStat08;
+	uint32_t stat_GenStat09;
+	uint32_t stat_GenStat10;
+	uint32_t stat_GenStat11;
+	uint32_t stat_GenStat12;
+	uint32_t stat_GenStat13;
+	uint32_t stat_GenStat14;
+	uint32_t stat_GenStat15;
 };
 
 
@@ -912,7 +893,7 @@ struct statistics_block {
  *  l2_fhdr definition
  */
 struct l2_fhdr {
-	u_int32_t l2_fhdr_status;
+	uint32_t l2_fhdr_status;
 		#define L2_FHDR_STATUS_RULE_CLASS	(0x7<<0)
 		#define L2_FHDR_STATUS_RULE_P2		(1<<3)
 		#define L2_FHDR_STATUS_RULE_P3		(1<<4)
@@ -932,17 +913,17 @@ struct l2_fhdr {
 		#define L2_FHDR_ERRORS_TCP_XSUM		(1<<28)
 		#define L2_FHDR_ERRORS_UDP_XSUM		(1<<31)
 
-	u_int32_t l2_fhdr_hash;
+	uint32_t l2_fhdr_hash;
 #if BYTE_ORDER == BIG_ENDIAN
-	u_int16_t l2_fhdr_pkt_len;
-	u_int16_t l2_fhdr_vlan_tag;
-	u_int16_t l2_fhdr_ip_xsum;
-	u_int16_t l2_fhdr_tcp_udp_xsum;
+	uint16_t l2_fhdr_pkt_len;
+	uint16_t l2_fhdr_vlan_tag;
+	uint16_t l2_fhdr_ip_xsum;
+	uint16_t l2_fhdr_tcp_udp_xsum;
 #elif BYTE_ORDER == LITTLE_ENDIAN
-	u_int16_t l2_fhdr_vlan_tag;
-	u_int16_t l2_fhdr_pkt_len;
-	u_int16_t l2_fhdr_tcp_udp_xsum;
-	u_int16_t l2_fhdr_ip_xsum;
+	uint16_t l2_fhdr_vlan_tag;
+	uint16_t l2_fhdr_pkt_len;
+	uint16_t l2_fhdr_tcp_udp_xsum;
+	uint16_t l2_fhdr_ip_xsum;
 #endif
 };
 
@@ -956,6 +937,7 @@ struct l2_fhdr {
 #define BNX_L2CTX_TYPE_TYPE_EMPTY			 (0<<28)
 #define BNX_L2CTX_TYPE_TYPE_L2				 (1<<28)
 
+#define BNX_L2CTX_TYPE_XI				0x00000080
 #define BNX_L2CTX_TX_HOST_BIDX				0x00000088
 #define BNX_L2CTX_EST_NBD				0x00000088
 #define BNX_L2CTX_CMD_TYPE				0x00000088
@@ -974,6 +956,9 @@ struct l2_fhdr {
 #define BNX_L2CTX_TXP_BIDX				0x000000a8
 #define BNX_L2CTX_TXP_BSEQ				0x000000ac
 
+#define BNX_L2CTX_CMD_TYPE_XI				0x00000240
+#define BNX_L2CTX_TBDR_BHADDR_HI_XI			0x00000258
+#define BNX_L2CTX_TBDR_BHADDR_LO_XI			0x0000025c
 
 /*
  *  l2_bd_chain_context definition
@@ -993,6 +978,46 @@ struct l2_fhdr {
 #define BNX_L2CTX_NX_BDHADDR_LO			0x00000014
 #define BNX_L2CTX_NX_BDIDX				0x00000018
 
+/*
+ *  l2_rx_context definition (5706, 5708, 5709, and 5716)
+ */
+#define BNX_L2CTX_RX_WATER_MARK                         0x00000000
+#define BNX_L2CTX_RX_LO_WATER_MARK_SHIFT        0
+#define BNX_L2CTX_RX_LO_WATER_MARK_DEFAULT      32
+#define BNX_L2CTX_RX_LO_WATER_MARK_SCALE        4
+#define BNX_L2CTX_RX_LO_WATER_MARK_DIS          0
+#define BNX_L2CTX_RX_HI_WATER_MARK_SHIFT        4
+#define BNX_L2CTX_RX_HI_WATER_MARK_SCALE        16
+#define BNX_L2CTX_RX_WATER_MARKS_MSK            0x000000ff
+
+#define BNX_L2CTX_RX_BD_PRE_READ                        0x00000000
+#define BNX_L2CTX_RX_BD_PRE_READ_SHIFT          8
+
+#define BNX_L2CTX_RX_CTX_SIZE                           0x00000000
+#define BNX_L2CTX_RX_CTX_SIZE_SHIFT                     16
+#define BNX_L2CTX_RX_CTX_TYPE_SIZE_L2           ((0x20/20)<<BNX_L2CTX_RX_CTX_SIZE_SHIFT)
+
+#define BNX_L2CTX_RX_CTX_TYPE                           0x00000000
+#define BNX_L2CTX_RX_CTX_TYPE_SHIFT                     24
+
+#define BNX_L2CTX_RX_CTX_TYPE_CTX_BD_CHN_TYPE   (0xf<<28)
+#define BNX_L2CTX_RX_CTX_TYPE_CTX_BD_CHN_TYPE_UNDEFINED (0<<28)
+#define BNX_L2CTX_RX_CTX_TYPE_CTX_BD_CHN_TYPE_VALUE     (1<<28)
+
+#define BNX_L2CTX_RX_HOST_BDIDX                         0x00000004
+#define BNX_L2CTX_RX_HOST_BSEQ                          0x00000008
+#define BNX_L2CTX_RX_NX_BSEQ                            0x0000000c
+#define BNX_L2CTX_RX_NX_BDHADDR_HI                      0x00000010
+#define BNX_L2CTX_RX_NX_BDHADDR_LO                      0x00000014
+#define BNX_L2CTX_RX_NX_BDIDX                           0x00000018
+
+#define BNX_L2CTX_RX_HOST_PG_BDIDX                      0x00000044
+#define BNX_L2CTX_RX_PG_BUF_SIZE                        0x00000048
+#define BNX_L2CTX_RX_RBDC_KEY                           0x0000004c
+#define BNX_L2CTX_RX_RBDC_JUMBO_KEY                     0x3ffe
+#define BNX_L2CTX_RX_NX_PG_BDHADDR_HI           0x00000050
+#define BNX_L2CTX_RX_NX_PG_BDHADDR_LO           0x00000054
+#define BNX_L2CTX_RX_NX_PG_BDIDX                        0x00000058
 
 /*
  *  pci_config_l definition
@@ -1248,7 +1273,6 @@ struct l2_fhdr {
 #define BNX_PCI_MSI_ADDR_H				0x00000454
 #define BNX_PCI_MSI_ADDR_L				0x00000458
 
-
 /*
  *  misc_reg definition
  *  offset: 0x800
@@ -1256,10 +1280,21 @@ struct l2_fhdr {
 #define BNX_MISC_COMMAND				0x00000800
 #define BNX_MISC_COMMAND_ENABLE_ALL			 (1L<<0)
 #define BNX_MISC_COMMAND_DISABLE_ALL			 (1L<<1)
-#define BNX_MISC_COMMAND_CORE_RESET			 (1L<<4)
-#define BNX_MISC_COMMAND_HARD_RESET			 (1L<<5)
+#define BNX_MISC_COMMAND_SW_RESET			 (1L<<4)
+#define BNX_MISC_COMMAND_POR_RESET			 (1L<<5)
+#define BNX_MISC_COMMAND_HD_RESET			 (1L<<6)
+#define BNX_MISC_COMMAND_CMN_SW_RESET			 (1L<<7)
 #define BNX_MISC_COMMAND_PAR_ERROR			 (1L<<8)
+#define BNX_MISC_COMMAND_CS16_ERR			 (1L<<9)
+#define BNX_MISC_COMMAND_CS16_ERR_LOC			 (0xfL<<12)
 #define BNX_MISC_COMMAND_PAR_ERR_RAM			 (0x7fL<<16)
+#define BNX_MISC_COMMAND_POWERDOWN_EVENT		 (1L<<23)
+#define BNX_MISC_COMMAND_SW_SHUTDOWN			 (1L<<24)
+#define BNX_MISC_COMMAND_SHUTDOWN_EN			 (1L<<25)
+#define BNX_MISC_COMMAND_DINTEG_ATTN_EN			 (1L<<26)
+#define BNX_MISC_COMMAND_PCIE_LINK_IN_L23		 (1L<<27)
+#define BNX_MISC_COMMAND_PCIE_DIS			 (1L<<28)
+
 
 #define BNX_MISC_CFG					0x00000804
 #define BNX_MISC_CFG_PCI_GRC_TMOUT			 (1L<<0)
@@ -1343,6 +1378,9 @@ struct l2_fhdr {
 #define BNX_MISC_ENABLE_SET_BITS_TIMER_ENABLE		 (1L<<25)
 #define BNX_MISC_ENABLE_SET_BITS_DMA_ENGINE_ENABLE	 (1L<<26)
 #define BNX_MISC_ENABLE_SET_BITS_UMP_ENABLE		 (1L<<27)
+
+#define BNX_MISC_ENABLE_DEFAULT				0x05ffffff
+#define BNX_MISC_ENABLE_DEFAULT_XI			0x17ffffff
 
 #define BNX_MISC_ENABLE_CLR_BITS			0x00000814
 #define BNX_MISC_ENABLE_CLR_BITS_TX_SCHEDULER_ENABLE	 (1L<<0)
@@ -1686,6 +1724,38 @@ struct l2_fhdr {
 #define BNX_MISC_FINAL_CLK_CTL_VAL			0x000008b8
 #define BNX_MISC_FINAL_CLK_CTL_VAL_MISC_FINAL_CLK_CTL_VAL	 (0x3ffffffL<<6)
 
+#define BNX_MISC_NEW_CORE_CTL				0x000008c8
+#define BNX_MISC_NEW_CORE_CTL_LINK_HOLDOFF_SUCCESS	 (1L<<0)
+#define BNX_MISC_NEW_CORE_CTL_LINK_HOLDOFF_REQ		 (1L<<1)
+#define BNX_MISC_NEW_CORE_CTL_DMA_ENABLE		 (1L<<16)
+#define BNX_MISC_NEW_CORE_CTL_RESERVED_CMN		 (0x3fffL<<2)
+#define BNX_MISC_NEW_CORE_CTL_RESERVED_TC		 (0xffffL<<16)
+
+#define BNX_MISC_DUAL_MEDIA_CTRL			0x000008ec
+#define BNX_MISC_DUAL_MEDIA_CTRL_BOND_ID		 (0xffL<<0)
+#define BNX_MISC_DUAL_MEDIA_CTRL_BOND_ID_X		 (0L<<0)
+#define BNX_MISC_DUAL_MEDIA_CTRL_BOND_ID_C		 (3L<<0)
+#define BNX_MISC_DUAL_MEDIA_CTRL_BOND_ID_S		 (12L<<0)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_CTRL_STRAP	 (0x7L<<8)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PORT_SWAP_PIN		 (1L<<11)
+#define BNX_MISC_DUAL_MEDIA_CTRL_SERDES1_SIGDET	 (1L<<12)
+#define BNX_MISC_DUAL_MEDIA_CTRL_SERDES0_SIGDET	 (1L<<13)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY1_SIGDET		 (1L<<14)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY0_SIGDET		 (1L<<15)
+#define BNX_MISC_DUAL_MEDIA_CTRL_LCPLL_RST		 (1L<<16)
+#define BNX_MISC_DUAL_MEDIA_CTRL_SERDES1_RST		 (1L<<17)
+#define BNX_MISC_DUAL_MEDIA_CTRL_SERDES0_RST		 (1L<<18)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY1_RST		 (1L<<19)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY0_RST		 (1L<<20)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_CTRL		 (0x7L<<21)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PORT_SWAP		 (1L<<24)
+#define BNX_MISC_DUAL_MEDIA_CTRL_STRAP_OVERRIDE	 (1L<<25)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_SERDES_IDDQ	 (0xfL<<26)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_SERDES_IDDQ_SER1_IDDQ	 (1L<<26)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_SERDES_IDDQ_SER0_IDDQ	 (2L<<26)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_SERDES_IDDQ_PHY1_IDDQ	 (4L<<26)
+#define BNX_MISC_DUAL_MEDIA_CTRL_PHY_SERDES_IDDQ_PHY0_IDDQ	 (8L<<26)
+
 #define BNX_MISC_UNUSED0				0x000008bc
 
 
@@ -2008,8 +2078,27 @@ struct l2_fhdr {
  *  context_reg definition
  *  offset: 0x1000
  */
-#define BNX_CTX_COMMAND				0x00001000
-#define BNX_CTX_COMMAND_ENABLED			 (1L<<0)
+#define BNX_CTX_COMMAND					0x00001000
+#define BNX_CTX_COMMAND_ENABLED				 (1L<<0)
+#define BNX_CTX_COMMAND_DISABLE_USAGE_CNT		 (1L<<1)
+#define BNX_CTX_COMMAND_DISABLE_PLRU			 (1L<<2)
+#define BNX_CTX_COMMAND_DISABLE_COMBINE_READ		 (1L<<3)
+#define BNX_CTX_COMMAND_FLUSH_AHEAD			 (0x1fL<<8)
+#define BNX_CTX_COMMAND_MEM_INIT			 (1L<<13)
+#define BNX_CTX_COMMAND_PAGE_SIZE			 (0xfL<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_256			 (0L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_512			 (1L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_1K			 (2L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_2K			 (3L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_4K			 (4L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_8K			 (5L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_16K			 (6L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_32K			 (7L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_64K			 (8L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_128K			 (9L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_256K			 (10L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_512K			 (11L<<16)
+#define BNX_CTX_COMMAND_PAGE_SIZE_1M			 (12L<<16)
 
 #define BNX_CTX_STATUS					0x00001004
 #define BNX_CTX_STATUS_LOCK_WAIT			 (1L<<0)
@@ -2044,12 +2133,26 @@ struct l2_fhdr {
 #define BNX_CTX_LOCK_STATUS				 (1L<<30)
 #define BNX_CTX_LOCK_REQ				 (1L<<31)
 
+#define BNX_CTX_CTX_CTRL				0x0000101c
+#define BNX_CTX_CTX_CTRL_CTX_ADDR			(0x7ffffL<<2)
+#define BNX_CTX_CTX_CTRL_MOD_USAGE_CNT			(0x3L<<21)
+#define BNX_CTX_CTX_CTRL_NO_RAM_ACC			(1L<<23)
+#define BNX_CTX_CTX_CTRL_PREFETCH_SIZE			(0x3L<<24)
+#define BNX_CTX_CTX_CTRL_ATTR				(1L<<26)
+#define BNX_CTX_CTX_CTRL_WRITE_REQ			(1L<<30)
+#define BNX_CTX_CTX_CTRL_READ_REQ			(1L<<31)
+
+#define BNX_CTX_CTX_DATA				0x00001020
+
 #define BNX_CTX_ACCESS_STATUS				0x00001040
 #define BNX_CTX_ACCESS_STATUS_MASTERENCODED		 (0xfL<<0)
 #define BNX_CTX_ACCESS_STATUS_ACCESSMEMORYSM		 (0x3L<<10)
 #define BNX_CTX_ACCESS_STATUS_PAGETABLEINITSM		 (0x3L<<12)
 #define BNX_CTX_ACCESS_STATUS_ACCESSMEMORYINITSM	 (0x3L<<14)
-#define BNX_CTX_ACCESS_STATUS_QUALIFIED_REQUEST	 (0x7ffL<<17)
+#define BNX_CTX_ACCESS_STATUS_QUALIFIED_REQUEST		 (0x7ffL<<17)
+#define BNX_CTX_ACCESS_STATUS_CAMMASTERENCODED_XI	 (0x1fL<<0)
+#define BNX_CTX_ACCESS_STATUS_CACHEMASTERENCODED_XI	 (0x1fL<<5)
+#define BNX_CTX_ACCESS_STATUS_REQUEST_XI		 (0x3fffffL<<10)
 
 #define BNX_CTX_DBG_LOCK_STATUS			0x00001044
 #define BNX_CTX_DBG_LOCK_STATUS_SM			 (0x3ffL<<0)
@@ -2069,6 +2172,17 @@ struct l2_fhdr {
 #define BNX_CTX_CHNL_LOCK_STATUS_7			0x0000109c
 #define BNX_CTX_CHNL_LOCK_STATUS_8			0x000010a0
 
+#define BNX_CTX_CACHE_DATA				0x000010c4
+#define BNX_CTX_HOST_PAGE_TBL_CTRL			0x000010c8
+#define BNX_CTX_HOST_PAGE_TBL_CTRL_PAGE_TBL_ADDR	 (0x1ffL<<0)
+#define BNX_CTX_HOST_PAGE_TBL_CTRL_WRITE_REQ		 (1L<<30)
+#define BNX_CTX_HOST_PAGE_TBL_CTRL_READ_REQ		 (1L<<31)
+
+#define BNX_CTX_HOST_PAGE_TBL_DATA0			0x000010cc
+#define BNX_CTX_HOST_PAGE_TBL_DATA0_VALID		 (1L<<0)
+#define BNX_CTX_HOST_PAGE_TBL_DATA0_VALUE		 (0xffffffL<<8)
+
+#define BNX_CTX_HOST_PAGE_TBL_DATA1			0x000010d0
 
 /*
  *  emac_reg definition
@@ -3152,14 +3266,17 @@ struct l2_fhdr {
 #define BNX_MQ_CONFIG					0x00003c08
 #define BNX_MQ_CONFIG_TX_HIGH_PRI			 (1L<<0)
 #define BNX_MQ_CONFIG_HALT_DIS				 (1L<<1)
+#define BNX_MQ_CONFIG_BIN_MQ_MODE			 (1L<<2)
+#define BNX_MQ_CONFIG_DIS_IDB_DROP			 (1L<<3)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE			 (0x7L<<4)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE_256		 (0L<<4)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE_512		 (1L<<4)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE_1K		 (2L<<4)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE_2K		 (3L<<4)
 #define BNX_MQ_CONFIG_KNL_BYP_BLK_SIZE_4K		 (4L<<4)
-#define BNX_MQ_CONFIG_MAX_DEPTH			 (0x7fL<<8)
-#define BNX_MQ_CONFIG_CUR_DEPTH			 (0x7fL<<20)
+#define BNX_MQ_CONFIG_MAX_DEPTH				 (0x7fL<<8)
+#define BNX_MQ_CONFIG_CUR_DEPTH				 (0x7fL<<20)
+
 
 #define BNX_MQ_ENQUEUE1				0x00003c0c
 #define BNX_MQ_ENQUEUE1_OFFSET				 (0x3fL<<2)
@@ -3220,7 +3337,14 @@ struct l2_fhdr {
 #define BNX_MQ_MEM_RD_DATA2				0x00003c90
 #define BNX_MQ_MEM_RD_DATA2_VALUE			 (0x3fffffffL<<0)
 
-
+#define BNX_MQ_MAP_L2_5					0x00003d34
+#define BNX_MQ_MAP_L2_5_MQ_OFFSET			 (0xffL<<0)
+#define BNX_MQ_MAP_L2_5_SZ				 (0x3L<<8)
+#define BNX_MQ_MAP_L2_5_CTX_OFFSET			 (0x2ffL<<10)
+#define BNX_MQ_MAP_L2_5_BIN_OFFSET			 (0x7L<<23)
+#define BNX_MQ_MAP_L2_5_ARM				 (0x3L<<26)
+#define BNX_MQ_MAP_L2_5_ENA				 (0x1L<<31)
+#define BNX_MQ_MAP_L2_5_DEFAULT				0x83000b08
 
 /*
  *  tbdr_reg definition
@@ -4422,8 +4546,7 @@ struct l2_fhdr {
 #define DMA_WRITE_CHANS	3
 
 /* Use the natural page size of the host CPU. */
-/* XXX: This has only been tested on amd64/i386 systems using 4KB pages. */
-#define BCM_PAGE_BITS	PAGE_SHIFT	
+#define BCM_PAGE_BITS	PAGE_SHIFT
 #define BCM_PAGE_SIZE	PAGE_SIZE
 
 #define TX_PAGES	2
@@ -4432,7 +4555,6 @@ struct l2_fhdr {
 #define TOTAL_TX_BD (TOTAL_TX_BD_PER_PAGE * TX_PAGES)
 #define USABLE_TX_BD (USABLE_TX_BD_PER_PAGE * TX_PAGES)
 #define MAX_TX_BD (TOTAL_TX_BD - 1)
-#define BNX_TX_SLACK_SPACE 16
 
 #define RX_PAGES	2
 #define TOTAL_RX_BD_PER_PAGE  (BCM_PAGE_SIZE / sizeof(struct rx_bd))
@@ -4440,7 +4562,6 @@ struct l2_fhdr {
 #define TOTAL_RX_BD (TOTAL_RX_BD_PER_PAGE * RX_PAGES)
 #define USABLE_RX_BD (USABLE_RX_BD_PER_PAGE * RX_PAGES)
 #define MAX_RX_BD (TOTAL_RX_BD - 1)
-#define BNX_RX_SLACK_SPACE (MAX_RX_BD - 8)
 
 #define NEXT_TX_BD(x) (((x) & USABLE_TX_BD_PER_PAGE) ==	\
 		(USABLE_TX_BD_PER_PAGE - 1)) ?					  	\
@@ -4448,7 +4569,7 @@ struct l2_fhdr {
 
 #define TX_CHAIN_IDX(x) ((x) & MAX_TX_BD)
 
-#define TX_PAGE(x) (((x) & ~USABLE_TX_BD_PER_PAGE) >> 8)
+#define TX_PAGE(x) (((x) & ~USABLE_TX_BD_PER_PAGE) >> (BCM_PAGE_BITS - 4))
 #define TX_IDX(x) ((x) & USABLE_TX_BD_PER_PAGE)
 
 #define NEXT_RX_BD(x) (((x) & USABLE_RX_BD_PER_PAGE) ==	\
@@ -4457,97 +4578,123 @@ struct l2_fhdr {
 
 #define RX_CHAIN_IDX(x) ((x) & MAX_RX_BD)
 
-#define RX_PAGE(x) (((x) & ~USABLE_RX_BD_PER_PAGE) >> 8)
+#define RX_PAGE(x) (((x) & ~USABLE_RX_BD_PER_PAGE) >> (BCM_PAGE_BITS - 4))
 #define RX_IDX(x) ((x) & USABLE_RX_BD_PER_PAGE)
 
 /* Context size. */
-#define CTX_SHIFT                   7
-#define CTX_SIZE                    (1 << CTX_SHIFT)
-#define CTX_MASK                    (CTX_SIZE - 1)
-#define GET_CID_ADDR(_cid)          ((_cid) << CTX_SHIFT)
-#define GET_CID(_cid_addr)          ((_cid_addr) >> CTX_SHIFT)
+#define BNX_CTX_SHIFT			7
+#define BNX_CTX_SIZE			(1 << BNX_CTX_SHIFT)
+#define BNX_CTX_MASK			(BNX_CTX_SIZE - 1)
+#define GET_CID_ADDR(_cid)		((_cid) << BNX_CTX_SHIFT)
+#define GET_CID(_cid_addr)		((_cid_addr) >> BNX_CTX_SHIFT)
 
-#define PHY_CTX_SHIFT               6
-#define PHY_CTX_SIZE                (1 << PHY_CTX_SHIFT)
-#define PHY_CTX_MASK                (PHY_CTX_SIZE - 1)
-#define GET_PCID_ADDR(_pcid)        ((_pcid) << PHY_CTX_SHIFT)
-#define GET_PCID(_pcid_addr)        ((_pcid_addr) >> PHY_CTX_SHIFT)
+#define BNX_PHY_CTX_SHIFT		6
+#define BNX_PHY_CTX_SIZE		(1 << BNX_PHY_CTX_SHIFT)
+#define BNX_PHY_CTX_MASK		(BNX_PHY_CTX_SIZE - 1)
+#define GET_PCID_ADDR(_pcid)		((_pcid) << PHY_BNX_CTX_SHIFT)
+#define GET_PCID(_pcid_addr)		((_pcid_addr) >> PHY_BNX_CTX_SHIFT)
 
-#define MB_KERNEL_CTX_SHIFT         8
-#define MB_KERNEL_CTX_SIZE          (1 << MB_KERNEL_CTX_SHIFT)
-#define MB_KERNEL_CTX_MASK          (MB_KERNEL_CTX_SIZE - 1)
-#define MB_GET_CID_ADDR(_cid)       (0x10000 + ((_cid) << MB_KERNEL_CTX_SHIFT))
+#define BNX_MB_KERNEL_CTX_SHIFT 	8
+#define BNX_MB_KERNEL_CTX_SIZE		(1 << BNX_MB_KERNEL_CTX_SHIFT)
+#define BNX_MB_KERNEL_CTX_MASK		(BNX_MB_KERNEL_CTX_SIZE - 1)
+#define BNX_MB_GET_CID_ADDR(_cid)	(0x10000 + ((_cid) << BNX_MB_KERNEL_CTX_SHIFT))
 
-#define MAX_CID_CNT                 0x4000
-#define MAX_CID_ADDR                (GET_CID_ADDR(MAX_CID_CNT))
-#define INVALID_CID_ADDR            0xffffffff
+#define MAX_CID_CNT			0x4000
+#define MAX_CID_ADDR			(GET_CID_ADDR(MAX_CID_CNT))
+#define INVALID_CID_ADDR		0xffffffff
 
 #define TX_CID		16
 #define RX_CID		0
 
-#define MB_TX_CID_ADDR	MB_GET_CID_ADDR(TX_CID)
-#define MB_RX_CID_ADDR	MB_GET_CID_ADDR(RX_CID)
+#define MB_TX_CID_ADDR	BNX_MB_GET_CID_ADDR(TX_CID)
+#define MB_RX_CID_ADDR	BNX_MB_GET_CID_ADDR(RX_CID)
 
 /****************************************************************************/
 /* BNX Processor Firmwware Load Definitions                                 */
 /****************************************************************************/
 
 struct cpu_reg {
-	u_int32_t mode;
-	u_int32_t mode_value_halt;
-	u_int32_t mode_value_sstep;
+	uint32_t mode;
+	uint32_t mode_value_halt;
+	uint32_t mode_value_sstep;
 
-	u_int32_t state;
-	u_int32_t state_value_clear;
+	uint32_t state;
+	uint32_t state_value_clear;
 
-	u_int32_t gpr0;
-	u_int32_t evmask;
-	u_int32_t pc;
-	u_int32_t inst;
-	u_int32_t bp;
+	uint32_t gpr0;
+	uint32_t evmask;
+	uint32_t pc;
+	uint32_t inst;
+	uint32_t bp;
 
-	u_int32_t spad_base;
+	uint32_t spad_base;
 
-	u_int32_t mips_view_base;
+	uint32_t mips_view_base;
 };
 
 struct fw_info {
-	u_int32_t ver_major;
-	u_int32_t ver_minor;
-	u_int32_t ver_fix;
+	uint32_t ver_major;
+	uint32_t ver_minor;
+	uint32_t ver_fix;
 
-	u_int32_t start_addr;
+	uint32_t start_addr;
 
 	/* Text section. */
-	u_int32_t text_addr;
-	u_int32_t text_len;
-	u_int32_t text_index;
-	u_int32_t *text;
+	uint32_t text_addr;
+	uint32_t text_len;
+	uint32_t text_index;
+	const uint32_t *text;
 
 	/* Data section. */
-	u_int32_t data_addr;
-	u_int32_t data_len;
-	u_int32_t data_index;
-	u_int32_t *data;
+	uint32_t data_addr;
+	uint32_t data_len;
+	uint32_t data_index;
+	const uint32_t *data;
 
 	/* SBSS section. */
-	u_int32_t sbss_addr;
-	u_int32_t sbss_len;
-	u_int32_t sbss_index;
-	u_int32_t *sbss;
+	uint32_t sbss_addr;
+	uint32_t sbss_len;
+	uint32_t sbss_index;
+	const uint32_t *sbss;
 
 	/* BSS section. */
-	u_int32_t bss_addr;
-	u_int32_t bss_len;
-	u_int32_t bss_index;
-	u_int32_t *bss;
+	uint32_t bss_addr;
+	uint32_t bss_len;
+	uint32_t bss_index;
+	const uint32_t *bss;
 
 	/* Read-only section. */
-	u_int32_t rodata_addr;
-	u_int32_t rodata_len;
-	u_int32_t rodata_index;
-	u_int32_t *rodata;
+	uint32_t rodata_addr;
+	uint32_t rodata_len;
+	uint32_t rodata_index;
+	const uint32_t *rodata;
 };
+
+struct bnx_rv2p_header {
+	int		bnx_rv2p_proc1len;
+	int		bnx_rv2p_proc2len;
+
+	/*
+	 * Followed by blocks of data, each sized according to
+	 * the (rather obvious) block length stated above.
+	 */
+};
+
+/*
+ * The RV2P block must be configured for the system
+ * page size, or more specifically, the number of
+ * usable rx_bd's per page, and should be called
+ * as follows prior to loading the RV2P firmware:
+ *
+ * BNX_RV2P_PROC2_CHG_MAX_BD_PAGE(USABLE_RX_BD_PER_PAGE)
+ *
+ * The default value is 0xFF.
+ */
+#define BNX_RV2P_PROC2_MAX_BD_PAGE_LOC  5
+#define BNX_RV2P_PROC2_CHG_MAX_BD_PAGE(_rv2p, _v)  {			\
+	_rv2p[BNX_RV2P_PROC2_MAX_BD_PAGE_LOC] =				\
+	(_rv2p[BNX_RV2P_PROC2_MAX_BD_PAGE_LOC] & ~0xFFFF) | (_v);	\
+}
 
 #define RV2P_PROC1                              0
 #define RV2P_PROC2                              1
@@ -4577,254 +4724,5 @@ struct fw_info {
 #define BNX_MAX_JUMBO_ETHER_MTU			9018
 #define BNX_MAX_JUMBO_ETHER_MTU_VLAN 	9022
 
-#define BNX_MAX_MRU				9216
-
-/****************************************************************************/
-/* BNX Device State Data Structure                                          */
-/****************************************************************************/
-
-#define BNX_STATUS_BLK_SZ		sizeof(struct status_block)
-#define BNX_STATS_BLK_SZ		sizeof(struct statistics_block)
-#define BNX_TX_CHAIN_PAGE_SZ	BCM_PAGE_SIZE
-#define BNX_RX_CHAIN_PAGE_SZ	BCM_PAGE_SIZE
-
-struct bnx_softc
-{
-	device_t bnx_dev;
-	struct ethercom			bnx_ec;
-	struct pci_attach_args		bnx_pa;
-
-	struct ifmedia		bnx_ifmedia;		/* TBI media info */
-
-	bus_space_tag_t		bnx_btag;			/* Device bus tag */
-	bus_space_handle_t	bnx_bhandle;		/* Device bus handle */
-	bus_size_t		bnx_size;
-
-	void				*bnx_intrhand;		/* Interrupt handler */
-	void				*bnx_powerhook;
-	void				*bnx_shutdownhook;
-
-	/* ASIC Chip ID. */
-	u_int32_t					bnx_chipid;
-
-	/* General controller flags. */
-	u_int32_t					bnx_flags;
-#define BNX_PCIX_FLAG			0x01
-#define BNX_PCI_32BIT_FLAG 		0x02
-#define BNX_ONE_TDMA_FLAG		0x04		/* Deprecated */
-#define BNX_NO_WOL_FLAG			0x08
-#define BNX_USING_DAC_FLAG		0x10
-#define BNX_USING_MSI_FLAG 		0x20
-#define BNX_MFW_ENABLE_FLAG		0x40
-
-	/* PHY specific flags. */
-	u_int32_t					bnx_phy_flags;
-#define BNX_PHY_SERDES_FLAG					1
-#define BNX_PHY_CRC_FIX_FLAG				2
-#define BNX_PHY_PARALLEL_DETECT_FLAG		4
-#define BNX_PHY_2_5G_CAPABLE_FLAG			8
-#define BNX_PHY_INT_MODE_MASK_FLAG			0x300
-#define BNX_PHY_INT_MODE_AUTO_POLLING_FLAG	0x100
-#define BNX_PHY_INT_MODE_LINK_READY_FLAG	0x200
-
-	int					bnx_if_flags;
-
-	u_int16_t					bus_speed_mhz;		/* PCI bus speed */
-	struct flash_spec	*bnx_flash_info;	/* Flash NVRAM settings */
-	u_int32_t					bnx_flash_size;		/* Flash NVRAM size */
-	u_int32_t					bnx_shmem_base;		/* Shared Memory base address */
-	char *				bnx_name;			/* Name string */
-
-	/* Tracks the version of bootcode firmware. */
-	u_int32_t					bnx_fw_ver;
-
-	/* Tracks the state of the firmware.  0 = Running while any     */
-	/* other value indicates that the firmware is not responding.   */
-	u_int16_t					bnx_fw_timed_out;
-
-	/* An incrementing sequence used to coordinate messages passed   */
-	/* from the driver to the firmware.                              */
-	u_int16_t					bnx_fw_wr_seq;
-
-	/* An incrementing sequence used to let the firmware know that   */
-	/* the driver is still operating.  Without the pulse, management */
-	/* firmware such as IPMI or UMP will operate in OS absent state. */
-	u_int16_t					bnx_fw_drv_pulse_wr_seq;
-
-	/* Ethernet MAC address. */
-	u_char				eaddr[6];
-
-	/* These setting are used by the host coalescing (HC) block to   */
-	/* to control how often the status block, statistics block and   */
-	/* interrupts are generated.                                     */
-	u_int16_t					bnx_tx_quick_cons_trip_int;
-	u_int16_t					bnx_tx_quick_cons_trip;
-	u_int16_t					bnx_rx_quick_cons_trip_int;
-	u_int16_t					bnx_rx_quick_cons_trip;
-	u_int16_t					bnx_comp_prod_trip_int;
-	u_int16_t					bnx_comp_prod_trip;
-	u_int16_t					bnx_tx_ticks_int;
-	u_int16_t					bnx_tx_ticks;
-	u_int16_t					bnx_rx_ticks_int;
-	u_int16_t					bnx_rx_ticks;
-	u_int16_t					bnx_com_ticks_int;
-	u_int16_t					bnx_com_ticks;
-	u_int16_t					bnx_cmd_ticks_int;
-	u_int16_t					bnx_cmd_ticks;
-	u_int32_t					bnx_stats_ticks;
-
-	/* The address of the integrated PHY on the MII bus. */
-	int					bnx_phy_addr;
-
-	/* The device handle for the MII bus child device. */
-	struct mii_data				bnx_mii;
-
-	/* Driver maintained TX chain pointers and byte counter. */
-	u_int16_t					rx_prod;
-	u_int16_t					rx_cons;
-	u_int32_t					rx_prod_bseq;	/* Counts the bytes used.  */
-	u_int16_t					tx_prod;
-	u_int16_t					tx_cons;
-	u_int32_t					tx_prod_bseq;	/* Counts the bytes used.  */
-
-	struct callout				bnx_timeout;
-
-	/* Frame size and mbuf allocation size for RX frames. */
-	u_int32_t					max_frame_size;
-	int					mbuf_alloc_size;
-
-	/* Receive mode settings (i.e promiscuous, multicast, etc.). */
-	u_int32_t					rx_mode;
-
-	/* Bus tag for the bnx controller. */
-	bus_dma_tag_t		bnx_dmatag;
-
-	/* H/W maintained TX buffer descriptor chain structure. */
-	bus_dma_segment_t	tx_bd_chain_seg[TX_PAGES];
-	int			tx_bd_chain_rseg[TX_PAGES];
-	bus_dmamap_t		tx_bd_chain_map[TX_PAGES];
-	struct tx_bd		*tx_bd_chain[TX_PAGES];
-	bus_addr_t			tx_bd_chain_paddr[TX_PAGES];
-
-	/* H/W maintained RX buffer descriptor chain structure. */
-	bus_dma_segment_t	rx_bd_chain_seg[TX_PAGES];
-	int			rx_bd_chain_rseg[TX_PAGES];
-	bus_dmamap_t		rx_bd_chain_map[RX_PAGES];
-	struct rx_bd		*rx_bd_chain[RX_PAGES];
-	bus_addr_t			rx_bd_chain_paddr[RX_PAGES];
-
-	/* H/W maintained status block. */
-	bus_dma_segment_t	status_seg;
-	int			status_rseg;
-	bus_dmamap_t		status_map;
-	struct status_block	*status_block;				/* virtual address */
-	bus_addr_t			status_block_paddr;			/* Physical address */
-
-	/* Driver maintained status block values. */
-	u_int16_t					last_status_idx;
-	u_int16_t					hw_rx_cons;
-	u_int16_t					hw_tx_cons;
-
-	/* H/W maintained statistics block. */
-	bus_dma_segment_t	stats_seg;
-	int			stats_rseg;
-	bus_dmamap_t		stats_map;
-	struct statistics_block *stats_block;		/* Virtual address */
-	bus_addr_t			stats_block_paddr;		/* Physical address */
-
-	/* Bus tag for RX/TX mbufs. */
-	bus_dma_segment_t	rx_mbuf_seg;
-	int			rx_mbuf_rseg;
-	bus_dma_segment_t	tx_mbuf_seg;
-	int			tx_mbuf_rseg;
-
-	/* S/W maintained mbuf TX chain structure. */
-	bus_dmamap_t		tx_mbuf_map[TOTAL_TX_BD];
-	struct mbuf			*tx_mbuf_ptr[TOTAL_TX_BD];
-
-	/* S/W maintained mbuf RX chain structure. */
-	bus_dmamap_t		rx_mbuf_map[TOTAL_RX_BD];
-	struct mbuf			*rx_mbuf_ptr[TOTAL_RX_BD];
-
-	/* Track the number of rx_bd and tx_bd's in use. */
-	u_int16_t free_rx_bd;
-	u_int16_t used_tx_bd;
-
-	/* Provides access to hardware statistics through sysctl. */
-	u_int64_t stat_IfHCInOctets;
-	u_int64_t stat_IfHCInBadOctets;
-	u_int64_t stat_IfHCOutOctets;
-	u_int64_t stat_IfHCOutBadOctets;
-	u_int64_t stat_IfHCInUcastPkts;
-	u_int64_t stat_IfHCInMulticastPkts;
-	u_int64_t stat_IfHCInBroadcastPkts;
-	u_int64_t stat_IfHCOutUcastPkts;
-	u_int64_t stat_IfHCOutMulticastPkts;
-	u_int64_t stat_IfHCOutBroadcastPkts;
-
-	u_int32_t stat_emac_tx_stat_dot3statsinternalmactransmiterrors;
-	u_int32_t stat_Dot3StatsCarrierSenseErrors;
-	u_int32_t stat_Dot3StatsFCSErrors;
-	u_int32_t stat_Dot3StatsAlignmentErrors;
-	u_int32_t stat_Dot3StatsSingleCollisionFrames;
-	u_int32_t stat_Dot3StatsMultipleCollisionFrames;
-	u_int32_t stat_Dot3StatsDeferredTransmissions;
-	u_int32_t stat_Dot3StatsExcessiveCollisions;
-	u_int32_t stat_Dot3StatsLateCollisions;
-	u_int32_t stat_EtherStatsCollisions;
-	u_int32_t stat_EtherStatsFragments;
-	u_int32_t stat_EtherStatsJabbers;
-	u_int32_t stat_EtherStatsUndersizePkts;
-	u_int32_t stat_EtherStatsOverrsizePkts;
-	u_int32_t stat_EtherStatsPktsRx64Octets;
-	u_int32_t stat_EtherStatsPktsRx65Octetsto127Octets;
-	u_int32_t stat_EtherStatsPktsRx128Octetsto255Octets;
-	u_int32_t stat_EtherStatsPktsRx256Octetsto511Octets;
-	u_int32_t stat_EtherStatsPktsRx512Octetsto1023Octets;
-	u_int32_t stat_EtherStatsPktsRx1024Octetsto1522Octets;
-	u_int32_t stat_EtherStatsPktsRx1523Octetsto9022Octets;
-	u_int32_t stat_EtherStatsPktsTx64Octets;
-	u_int32_t stat_EtherStatsPktsTx65Octetsto127Octets;
-	u_int32_t stat_EtherStatsPktsTx128Octetsto255Octets;
-	u_int32_t stat_EtherStatsPktsTx256Octetsto511Octets;
-	u_int32_t stat_EtherStatsPktsTx512Octetsto1023Octets;
-	u_int32_t stat_EtherStatsPktsTx1024Octetsto1522Octets;
-	u_int32_t stat_EtherStatsPktsTx1523Octetsto9022Octets;
-	u_int32_t stat_XonPauseFramesReceived;
-	u_int32_t stat_XoffPauseFramesReceived;
-	u_int32_t stat_OutXonSent;
-	u_int32_t stat_OutXoffSent;
-	u_int32_t stat_FlowControlDone;
-	u_int32_t stat_MacControlFramesReceived;
-	u_int32_t stat_XoffStateEntered;
-	u_int32_t stat_IfInFramesL2FilterDiscards;
-	u_int32_t stat_IfInRuleCheckerDiscards;
-	u_int32_t stat_IfInFTQDiscards;
-	u_int32_t stat_IfInMBUFDiscards;
-	u_int32_t stat_IfInRuleCheckerP4Hit;
-	u_int32_t stat_CatchupInRuleCheckerDiscards;
-	u_int32_t stat_CatchupInFTQDiscards;
-	u_int32_t stat_CatchupInMBUFDiscards;
-	u_int32_t stat_CatchupInRuleCheckerP4Hit;
-
-#ifdef BNX_DEBUG
-	/* Track the number of enqueued mbufs. */
-	int	tx_mbuf_alloc;
-	int rx_mbuf_alloc;
-
-	/* Track how many and what type of interrupts are generated. */
-	u_int32_t interrupts_generated;
-	u_int32_t interrupts_handled;
-	u_int32_t rx_interrupts;
-	u_int32_t tx_interrupts;
-
-	u_int32_t	rx_low_watermark;			/* Lowest number of rx_bd's free. */
-	u_int32_t tx_hi_watermark;			/* Greatest number of tx_bd's used. */
-	u_int32_t	mbuf_alloc_failed;			/* Mbuf allocation failure counter. */
-	u_int32_t l2fhdr_status_errors;
-	u_int32_t unexpected_attentions;
-	u_int32_t	lost_status_block_updates;
-#endif
-};
-
-#endif /* #ifndef _BNX_H_DEFINED */
+#define BNX_MAX_MRU				MCLBYTES
+#define BNX_MAX_JUMBO_MRU			9216

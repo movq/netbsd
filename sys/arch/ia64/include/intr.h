@@ -1,41 +1,14 @@
-/*	$NetBSD: intr.h,v 1.3 2007/02/16 02:53:47 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.7 2017/12/13 16:50:46 scole Exp $	*/
 
 /* XXX: cherry: To Be fixed when we switch on interrupts. */
 
 #ifndef _IA64_INTR_H_
 #define _IA64_INTR_H_
 
-#define	IPL_NONE	0	/* XXX: Placeholder */
-#define	IPL_BIO		0	/* XXX: Placeholder */
-#define	IPL_NET		0	/* XXX: Placeholder */
-#define	IPL_TTY		0	/* XXX: Placeholder */
-#define	IPL_CLOCK	0	/* XXX: Placeholder */
-#define	IPL_STATCLOCK	0	/* XXX: Placeholder */
-#define	IPL_HIGH	0	/* XXX: Placeholder */
-#define	IPL_SERIAL	0	/* XXX: Placeholder */
-#define	IPL_SCHED	0	/* XXX: Placeholder */
-#define	IPL_LOCK	0	/* XXX: Placeholder */
-#define	IPL_VM		0	/* XXX: Placeholder */
-
-#define IPL_SOFTCLOCK   0	/* XXX: Placeholder */
-#define IPL_SOFTNET     0	/* XXX: Placeholder */
-#define IPL_SOFTSERIAL  0	/* XXX: Placeholder */
+#include <machine/intrdefs.h>
 
 static __inline int splraise(int dummy) { return 0; }
 static __inline void spllower(int dummy) { }
-
-/*
- * Hardware interrupt masks
- */
-#define	splbio()	splraise(IPL_BIO)
-#define	splnet()	splraise(IPL_NET)
-#define	spltty()	splraise(IPL_TTY)
-#define	splaudio()	splraise(IPL_AUDIO)
-#define	splclock()	splraise(IPL_CLOCK)
-#define	splstatclock()	splclock()
-#define	splserial()	splraise(IPL_SERIAL)
-#define splipi()	splraise(IPL_IPI)
-
 
 /*
  * Miscellaneous
@@ -73,5 +46,33 @@ splraiseipl(ipl_cookie_t icookie)
 
 	return splraise(icookie._ipl);
 }
+
+
+/*
+ * Layout of the Processor Interrupt Block.
+ */
+struct ia64_interrupt_block
+{
+	uint64_t ib_ipi[0x20000];	/* 1Mb of IPI interrupts */
+	uint8_t ib_reserved1[0xe0000];
+	uint8_t ib_inta;		/* Generate INTA cycle */
+	uint8_t ib_reserved2[7];
+	uint8_t ib_xtp;			/* XTP cycle */
+	uint8_t ib_reserved3[7];
+	uint8_t ib_reserved4[0x1fff0];
+};
+
+extern uint64_t ia64_lapic_address;
+
+#define IA64_INTERRUPT_BLOCK \
+	(struct ia64_interrupt_block *)IA64_PHYS_TO_RR6(ia64_lapic_address)
+
+/* XXX acpi */
+typedef uint64_t intr_handle_t;
+const char *intr_string(intr_handle_t, char *, size_t);
+
+void *intr_establish(int, int, int, int (*)(void *), void *);
+void intr_disestablish(void *);
+void ia64_handle_intr(void *);
 
 #endif /* ! _IA64_INTR_H_ */

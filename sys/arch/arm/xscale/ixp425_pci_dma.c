@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_pci_dma.c,v 1.3 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: ixp425_pci_dma.c,v 1.6 2012/09/18 05:47:28 matt Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_pci_dma.c,v 1.3 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_pci_dma.c,v 1.6 2012/09/18 05:47:28 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_pci_dma.c,v 1.3 2005/12/11 12:16:51 christos 
 #include <uvm/uvm_extern.h>
 
 #define _ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -80,4 +74,7 @@ ixp425_pci_dma_init(struct ixp425_softc *sc)
 	dmat->_dmamem_map = _bus_dmamem_map;
 	dmat->_dmamem_unmap = _bus_dmamem_unmap;
 	dmat->_dmamem_mmap = _bus_dmamem_mmap;
+
+	dmat->_dmatag_subregion = _bus_dmatag_subregion;
+	dmat->_dmatag_destroy = _bus_dmatag_destroy;
 }

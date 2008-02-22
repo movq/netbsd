@@ -1,4 +1,4 @@
-/*	$NetBSD: adv_isa.c,v 1.14 2007/10/19 12:00:14 ad Exp $	*/
+/*	$NetBSD: adv_isa.c,v 1.21 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc. All rights reserved.
@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adv_isa.c,v 1.14 2007/10/19 12:00:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adv_isa.c,v 1.21 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: adv_isa.c,v 1.14 2007/10/19 12:00:14 ad Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <sys/bus.h>
@@ -101,17 +93,16 @@ static int asc_ioport[ASC_IOADR_TABLE_MAX_IX] =
 
 /******************************************************************************/
 
-int	adv_isa_probe(struct device *, struct cfdata *, void *);
-void	adv_isa_attach(struct device *, struct device *, void *);
+int	adv_isa_probe(device_t, cfdata_t, void *);
+void	adv_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(adv_isa, sizeof(ASC_SOFTC),
+CFATTACH_DECL_NEW(adv_isa, sizeof(ASC_SOFTC),
     adv_isa_probe, adv_isa_attach, NULL, NULL);
 
 /******************************************************************************/
 
 int
-adv_isa_probe( struct device *parent, struct cfdata *match,
-    void *aux)
+adv_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -207,10 +198,10 @@ adv_isa_probe( struct device *parent, struct cfdata *match,
 
 
 void
-adv_isa_attach(struct device *parent, struct device *self, void *aux)
+adv_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	ASC_SOFTC *sc = (void *) self;
+	ASC_SOFTC *sc = device_private(self);
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	isa_chipset_tag_t ic = ia->ia_ic;
@@ -218,10 +209,11 @@ adv_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	printf("\n");
 
+	sc->sc_dev = self;
 	sc->sc_flags = 0x0;
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, ASC_IOADR_GAP, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
@@ -240,21 +232,20 @@ adv_isa_attach(struct device *parent, struct device *self, void *aux)
 	 * Initialize the board
 	 */
 	if (adv_init(sc)) {
-		printf("%s: adv_init failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "adv_init failed\n");
 		return;
 	}
 
 	if ((error = isa_dmacascade(ic, ia->ia_drq[0].ir_drq)) != 0) {
-		printf("%s: unable to cascade DRQ, error = %d\n",
-				sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to cascade DRQ, error = %d\n", error);
 		return;
 	}
 
 	sc->sc_ih = isa_intr_establish(ic, ia->ia_irq[0].ir_irq, IST_EDGE,
 	    IPL_BIO, adv_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 

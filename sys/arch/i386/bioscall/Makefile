@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2006/06/06 15:41:50 christos Exp $
+#	$NetBSD: Makefile,v 1.20 2014/03/04 14:58:14 joerg Exp $
 
 CPPFLAGS=	${APMCPPFLAGS}
 KSRC=${.CURDIR}/../../..
@@ -27,27 +27,15 @@ x86:
 
 .include <bsd.own.mk>
 
-.if ${OBJECT_FMT} == "ELF"
 biostramp.bin: biostramp.obj
 	${OBJCOPY} --output-target=binary $? $@
-.else
-biostramp.bin: biostramp.obj
-	cp $? $@
-	@${STRIP} $@
-	@${HOST_SH} ${.CURDIR}/rmaouthdr $@ $@.tmp
-	@if [ `ls -l $@.tmp |awk '{print $$5}'` -gt 4096 ]; then \
-		echo "$@ too big"; \
-		exit 1; \
-	fi
-	@mv -f $@.tmp $@
-.endif
 
 biostramp.obj: ${OBJS} ${DEPS}
 	${LD} -Bstatic -N -Ttext 0 -e do_bios_call -o $@ $(OBJS)
 
 assym.h: machine x86 genassym.cf
-	${TOOL_GENASSYM} -- ${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} \
-	    < ${.CURDIR}/genassym.cf > assym.h.tmp && \
+	${TOOL_GENASSYM} -- ${CC} ${CFLAGS:N-Wa,*} ${CPPFLAGS} ${PROF} \
+	    ${GENASSYM_CPPFLAGS} < ${.CURDIR}/genassym.cf > assym.h.tmp && \
 	mv -f assym.h.tmp assym.h
 
 biostramp.S: assym.h

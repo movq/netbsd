@@ -1,4 +1,4 @@
-/*	$NetBSD: fseek.c,v 1.22 2006/01/26 10:48:18 kleink Exp $	*/
+/*	$NetBSD: fseek.c,v 1.24 2014/11/16 20:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fseek.c,v 1.22 2006/01/26 10:48:18 kleink Exp $");
+__RCSID("$NetBSD: fseek.c,v 1.24 2014/11/16 20:32:52 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -58,9 +55,12 @@ fseek(FILE *fp, long l_offset, int whence)
 {
 	off_t offset;
 
+#if 0
+	/* This is a bad idea because makes fseek(fp, -6, SEEK_SET) work... */
 	if (whence == SEEK_SET)
 		offset = (unsigned long)l_offset;
 	else
+#endif
 		offset = l_offset;
 	return fseeko(fp, offset, whence);
 }

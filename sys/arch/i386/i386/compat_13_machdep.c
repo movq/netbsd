@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.20 2007/12/20 23:02:39 dsl Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.27 2017/09/17 09:41:35 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,25 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.20 2007/12/20 23:02:39 dsl Exp $");
-
-#include "opt_vm86.h"
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.27 2017/09/17 09:41:35 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
-
-#ifdef VM86
-#include <machine/vm86.h>
-#endif
 
 int
 compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
@@ -79,35 +65,24 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 
 	/* Restore register context. */
 	tf = l->l_md.md_regs;
-#ifdef VM86
-	if (context.sc_eflags & PSL_VM) {
-		void syscall_vm86(struct trapframe *);
 
-		tf->tf_vm86_gs = context.sc_gs;
-		tf->tf_vm86_fs = context.sc_fs;
-		tf->tf_vm86_es = context.sc_es;
-		tf->tf_vm86_ds = context.sc_ds;
-		set_vflags(l, context.sc_eflags);
-		p->p_md.md_syscall = syscall_vm86;
-	} else
-#endif
-	{
-		/*
-		 * Check for security violations.  If we're returning to
-		 * protected mode, the CPU will validate the segment registers
-		 * automatically and generate a trap on violations.  We handle
-		 * the trap, rather than doing all of the checking here.
-		 */
-		if (((context.sc_eflags ^ tf->tf_eflags) & PSL_USERSTATIC) != 0 ||
-		    !USERMODE(context.sc_cs, context.sc_eflags))
-			return (EINVAL);
+	/*
+	 * Check for security violations.  If we're returning to
+	 * protected mode, the CPU will validate the segment registers
+	 * automatically and generate a trap on violations.  We handle
+	 * the trap, rather than doing all of the checking here.
+	 */
+	if (((context.sc_eflags ^ tf->tf_eflags) & PSL_USERSTATIC) != 0 ||
+	    !USERMODE(context.sc_cs))
+		return (EINVAL);
 
-		tf->tf_gs = context.sc_gs;
-		tf->tf_fs = context.sc_fs;		
-		tf->tf_es = context.sc_es;
-		tf->tf_ds = context.sc_ds;
-		tf->tf_eflags = context.sc_eflags;
-	}
+	tf->tf_gs = context.sc_gs;
+	tf->tf_fs = context.sc_fs;		
+	tf->tf_es = context.sc_es;
+	tf->tf_ds = context.sc_ds;
+	tf->tf_eflags &= ~PSL_USER;
+	tf->tf_eflags |= context.sc_eflags & PSL_USER;
+
 	tf->tf_edi = context.sc_edi;
 	tf->tf_esi = context.sc_esi;
 	tf->tf_ebp = context.sc_ebp;
@@ -120,7 +95,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	tf->tf_esp = context.sc_esp;
 	tf->tf_ss = context.sc_ss;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -129,7 +104,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&context.sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

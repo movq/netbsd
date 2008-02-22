@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_union.c,v 1.20 2008/02/05 16:54:07 ad Exp $	*/
+/*	$NetBSD: mount_union.c,v 1.22 2011/08/29 14:35:03 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_union.c	8.6 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_union.c,v 1.20 2008/02/05 16:54:07 ad Exp $");
+__RCSID("$NetBSD: mount_union.c,v 1.22 2011/08/29 14:35:03 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,7 +68,7 @@ static const struct mntopt mopts[] = {
 
 int	mount_union(int argc, char **argv);
 static int	subdir(const char *, const char *);
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int

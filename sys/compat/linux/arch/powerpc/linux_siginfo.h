@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_siginfo.h,v 1.3 2005/12/11 12:20:16 christos Exp $ */
+/*	$NetBSD: linux_siginfo.h,v 1.6 2011/11/18 04:07:44 christos Exp $ */
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -98,26 +91,5 @@ typedef struct linux_siginfo {
 
 	} _sidata;
 } linux_siginfo_t;
-
-#define lsi_pid _sidata._kill._pid
-#define lsi_uid _sidata._kill._uid
-
-/*
- * si_code values
- * Digital reserves positive values for kernel-generated signals.
- */
-#define LINUX__SI_CODE(T,N)  ((T) << 16 | ((N) & 0xffff))
-
-#define LINUX_SI_USER		0
-#define LINUX_SI_KERNEL		0x80
-#define LINUX_SI_QUEUE		-1
-#define LINUX_SI_TIMER		LINUX__SI_CODE(__SI_TIMER,-2)
-#define LINUX_SI_MESGQ		-3
-#define LINUX_SI_ASYNCIO	-4
-#define LINUX_SI_SIGIO  	-5
-
-#define LINUX_SI_FROMUSER(sp)	((sp)->si_code <= 0)
-#define LINUX_SI_FROMKERENL(sp) ((sp)->si_code > 0)
-
 
 #endif /* !_POWERPC_LINUX_SIGINFO_H */

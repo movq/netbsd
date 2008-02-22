@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pmc.c,v 1.9 2007/12/20 23:03:11 dsl Exp $	*/
+/*	$NetBSD: sys_pmc.c,v 1.11 2014/01/25 21:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pmc.c,v 1.9 2007/12/20 23:03:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pmc.c,v 1.11 2014/01/25 21:11:49 christos Exp $");
 
 #include "opt_perfctrs.h"
 
@@ -71,27 +71,26 @@ sys_pmc_control(struct lwp *l, const struct sys_pmc_control_args *uap, register_
 	int ctr, operation, error=0;
 
 	ctr = SCARG(uap, ctr);
+	__USE(ctr);
 	operation = SCARG(uap, op);
 
+	KERNEL_LOCK(1, NULL);
 	switch (operation) {
 	case PMC_OP_START:
 		if (!pmc_counter_isconfigured(l->l_proc, ctr)) {
-			return ENXIO;
+			error = ENXIO;
+		} else if (pmc_counter_isrunning(l->l_proc, ctr)) {
+			error = EINPROGRESS;
+		} else {
+			pmc_enable_counter(l->l_proc, ctr);
 		}
-		if (pmc_counter_isrunning(l->l_proc, ctr)) {
-			return EINPROGRESS;
-		}
-		pmc_enable_counter(l->l_proc, ctr);
 		break;
 	case PMC_OP_STOP:
 		if (!pmc_counter_isconfigured(l->l_proc, ctr)) {
-			return ENXIO;
+			error = ENXIO;
+		} else if (pmc_counter_isrunning(l->l_proc, ctr)) {
+			pmc_disable_counter(l->l_proc, ctr);
 		}
-		if (!pmc_counter_isrunning(l->l_proc, ctr)) {
-			/* Nothing to do */
-			return 0;
-		}
-		pmc_disable_counter(l->l_proc, ctr);
 		break;
 	case PMC_OP_CONFIGURE:
 		args = SCARG(uap, args);
@@ -119,6 +118,7 @@ sys_pmc_control(struct lwp *l, const struct sys_pmc_control_args *uap, register_
 		error = EINVAL;
 		break;
 	}
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 #endif
 }
@@ -141,9 +141,10 @@ sys_pmc_get_info(struct lwp *l, const struct sys_pmc_get_info_args *uap, registe
 	ctr = SCARG(uap, ctr);
 	request = SCARG(uap, op);
 	args = SCARG(uap, args);
+	__USE(flags);
 
+	KERNEL_LOCK(1, NULL);
 	nctrs = pmc_get_num_counters();
-
 	switch (request) {
 	case PMC_INFO_NCOUNTERS:	/* args should be (int *) */
 		error = copyout(&nctrs, args, sizeof(int));
@@ -159,7 +160,8 @@ sys_pmc_get_info(struct lwp *l, const struct sys_pmc_get_info_args *uap, registe
 		/*FALLTHROUGH*/
 	case PMC_INFO_COUNTER_VALUE:
 		if (ctr < 0 || ctr >= nctrs) {
-			return EINVAL;
+			error = EINVAL;
+			break;
 		}
 		error = pmc_get_counter_value(l->l_proc, ctr, flags, &val);
 		if (error == 0) {
@@ -170,6 +172,7 @@ sys_pmc_get_info(struct lwp *l, const struct sys_pmc_get_info_args *uap, registe
 		error = EINVAL;
 		break;
 	}
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 #endif
 }

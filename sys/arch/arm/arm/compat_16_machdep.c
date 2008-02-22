@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.9 2007/12/21 02:27:57 matt Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.18 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -35,35 +35,35 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup
+ * Machine dependent functions for kernel setup
  *
  * Created      : 17/09/94
  */
 
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.18 2018/01/24 09:04:44 skrll Exp $");
+
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_armfpe.h"
+#endif
 
 #include <sys/param.h>
-
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.9 2007/12/21 02:27:57 matt Exp $");
-
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/ucontext.h>
 
 #include <arm/armreg.h>
+#include <arm/locore.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
-#include <machine/pcb.h>
-#ifndef acorn26
 #include <arm/cpufunc.h>
-#endif
 
 /*
  * Send an interrupt to process.
@@ -82,17 +82,15 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.9 2007/12/21 02:27:57 matt E
 void
 sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	struct sigacts *ps = p->p_sigacts;
-	struct trapframe *tf;
+	struct lwp * const l = curlwp;
+	struct proc * const p = l->l_proc;
+	struct sigacts * const ps = p->p_sigacts;
+	struct trapframe * const tf = lwp_trapframe(l);
 	struct sigframe_sigcontext *fp, frame;
 	int onstack, error;
 	int sig = ksi->ksi_signo;
 	u_long code = KSI_TRAPCODE(ksi);
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
-
-	tf = process_frame(l);
 
 	fp = getframe(l, sig, &onstack);
 
@@ -100,7 +98,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	fp--;
 
 	/* make the stack aligned */
-	fp = (void *)STACKALIGN(fp);
+	fp = (void *)STACK_ALIGN(fp, STACK_ALIGNBYTES);
 
 	/* Save register context. */
 	frame.sf_sc.sc_r0     = tf->tf_r0;
@@ -139,9 +137,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -178,10 +176,8 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	switch (ps->sa_sigdesc[sig].sd_vers) {
 	case 0:		/* legacy on-stack sigtramp */
 		tf->tf_usr_lr = (int)p->p_sigctx.ps_sigcode;
-#ifndef acorn26
 		/* XXX This should not be needed. */
 		cpu_icache_sync_all();
-#endif
 		break;
 	case 1:
 		tf->tf_usr_lr = (int)ps->sa_sigdesc[sig].sd_tramp;
@@ -214,9 +210,9 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	/* {
 		syscallarg(struct sigcontext *) sigcntxp;
 	} */
+	struct trapframe * const tf = lwp_trapframe(l);
+	struct proc * const p = l->l_proc;
 	struct sigcontext *scp, context;
-	struct trapframe *tf;
-	struct proc *p = l->l_proc;
 
 	/*
 	 * we do a rather scary test in userland
@@ -241,7 +237,6 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 		return EINVAL;
 
 	/* Restore register context. */
-	tf = process_frame(l);
 	tf->tf_r0    = context.sc_r0;
 	tf->tf_r1    = context.sc_r1;
 	tf->tf_r2    = context.sc_r2;
@@ -261,7 +256,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	tf->tf_pc    = context.sc_pc;
 	tf->tf_spsr  = context.sc_spsr;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
@@ -272,7 +267,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &context.sc_mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

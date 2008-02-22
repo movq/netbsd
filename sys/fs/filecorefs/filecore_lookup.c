@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $	*/
+/*	$NetBSD: filecore_lookup.c,v 1.21 2014/10/04 13:27:24 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.21 2014/10/04 13:27:24 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -79,8 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka E
 #include <fs/filecorefs/filecore.h>
 #include <fs/filecorefs/filecore_extern.h>
 #include <fs/filecorefs/filecore_node.h>
-
-struct	nchstats filecore_nchstats;
 
 /*
  * Convert a component of a pathname into a pointer to a locked inode.
@@ -118,22 +116,18 @@ struct	nchstats filecore_nchstats;
  * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode unlocked.
  */
 int
-filecore_lookup(v)
-	void *v;
+filecore_lookup(void *v)
 {
-	struct vop_lookup_args /* {
+	struct vop_lookup_v2_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
 	} */ *ap = v;
 	struct vnode *vdp;		/* vnode for directory being searched */
 	struct filecore_node *dp;	/* inode for directory being searched */
-	struct filecore_mnt *fcmp;	/* file system that directory is in */
 	struct buf *bp;			/* a buffer of directory entries */
 	struct filecore_direntry *de;
 	int numdirpasses;		/* strategy for directory search */
-	struct vnode *pdp;		/* saved dp during symlink work */
-	struct vnode *tdp;		/* returned by filecore_vget_internal */
 	int error;
 	u_short namelen;
 	int res;
@@ -151,7 +145,6 @@ filecore_lookup(v)
 	*vpp = NULL;
 	vdp = ap->a_dvp;
 	dp = VTOI(vdp);
-	fcmp = dp->i_mnt;
 
 	/*
 	 * Check accessiblity of directory.
@@ -170,8 +163,10 @@ filecore_lookup(v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
-		return (error);
+	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
+			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
+		return *vpp == NULLVP ? ENOENT : 0;
+	}
 
 	name = cnp->cn_nameptr;
 	namelen = cnp->cn_namelen;
@@ -194,7 +189,7 @@ filecore_lookup(v)
 	} else {
 		i = dp->i_diroff;
 		numdirpasses = 2;
-		filecore_nchstats.ncs_2passes++;
+		namecache_count_2passes();
 	}
 	endsearch = FILECORE_MAXDIRENTS;
 
@@ -203,7 +198,6 @@ filecore_lookup(v)
 
 	error = filecore_dbread(dp, &bp);
 	if (error) {
-		brelse(bp, 0);
 		return error;
 	}
 
@@ -247,15 +241,13 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(vdp, *vpp, cnp);
-	if (nameiop == CREATE || nameiop == RENAME)
-		return (EROFS);
-	return (ENOENT);
+	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
+		    cnp->cn_flags);
+	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
 
 found:
 	if (numdirpasses == 2)
-		filecore_nchstats.ncs_pass2++;
+		namecache_count_pass2();
 
 	/*
 	 * Found component in pathname.
@@ -265,60 +257,30 @@ found:
 	if ((flags & ISLASTCN) && nameiop == LOOKUP)
 		dp->i_diroff = i;
 
-	/*
-	 * Step through the translation in the name.  We do not `iput' the
-	 * directory because we may need it again if a symbolic link
-	 * is relative to the current directory.  Instead we save it
-	 * unlocked as "pdp".  We must get the target inode before unlocking
-	 * the directory to insure that the inode will not be removed
-	 * before we get it.  We prevent deadlock by always fetching
-	 * inodes from the root, moving down the directory tree. Thus
-	 * when following backward pointers ".." we must unlock the
-	 * parent directory before getting the requested directory.
-	 * There is a potential race condition here if both the current
-	 * and parent directories are removed before the `iget' for the
-	 * inode associated with ".." returns.  We hope that this occurs
-	 * infrequently since we cannot avoid this race condition without
-	 * implementing a sophisticated deadlock detection algorithm.
-	 * Note also that this simple deadlock detection scheme will not
-	 * work if the file system has any hard links other than ".."
-	 * that point backwards in the directory structure.
-	 */
-	pdp = vdp;
-
-	/*
-	 * If ino is different from dp->i_ino,
-	 * it's a relocated directory.
-	 */
-	if (flags & ISDOTDOT) {
-		ino_t pin = filecore_getparent(dp);
-
-		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
-		error = VFS_VGET(vdp->v_mount, pin, &tdp);
-		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
-		if (error) {
-			return error;
-		}
-		*vpp = tdp;
-	} else if (name[0] == '.' && namelen == 1) {
-		VREF(vdp);	/* we want ourself, ie "." */
+	if (name[0] == '.' && namelen == 1) {
+		vref(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
+		ino_t ino;
+
+		if (flags & ISDOTDOT) {
+			ino = filecore_getparent(dp);
+		} else {
+			ino = dp->i_dirent.addr | (i << FILECORE_INO_INDEX);
 #ifdef FILECORE_DEBUG_BR
 			printf("brelse(%p) lo4\n", bp);
 #endif
-		brelse(bp, 0);
-		error = VFS_VGET(vdp->v_mount, dp->i_dirent.addr |
-		    (i << FILECORE_INO_INDEX), &tdp);
+			brelse(bp, 0);
+		}
+		error = vcache_get(vdp->v_mount, &ino, sizeof(ino), vpp);
 		if (error)
-			return (error);
-		*vpp = tdp;
+			return error;
 	}
 
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(vdp, *vpp, cnp);
-	return (0);
+	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
+		    cnp->cn_flags);
+	return 0;
 }

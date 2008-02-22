@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses_tty.3,v 1.8 2004/03/16 19:27:35 snj Exp $
+.\"	$NetBSD: curses_tty.3,v 1.14 2017/09/18 08:49:20 wiz Exp $
 .\"
 .\" Copyright (c) 2002
 .\"	Brett Lymn (blymn@NetBSD.org, brett_lymn@yahoo.com.au)
@@ -30,11 +30,12 @@
 .\" SUCH DAMAGE.
 .\"
 .\"
-.Dd June 13, 2003
+.Dd February 17, 2017
 .Dt CURSES_TTY 3
 .Os
 .Sh NAME
 .Nm curses_tty ,
+.Nm baudrate ,
 .Nm beep ,
 .Nm flash ,
 .Nm curs_set ,
@@ -65,6 +66,7 @@
 .Nm nocbreak ,
 .Nm raw ,
 .Nm noraw ,
+.Nm typeahead ,
 .Nm savetty ,
 .Nm resetty
 .Nd curses terminal manipulation routines
@@ -72,6 +74,8 @@
 .Lb libcurses
 .Sh SYNOPSIS
 .In curses.h
+.Ft int
+.Fn baudrate "void"
 .Ft int
 .Fn beep "void"
 .Ft int
@@ -98,16 +102,16 @@
 .Fn flushinp "void"
 .Ft int
 .Fn gettmode "void"
-.Ft int
+.Ft bool
 .Fn has_ic "void"
-.Ft int
+.Ft bool
 .Fn has_il "void"
 .Ft int
-.Fn idcok "WINDOW *win" "boolf flag"
+.Fn idcok "WINDOW *win" "bool flag"
 .Ft int
-.Fn idlok "WINDOW *win" "boolf flag"
+.Fn idlok "WINDOW *win" "bool flag"
 .Ft int
-.Fn intrflush "WINDOW *win" "boolf flag"
+.Fn intrflush "WINDOW *win" "bool flag"
 .Ft void
 .Fn noqiflush "void"
 .Ft void
@@ -115,7 +119,7 @@
 .Ft char
 .Fn killchar "void"
 .Ft int
-.Fn meta "WINDOW *win" "boolf flag"
+.Fn meta "WINDOW *win" "bool flag"
 .Ft int
 .Fn napms "int ms"
 .Ft int
@@ -133,11 +137,18 @@
 .Ft int
 .Fn noraw "void"
 .Ft int
+.Fn typeahead "int filedes"
+.Ft int
 .Fn savetty "void"
 .Ft int
 .Fn resetty "void"
 .Sh DESCRIPTION
 These functions manipulate curses terminal settings.
+.Pp
+The
+.Fn baudrate
+function extracts the output speed of the terminal
+and returns it in bits per second.
 .Pp
 The
 .Fn beep
@@ -318,6 +329,28 @@ The
 function puts the terminal into Raw mode, no input character
 translation is done nor is signal character processing.
 .Pp
+The
+.Fn typeahead
+function controls the detection of typeahead during a refresh based on the
+value of
+.Va filedes :
+.Bl -bullet -compact
+.It
+If
+.Ar filedes
+is a valid file descriptor, typeahead is enabled during refresh;
+Curses periodically checks
+.Ar filedes
+for input and aborts the refresh if any character is available.
+The value of
+.Ar filedes
+need not be the file descriptor on which the refresh is occurring.
+.It
+If
+.Ar filedes
+is \-1, Curses does not check for typeahead during refresh.
+.El
+.Pp
 The terminal
 tty flags can be saved by calling
 .Fn savetty
@@ -334,9 +367,9 @@ The functions that return an int will return one of the following
 values:
 .Pp
 .Bl -tag -width ERR -compact
-.It Er OK
+.It Dv OK
 The function completed successfully.
-.It Er ERR
+.It Dv ERR
 An error occurred in the function.
 .El
 .Sh SEE ALSO

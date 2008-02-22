@@ -1,4 +1,4 @@
-.\"	$NetBSD: upgrade,v 1.24 2008/02/07 14:36:40 itohy Exp $
+.\"	$NetBSD: upgrade,v 1.30 2015/05/09 08:13:35 snj Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,12 +27,10 @@
 .
 .
 .Pp
-The upgrade to
+The easiest way to upgrade to
 .Nx
 \*V
-is a binary upgrade; it can be quite difficult to update the system
-from an earlier version by recompiling from source, primarily due to
-interdependencies in the various components.
+is with binaries, and that is the method documented here.
 .Pp
 .ie \n[atari] \{\
 To do the upgrade, you must first boot the system as described in the
@@ -48,7 +39,7 @@ section.
 .\}
 .el \{\
 .ie \n[mac68k]:\n[macppc]:\n[sparc]:\n[sparc64] \{\
-To do the upgrade, you must boot from the installer kernel using one of
+To do the upgrade, you must boot the install kernel using one of
 the methods described above.
 .\}
 .el \{\
@@ -68,30 +59,21 @@ utility and the installation kernel you chose, or the
 boot floppies available to do the upgrade.
 .\}
 .el \{\
-To do the upgrade, you must have the boot floppy
-.if \n[alpha]:\n[i386] set
-available.
+To do the upgrade, you must have one form of boot media available.
 .\}\}\}\}
 You must also have at least the
 .Sy base
 and
 .Sy kern
-binary distribution sets available, so that you can upgrade with them,
-using one of the upgrade methods described above.
+binary distribution sets available.
 Finally, you must have sufficient disk space available to install the
 new binaries.
 Since files already installed on the system are overwritten in place,
 you only need additional free space for files which weren't previously
 installed or to account for growth of the sets between releases.
-If you have a few megabytes free on each of your root
-.Pq Pa /
-and
-.Pa /usr
-partitions, you should have enough space.
 .Pp
-Since upgrading involves replacing the kernel, the boot blocks on your
-.Nx
-partition, and most of the system binaries, it has the
+Since upgrading involves replacing the kernel, boot blocks,
+and most of the system binaries, it has the
 potential to cause data loss.
 You are strongly advised to 
 .Em back up 
@@ -108,20 +90,12 @@ booting, there is an option to bypass this step.
 Make sure you know whether or not to install the bootloader.
 .\}
 .Pp
-The upgrade procedure using the
-.Ic sysinst
-tool is similar to an installation, but without the hard disk partitioning.
-.Ic sysinst
-will attempt to merge the settings stored in your
-.Pa /etc
-directory with the new version of
-.Nx .
-Getting the binary
-sets is done in the same manner as the installation procedure;
-refer to the installation part of the document
-for how to do this.
-Also, some sanity checks are done, i.e.
-file systems are checked before unpacking the sets.
+The upgrade procedure
+is similar to an installation, but without the hard disk partitioning.
+.Pp
+Fetching the binary sets is done in the same manner as the installation
+procedure; refer to the installation part of the document for help.
+File systems are checked before unpacking the sets.
 .Pp
 After a new kernel has been copied to your hard disk, your
 machine is a complete
@@ -129,8 +103,7 @@ machine is a complete
 \*V
 system.
 However, that doesn't mean that you're finished with the upgrade process.
-You will probably want to update the set of device
-nodes you have in
+You will probably want to update the set of device nodes you have in
 .Pa /dev .
 If you've changed the contents of
 .Pa /dev
@@ -141,9 +114,17 @@ and run the command:
 .Pp
 .Dl # Ic "sh MAKEDEV all"
 .Pp
-Finally, you will want to delete old binaries that were part
-of the version of
+.Ic sysinst
+will attempt to merge the settings stored in your
+.Pa /etc
+directory with the new version of
 .Nx
-that you upgraded from and have since been removed from the
-.Nx
-distribution.
+using the
+.Xr postinstall 8
+utility.
+However,
+.Xr postinstall 8
+is only able to deal with changes that are easily automated.
+It is recommended that you use the
+.Xr etcupdate 8
+tool to merge any remaining configuration changes.

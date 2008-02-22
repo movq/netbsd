@@ -1,4 +1,4 @@
-/*	$NetBSD: mulaw.c,v 1.26 2006/11/16 01:32:45 christos Exp $	*/
+/*	$NetBSD: mulaw.c,v 1.33 2017/12/27 00:12:06 nat Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -35,10 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.26 2006/11/16 01:32:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mulaw.c,v 1.33 2017/12/27 00:12:06 nat Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <dev/auconv.h>
 #include <dev/mulaw.h>
 
@@ -260,7 +261,7 @@ static const uint8_t lintoalaw[256] = {
 
 #define DEFINE_FILTER(name)	\
 static int \
-name##_fetch_to(stream_fetcher_t *, audio_stream_t *, int); \
+name##_fetch_to(struct audio_softc *, stream_fetcher_t *, audio_stream_t *, int); \
 stream_filter_t * \
 name(struct audio_softc *sc, const audio_params_t *from, \
      const audio_params_t *to) \
@@ -269,7 +270,8 @@ name(struct audio_softc *sc, const audio_params_t *from, \
 	return auconv_nocontext_filter_factory(name##_fetch_to); \
 } \
 static int \
-name##_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
+name##_fetch_to(struct audio_softc *sc, stream_fetcher_t *self, \
+    audio_stream_t *dst, int max_used)
 
 DEFINE_FILTER(mulaw_to_linear8)
 {
@@ -277,7 +279,7 @@ DEFINE_FILTER(mulaw_to_linear8)
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
@@ -299,16 +301,17 @@ DEFINE_FILTER(mulaw_to_linear16)
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used / 2)))
+	max_used = (max_used + 1) & ~1;
+	if ((err = this->prev->fetch_to(sc, this->prev,
+		this->src, max_used / 2)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	switch (dst->param.encoding) {
 	case AUDIO_ENCODING_ULINEAR_LE:
 		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 2, m) {
-			d[0] = mulawtolin16[s[0]][1];
 			d[1] = mulawtolin16[s[0]][0];
+			d[0] = mulawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_BE:
@@ -319,8 +322,8 @@ DEFINE_FILTER(mulaw_to_linear16)
 		break;
 	case AUDIO_ENCODING_SLINEAR_LE:
 		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 2, m) {
-			d[0] = mulawtolin16[s[0]][1];
 			d[1] = mulawtolin16[s[0]][0] ^ 0x80;
+			d[0] = mulawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_SLINEAR_BE:
@@ -329,63 +332,157 @@ DEFINE_FILTER(mulaw_to_linear16)
 			d[1] = mulawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
 	}
 	return 0;
-}
+}								
 
-DEFINE_FILTER(linear16_to_mulaw)
+DEFINE_FILTER(mulaw_to_linear24)
 {
 	stream_filter_t *this;
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used * 2)))
+	max_used = (max_used + 1) & ~1;
+	if ((err = this->prev->fetch_to(sc, this->prev,
+		this->src, max_used / 3)))
+		return err;
+	m = (dst->end - dst->start) & ~1;
+	m = min(m, max_used);
+	switch (dst->param.encoding) {
+	case AUDIO_ENCODING_ULINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[2] = mulawtolin16[s[0]][0];
+			d[1] = mulawtolin16[s[0]][1];
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_ULINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[0] = mulawtolin16[s[0]][0];
+			d[1] = mulawtolin16[s[0]][1];
+			d[2] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[2] = mulawtolin16[s[0]][0] ^ 0x80;
+			d[1] = mulawtolin16[s[0]][1];
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[0] = mulawtolin16[s[0]][0] ^ 0x80;
+			d[1] = mulawtolin16[s[0]][1];
+			d[2] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
+	}
+	return 0;
+}								
+
+DEFINE_FILTER(mulaw_to_linear32)
+{
+	stream_filter_t *this;
+	int m, err;
+
+	this = (stream_filter_t *)self;
+	max_used = (max_used + 1) & ~1;
+	if ((err = this->prev->fetch_to(sc, this->prev,
+		this->src, max_used / 4)))
+		return err;
+	m = (dst->end - dst->start) & ~1;
+	m = min(m, max_used);
+	switch (dst->param.encoding) {
+	case AUDIO_ENCODING_ULINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[3] = mulawtolin16[s[0]][0];
+			d[2] = mulawtolin16[s[0]][1];
+			d[1] = 0;
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_ULINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[0] = mulawtolin16[s[0]][0];
+			d[1] = mulawtolin16[s[0]][1];
+			d[2] = 0;
+			d[3] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[3] = mulawtolin16[s[0]][0] ^ 0x80;
+			d[2] = mulawtolin16[s[0]][1];
+			d[1] = 0;
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[0] = mulawtolin16[s[0]][0] ^ 0x80;
+			d[1] = mulawtolin16[s[0]][1];
+			d[2] = 0;
+			d[3] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
+	}
+	return 0;
+}								
+
+DEFINE_FILTER(linearN_to_mulaw)
+{
+	stream_filter_t *this;
+	int hw, m, err;
+
+	this = (stream_filter_t *)self;
+	hw = this->src->param.precision / NBBY;
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src,
+		 max_used * hw)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
 	switch (this->src->param.encoding) {
 	case AUDIO_ENCODING_SLINEAR_LE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
-			d[0] = lintomulaw[s[1] ^ 0x80];
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
+			d[0] = lintomulaw[s[hw - 1] ^ 0x80];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_SLINEAR_BE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
 			d[0] = lintomulaw[s[0] ^ 0x80];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_LE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
-			d[0] = lintomulaw[s[1]];
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
+			d[0] = lintomulaw[s[hw - 1]];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_BE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
 			d[0] = lintomulaw[s[0]];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
-	}
-	return 0;
-}
-
-DEFINE_FILTER(linear8_to_mulaw)
-{
-	stream_filter_t *this;
-	int m, err;
-
-	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
-		return err;
-	m = dst->end - dst->start;
-	m = min(m, max_used);
-	if (this->src->param.encoding == AUDIO_ENCODING_ULINEAR_LE) {
-		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 1, m) {
-			*d = lintomulaw[*s];
-		} FILTER_LOOP_EPILOGUE(this->src, dst);
-	} else {		/* SLINEAR_LE */
-		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 1, m) {
-			*d = lintomulaw[*s ^ 0x80];
-		} FILTER_LOOP_EPILOGUE(this->src, dst);
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]n",
+		    __func__);
+		break;
 	}
 	return 0;
 }
@@ -396,7 +493,7 @@ DEFINE_FILTER(alaw_to_linear8)
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
@@ -419,15 +516,16 @@ DEFINE_FILTER(alaw_to_linear16)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used / 2)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src,
+		 max_used / 2)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	switch (dst->param.encoding) {
 	case AUDIO_ENCODING_ULINEAR_LE:
 		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 2, m) {
-			d[0] = alawtolin16[s[0]][1];
 			d[1] = alawtolin16[s[0]][0];
+			d[0] = alawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_BE:
@@ -438,8 +536,8 @@ DEFINE_FILTER(alaw_to_linear16)
 		break;
 	case AUDIO_ENCODING_SLINEAR_LE:
 		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 2, m) {
-			d[0] = alawtolin16[s[0]][1];
 			d[1] = alawtolin16[s[0]][0] ^ 0x80;
+			d[0] = alawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_SLINEAR_BE:
@@ -448,62 +546,156 @@ DEFINE_FILTER(alaw_to_linear16)
 			d[1] = alawtolin16[s[0]][1];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
 	}
 	return 0;
 }
 
-DEFINE_FILTER(linear8_to_alaw)
+DEFINE_FILTER(alaw_to_linear24)
 {
 	stream_filter_t *this;
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	max_used = (max_used + 1) & ~1; /* round up to even */
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src,
+		 max_used / 3)))
 		return err;
-	m = dst->end - dst->start;
+	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
-	if (this->src->param.encoding == AUDIO_ENCODING_ULINEAR_LE) {
-		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 1, m) {
-			*d = lintoalaw[*s];
+	switch (dst->param.encoding) {
+	case AUDIO_ENCODING_ULINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[2] = alawtolin16[s[0]][0];
+			d[1] = alawtolin16[s[0]][1];
+			d[0] = 0;
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
-	} else {		/* SLINEAR_LE */
-		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 1, m) {
-			*d = lintoalaw[*s ^ 0x80];
+		break;
+	case AUDIO_ENCODING_ULINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[0] = alawtolin16[s[0]][0];
+			d[1] = alawtolin16[s[0]][1];
+			d[2] = 0;
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[2] = alawtolin16[s[0]][0] ^ 0x80;
+			d[1] = alawtolin16[s[0]][1];
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 3, m) {
+			d[0] = alawtolin16[s[0]][0] ^ 0x80;
+			d[1] = alawtolin16[s[0]][1];
+			d[2] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
 	}
 	return 0;
 }
 
-DEFINE_FILTER(linear16_to_alaw)
+DEFINE_FILTER(alaw_to_linear32)
 {
 	stream_filter_t *this;
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used * 2)))
+	max_used = (max_used + 1) & ~1; /* round up to even */
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src,
+		 max_used / 4)))
+		return err;
+	m = (dst->end - dst->start) & ~1;
+	m = min(m, max_used);
+	switch (dst->param.encoding) {
+	case AUDIO_ENCODING_ULINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[3] = alawtolin16[s[0]][0];
+			d[2] = alawtolin16[s[0]][1];
+			d[1] = 0;
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_ULINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[0] = alawtolin16[s[0]][0];
+			d[1] = alawtolin16[s[0]][1];
+			d[2] = 0;
+			d[3] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_LE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[3] = alawtolin16[s[0]][0] ^ 0x80;
+			d[2] = alawtolin16[s[0]][1];
+			d[1] = 0;
+			d[0] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	case AUDIO_ENCODING_SLINEAR_BE:
+		FILTER_LOOP_PROLOGUE(this->src, 1, dst, 4, m) {
+			d[0] = alawtolin16[s[0]][0] ^ 0x80;
+			d[1] = alawtolin16[s[0]][1];
+			d[2] = 0;
+			d[3] = 0;
+		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
+		break;
+	}
+	return 0;
+}
+
+DEFINE_FILTER(linearN_to_alaw)
+{
+	stream_filter_t *this;
+	int hw, m, err;
+
+	this = (stream_filter_t *)self;
+	hw = this->src->param.precision / NBBY;
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src,
+			max_used * hw)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
 	switch (this->src->param.encoding) {
 	case AUDIO_ENCODING_SLINEAR_LE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
-			d[0] = lintoalaw[s[1] ^ 0x80];
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
+			d[0] = lintoalaw[s[hw - 1] ^ 0x80];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_SLINEAR_BE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
 			d[0] = lintoalaw[s[0] ^ 0x80];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_LE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
-			d[0] = lintoalaw[s[1]];
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
+			d[0] = lintoalaw[s[hw - 1]];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
 		break;
 	case AUDIO_ENCODING_ULINEAR_BE:
-		FILTER_LOOP_PROLOGUE(this->src, 2, dst, 1, m) {
+		FILTER_LOOP_PROLOGUE(this->src, hw, dst, 1, m) {
 			d[0] = lintoalaw[s[0]];
 		} FILTER_LOOP_EPILOGUE(this->src, dst);
+		break;
+	default:
+		aprint_error(
+		    "%s: encoding must be [s/u]linear_[le/be]\n",
+		    __func__);
 		break;
 	}
 	return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_eisa.c,v 1.17 2007/10/19 11:59:41 ad Exp $	*/
+/*	$NetBSD: dpt_eisa.c,v 1.23 2016/07/14 04:00:45 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.17 2007/10/19 11:59:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.23 2016/07/14 04:00:45 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,11 +57,11 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_eisa.c,v 1.17 2007/10/19 11:59:41 ad Exp $");
 #define DPT_EISA_IOCONF			0x90
 #define DPT_EISA_EATA_REG_OFFSET	0x88
 
-static void	dpt_eisa_attach(struct device *, struct device *, void *);
+static void	dpt_eisa_attach(device_t, device_t, void *);
 static int	dpt_eisa_irq(bus_space_tag_t, bus_space_handle_t, int *);
-static int	dpt_eisa_match(struct device *, struct cfdata *, void *);
+static int	dpt_eisa_match(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(dpt_eisa, sizeof(struct dpt_softc),
+CFATTACH_DECL_NEW(dpt_eisa, sizeof(struct dpt_softc),
     dpt_eisa_match, dpt_eisa_attach, NULL, NULL);
 
 static const char * const dpt_eisa_boards[] = {
@@ -103,8 +103,7 @@ dpt_eisa_irq(bus_space_tag_t iot, bus_space_handle_t ioh, int *irq)
 }
 
 static int
-dpt_eisa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+dpt_eisa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct eisa_attach_args *ea;
 	int i;
@@ -119,7 +118,7 @@ dpt_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-dpt_eisa_attach(struct device *parent, struct device *self, void *aux)
+dpt_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -129,9 +128,11 @@ dpt_eisa_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot;
 	const char *intrstr;
 	int irq;
+	char intrbuf[EISA_INTRSTR_LEN];
 
 	ea = aux;
 	sc = device_private(self);
+	sc->sc_dev = self;
 	iot = ea->ea_iot;
 	ec = ea->ea_ec;
 
@@ -139,7 +140,7 @@ dpt_eisa_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) +
 	    DPT_EISA_SLOT_OFFSET, DPT_EISA_IOSIZE, 0, &ioh)) {
-		printf("can't map i/o space\n");
+		aprint_error("can't map i/o space\n");
 		return;
 	}
 
@@ -149,30 +150,29 @@ dpt_eisa_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (dpt_eisa_irq(iot, ioh, &irq)) {
-		printf("HBA on invalid IRQ\n");
+		aprint_error("HBA on invalid IRQ\n");
 		return;
 	}
 
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("can't map interrupt (%d)\n", irq);
+		aprint_error("can't map interrupt (%d)\n", irq);
 		return;
 	}
 
-	intrstr = eisa_intr_string(ec, ih);
+	intrstr = eisa_intr_string(ec, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = eisa_intr_establish(ec, ih, IST_LEVEL, IPL_BIO,
 	    dpt_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("can't establish interrupt");
+		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
 	/* Read the EATA configuration. */
 	if (dpt_readcfg(sc)) {
-		printf("%s: readcfg failed - see dpt(4)\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(sc->sc_dev, "readcfg failed - see dpt(4)\n");
 		return;
 	}
 

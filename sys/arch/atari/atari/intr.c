@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.13 2007/12/03 15:33:21 ad Exp $	*/
+/*	$NetBSD: intr.c,v 1.26 2014/10/18 08:33:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13 2007/12/03 15:33:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.26 2014/10/18 08:33:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,9 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13 2007/12/03 15:33:21 ad Exp $");
 #include <sys/device.h>
 #include <sys/cpu.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <atari/atari/intr.h>
+#include <machine/intr.h>
 
 #define	AVEC_MIN	1
 #define	AVEC_MAX	7
@@ -62,11 +53,11 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13 2007/12/03 15:33:21 ad Exp $");
 typedef LIST_HEAD(, intrhand) ih_list_t;
 ih_list_t autovec_list[AVEC_MAX - AVEC_MIN + 1];
 ih_list_t uservec_list[UVEC_MAX - UVEC_MIN + 1];
-static int idepth;
+int idepth;
 volatile int ssir;
 
 void
-intr_init()
+intr_init(void)
 {
 	int i;
 
@@ -95,7 +86,7 @@ intr_init()
  *			means:
  *				- This vector can't be shared
  *				- 'ih_fun' must save registers
- *				- 'ih_fun' must do it's own interrupt accounting
+ *				- 'ih_fun' must do its own interrupt accounting
  *				- The argument to 'ih_fun' is a standard
  *				  interrupt frame.
  *		- ARG_CLOCKRAME
@@ -114,12 +105,7 @@ intr_init()
  */
 
 struct intrhand *
-intr_establish(vector, type, pri, ih_fun, ih_arg)
-	void		*ih_arg;
-        int		vector;
-        int		type;
-        int		pri;
-        hw_ifun_t	ih_fun;
+intr_establish(int vector, int type, int pri, hw_ifun_t ih_fun, void *ih_arg)
 {
 	struct intrhand	*ih, *cur_vec;
 	ih_list_t	*vec_list;
@@ -144,25 +130,29 @@ intr_establish(vector, type, pri, ih_fun, ih_arg)
 	 * Do some validity checking on the 'vector' argument and determine
 	 * vector list this interrupt should be on.
 	 */
-	switch(type & (AUTO_VEC|USER_VEC)) {
-		case AUTO_VEC:
-			if (vector < AVEC_MIN || vector > AVEC_MAX)
-				return (NULL);
-			vec_list = &autovec_list[vector-1];
-			hard_vec = &autovects[vector-1];
-			ih->ih_intrcnt = &intrcnt_auto[vector-1];
-			break;
-		case USER_VEC:
-			if (vector < UVEC_MIN || vector > UVEC_MAX)
-				return (NULL);
-			vec_list = &uservec_list[vector];
-			hard_vec = &uservects[vector];
-			ih->ih_intrcnt = &intrcnt_user[vector];
-			break;
-		default:
-			printf("intr_establish: bogus vector type\n");
+	switch (type & (AUTO_VEC|USER_VEC)) {
+	case AUTO_VEC:
+		if (vector < AVEC_MIN || vector > AVEC_MAX) {
 			free(ih, M_DEVBUF);
-			return(NULL);
+			return NULL;
+		}
+		vec_list = &autovec_list[vector-1];
+		hard_vec = &autovects[vector-1];
+		ih->ih_intrcnt = &intrcnt_auto[vector-1];
+		break;
+	case USER_VEC:
+		if (vector < UVEC_MIN || vector > UVEC_MAX) {
+			free(ih, M_DEVBUF);
+			return NULL;
+		}
+		vec_list = &uservec_list[vector];
+		hard_vec = &uservects[vector];
+		ih->ih_intrcnt = &intrcnt_user[vector];
+		break;
+	default:
+		printf("%s: bogus vector type\n", __func__);
+		free(ih, M_DEVBUF);
+		return NULL;
 	}
 
 	/*
@@ -175,11 +165,11 @@ intr_establish(vector, type, pri, ih_fun, ih_arg)
 		LIST_INSERT_HEAD(vec_list, ih, ih_link);
 		if (type & FAST_VEC)
 			*hard_vec = (u_long)ih->ih_fun;
-		else if(*hard_vec != (u_long)intr_glue) {
+		else if (*hard_vec != (u_long)intr_glue) {
 			/*
 			 * Normally, all settable vectors are already
 			 * re-routed to the intr_glue() function. The
-			 * marvelous exeption to these are the HBL/VBL
+			 * marvelous exception to these are the HBL/VBL
 			 * interrupts. They happen *very* often and
 			 * can't be turned off on the Falcon. So they
 			 * are normally vectored to an 'rte' instruction.
@@ -199,7 +189,7 @@ intr_establish(vector, type, pri, ih_fun, ih_arg)
 	if (cur_vec->ih_type & FAST_VEC) {
 		free(ih, M_DEVBUF);
 		printf("intr_establish: vector cannot be shared\n");
-		return (NULL);
+		return NULL;
 	}
 
 	/*
@@ -214,7 +204,7 @@ intr_establish(vector, type, pri, ih_fun, ih_arg)
 			LIST_INSERT_BEFORE(cur_vec, ih, ih_link);
 			splx(s);
 
-			return (ih);
+			return ih;
 		}
 	}
 
@@ -230,8 +220,7 @@ intr_establish(vector, type, pri, ih_fun, ih_arg)
 }
 
 int
-intr_disestablish(ih)
-struct intrhand	*ih;
+intr_disestablish(struct intrhand *ih)
 {
 	ih_list_t	*vec_list;
 	u_long		*hard_vec;
@@ -239,22 +228,22 @@ struct intrhand	*ih;
 	struct intrhand	*cur_vec;
 
 	vector = ih->ih_vector;
-	switch(ih->ih_type & (AUTO_VEC|USER_VEC)) {
-		case AUTO_VEC:
-			if (vector < AVEC_MIN || vector > AVEC_MAX)
-				return 0;
-			vec_list = &autovec_list[vector-1];
-			hard_vec = &autovects[vector-1];
-			break;
-		case USER_VEC:
-			if (vector < UVEC_MIN || vector > UVEC_MAX)
-				return 0;
-			vec_list = &uservec_list[vector];
-			hard_vec = &uservects[vector];
-			break;
-		default:
-			printf("intr_disestablish: bogus vector type\n");
-			return  0;
+	switch (ih->ih_type & (AUTO_VEC|USER_VEC)) {
+	case AUTO_VEC:
+		if (vector < AVEC_MIN || vector > AVEC_MAX)
+			return 0;
+		vec_list = &autovec_list[vector-1];
+		hard_vec = &autovects[vector-1];
+		break;
+	case USER_VEC:
+		if (vector < UVEC_MIN || vector > UVEC_MAX)
+			return 0;
+		vec_list = &uservec_list[vector];
+		hard_vec = &uservects[vector];
+		break;
+	default:
+		printf("intr_disestablish: bogus vector type\n");
+		return 0;
 	}
 
 	/*
@@ -285,8 +274,7 @@ struct intrhand	*ih;
  * assembly language interrupt-glue routine.
  */
 void
-intr_dispatch(frame)
-struct clockframe	frame;
+intr_dispatch(struct clockframe frame)
 {
 	static int	unexpected, straycount;
 	int		vector;
@@ -294,36 +282,34 @@ struct clockframe	frame;
 	ih_list_t	*vec_list;
 	struct intrhand	*ih;
 
-	idepth++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 	vector = (frame.cf_vo & 0xfff) >> 2;
 	if (vector < (AVEC_LOC+AVEC_MAX) && vector >= AVEC_LOC)
 		vec_list = &autovec_list[vector - AVEC_LOC];
 	else if (vector <= (UVEC_LOC+UVEC_MAX) && vector >= UVEC_LOC)
 		vec_list = &uservec_list[vector - UVEC_LOC];
-	else panic("intr_dispatch: Bogus vector %d", vector);
+	else
+		panic("intr_dispatch: Bogus vector %d", vector);
 
 	if ((ih = vec_list->lh_first) == NULL) {
 		printf("intr_dispatch: vector %d unexpected\n", vector);
 		if (++unexpected > 10)
-		  panic("intr_dispatch: too many unexpected interrupts");
-		idepth--;
+			panic("intr_dispatch: too many unexpected interrupts");
 		return;
 	}
 	ih->ih_intrcnt[0]++;
 
 	/* Give all the handlers a chance. */
-	for ( ; ih != NULL; ih = ih->ih_link.le_next)
-		handled |= (*ih->ih_fun)((ih->ih_type & ARG_CLOCKFRAME)
-					? &frame : ih->ih_arg, frame.cf_sr);
+	for (; ih != NULL; ih = ih->ih_link.le_next)
+		handled |= (*ih->ih_fun)((ih->ih_type & ARG_CLOCKFRAME) ?
+		    &frame : ih->ih_arg, frame.cf_sr);
 
 	if (handled)
-	    straycount = 0;
+		straycount = 0;
 	else if (++straycount > 50)
-	    panic("intr_dispatch: too many stray interrupts");
+		panic("intr_dispatch: too many stray interrupts");
 	else
-	    printf("intr_dispatch: stray level %d interrupt\n", vector);
-	idepth--;
+		printf("intr_dispatch: stray level %d interrupt\n", vector);
 }
 
 bool
@@ -333,20 +319,13 @@ cpu_intr_p(void)
 	return idepth != 0;
 }
 
-static const int ipl2psl_table[] = {
-	[IPL_NONE]       = PSL_IPL0,
-	[IPL_SOFTCLOCK]  = PSL_IPL1,
-	[IPL_SOFTBIO]    = PSL_IPL1,
-	[IPL_SOFTNET]    = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL1,
-	[IPL_VM]         = PSL_IPL4,
-	[IPL_SCHED]      = PSL_IPL6,
-	[IPL_HIGH]       = PSL_IPL7,
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL1,
+	[IPL_VM]         = PSL_S | PSL_IPL4,
+	[IPL_SCHED]      = PSL_S | PSL_IPL6,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
-}

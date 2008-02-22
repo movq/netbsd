@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2006/04/07 14:21:32 cherry Exp $
+#	$NetBSD: Makefile.inc,v 1.7 2018/06/13 16:04:55 christos Exp $
 #
 #	Configuration variables (default values are below):
 #
@@ -22,12 +22,12 @@ EFILIB=			${EFIDST}/libefi.a
 EFIMAKE= \
 	cd ${EFIDIR} && MAKEOBJDIRPREFIX= && unset MAKEOBJDIRPREFIX && \
 	    MAKEOBJDIR=${EFIDST} ${MAKE} \
-	    CC=${CC:Q} CFLAGS=${CFLAGS:Q} \
-	    AS=${AS:Q} AFLAGS=${AFLAGS:Q} \
-	    LD=${LD:Q} STRIP=${STRIP:Q} \
-	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:Q} \
-	    EFICPPFLAGS=${CPPFLAGS:S@^-I.@-I../../.@g:Q} \
-	    EFIMISCCPPFLAGS=${EFIMISCCPPFLAGS:Q} \
+	    CC=${CC:q} CFLAGS=${CFLAGS:q} \
+	    AS=${AS:q} AFLAGS=${AFLAGS:q} \
+	    LD=${LD:q} STRIP=${STRIP:q} \
+	    MACHINE=${MACHINE} MACHINE_ARCH=${MACHINE_ARCH:q} \
+	    EFICPPFLAGS=${CPPFLAGS:S@^-I.@-I../../.@g:q} \
+	    EFIMISCCPPFLAGS=${EFIMISCCPPFLAGS:q} \
 	    ${EFIMISCMAKEFLAGS}
 
 ${EFILIB}:		.NOTMAIN __always_make_efilib
@@ -43,6 +43,7 @@ cleandir distclean:	.NOTMAIN cleandirefilib
 cleandirefilib:		.NOTMAIN
 	@echo cleandiring the efi library objects
 	@if [ -d "${EFIDST}" ]; then ${EFIMAKE} cleandir; fi
+	-rm -rf efi
 
 dependall depend:	.NOTMAIN dependefilib
 dependefilib:		.NOTMAIN __always_make_efilib

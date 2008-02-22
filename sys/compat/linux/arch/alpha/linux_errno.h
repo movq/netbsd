@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_errno.h,v 1.6 2006/10/31 00:38:07 cbiere Exp $	*/
+/* 	$NetBSD: linux_errno.h,v 1.8 2013/12/17 22:14:24 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -153,5 +146,17 @@
 
 #define LINUX_ENOMEDIUM		129	/* No medium found */
 #define LINUX_EMEDIUMTYPE	130	/* Wrong medium type */
+#define LINUX_ECANCELED		131	/* Operation Cancelled */
+#define LINUX_ENOKEY		132	/* Required key not available */
+#define LINUX_EKEYEXPIRED	133	/* Key has expired */
+#define LINUX_EKEYREVOKED	134	/* Key has been revoked */
+#define LINUX_EKEYREJECTED	135	/* Key was rejected by service */
+
+#define LINUX_EOWNERDEAD	136	/* Owner died */
+#define LINUX_ENOTRECOVERABLE	137	/* State not recoverable */
+
+#define LINUX_ERFKILL		138	/* Operation not possible due to RF-kill */
+
+#define LINUX_EHWPOISON		139	/* Memory page has hardware error */
 
 #endif /* !_ALPHA_LINUX_ERRNO_H */

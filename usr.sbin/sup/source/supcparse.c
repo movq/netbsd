@@ -1,4 +1,4 @@
-/*	$NetBSD: supcparse.c,v 1.14 2006/04/02 01:39:48 christos Exp $	*/
+/*	$NetBSD: supcparse.c,v 1.16 2013/04/09 16:39:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -69,7 +69,7 @@ typedef enum {			/* supfile options */
 	OHOST, OBASE, OHOSTBASE, OPREFIX, ORELEASE,
 	ONOTIFY, OLOGIN, OPASSWORD, OCRYPT,
 	OBACKUP, ODELETE, OEXECUTE, OOLD, OTIMEOUT, OKEEP, OURELSUF,
-	OCOMPRESS
+	OCOMPRESS, OCANONICALIZE, OIGNCHERR,
 }    OPTION;
 
 struct option {
@@ -92,7 +92,9 @@ struct option {
 	{ "timeout", OTIMEOUT },
 	{ "keep", OKEEP },
 	{ "use-rel-suffix", OURELSUF },
-	{ "compress", OCOMPRESS }
+	{ "compress", OCOMPRESS },
+	{ "canonicalize", OCANONICALIZE },
+	{ "igncherr", OIGNCHERR },
 };
 
 static void passdelim(char **, char);
@@ -215,10 +217,16 @@ parsecoll(COLLECTION * c, char *collname, char *args)
 		case OCOMPRESS:
 			c->Cflags |= CFCOMPRESS;
 			break;
+		case OCANONICALIZE:
+			c->Cflags |= CFCANONICALIZE;
+			break;
 		case OTIMEOUT:
 			passdelim(&args, '=');
 			arg = nxtarg(&args, " \t");
 			c->Ctimeout = atoi(arg);
+			break;
+		case OIGNCHERR:
+			c->Cflags |= CFIGNCHERR;
 			break;
 		}
 	}

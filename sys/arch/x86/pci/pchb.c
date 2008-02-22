@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.6 2008/01/03 04:50:19 dyoung Exp $ */
+/*	$NetBSD: pchb.c,v 1.35 2016/10/01 21:51:52 mrg Exp $ */
 
 /*-
  * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.6 2008/01/03 04:50:19 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.35 2016/10/01 21:51:52 mrg Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -56,8 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.6 2008/01/03 04:50:19 dyoung Exp $");
 
 #include <arch/x86/pci/pchbvar.h>
 
-#include "rnd.h"
-
 #define PCISET_BRIDGETYPE_MASK	0x3
 #define PCISET_TYPE_COMPAT	0x1
 #define PCISET_TYPE_AUX		0x2
@@ -67,29 +58,29 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.6 2008/01/03 04:50:19 dyoung Exp $");
 #define PCISET_PCI_BUS_NUMBER(reg)	(((reg) >> 16) & 0xff)
 
 /* XXX should be in dev/ic/i82443reg.h */
-#define	I82443BX_SDRAMC_REG	0x76
+#define	I82443BX_SDRAMC_REG	0x74 /* upper 16 bits */
 
 /* XXX should be in dev/ic/i82424{reg.var}.h */
-#define I82424_CPU_BCTL_REG		0x53
+#define I82424_CPU_BCTL_REG		0x50 /* upper 8 bits */
 #define I82424_PCI_BCTL_REG		0x54
 
-#define I82424_BCTL_CPUMEM_POSTEN	0x01
-#define I82424_BCTL_CPUPCI_POSTEN	0x02
-#define I82424_BCTL_PCIMEM_BURSTEN	0x01
-#define I82424_BCTL_PCI_BURSTEN		0x02
+#define I82424_BCTL_CPUMEM_POSTEN	0x01000000
+#define I82424_BCTL_CPUPCI_POSTEN	0x02000000
+#define I82424_BCTL_PCIMEM_BURSTEN	0x01000000
+#define I82424_BCTL_PCI_BURSTEN		0x02000000
 
-int	pchbmatch(struct device *, struct cfdata *, void *);
-void	pchbattach(struct device *, struct device *, void *);
-int	pchbdetach(device_t, int);
+static int	pchbmatch(device_t, cfdata_t, void *);
+static void	pchbattach(device_t, device_t, void *);
+static int	pchbdetach(device_t, int);
 
-static bool	pchb_resume(device_t);
-static bool	pchb_suspend(device_t);
+static bool	pchb_resume(device_t, const pmf_qual_t *);
+static bool	pchb_suspend(device_t, const pmf_qual_t *);
 
-CFATTACH_DECL(pchb, sizeof(struct pchb_softc),
-    pchbmatch, pchbattach, pchbdetach, NULL);
+CFATTACH_DECL3_NEW(pchb, sizeof(struct pchb_softc),
+    pchbmatch, pchbattach, pchbdetach, NULL, NULL, NULL, DVF_DETACH_SHUTDOWN);
 
-int
-pchbmatch(struct device *parent, struct cfdata *match, void *aux)
+static int
+pchbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -100,14 +91,66 @@ pchbmatch(struct device *parent, struct cfdata *match, void *aux)
 	return 0;
 }
 
-void
-pchbattach(struct device *parent, struct device *self, void *aux)
+int
+pchb_get_bus_number(pci_chipset_tag_t pc, pcitag_t tag)
 {
-#if NRND > 0
-	struct pchb_softc *sc = (void *) self;
-#endif
-	struct pci_attach_args *pa = aux;
-	char devinfo[256];
+	pcireg_t dev_id;
+	int bus, dev, func;
+	int bcreg, pbnum;
+
+	pci_decompose_tag(pc, tag, &bus, &dev, &func);
+
+	dev_id = pci_conf_read(pc, tag, PCI_ID_REG);
+	switch (PCI_VENDOR(dev_id)) {
+	case PCI_VENDOR_SERVERWORKS:
+		return pci_conf_read(pc, tag, 0x44) & 0xff;
+	case PCI_VENDOR_INTEL:
+		switch (PCI_PRODUCT(dev_id)) {
+		case PCI_PRODUCT_INTEL_82452_PB:
+			bcreg = pci_conf_read(pc, tag, 0x40);
+			pbnum = PCISET_BRIDGE_NUMBER(bcreg);
+			if (pbnum != 0xff)
+				return pbnum + 1;
+
+			break;
+		case PCI_PRODUCT_INTEL_PCI450_PB:
+			bcreg = pci_conf_read(pc, tag, PCISET_BUSCONFIG_REG);
+			return PCISET_PCI_BUS_NUMBER(bcreg);
+		case PCI_PRODUCT_INTEL_82451NX_PXB:
+			pbnum = 0;
+			switch (dev) {
+			case 18: /* PXB 0 bus A - primary bus */
+				break;
+			case 19: /* PXB 0 bus B */
+				/* read SUBA0 from MIOC */
+				tag = pci_make_tag(pc, 0, 16, 0);
+				bcreg = pci_conf_read(pc, tag, 0xd0);
+				pbnum = ((bcreg & 0x0000ff00) >> 8) + 1;
+				break;
+			case 20: /* PXB 1 bus A */
+				/* read BUSNO1 from MIOC */
+				tag = pci_make_tag(pc, 0, 16, 0);
+				bcreg = pci_conf_read(pc, tag, 0xd0);
+				pbnum = (bcreg & 0xff000000) >> 24;
+				break;
+			case 21: /* PXB 1 bus B */
+				/* read SUBA1 from MIOC */
+				tag = pci_make_tag(pc, 0, 16, 0);
+				bcreg = pci_conf_read(pc, tag, 0xd4);
+				pbnum = (bcreg & 0x000000ff) + 1;
+				break;
+			}
+			return pbnum;
+		}
+	}
+	return -1;
+}
+
+static void
+pchbattach(device_t parent, device_t self, void *aux)
+{
+	struct pchb_softc *sc = device_private(self);
+	const struct pci_attach_args *pa = aux;
 	struct pcibus_attach_args pba;
 	struct agpbus_attach_args apa;
 	pcireg_t bcreg;
@@ -115,21 +158,20 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	pcitag_t tag;
 	int doattach, attachflags, has_agp;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	doattach = 0;
 	has_agp = 0;
 	attachflags = pa->pa_flags;
+
+	sc->sc_dev = self;
+	sc->sc_pc = pa->pa_pc;
+	sc->sc_tag = pa->pa_tag;
 
 	/*
 	 * Print out a description, and configure certain chipsets which
 	 * have auxiliary PCI buses.
 	 */
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	switch (PCI_VENDOR(pa->pa_id)) {
 	/*
@@ -161,9 +203,10 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			   buses. */
 			break;
 		default:
-			aprint_error("%s: unknown ServerWorks chip ID "
-			    "0x%04x; trying to attach PCI buses behind it\n",
-			    self->dv_xname, PCI_PRODUCT(pa->pa_id));
+			aprint_error_dev(self,
+			    "unknown ServerWorks chip ID 0x%04x; trying "
+			    "to attach PCI buses behind it\n",
+			    PCI_PRODUCT(pa->pa_id));
 			/* FALLTHROUGH */
 		case PCI_PRODUCT_SERVERWORKS_CNB20_LE_AGP:
 		case PCI_PRODUCT_SERVERWORKS_CNB30_LE_PCI:
@@ -176,12 +219,12 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		case PCI_PRODUCT_SERVERWORKS_CIOB_X2:
 		case PCI_PRODUCT_SERVERWORKS_CIOB_E:
 			switch (attachflags &
-			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) {
+			    (PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY)) {
 			case 0:
 				/* Doesn't smell like there's anything there. */
 				break;
-			case PCI_FLAGS_MEM_ENABLED:
-				attachflags |= PCI_FLAGS_IO_ENABLED;
+			case PCI_FLAGS_MEM_OKAY:
+				attachflags |= PCI_FLAGS_IO_OKAY;
 				/* FALLTHROUGH */
 			default:
 				doattach = 1;
@@ -218,12 +261,12 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 				 */
 				bcreg = pci_conf_read(pa->pa_pc, pa->pa_tag,
 				    I82443BX_SDRAMC_REG);
-				if ((bcreg & 0x0300) != 0x0100) {
-					aprint_verbose("%s: fixing "
+				if ((bcreg & 0x03000000) != 0x01000000) {
+					aprint_verbose_dev(self, "fixing "
 					    "Idle/Pipeline DRAM "
-					    "Leadoff Timing\n", self->dv_xname);
-					bcreg &= ~0x0300;
-					bcreg |=  0x0100;
+					    "Leadoff Timing\n");
+					bcreg &= ~0x03000000;
+					bcreg |=  0x01000000;
 					pci_conf_write(pa->pa_pc, pa->pa_tag,
 					    I82443BX_SDRAMC_REG, bcreg);
 				}
@@ -237,17 +280,16 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			pbnum = PCISET_PCI_BUS_NUMBER(bcreg);
 			switch (bdnum & PCISET_BRIDGETYPE_MASK) {
 			default:
-				aprint_error("%s: bdnum=%x (reserved)\n",
-				       self->dv_xname, bdnum);
+				aprint_error_dev(self, "bdnum=%x (reserved)\n",
+				       bdnum);
 				break;
 			case PCISET_TYPE_COMPAT:
-				aprint_verbose(
-				    "%s: Compatibility PB (bus %d)\n",
-				    self->dv_xname, pbnum);
+				aprint_verbose_dev(self,
+				    "Compatibility PB (bus %d)\n", pbnum);
 				break;
 			case PCISET_TYPE_AUX:
-				aprint_verbose("%s: Auxiliary PB (bus %d)\n",
-				       self->dv_xname, pbnum);
+				aprint_verbose_dev(self,
+				    "Auxiliary PB (bus %d)\n",pbnum);
 				/*
 				 * This host bridge has a second PCI bus.
 				 * Configure it.
@@ -263,9 +305,8 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 				bcreg &= ~I82424_BCTL_CPUPCI_POSTEN;
 				pci_conf_write(pa->pa_pc, pa->pa_tag,
 					       I82424_CPU_BCTL_REG, bcreg);
-				aprint_verbose(
-				    "%s: disabled CPU-PCI write posting\n",
-				    self->dv_xname);
+				aprint_verbose_dev(self,
+				    "disabled CPU-PCI write posting\n");
 			}
 			break;
 		case PCI_PRODUCT_INTEL_82451NX_PXB:
@@ -281,9 +322,9 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			 * at the MIOC, but less aesthetical imho.)
 			 */
 			if ((attachflags &
-			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) ==
-			    PCI_FLAGS_MEM_ENABLED)
-				attachflags |= PCI_FLAGS_IO_ENABLED;
+			    (PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY)) ==
+			    PCI_FLAGS_MEM_OKAY)
+				attachflags |= PCI_FLAGS_IO_OKAY;
 
 			pbnum = 0;
 			switch (pa->pa_device) {
@@ -327,12 +368,29 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		case PCI_PRODUCT_INTEL_82915GM_HB:
 		case PCI_PRODUCT_INTEL_82945P_MCH:
 		case PCI_PRODUCT_INTEL_82945GM_HB:
+		case PCI_PRODUCT_INTEL_82945GME_HB:
+		case PCI_PRODUCT_INTEL_82946GZ_HB:
 		case PCI_PRODUCT_INTEL_82965Q_HB:
 		case PCI_PRODUCT_INTEL_82965G_HB:
 		case PCI_PRODUCT_INTEL_82965PM_HB:
 		case PCI_PRODUCT_INTEL_82Q35_HB:
 		case PCI_PRODUCT_INTEL_82G33_HB:
 		case PCI_PRODUCT_INTEL_82Q33_HB:
+		case PCI_PRODUCT_INTEL_82G35_HB:
+		case PCI_PRODUCT_INTEL_82GM45_HB:
+		case PCI_PRODUCT_INTEL_82IGD_E_HB:
+		case PCI_PRODUCT_INTEL_82Q45_HB:
+		case PCI_PRODUCT_INTEL_82G45_HB:
+		case PCI_PRODUCT_INTEL_82G41_HB:
+		case PCI_PRODUCT_INTEL_E7221_HB:
+		case PCI_PRODUCT_INTEL_82965GME_HB:
+		case PCI_PRODUCT_INTEL_82B43_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_D_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_M_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_MA_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_MC2_HB:
+		case PCI_PRODUCT_INTEL_PINEVIEW_HB:
+		case PCI_PRODUCT_INTEL_PINEVIEW_M_HB:
 			/*
 			 * The host bridge is either in GFX mode (internal
 			 * graphics) or in AGP mode. In GFX mode, we pretend
@@ -347,13 +405,6 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		}
 		break;
 	}
-
-#if NRND > 0
-	/*
-	 * Attach a random number generator, if there is one.
-	 */
-	pchb_attach_rnd(sc, pa);
-#endif
 
 	if (!pmf_device_register(self, pchb_suspend, pchb_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -385,30 +436,21 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-int
+static int
 pchbdetach(device_t self, int flags)
 {
 	int rc;
-#if NRND > 0
-	struct pchb_softc *sc = device_private(self);
-#endif
 
 	if ((rc = config_detach_children(self, flags)) != 0)
 		return rc;
 
 	pmf_device_deregister(self);
 
-#if NRND > 0
-	/*
-	 * Attach a random number generator, if there is one.
-	 */
-	pchb_detach_rnd(sc);
-#endif
 	return 0;
 }
 
 static bool
-pchb_suspend(device_t dv)
+pchb_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pchb_softc *sc = device_private(dv);
 	pci_chipset_tag_t pc;
@@ -425,7 +467,7 @@ pchb_suspend(device_t dv)
 }
 
 static bool
-pchb_resume(device_t dv)
+pchb_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pchb_softc *sc = device_private(dv);
 	pci_chipset_tag_t pc;

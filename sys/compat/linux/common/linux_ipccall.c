@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipccall.c,v 1.30 2007/12/20 23:02:54 dsl Exp $	*/
+/*	$NetBSD: linux_ipccall.c,v 1.33 2013/12/27 15:10:53 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ipccall.c,v 1.30 2007/12/20 23:02:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ipccall.c,v 1.33 2013/12/27 15:10:53 njoly Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
@@ -98,11 +91,11 @@ linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *r
 
 	switch (SCARG(uap, what)) {
 #ifdef SYSVSEM
-	case LINUX_SYS_semop:
+	case LINUX_SYS_SEMOP:
 		return linux_semop(l, uap, retval);
-	case LINUX_SYS_semget:
+	case LINUX_SYS_SEMGET:
 		return linux_semget(l, uap, retval);
-	case LINUX_SYS_semctl: {
+	case LINUX_SYS_SEMCTL: {
 		struct linux_sys_semctl_args bsa;
 		union linux_semun arg;
 		int error;
@@ -119,13 +112,13 @@ linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *r
 	    }
 #endif
 #ifdef SYSVMSG
-	case LINUX_SYS_msgsnd:
+	case LINUX_SYS_MSGSND:
 		return linux_msgsnd(l, uap, retval);
-	case LINUX_SYS_msgrcv:
+	case LINUX_SYS_MSGRCV:
 		return linux_msgrcv(l, uap, retval);
-	case LINUX_SYS_msgget:
+	case LINUX_SYS_MSGGET:
 		return linux_msgget(l, uap, retval);
-	case LINUX_SYS_msgctl: {
+	case LINUX_SYS_MSGCTL: {
 		struct linux_sys_msgctl_args bsa;
 
 		SCARG(&bsa, msqid) = SCARG(uap, a1);
@@ -136,7 +129,7 @@ linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *r
 	    }
 #endif
 #ifdef SYSVSHM
-	case LINUX_SYS_shmat: {
+	case LINUX_SYS_SHMAT: {
 		struct linux_sys_shmat_args bsa;
 
 		SCARG(&bsa, shmid) = SCARG(uap, a1);
@@ -147,11 +140,11 @@ linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *r
 
 		return linux_sys_shmat(l, &bsa, retval);
 	    }
-	case LINUX_SYS_shmdt:
+	case LINUX_SYS_SHMDT:
 		return linux_shmdt(l, uap, retval);
-	case LINUX_SYS_shmget:
+	case LINUX_SYS_SHMGET:
 		return linux_shmget(l, uap, retval);
-	case LINUX_SYS_shmctl: {
+	case LINUX_SYS_SHMCTL: {
 		struct linux_sys_shmctl_args bsa;
 
 		SCARG(&bsa, shmid) = SCARG(uap, a1);
@@ -167,7 +160,7 @@ linux_sys_ipc(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *r
 }
 
 #ifdef SYSVSEM
-inline int
+int
 linux_semop(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	/* {
@@ -186,7 +179,7 @@ linux_semop(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *ret
 	return sys_semop(l, &bsa, retval);
 }
 
-inline int
+int
 linux_semget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	/* {
@@ -209,7 +202,7 @@ linux_semget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *re
 
 #ifdef SYSVMSG
 
-inline int
+int
 linux_msgsnd(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgsnd_args bma;
@@ -222,7 +215,7 @@ linux_msgsnd(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *re
 	return sys_msgsnd(l, &bma, retval);
 }
 
-inline int
+int
 linux_msgrcv(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgrcv_args bma;
@@ -241,7 +234,7 @@ linux_msgrcv(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *re
 	return sys_msgrcv(l, &bma, retval);
 }
 
-inline int
+int
 linux_msgget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_msgget_args bma;
@@ -259,7 +252,7 @@ linux_msgget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *re
  * shmdt(): this could have been mapped directly, if it wasn't for
  * the extra indirection by the linux_ipc system call.
  */
-inline int
+int
 linux_shmdt(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct sys_shmdt_args bsa;
@@ -272,7 +265,7 @@ linux_shmdt(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *ret
 /*
  * Same story as shmdt.
  */
-inline int
+int
 linux_shmget(struct lwp *l, const struct linux_sys_ipc_args *uap, register_t *retval)
 {
 	struct linux_sys_shmget_args bsa;

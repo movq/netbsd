@@ -1,4 +1,4 @@
-/*	$NetBSD: announce.c,v 1.21 2003/08/07 09:46:50 agc Exp $	*/
+/*	$NetBSD: announce.c,v 1.25 2009/03/16 01:13:38 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)announce.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: announce.c,v 1.21 2003/08/07 09:46:50 agc Exp $");
+__RCSID("$NetBSD: announce.c,v 1.25 2009/03/16 01:13:38 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,9 +68,7 @@ extern char hostname[];
  * a talk is requested.
  */
 int
-announce(request, remote_machine)
-	CTL_MSG *request;
-	char *remote_machine;
+announce(CTL_MSG *request, const char *remote_machine)
 {
 	char full_tty[32];
 	struct stat stbuf;
@@ -90,17 +88,13 @@ announce(request, remote_machine)
  * Build a block of characters containing the message.
  * It is sent blank filled and in a single block to
  * try to keep the message in one piece if the recipient
- * in in vi at the time
+ * is in vi at the time.
  */
 int
-print_mesg(tty, request, remote_machine)
-	char *tty;
-	CTL_MSG *request;
-	char *remote_machine;
+print_mesg(const char *tty, CTL_MSG *request, const char *remote_machine)
 {
-	struct timeval clock;
+	struct timeval clocktv;
 	time_t clocktime;
-	struct timezone zone;
 	struct tm *localclock;
 	struct iovec iovec;
 	char line_buf[N_LINES][N_CHARS];
@@ -111,8 +105,8 @@ print_mesg(tty, request, remote_machine)
 
 	i = 0;
 	max_size = 0;
-	(void)gettimeofday(&clock, &zone);
-	clocktime = clock.tv_sec;
+	(void)gettimeofday(&clocktv, NULL);
+	clocktime = clocktv.tv_sec;
 	localclock = localtime(&clocktime);
 	(void)snprintf(line_buf[i], N_CHARS, " ");
 	sizes[i] = strlen(line_buf[i]);

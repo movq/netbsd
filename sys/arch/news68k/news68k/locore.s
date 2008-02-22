@@ -1,6 +1,7 @@
-/*	$NetBSD: locore.s,v 1.45 2007/12/03 15:34:03 ad Exp $	*/
+/*	$NetBSD: locore.s,v 1.65 2014/03/15 09:24:56 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
 
 /*
  * locore.s for news68k - based on mvme68k and hp300 version
@@ -88,6 +50,7 @@
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "opt_fpu_emulate.h"
+#include "opt_m68k_arch.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -185,9 +148,10 @@ ASENTRY_NOPROFILE(start)
 
 	movc %vbr,%a0
 	movl %a0@(188),_ASM_LABEL(monitor)| save trap #15 to return PROM monitor
+	movl %a0@(128),_ASM_LABEL(romcallvec)| save trap #0 to use PROM calls
 
 	RELOC(esym, %a0)
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	movl	%d2,%a0@		| store end of symbol table
 #else
 	clrl	%a0@
@@ -221,11 +185,11 @@ ASENTRY_NOPROFILE(start)
 
 	/* news1200 */
 	/* XXX Are these needed?*/
-	sf	0xe1100000		| AST disable (???)
-	sf	0xe10c0000		| level2 interrupt disable (???)
-	moveb	#0x03,0xe1140002	| timer set (???)
-	moveb	#0xd0,0xe1140003	| timer set (???)
-	sf	0xe1140000		| timer interrupt disable (???)
+	sf	0xe1100000		| AST disable (?)
+	sf	0xe10c0000		| level2 interrupt disable (?)
+	moveb	#0x03,0xe1140002	| timer set (?)
+	moveb	#0xd0,0xe1140003	| timer set (?)
+	sf	0xe1140000		| timer interrupt disable (?)
 	/* XXX */
 
 	RELOC(systype,%a0)
@@ -259,11 +223,11 @@ Lnot1200:
 
 	/* news1400/1500/1600/1700 */
 	/* XXX Are these needed?*/
-	sf	0xe1280000		| AST disable (???)
-	sf	0xe1180000		| level2 interrupt disable (???)
-	st	0xe1300000		| L2 cache enable (???)
-	st	0xe1900000		| L2 cache clear (???)
-	sf	0xe1000000		| timer interrupt disable (???)
+	sf	0xe1280000		| AST disable (?)
+	sf	0xe1180000		| level2 interrupt disable (?)
+	st	0xe1300000		| L2 cache enable (?)
+	st	0xe1900000		| L2 cache clear (?)
+	sf	0xe1000000		| timer interrupt disable (?)
 	moveb	#0x36,0xe0c80000	| XXX reset FDC for PWS-1560
 	/* XXX */
 
@@ -365,9 +329,9 @@ Lstart1:
 /*
  * configure kernel and lwp0 VA space so we can get going
  */
-	.globl	_Sysseg, _pmap_bootstrap, _avail_start
+	.globl	_Sysseg_pa, _pmap_bootstrap, _avail_start
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	RELOC(esym,%a0)			| end of static kernel test/data/syms
 	movl	%a0@,%d2
 	jne	Lstart2
@@ -398,9 +362,8 @@ Lstart2:
 	movl	#_C_LABEL(vectab),%d0	| get our VBR address
 	movc	%d0,%vbr
 
-	RELOC(Sysseg, %a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA
+	RELOC(Sysseg_pa, %a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 	RELOC(mmutype, %a0)
 	cmpl	#MMU_68040,%a0@		| 68040?
 	jne	Lmotommu1		| no, skip
@@ -423,37 +386,46 @@ Lstploaddone:
 	.long	0x4e7b0007		| movc %d0,%dtt1
 	.word	0xf4d8			| cinva bc
 	.word	0xf518			| pflusha
+#if PGSHIFT == 13
+	movl	#0xc000,%d0
+#else
 	movl	#0x8000,%d0
+#endif
 	.long	0x4e7b0003		| movc %d0,%tc
 	movl	#CACHE40_ON,%d0
 	movc	%d0,%cacr		| turn on both caches
 	jmp	Lenab1
 Lmotommu2:
-#if 0 /* XXX use %tt0 register to map I/O space temporary */
+	/* Use %tt0 register to map I/O space */
 	RELOC(protott0, %a0)
-	movl	#0xe01f8550,%a0@	| use %tt0 (0xe0000000-0xffffffff)
+	movl	#0xe01f8543,%a0@	| use %tt0 (0xe0000000-0xffffffff)
 	.long	0xf0100800		| pmove %a0@,%tt0
-#endif
+	/* Use %tt1 register to map RAM  to use PROM calls */
+	RELOC(protott1, %a0)
+	movl	#0xc01f8143,%a0@	| use %tt1 (0xc0000000-0xdfffffff)
+	.long	0xf0100c00		| pmove %a0@,%tt1
+
+	pflusha
 	RELOC(prototc, %a2)
+#if PGSHIFT == 13
+	movl	#0x82d08b00,%a2@	| value to load TC with
+#else
 	movl	#0x82c0aa00,%a2@	| value to load TC with
+#endif
 	pmove	%a2@,%tc		| load it
 
 /*
  * Should be running mapped from this point on
  */
 Lenab1:
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize)  | select software page size
-/* set kernel stack, user SP, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1| get lwp0 pcb addr
-	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
+	lea	%a1@(USPACE-4),%sp	|   set kernel stack to end of area
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
@@ -486,7 +458,7 @@ Lenab3:
 	jbsr	_C_LABEL(news68k_init)	| additional pre-main initialization
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -507,105 +479,10 @@ Lenab3:
  */
 #include <m68k/m68k/trap_subr.s>
 
-	.data
-GLOBAL(m68k_fault_addr)
-	.long	0
-
-#if defined(M68020) || defined(M68030)
-ENTRY_NOPROFILE(busaddrerr2030)
-	clrl	%sp@-			| stack adjust count
-	moveml	#0xFFFF,%sp@-		| save user registers
-	movl	%usp,%a0		| save the user SP
-	movl	%a0,%sp@(FR_SP)		|   in the savearea
-	moveq	#0,%d0
-	movw	%sp@(FR_HW+10),%d0	| grab SSW for fault processing
-	btst	#12,%d0			| RB set?
-	jeq	LbeX0			| no, test RC
-	bset	#14,%d0			| yes, must set FB
-	movw	%d0,%sp@(FR_HW+10)	| for hardware too
-LbeX0:
-	btst	#13,%d0			| RC set?
-	jeq	LbeX1			| no, skip
-	bset	#15,%d0			| yes, must set FC
-	movw	%d0,%sp@(FR_HW+10)	| for hardware too
-LbeX1:
-	btst	#8,%d0			| data fault?
-	jeq	Lbe0			| no, check for hard cases
-	movl	%sp@(FR_HW+16),%d1	| fault address is as given in frame
-	jra	Lbe10			| thats it
-Lbe0:
-	btst	#4,%sp@(FR_HW+6)	| long (type B) stack frame?
-	jne	Lbe4			| yes, go handle
-	movl	%sp@(FR_HW+2),%d1	| no, can use save PC
-	btst	#14,%d0			| FB set?
-	jeq	Lbe3			| no, try FC
-	addql	#4,%d1			| yes, adjust address
-	jra	Lbe10			| done
-Lbe3:
-	btst	#15,%d0			| FC set?
-	jeq	Lbe10			| no, done
-	addql	#2,%d1			| yes, adjust address
-	jra	Lbe10			| done
-Lbe4:
-	movl	%sp@(FR_HW+36),%d1	| long format, use stage B address
-	btst	#15,%d0			| FC set?
-	jeq	Lbe10			| no, all done
-	subql	#2,%d1			| yes, adjust address
-Lbe10:
-	movl	%d1,%sp@-		| push fault VA
-	movl	%d0,%sp@-		| and padded SSW
-	movw	%sp@(FR_HW+8+6),%d0	| get frame format/vector offset
-	andw	#0x0FFF,%d0		| clear out frame format
-	cmpw	#12,%d0			| address error vector?
-	jeq	Lisaerr			| yes, go to it
-	movl	%d1,%a0			| fault address
-	movl	%sp@,%d0		| function code from ssw
-	btst	#8,%d0			| data fault?
-	jne	Lbe10a
-#if 0
-	movql	#1,%d0			| user program access FC
-#else
-	moveq	#1,%d0			| user program access FC
-#endif
-					| (we dont separate data/program)
-	btst	#5,%sp@(FR_HW+8)	| supervisor mode?
-	jeq	Lbe10a			| if no, done
-	movql	#5,%d0			| else supervisor program access
-Lbe10a:
-	ptestr	%d0,%a0@,#7		| do a table search
-	pmove	%psr,%sp@		| save result
-	movb	%sp@,%d1
-	btst	#2,%d1			| invalid (incl. limit viol. and berr)?
-	jeq	Lmightnotbemerr		| no -> wp check
-	btst	#7,%d1			| is it MMU table berr?
-	jne	Lisberr1		| yes, needs not be fast.
-Lismerr:
-	movl	#T_MMUFLT,%sp@-		| show that we are an MMU fault
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lmightnotbemerr:
-	btst	#3,%d1			| write protect bit set?
-	jeq	Lisberr1		| no: must be bus error
-	movl	%sp@,%d0		| ssw into low word of %d0
-	andw	#0xc0,%d0		| Write protect is set on page:
-	cmpw	#0x40,%d0		| was it read cycle?
-	jne	Lismerr			| no, was not WPE, must be MMU fault
-	jra	Lisberr1		| real bus err needs not be fast.
-Lisaerr:
-	movl	#T_ADDRERR,%sp@-	| mark address error
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lisberr1:
-	clrw	%sp@			| re-clear pad word
-	tstl	_C_LABEL(nofault)	| catch bus error?
-	jeq	Lisberr			| no, handle as usual
-	movl	%sp@(FR_HW+8+16),_C_LABEL(m68k_fault_addr) | save fault addr
-	movl	_C_LABEL(nofault),%sp@-	| yes,
-	jbsr	_C_LABEL(longjmp)	|  longjmp(nofault)
-	/* NOTREACHED */
-#endif /* M68020 || M68030 */
-
-Lisberr:				| also used by M68040/60
-	movl	#T_BUSERR,%sp@-		| mark bus error
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
+/*
+ * Use common m68k bus error and address error handlers.
+ */
+#include <m68k/m68k/busaddrerr.s>
 
 /*
  * FP exceptions.
@@ -680,8 +557,8 @@ ENTRY_NOPROFILE(trap0)
 	movl	%d0,%sp@-		| push syscall number
 	jbsr	_C_LABEL(syscall)	| handle it
 	addql	#4,%sp			| pop syscall arg
-	tstl	_C_LABEL(astpending)
-	jne	Lrei2
+	tstl	_C_LABEL(astpending)	| AST pending?
+	jne	Lrei			| yes, handle it via trap
 	movl	%sp@(FR_SP),%a0		| grab and restore
 	movl	%a0,%usp		|   user SP
 	moveml	%sp@+,#0x7FFF		| restore most registers
@@ -829,30 +706,33 @@ Lbrkpt3:
  * _intrhand_vectored is the entry point for vectored interrupts.
  */
 
-#define INTERRUPT_SAVEREG	moveml  #0xC0C0,%sp@-
-#define INTERRUPT_RESTOREREG	moveml  %sp@+,#0x0303
-
 ENTRY_NOPROFILE(spurintr)	/* Level 0 */
 	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	rte
 
 ENTRY_NOPROFILE(intrhand_autovec)	/* Levels 1 through 6 */
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	movw	%sp@(22),%sp@-		| push exception vector
 	clrw	%sp@-
 	jbsr	_C_LABEL(isrdispatch_autovec) | call dispatcher
 	addql	#4,%sp
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 
 ENTRY_NOPROFILE(lev1intr)		/* Level 1: AST interrupt */
-	movl	%a0,%sp@-
+	addql	#1,_C_LABEL(idepth)
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
 	addql	#1,_C_LABEL(intrcnt)+4
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	movl	_C_LABEL(ctrl_ast),%a0
 	clrb	%a0@			| disable AST interrupt
-	movl	%sp@+,%a0
+	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		| handle AST
 
 #ifdef notyet
@@ -864,32 +744,40 @@ ENTRY_NOPROFILE(_softintr)		/* Level 2: software interrupt */
 #endif
 
 ENTRY_NOPROFILE(lev3intr)		/* Level 3: fd, lpt, vme etc. */
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(intrhand_lev3)
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 
 ENTRY_NOPROFILE(lev4intr)		/* Level 4: scsi, le, vme etc. */
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(intrhand_lev4)
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 
 #if 0
 ENTRY_NOPROFILE(lev5intr)		/* Level 5: kb, ms (zs is vectored) */
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(intrhand_lev5)
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 #endif
 
 ENTRY_NOPROFILE(_isr_clock)		/* Level 6: clock (see clock_hb.c) */
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	lea	%sp@(16),%a1
 	movl	%a1,%sp@-
 	jbsr	_C_LABEL(clock_intr)
 	addql	#4,%sp
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 
 #if 0
@@ -908,6 +796,7 @@ ENTRY_NOPROFILE(lev7intr)		/* Level 7: NMI */
 #endif
 
 ENTRY_NOPROFILE(intrhand_vectored)
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 	lea	%sp@(16),%a1		| get pointer to frame
 	movl	%a1,%sp@-
@@ -917,6 +806,7 @@ ENTRY_NOPROFILE(intrhand_vectored)
 	jbsr	_C_LABEL(isrdispatch_vectored) | call dispatcher
 	lea	%sp@(12),%sp		| pop value args
 	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 	rte
 
 #undef INTERRUPT_SAVEREG
@@ -925,36 +815,35 @@ ENTRY_NOPROFILE(intrhand_vectored)
 /*
  * Emulation of VAX REI instruction.
  *
- * This code deals with checking for and servicing ASTs
- * (profiling, scheduling) and software interrupts (network, softclock).
- * We check for ASTs first, just like the VAX.  To avoid excess overhead
- * the T_ASTFLT handling code will also check for software interrupts so we
- * do not have to do it here.  After identifing that we need an AST we
- * drop the IPL to allow device interrupts.
+ * This code deals with checking for and servicing
+ * ASTs (profiling, scheduling).
+ * After identifing that we need an AST we drop the IPL
+ * to allow device interrupts.
  *
  * This code is complicated by the fact that sendsig may have been called
  * necessitating a stack cleanup.
  */
 /*
- * news68k has hardware support for AST and software interrupt.
- * We just use it rather than VAX REI emulation.
+ * news68k has hardware support for AST,
+ * so only traps (including system call) and
+ * the AST interrupt use this REI function.
  */
 
 ASENTRY_NOPROFILE(rei)
 	tstl	_C_LABEL(astpending)	| AST pending?
-	jne	Lrei1			| no, done
-	rte
-Lrei1:
-	btst	#5,%sp@			| yes, are we returning to user mode?
-	jeq	1f			| no, done
+	jne	1f			| no, done
 	rte
 1:
+	btst	#5,%sp@			| yes, are we returning to user mode?
+	jeq	2f			| no, done
+	rte
+2:
 	movw	#PSL_LOWIPL,%sr		| lower SPL
 	clrl	%sp@-			| stack adjust
 	moveml	#0xFFFF,%sp@-		| save all registers
 	movl	%usp,%a1		| including
 	movl	%a1,%sp@(FR_SP)		|    the users SP
-Lrei2:
+Lrei:
 	clrl	%sp@-			| VA == none
 	clrl	%sp@-			| code == none
 	movl	#T_ASTFLT,%sp@-		| type == async system trap
@@ -1023,14 +912,6 @@ ENTRY(ecacheoff)
 Lnocache8:
 	rts
 
-ENTRY_NOPROFILE(getsfc)
-	movc	%sfc,%d0
-	rts
-
-ENTRY_NOPROFILE(getdfc)
-	movc	%dfc,%d0
-	rts
-
 /*
  * Load a new user segment table pointer.
  */
@@ -1078,39 +959,10 @@ ENTRY_NOPROFILE(_delay)
 	 * operations and that the loop will run from a single cache
 	 * half-line.
 	 */
-#ifdef __ELF__
 	.align  8
-#else
-	.align	3
-#endif
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
-	rts
-
-/*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-Lm68881fpsave:
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS) | save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
-Lm68881sdone:
-	rts
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-Lm68881fprestore:
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lm68881rdone:
-	frestore %a0@			| restore state
 	rts
 
 /*
@@ -1222,9 +1074,6 @@ GLOBAL(bootctrllun)
 GLOBAL(bootaddr)
 	.long	0
 
-GLOBAL(proc0paddr)
-	.long	0		| KVA of lwp0 u-area
-
 GLOBAL(intiobase)
 	.long	0		| KVA of base of internal IO space
 
@@ -1257,6 +1106,9 @@ GLOBAL(cache_ctl)
 
 GLOBAL(cache_clr)
 	.long	0		| KVA of external cache clear port
+
+GLOBAL(romcallvec)
+	.long	0
 
 
 /* interrupt counters */

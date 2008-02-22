@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $ */
+/* $NetBSD: lemac.c,v 1.49 2018/06/26 06:48:00 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.49 2018/06/26 06:48:00 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,9 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $");
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -76,12 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $");
 #include <i386/isa/decether.h>
 #endif
 
-#include <uvm/uvm_extern.h>
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 static void lemac_init(lemac_softc_t *sc);
 static void lemac_ifstart(struct ifnet *ifp);
@@ -179,7 +171,7 @@ lemac_tne_intr(
 	}
     }
     sc->sc_if.if_flags &= ~IFF_OACTIVE;
-    lemac_ifstart(&sc->sc_if);
+    if_schedule_deferred_start(&sc->sc_if);
 }
 
 static void
@@ -310,24 +302,11 @@ lemac_input(
 	if (length & 1)
 	    m->m_data[length - 1] = LEMAC_GET8(sc, offset + length - 1);
     }
-#if NBPFILTER > 0
-    if (sc->sc_if.if_bpf != NULL) {
-	m->m_pkthdr.len = m->m_len = length;
-	bpf_mtap(sc->sc_if.if_bpf, m);
-    }
-    /*
-     * If this is single cast but not to us
-     * drop it!
-     */
-    if ((eh.ether_dhost[0] & 1) == 0
-	   && !LEMAC_ADDREQUAL(eh.ether_dhost, sc->sc_enaddr)) {
-	m_freem(m);
-	return;
-    }
-#endif
+
     m->m_pkthdr.len = m->m_len = length;
-    m->m_pkthdr.rcvif = &sc->sc_if;
-    (*sc->sc_if.if_input)(&sc->sc_if, m);
+    m_set_rcvif(m, &sc->sc_if);
+
+    if_percpuq_enqueue((&sc->sc_if)->if_percpuq, m);
 }
 
 static void
@@ -342,7 +321,6 @@ lemac_rne_intr(
 	unsigned rxpg = LEMAC_INB(sc, LEMAC_REG_RQ);
 	u_int32_t rxlen;
 
-	sc->sc_if.if_ipackets++;
 	if (LEMAC_USE_PIO_MODE(sc)) {
 	    LEMAC_OUTB(sc, LEMAC_REG_IOP, rxpg);
 	    LEMAC_OUTB(sc, LEMAC_REG_PI1, 0);
@@ -735,10 +713,7 @@ lemac_ifstart(
 	}
 
 	LEMAC_OUTB(sc, LEMAC_REG_TQ, tx_pg);	/* tell chip to transmit this packet */
-#if NBPFILTER > 0
-	if (sc->sc_if.if_bpf != NULL)
-	    bpf_mtap(sc->sc_if.if_bpf, m);
-#endif
+	bpf_mtap(&sc->sc_if, m, BPF_D_OUT);
 	m_freem(m);			/* free the mbuf */
     }
     LEMAC_INTR_ENABLE(sc);
@@ -757,7 +732,7 @@ lemac_ifioctl(
     s = splnet();
 
     switch (cmd) {
-	case SIOCSIFADDR: {
+	case SIOCINITIFADDR: {
 	    struct ifaddr *ifa = (struct ifaddr *)data;
 
 	    ifp->if_flags |= IFF_UP;
@@ -779,6 +754,8 @@ lemac_ifioctl(
 	}
 
 	case SIOCSIFFLAGS: {
+	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+		break;
 	    lemac_init(sc);
 	    break;
 	}
@@ -805,7 +782,7 @@ lemac_ifioctl(
 	}
 
 	default: {
-	    error = EINVAL;
+	    error = ether_ioctl(ifp, cmd, data);
 	    break;
 	}
     }
@@ -963,10 +940,8 @@ lemac_intr(
     LEMAC_OUTB(sc, LEMAC_REG_CTL, LEMAC_INB(sc, LEMAC_REG_CTL) ^ LEMAC_CTL_LED);
     LEMAC_INTR_ENABLE(sc);		/* Unmask interrupts */
 
-#if NRND > 0
     if (cs_value)
         rnd_add_uint32(&sc->rnd_source, cs_value);
-#endif
 
     return 1;
 }
@@ -991,7 +966,7 @@ lemac_ifattach(
 {
     struct ifnet * const ifp = &sc->sc_if;
 
-    strcpy(ifp->if_xname, sc->sc_dv.dv_xname);
+    strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 
     lemac_reset(sc);
 
@@ -1022,12 +997,11 @@ lemac_ifattach(
 	IFQ_SET_READY(&ifp->if_snd);
 
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dv.dv_xname,
-			  RND_TYPE_NET, 0);
-#endif
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_NET, RND_FLAG_DEFAULT);
 
 	ifmedia_init(&sc->sc_ifmedia, 0,
 		     lemac_ifmedia_change,

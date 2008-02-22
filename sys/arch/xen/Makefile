@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 2005/12/11 12:19:47 christos Exp $
+#	$NetBSD: Makefile,v 1.9 2010/03/31 00:00:33 dyoung Exp $
+
+.include <bsd.own.mk>
 
 # Makefile for xen tags file
 
@@ -10,20 +12,30 @@
 
 TXEN=	${SYSDIR}/arch/xen/tags
 
-SXEN!=	awk '($$2 ~ /^arch.*\.[c]$$/) {print "${SYSDIR}/" $$2}' \
+SXEN!=	${TOOL_AWK} '/^\#/ { next } ($$2 ~ /^arch.*\.[c]$$/) {print "${SYSDIR}/" $$2}' \
 		${SYSDIR}/arch/xen/conf/files.xen
-AXEN!=	awk '($$2 ~ /^arch.*\.[sS]$$/) {print "${SYSDIR}/" $$2}' \
+SXEN+=	${SYSDIR}/arch/xen/include/*.h
+SXEN+=	${SYSDIR}/arch/xen/include/*/*.h
+SXEN+=	${SYSDIR}/arch/xen/include/*/*/*.h
+SXEN+=	${SYSDIR}/arch/x86/x86/*.[ch] \
+	${SYSDIR}/arch/x86/acpi/*.[ch] \
+	${SYSDIR}/arch/x86/include/*.h \
+	${SYSDIR}/arch/x86/isa/*.[ch] \
+	${SYSDIR}/arch/x86/pci/*.[ch]
+AXEN!=	${TOOL_AWK} '/^\#/ { next } ($$2 ~ /^arch.*\.[sS]$$/) {print "${SYSDIR}/" $$2}' \
 		${SYSDIR}/arch/xen/conf/files.xen
-AXEN+=	${SYSDIR}/arch/xen/${XEN_BUILD}/*.[sS]
+#AXEN+=	${SYSDIR}/arch/xen/${XEN_BUILD}/*.[sS]
 
 # Directories in which to place tags links
 DXEN=	xen ${XEN_MACHINE_ARCHS} include
 
 tags:
-	rm -f ${TXEN}
-	-echo ${SXEN} ${COMM} | xargs ctags -wadtf ${TXEN}
+	-rm -f ${TXEN}
+	-echo ${SXEN} | xargs ctags -wadtf ${TXEN}
+	${FINDCOMM} | xargs ctags -wadtf ${TXEN}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${AXEN} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+	"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
 		>> ${TXEN}
 	sort -o ${TXEN} ${TXEN}
 

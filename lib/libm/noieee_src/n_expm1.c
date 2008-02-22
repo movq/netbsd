@@ -1,4 +1,4 @@
-/*      $NetBSD: n_expm1.c,v 1.6 2003/08/07 16:44:51 agc Exp $ */
+/*      $NetBSD: n_expm1.c,v 1.8 2013/11/24 18:50:58 martin Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -111,10 +111,16 @@ ic(invln2, 1.4426950408889633870E0,     0, 1.71547652B82FE)
 #define PREC	53
 #endif	/* defined(__vax__)||defined(tahoe) */
 
+float
+expm1f(float x)
+{
+	return (float)expm1(x);
+}
+
 double
 expm1(double x)
 {
-	const static double one=1.0, half=1.0/2.0;
+	static const double one=1.0, half=1.0/2.0;
 	double  z,hi,lo,c;
 	int k;
 

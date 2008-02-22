@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile.inc,v 1.5 2007/05/28 12:06:38 tls Exp $
+#	$NetBSD: Makefile.inc,v 1.10 2017/01/11 12:19:44 joerg Exp $
 
-CPPFLAGS+=	-include ${.CURDIR}/../compat_openbsd.h
+WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
+CWARNFLAGS.clang+=	-Wno-tautological-compare
+CWARNFLAGS.clang+=	-Wno-error=address-of-packed-member
 
-WARNS?=	1
+CPPFLAGS+= -D_OPENBSD_SOURCE
 
 .if exists(${.CURDIR}/../../Makefile.inc)
 .include "${.CURDIR}/../../Makefile.inc"

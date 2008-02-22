@@ -1,4 +1,4 @@
-/*	$NetBSD: unstr.c,v 1.12 2007/12/15 19:44:40 perry Exp $	*/
+/*	$NetBSD: unstr.c,v 1.14 2012/06/19 05:46:08 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)unstr.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: unstr.c,v 1.12 2007/12/15 19:44:40 perry Exp $");
+__RCSID("$NetBSD: unstr.c,v 1.14 2012/06/19 05:46:08 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -85,9 +85,7 @@ void	order_unstr(STRFILE *);
 
 /* ARGSUSED */
 int
-main(ac, av)
-	int	ac __unused;
-	char	**av;
+main(int ac __unused, char **av)
 {
 	static STRFILE	tbl;		/* description table */
 
@@ -114,8 +112,7 @@ main(ac, av)
 }
 
 void
-getargs(av)
-	char	*av[];
+getargs(char *av[])
 {
 	if (!*++av) {
 		(void) fprintf(stderr, "usage: unstr datafile\n");
@@ -127,8 +124,7 @@ getargs(av)
 }
 
 void
-order_unstr(tbl)
-	STRFILE	*tbl;
+order_unstr(STRFILE *tbl)
 {
 	unsigned int	i;
 	char	*sp;

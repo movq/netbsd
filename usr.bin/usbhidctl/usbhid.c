@@ -1,4 +1,4 @@
-/*	$NetBSD: usbhid.c,v 1.33 2006/10/26 11:12:41 wiz Exp $	*/
+/*	$NetBSD: usbhid.c,v 1.37 2017/12/10 20:38:14 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,13 +31,14 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: usbhid.c,v 1.33 2006/10/26 11:12:41 wiz Exp $");
+__RCSID("$NetBSD: usbhid.c,v 1.37 2017/12/10 20:38:14 bouyer Exp $");
 #endif
 
 #include <sys/types.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
+#include <dev/hid/hid.h>
 
 #include <ctype.h>
 #include <err.h>
@@ -61,7 +55,7 @@ __RCSID("$NetBSD: usbhid.c,v 1.33 2006/10/26 11:12:41 wiz Exp $");
  * Zero if not in a verbose mode.  Greater levels of verbosity
  * are indicated by values larger than one.
  */
-unsigned int verbose;
+static unsigned int verbose;
 
 /* Parser tokens */
 #define DELIM_USAGE '.'
@@ -220,7 +214,7 @@ hidtestrule(struct Susbvar *var, struct usagedata *cache)
 		if (numpage >= 0) {
 			/* Valid numeric */
 
-			if (numpage != HID_PAGE(usage_id))
+			if (numpage != (int)HID_PAGE(usage_id))
 				/* Numeric didn't match page ID */
 				return -1;
 		} else {
@@ -258,7 +252,7 @@ hidtestrule(struct Susbvar *var, struct usagedata *cache)
 	if (numusage >= 0) {
 		/* Valid numeric */
 
-		if (numusage != HID_USAGE(usage_id))
+		if (numusage != (int)HID_USAGE(usage_id))
 			/* Numeric didn't match usage ID */
 			return -1;
 	} else {
@@ -628,7 +622,7 @@ varop_report(struct hid_item *item, struct Susbvar *var,
 	return 0;
 }
 
-static void
+__dead static void
 devloop(int hidfd, report_desc_t rd, struct Susbvar *varlist, size_t vlsize)
 {
 	u_char *dbuf;
@@ -805,7 +799,7 @@ devshow(int hidfd, report_desc_t rd, struct Susbvar *varlist, size_t vlsize,
 	}
 }
 
-static void
+__dead static void
 usage(void)
 {
 	const char *progname = getprogname();

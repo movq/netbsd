@@ -27,7 +27,7 @@
  *	i4b_tel.c - device driver for ISDN telephony
  *	--------------------------------------------
  *
- *	$Id: i4b_tel.c,v 1.21 2007/12/05 17:20:03 pooka Exp $
+ *	$Id: i4b_tel.c,v 1.28 2017/10/25 08:12:40 maya Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.21 2007/12/05 17:20:03 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.28 2017/10/25 08:12:40 maya Exp $");
 
 #include "isdntel.h"
 
@@ -175,27 +175,37 @@ static u_char sinetab[];
 
 #ifndef __FreeBSD__
 #define	PDEVSTATIC	/* - not static - */
-PDEVSTATIC void isdntelattach __P((void));
-PDEVSTATIC int isdntelioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
+PDEVSTATIC void isdntelattach(void);
+PDEVSTATIC int isdntelioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
 
-int isdntelopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdntelclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdntelread __P((dev_t dev, struct uio *uio, int ioflag));
-int isdntelwrite __P((dev_t dev, struct uio * uio, int ioflag));
+int isdntelopen(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdntelclose(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdntelread(dev_t dev, struct uio *uio, int ioflag);
+int isdntelwrite(dev_t dev, struct uio * uio, int ioflag);
 
 #ifdef OS_USES_POLL
-int isdntelpoll	__P((dev_t dev, int events, struct lwp *l));
-int isdntelkqfilter __P((dev_t dev, struct knote *kn));
+int isdntelpoll(dev_t dev, int events, struct lwp *l);
+int isdntelkqfilter(dev_t dev, struct knote *kn);
 #else
-int isdntelsel __P((dev_t dev, int rw, struct lwp *l));
+int isdntelsel(dev_t dev, int rw, struct lwp *l);
 #endif
 
 #endif /* __FreeBSD__ */
 
 #ifdef __NetBSD__
 const struct cdevsw isdntel_cdevsw = {
-	isdntelopen, isdntelclose, isdntelread, isdntelwrite, isdntelioctl,
-	nostop, notty, isdntelpoll, nommap, isdntelkqfilter, D_OTHER
+	.d_open = isdntelopen,
+	.d_close = isdntelclose,
+	.d_read = isdntelread,
+	.d_write = isdntelwrite,
+	.d_ioctl = isdntelioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = isdntelpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = isdntelkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 #endif /* __NetBSD__ */
 
@@ -274,7 +284,7 @@ SYSINIT(i4bteldev, SI_SUB_DRIVERS,
 #ifdef __bsdi__
 
 int i4btelsel(dev_t dev, int rw, struct lwp *l);
-int i4btelmatch(struct device *parent, struct cfdata *cf, void *aux);
+int i4btelmatch(device_t parent, cfdata_t cf, void *aux);
 void dummy_i4btelattach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 62
@@ -290,14 +300,14 @@ struct devsw i4btelsw =
 };
 
 int
-i4btelmatch(struct device *parent, struct cfdata *cf, void *aux)
+i4btelmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	NDBGL4(L4_TELDBG, "aux=0x%x", aux);
 	return 1;
 }
 
 void
-dummy_i4btelattach(struct device *parent, struct device *self, void *aux)
+dummy_i4btelattach(device_t parent, device_t self, void *aux)
 {
 	NDBGL4(L4_TELDBG, "aux=0x%x", aux);
 }
@@ -327,7 +337,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdntelattach(void *dummy)
 #else
-isdntelattach()
+isdntelattach(void)
 #endif
 {
 	int i, j;
@@ -338,6 +348,8 @@ isdntelattach()
 	{
 		for(j=0; j < NOFUNCS; j++)
 		{
+			selinit(&tel_sc[i][j].selp);
+
 			tel_sc[i][j].devstate = ST_IDLE;
 			tel_sc[i][j].audiofmt = CVT_NONE;
 			tel_sc[i][j].rcvttab = 0;
@@ -972,8 +984,12 @@ filt_i4btel_telread(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops i4btel_telread_filtops =
-	{ 1, NULL, filt_i4btel_detach, filt_i4btel_telread };
+static const struct filterops i4btel_telread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4btel_detach,
+	.f_event = filt_i4btel_telread,
+};
 
 static int
 filt_i4btel_telwrite(struct knote *kn, long hint)
@@ -991,8 +1007,12 @@ filt_i4btel_telwrite(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops i4btel_telwrite_filtops =
-	{ 1, NULL, filt_i4btel_detach, filt_i4btel_telwrite };
+static const struct filterops i4btel_telwrite_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4btel_detach,
+	.f_event = filt_i4btel_telwrite,
+};
 
 static int
 filt_i4btel_dialread(struct knote *kn, long hint)
@@ -1006,11 +1026,19 @@ filt_i4btel_dialread(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops i4btel_dialread_filtops =
-	{ 1, NULL, filt_i4btel_detach, filt_i4btel_dialread };
+static const struct filterops i4btel_dialread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4btel_detach,
+	.f_event = filt_i4btel_dialread,
+};
 
-static const struct filterops i4btel_seltrue_filtops =
-	{ 1, NULL, filt_i4btel_detach, filt_seltrue };
+static const struct filterops i4btel_seltrue_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4btel_detach,
+	.f_event = filt_seltrue,
+};
 
 int
 isdntelkqfilter(dev_t dev, struct knote *kn)
@@ -1166,7 +1194,7 @@ tel_connect(void *softc, void *cdp)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 
@@ -1207,7 +1235,7 @@ tel_disconnect(void *softc, void *cdp)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 
 		if (sc->devstate & ST_TONE) {
 			sc->devstate &= ~ST_TONE;
@@ -1235,7 +1263,7 @@ tel_dialresponse(void *softc, int status, cause_t cause)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 
@@ -1262,7 +1290,7 @@ tel_rx_data_rdy(void *softc)
 		sc->devstate &= ~ST_RDWAITDATA;
 		wakeup((void *) &sc->isdn_linktab->rx_queue);
 	}
-	selnotify(&sc->selp, 0);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1283,7 +1311,7 @@ tel_tx_queue_empty(void *softc)
 	if(sc->devstate & ST_TONE) {
 		tel_tone(sc);
 	} else {
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 

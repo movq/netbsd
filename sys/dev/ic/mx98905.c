@@ -1,4 +1,4 @@
-/*	$NetBSD: mx98905.c,v 1.11 2008/01/08 06:28:29 matt Exp $	*/
+/*	$NetBSD: mx98905.c,v 1.15 2009/03/14 21:04:20 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: mx98905.c,v 1.11 2008/01/08 06:28:29 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mx98905.c,v 1.15 2009/03/14 21:04:20 dsl Exp $");
 
 #include <sys/device.h>
 #include <sys/mbuf.h>
@@ -105,9 +98,7 @@ mx98905_attach(struct dp8390_softc *sc)
 }
 
 static inline void
-mx98905_write_setup(sc, len, buf)
-	struct dp8390_softc *sc;
-	int len, buf;
+mx98905_write_setup(struct dp8390_softc *sc, int len, int buf)
 {
 	bus_space_tag_t nict = sc->sc_regt;
 	bus_space_handle_t nich = sc->sc_regh;
@@ -139,8 +130,7 @@ mx98905_write_setup(sc, len, buf)
 
 
 static inline void
-mx98905_write_wait(sc)
-	struct dp8390_softc *sc;
+mx98905_write_wait(struct dp8390_softc *sc)
 {
 	int maxwait = 100;	/* about 120us */
 	bus_space_tag_t nict = sc->sc_regt;
@@ -164,7 +154,7 @@ mx98905_write_wait(sc)
 	if (maxwait == 0) {
 		log(LOG_WARNING,
 		    "%s: remote transmit DMA failed to complete\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		dp8390_reset(sc);
 	}
 }
@@ -174,10 +164,7 @@ mx98905_write_wait(sc)
  * I/O.
  */
 int
-mx98905_write_mbuf(sc, m, buf)
-	struct dp8390_softc *sc;
-	struct mbuf *m;
-	int buf;
+mx98905_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 {
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	bus_space_tag_t nict = sc->sc_regt;
@@ -300,11 +287,7 @@ mx98905_write_mbuf(sc, m, buf)
  * ring-wrap.
  */
 int
-mx98905_ring_copy(sc, src, vdst, amount)
-	struct dp8390_softc *sc;
-	int src;
-	void *vdst;
-	u_short amount;
+mx98905_ring_copy(struct dp8390_softc *sc, int src, void *vdst, u_short amount)
 {
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	uint8_t *dst = vdst;
@@ -334,10 +317,7 @@ mx98905_ring_copy(sc, src, vdst, amount)
 }
 
 void
-mx98905_read_hdr(sc, buf, hdr)
-	struct dp8390_softc *sc;
-	int buf;
-	struct dp8390_ring *hdr;
+mx98905_read_hdr(struct dp8390_softc *sc, int buf, struct dp8390_ring *hdr)
 {
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 
@@ -382,15 +362,7 @@ mx98905_read_setup(bus_space_tag_t nict, bus_space_handle_t nich,
  * rounded up to a word - ok as long as mbufs are word sized.
  */
 void
-mx98905_readmem(nict, nich, asict, asich, src, dst, amount, useword)
-	bus_space_tag_t nict;
-	bus_space_handle_t nich;
-	bus_space_tag_t asict;
-	bus_space_handle_t asich;
-	int src;
-	u_int8_t *dst;
-	size_t amount;
-	int useword;
+mx98905_readmem(bus_space_tag_t nict, bus_space_handle_t nich, bus_space_tag_t asict, bus_space_handle_t asich, int src, u_int8_t *dst, size_t amount, int useword)
 {
 	int len, resid;
 

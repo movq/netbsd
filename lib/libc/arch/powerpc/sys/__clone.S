@@ -1,4 +1,4 @@
-/*	$NetBSD: __clone.S,v 1.2 2002/07/30 06:07:59 matt Exp $	*/
+/*	$NetBSD: __clone.S,v 1.6 2014/08/23 02:24:22 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 Tsubai Masanari.  All rights reserved.
@@ -29,6 +29,10 @@
 #include <sys/errno.h>
 #include "SYS.h"
 
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: __clone.S,v 1.6 2014/08/23 02:24:22 matt Exp $")
+#endif /* LIBC_SCCS && !lint */
+
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(clone, __clone)
 #endif
@@ -40,27 +44,30 @@ ENTRY(__clone)
 	/*
 	 * Sanity checks: func and stack may not be NULL.
 	 */
-	cmpwi	%r3,0
+	cmpptri	%r3,0
 	beq	1f
-	cmpwi	%r4,0
+	cmpptri	%r4,0
 	beq	1f
 
 	mr	%r7,%r3		/* Save fn in r7. */
 	mr	%r3,%r5
-	li	%r0,SYS___clone	/* (flags, stack) */
-	sc
+	_DOSYSCALL(__clone)	/* (flags, stack) */
 	bso	2f		/* error... */
 
-	cmpwi	%r3,0
+	cmpptri	%r3,0
 	bnelr			/* We're the parent, just return. */
 
 	mtlr	%r7		/* fn */
 	mr	%r3,%r6		/* arg */
 	blrl			/* Call the clone's entry point. */
 
+#ifdef __PIC__
+	PIC_TOCSETUP(__clone, %r30)	/* exit won't return so blow away r30 */
+#endif
 	bl	PIC_PLT(_C_LABEL(_exit))
 
 1:
 	li	%r3,EINVAL
 2:
-	b	PIC_PLT(_C_LABEL(__cerror))
+	BRANCH_TO_CERROR()
+END(__clone)

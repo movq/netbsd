@@ -1,4 +1,4 @@
-/*	$NetBSD: basename.c,v 1.13 2005/04/04 16:47:54 peter Exp $	*/
+/*	$NetBSD: basename.c,v 1.15 2011/08/29 14:24:03 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)basename.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: basename.c,v 1.13 2005/04/04 16:47:54 peter Exp $");
+__RCSID("$NetBSD: basename.c,v 1.15 2011/08/29 14:24:03 joerg Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -50,7 +50,7 @@ __RCSID("$NetBSD: basename.c,v 1.13 2005/04/04 16:47:54 peter Exp $");
 #include <string.h>
 #include <unistd.h>
 
-static void usage(void);
+__dead static void usage(void);
 
 int
 main(int argc, char **argv)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrether.c,v 1.6 2007/08/26 22:59:09 dyoung Exp $	*/
+/*	$NetBSD: if_agrether.c,v 1.10 2017/12/06 04:37:00 ozaki-r Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_agrether.c,v 1.6 2007/08/26 22:59:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_agrether.c,v 1.10 2017/12/06 04:37:00 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -98,6 +98,19 @@ agrether_ctor(struct agr_softc *sc, struct ifnet *ifp_port)
 	agr_mc_init(sc, &priv->aep_multiaddrs);
 
 	sc->sc_iftprivate = priv;
+	/*
+	 * inherit ports capabilities
+	 * XXX this really needs to be the intersection of all
+	 * ports capabilities, not just the latest port.
+	 * Okay if ports are the same.
+	 */
+	ifp->if_capabilities = ifp_port->if_capabilities &
+			(IFCAP_TSOv4 | IFCAP_TSOv6 |
+			IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
+			IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
+			IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx |
+			IFCAP_CSUM_TCPv6_Tx | IFCAP_CSUM_TCPv6_Rx |
+			IFCAP_CSUM_UDPv6_Tx | IFCAP_CSUM_UDPv6_Rx);
 
 	ether_ifattach(ifp, CLLADDR(ifp_port->if_sadl));
 	ec->ec_capabilities =
@@ -149,9 +162,15 @@ agrether_portinit(struct agr_softc *sc, struct agr_port *port)
 		}
 		ec->ec_capabilities &=
 		    ec_port->ec_capabilities |
-		    ~(ETHERCAP_VLAN_MTU | ETHERCAP_VLAN_MTU);
+		    ~(ETHERCAP_VLAN_MTU | ETHERCAP_VLAN_HWTAGGING);
 	}
 
+	/* Enable vlan support */
+	if (ec->ec_nvlans > 0) {
+		error = agr_vlan_add(port, NULL);
+		if (error != 0)
+			return error;
+	}
 	/* XXX ETHERCAP_JUMBO_MTU */
 
 	priv = malloc(sizeof(*priv), M_DEVBUF, M_WAITOK | M_ZERO);
@@ -185,10 +204,17 @@ static int
 agrether_portfini(struct agr_softc *sc, struct agr_port *port)
 {
 	struct ifreq ifr;
+	struct ethercom *ec_port = (void *)port->port_ifp;
 	int error;
 
 	if (port->port_iftprivate == NULL) {
 		return 0;
+	}
+
+	if (ec_port->ec_nvlans > 0) {
+		bool force = true;
+		/* Disable vlan support */
+		agr_vlan_del(port, &force);
 	}
 
 	memset(&ifr, 0, sizeof(ifr));

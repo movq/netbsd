@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ni.c,v 1.4 2007/03/04 06:00:56 christos Exp $ */
+/*	$NetBSD: if_ni.c,v 1.11 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of 
- *	Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -92,7 +86,7 @@
 #define DELAY(x)	{volatile int i = x * 3;while (--i);}
 #define WAITREG(csr,val) while (NI_RREG(csr) & val);
 
-static int ni_get(struct iodesc *, void *, size_t, time_t);
+static int ni_get(struct iodesc *, void *, size_t, saseconds_t);
 static int ni_put(struct iodesc *, void *, size_t);
 
 static int *syspte, allocbase, niaddr;
@@ -193,7 +187,8 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	struct ni_dg *data;
 	struct ni_msg *msg;
 	struct ni_ptdb *ptdb;
-	int i, va, res;
+	int i, va;
+	struct ni_param *nip;
 
 	if (beenhere++ && askname == 0)
 		return 0;
@@ -287,7 +282,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	for (i = 0; i < NMSGBUF; i++) {
 		msg = (void *)(va + i * 512);
 
-		res = INSQTI(msg, &fqb->nf_mforw);
+		(void)INSQTI(msg, &fqb->nf_mforw);
 	}
 	WAITREG(NI_PCR, PCR_OWN);
 	NI_WREG(NI_PCR, PCR_FREEQNE|PCR_MFREEQ|PCR_OWN);
@@ -316,7 +311,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		allocbase += 2048;
 		data->bufs[0]._index = i;
 
-		res = INSQTI(data, &fqb->nf_dforw);
+		(void)INSQTI(data, &fqb->nf_dforw);
 	}
 	WAITREG(NI_PCR, PCR_OWN);
 	NI_WREG(NI_PCR, PCR_FREEQNE|PCR_DFREEQ|PCR_OWN);
@@ -351,7 +346,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		data->bufs[0]._len = bd->nb_len;
 		data->bufs[0]._index = idx;
 
-		res = INSQTI(data, &fqb->nf_rforw);
+		(void)INSQTI(data, &fqb->nf_rforw);
 	}
 	WAITREG(NI_PCR, PCR_OWN);
 	NI_WREG(NI_PCR, PCR_FREEQNE|PCR_RFREEQ|PCR_OWN);
@@ -368,7 +363,8 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	msg->nm_status = 0;
 	msg->nm_len = sizeof(struct ni_param) + 6;
 	msg->nm_opcode2 = NI_WPARAM;
-	((struct ni_param *)&msg->nm_text[0])->np_flags = NP_PAD;
+	nip = (struct ni_param *)&msg->nm_text[0];
+	nip->np_flags = NP_PAD;
 
 	puton(msg, &gvp->nc_forw0, PCR_CMDQNE|PCR_CMDQ0|PCR_OWN);
 
@@ -383,8 +379,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 		insput(data, &fqb->nf_mforw, PCR_FREEQNE|PCR_MFREEQ|PCR_OWN);
 	}
 #endif
-	bcopy(((struct ni_param *)&msg->nm_text[0])->np_dpa,
-	    enaddr, ETHER_ADDR_LEN);
+	bcopy(nip->np_dpa, enaddr, ETHER_ADDR_LEN);
 	insput(data, &fqb->nf_mforw, PCR_FREEQNE|PCR_MFREEQ|PCR_OWN);
 
 #ifdef NIDEBUG
@@ -413,7 +408,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	msg->nm_len = 18;
 	msg->nm_opcode2 = NI_STPTDB;
 	ptdb = (struct ni_ptdb *)&msg->nm_text[0];
-	bzero(ptdb, sizeof(struct ni_ptdb));
+	memset(ptdb, 0, sizeof(struct ni_ptdb));
 	ptdb->np_index = 1;
 	ptdb->np_fque = 1;
 
@@ -426,7 +421,7 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 #endif
 	msg = REMQHI(&fqb->nf_mforw);
 	ptdb = (struct ni_ptdb *)&msg->nm_text[0];
-	bzero(ptdb, sizeof(struct ni_ptdb));
+	memset(ptdb, 0, sizeof(struct ni_ptdb));
 	msg->nm_opcode = BVP_MSG;
 	msg->nm_len = 18;
 	ptdb->np_index = 2;
@@ -449,17 +444,19 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 }
 
 int
-ni_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timeout)
+ni_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timeout)
 {
 	struct ni_dg *data;
 	struct ni_bbd *bd;
-	int nsec = getsecs() + timeout;
+	satime_t nsec = getsecs();
 	int len, idx;
 
-loop:	while ((data = REMQHI(&gvp->nc_forwr)) == 0 && (nsec > getsecs()))
+loop:
+	while ((data = REMQHI(&gvp->nc_forwr)) == 0 &&
+	    ((getsecs() - nsec) < timeout))
 		;
 
-	if (nsec <= getsecs())
+	if ((getsecs() - nsec) >= timeout)
 		return 0;
 
 	switch (data->nd_opcode) {
@@ -469,7 +466,7 @@ loop:	while ((data = REMQHI(&gvp->nc_forwr)) == 0 && (nsec > getsecs()))
 		len = data->bufs[0]._len;
 		if (len > maxlen)
 			len = maxlen;
-		bcopy((void *)data->nd_cmdref, pkt, len);
+		memcpy(pkt, (void *)data->nd_cmdref, len);
 		bd->nb_pte = (int)&syspte[data->nd_cmdref>>9];
 		data->bufs[0]._len = bd->nb_len = 2048;
 		data->bufs[0]._offset = 0;
@@ -510,7 +507,7 @@ ni_put(struct iodesc *desc, void *pkt, size_t len)
 	bdp = &bbd[(data->bufs[0]._index & 0x7fff)];
 	bdp->nb_status = NIBD_VALID;
 	bdp->nb_len = (len < 64 ? 64 : len);
-	bcopy(pkt, (void *)data->nd_cmdref, len);
+	memcpy((void *)data->nd_cmdref, pkt, len);
 	data->bufs[0]._offset = 0;
 	data->bufs[0]._len = bdp->nb_len;
 	data->nd_opcode = BVP_DGRAM;

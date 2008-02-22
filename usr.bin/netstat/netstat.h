@@ -1,4 +1,4 @@
-/*	$NetBSD: netstat.h,v 1.35 2006/05/28 16:51:40 elad Exp $	*/
+/*	$NetBSD: netstat.h,v 1.51 2014/11/06 21:30:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -32,6 +32,7 @@
  */
 
 #include <sys/cdefs.h>
+#include <kvm.h>
 
 int	Aflag;		/* show addresses of protocol control block */
 int	aflag;		/* show all sockets (including servers) */
@@ -41,6 +42,7 @@ int	dflag;		/* show i/f dropped packets */
 #ifndef SMALL
 int	gflag;		/* show group (multicast) routing or stats */
 #endif
+int	hflag;		/* humanize byte counts */
 int	iflag;		/* show interfaces */
 int	Lflag;		/* don't show LLINFO entries */
 int	lflag;		/* show routing table with use and ref */
@@ -53,120 +55,95 @@ int	pflag;		/* show given protocol */
 int	qflag;		/* show softintrq */
 int	rflag;		/* show routing tables (or routing stats) */
 int	sflag;		/* show protocol statistics */
+int	tagflag;	/* show route tags */
 int	tflag;		/* show i/f watchdog timers */
+int	Vflag;		/* show Vestigial TIME_WAIT (VTW) information */
 int	vflag;		/* verbose route information or don't truncate names */
-
-int	interval;	/* repeat interval for i/f stats */
 
 char	*interface;	/* desired i/f for stats, or NULL for all i/fs */
 
 int	af;		/* address family */
 int	use_sysctl;	/* use sysctl instead of kmem */
+int	force_sysctl;	/* force use of sysctl (or exit) - for testing */
 
 
-int	kread __P((u_long addr, char *buf, int size));
-char	*plural __P((int));
-char	*plurales __P((int));
-int	get_hardticks __P((void));
+int	kread(u_long addr, char *buf, int size);
+const char *plural(int);
+const char *plurales(int);
+int	get_hardticks(void);
 
-void	protopr __P((u_long, char *));
-void	tcp_stats __P((u_long, char *));
-void	tcp_dump __P((u_long));
-void	udp_stats __P((u_long, char *));
-void	ip_stats __P((u_long, char *));
-void	icmp_stats __P((u_long, char *));
-void	igmp_stats __P((u_long, char *));
-void	pim_stats __P((u_long, char *));
-void	arp_stats __P((u_long, char *));
-void	carp_stats __P((u_long, char *));
+void	protopr(u_long, const char *);
+void	tcp_stats(u_long, const char *);
+void	tcp_dump(u_long, const char *, u_long);
+void	udp_stats(u_long, const char *);
+void	ip_stats(u_long, const char *);
+void	icmp_stats(u_long, const char *);
+void	igmp_stats(u_long, const char *);
+void	pim_stats(u_long, const char *);
+void	arp_stats(u_long, const char *);
+void	carp_stats(u_long, const char *);
+void	pfsync_stats(u_long, const char*);
 #ifdef IPSEC
-/* run-time selector for which  implementation (KAME, FAST_IPSEC) to show */
-void	ipsec_switch __P((u_long, char *));
-/* KAME ipsec version */
-void	ipsec_stats __P((u_long, char *));
-/* FAST_IPSEC version */
-void	fast_ipsec_stats __P((u_long, char *));
+void	fast_ipsec_stats(u_long, const char *);
 #endif
 
 #ifdef INET6
 struct sockaddr_in6;
 struct in6_addr;
-void	ip6protopr __P((u_long, char *));
-void	tcp6_stats __P((u_long, char *));
-void	tcp6_dump __P((u_long));
-void	udp6_stats __P((u_long, char *));
-void	ip6_stats __P((u_long, char *));
-void	ip6_ifstats __P((char *));
-void	icmp6_stats __P((u_long, char *));
-void	icmp6_ifstats __P((char *));
-void	pim6_stats __P((u_long, char *));
-void	rip6_stats __P((u_long, char *));
-void	mroute6pr __P((u_long, u_long, u_long));
-void	mrt6_stats __P((u_long, u_long));
-char	*routename6 __P((struct sockaddr_in6 *));
+void	ip6protopr(u_long, const char *);
+void	tcp6_stats(u_long, const char *);
+void	tcp6_dump(u_long, const char *, u_long);
+void	udp6_stats(u_long, const char *);
+void	ip6_stats(u_long, const char *);
+void	ip6_ifstats(const char *);
+void	icmp6_stats(u_long, const char *);
+void	icmp6_ifstats(const char *);
+void	pim6_stats(u_long, const char *);
+void	rip6_stats(u_long, const char *);
+void	mroute6pr(u_long, u_long, u_long);
+void	mrt6_stats(u_long, u_long);
 #endif /*INET6*/
 
 #ifdef IPSEC
-void	pfkey_stats __P((u_long, char *));
+void	pfkey_stats(u_long, const char *);
 #endif
 
 void	mbpr(u_long, u_long, u_long, u_long, u_long);
 
-void	hostpr __P((u_long, u_long));
-void	impstats __P((u_long, u_long));
+void	hostpr(u_long, u_long);
+void	impstats(u_long, u_long);
 
-void	pr_rthdr __P((int, int));
-void	pr_family __P((int));
-void	rt_stats __P((u_long));
-char	*ns_phost __P((struct sockaddr *));
-void	upHex __P((char *));
+void	rt_stats(u_long);
+char	*ns_phost(struct sockaddr *);
 
-void	p_rttables(int);
-void	p_flags(int, char *);
-void	p_addr(struct sockaddr *, struct sockaddr *, int);
-void	p_gwaddr(struct sockaddr *, int);
-void	p_sockaddr(struct sockaddr *, struct sockaddr *, int, int);
-char	*routename(struct sockaddr *);
-char	*routename4(in_addr_t);
-char	*netname(struct sockaddr *, struct sockaddr *);
-char	*netname4(in_addr_t, in_addr_t);
+const char *atalk_print(const struct sockaddr *, int);
+const char *atalk_print2(const struct sockaddr *, const struct sockaddr *,
+    int);
+char	*ns_print(struct sockaddr *);
 
-/* char	*routename __P((u_int32_t)); */
-/* char	*netname __P((u_int32_t, u_int32_t)); */
-#ifdef INET6
-char	*netname6 __P((struct sockaddr_in6 *, struct sockaddr_in6 *));
-#endif 
-char	*atalk_print __P((const struct sockaddr *, int));
-char	*atalk_print2 __P((const struct sockaddr *, const struct sockaddr *,
-    int));
-char	*ns_print __P((struct sockaddr *));
-void	routepr __P((u_long));
+void	nsprotopr(u_long, const char *);
+void	spp_stats(u_long, const char *);
+void	idp_stats(u_long, const char *);
+void	nserr_stats(u_long, const char *);
 
-void	nsprotopr __P((u_long, char *));
-void	spp_stats __P((u_long, char *));
-void	idp_stats __P((u_long, char *));
-void	nserr_stats __P((u_long, char *));
+void	atalkprotopr(u_long, const char *);
+void	ddp_stats(u_long, const char *);
 
-void	atalkprotopr __P((u_long, char *));
-void	ddp_stats __P((u_long, char *));
+void	intpr(int, u_long, void (*)(const char *));
 
-void	intpr __P((int, u_long, void (*) __P((char *))));
+void	unixpr(u_long);
 
-void	unixpr __P((u_long));
-
-void	esis_stats __P((u_long, char *));
-void	clnp_stats __P((u_long, char *));
-void	cltp_stats __P((u_long, char *));
-void	iso_protopr __P((u_long, char *));
-void	iso_protopr1 __P((u_long, int));
-void	tp_protopr __P((u_long, char *));
-void	tp_inproto __P((u_long));
-void	tp_stats __P((u_long, caddr_t));
-
-void	mroutepr __P((u_long, u_long, u_long, u_long));
-void	mrt_stats __P((u_long, u_long));
+void	routepr(u_long);
+void	mroutepr(u_long, u_long, u_long, u_long);
+void	mrt_stats(u_long, u_long);
 
 void	bpf_stats(void);
-void	bpf_dump(char *);
+void	bpf_dump(const char *);
+
+kvm_t *get_kvmd(void);
+
+char	*mpls_ntoa(const struct sockaddr *);
+
+struct kinfo_pcb *getpcblist_sysctl(const char *, size_t *);
 
 #define PLEN    (LONG_BIT / 4 + 2)

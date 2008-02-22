@@ -1,4 +1,4 @@
-.\"	$NetBSD: ahdilabel.8,v 1.10 2003/06/26 11:57:49 wiz Exp $
+.\"	$NetBSD: ahdilabel.8,v 1.14 2017/07/03 21:31:00 wiz Exp $
 .\"
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
-.Dd July 29, 2000
+.Dd February 17, 2017
 .Dt AHDILABEL 8 atari
 .Os
 .Sh NAME
@@ -62,9 +55,9 @@ The name of the disk you want to edit.
 .Nm
 will first try to open a disk of this name.  If this cannot
 be opened, it will attempt to open
-.Ar r Ns \*[Lt]disk\*[Gt] Ns Ar c .
+.Ar r Ns <disk> Ns Ar c .
 Finally, if this also cannot be opened, it will attempt to open
-.Ar /dev/r Ns \*[Lt]disk\*[Gt] Ns Ar c .
+.Ar /dev/r Ns <disk> Ns Ar c .
 .El
 .Pp
 .Nm
@@ -103,8 +96,8 @@ up. The filesystem type is msdos.
 .Pp
 The root, start and size parameters can be entered using sector,
 cylinder/track/sector or megabyte notations.  Whole numbers of cylinders can
-be entered using the shorthand \*[Lt]cylinder\*[Gt]/.  Likewise, whole numbers of tracks
-can be entered using the shorthand \*[Lt]cylinder\*[Gt]/\*[Lt]track\*[Gt]/.  Megabytes are entered
+be entered using the shorthand <cylinder>/.  Likewise, whole numbers of tracks
+can be entered using the shorthand <cylinder>/<track>/.  Megabytes are entered
 using the suffix
 .Em M .
 .Pp
@@ -148,9 +141,9 @@ Quit
 .Dl ahdilabel sd0
 Edit the AHDI label for disk sd0.
 .Sh SEE ALSO
-.Xr bootpref 8 ,
-.Xr disklabel 8 ,
-.Xr installboot 8
+.Xr atari/bootpref 8 ,
+.Xr atari/installboot 8 ,
+.Xr disklabel 8
 .Sh HISTORY
 The
 .Nm

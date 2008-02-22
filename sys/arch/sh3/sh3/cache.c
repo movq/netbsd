@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.13 2007/11/06 01:33:00 uwe Exp $	*/
+/*	$NetBSD: cache.c,v 1.19 2013/11/18 15:34:06 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.13 2007/11/06 01:33:00 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.19 2013/11/18 15:34:06 skrll Exp $");
 
+#include "opt_cache.h"
 #include "opt_memsize.h"	/* IOM_RAM_BEGIN */
 
 #include <sys/param.h>
@@ -81,7 +75,7 @@ int sh_cache_alias_mask;
 int sh_cache_prefer_mask;
 
 void
-sh_cache_init()
+sh_cache_init(void)
 {
 
 #ifdef CACHE_DEBUG
@@ -98,7 +92,7 @@ sh_cache_init()
 }
 
 void
-sh_cache_information()
+sh_cache_information(void)
 {
 
 #ifdef CACHE_DEBUG
@@ -147,7 +141,7 @@ sh_cache_information()
 	}
 
 	/* Write-through/back */
-	aprint_normal("cpu0: P0, U0, P3 write-%s; P1 write-%s\n",
+	aprint_normal("cpu0: U0, P0, P3 write-%s; P1 write-%s\n",
 	    sh_cache_write_through_p0_u0_p3 ? "through" : "back",
 	    sh_cache_write_through_p1 ? "through" : "back");
 }
@@ -156,11 +150,10 @@ sh_cache_information()
  * CPU-independent cache flush.
  */
 void
-__cache_flush()
+__cache_flush(void)
 {
 	volatile int *p = (int *)SH3_PHYS_TO_P1SEG(IOM_RAM_BEGIN);
 	int i;
-	int d;
 
 	/* Flush D-Cache */
 	/*
@@ -170,7 +163,7 @@ __cache_flush()
 	 * 16KB line-size 32B 1-way ... [13:5]
 	 */
 	for (i = 0; i < 256/*entry*/ * 4/*way*/; i++) {
-		d = *p;
+		(void)*p;
 		p += 4;	/* next line index (16B) */
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: txsim.c,v 1.15 2005/12/11 12:17:34 christos Exp $ */
+/*	$NetBSD: txsim.c,v 1.17 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: txsim.c,v 1.15 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: txsim.c,v 1.17 2012/10/27 17:17:54 chs Exp $");
 
 #include "opt_vr41xx.h"
 #include "opt_tx39xx.h"
@@ -57,22 +50,20 @@ __KERNEL_RCSID(0, "$NetBSD: txsim.c,v 1.15 2005/12/11 12:17:34 christos Exp $");
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/txsnd.h>
 
-int	txsim_match(struct device *, struct cfdata *, void *);
-void	txsim_attach(struct device *, struct device *, void *);
+int	txsim_match(device_t, cfdata_t, void *);
+void	txsim_attach(device_t, device_t, void *);
 int	txsim_print(void *, const char*);
-int	txsim_search(struct device *, struct cfdata *,
-		     const int *, void *);
+int	txsim_search(device_t, cfdata_t, const int *, void *);
 
 struct txsim_softc {
-	struct	device sc_dev;
 	int sc_pri; /* attaching device priority */
 };
 
-CFATTACH_DECL(txsim, sizeof(struct txsim_softc),
+CFATTACH_DECL_NEW(txsim, sizeof(struct txsim_softc),
     txsim_match, txsim_attach, NULL, NULL);
 
 int
-txsim_match(struct device *parent, struct cfdata *match, void *aux)
+txsim_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -87,9 +78,9 @@ txsim_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-txsim_attach(struct device *parent, struct device *self, void *aux)
+txsim_attach(device_t parent, device_t self, void *aux)
 {
-	struct txsim_softc *sc = (void*)self;
+	struct txsim_softc *sc = device_private(self);
 
 	printf("\n");
 
@@ -120,10 +111,9 @@ txsim_print(void *aux, const char *pnp)
 }
 
 int
-txsim_search(struct device *parent, struct cfdata *cf,
-	     const int *ldesc, void *aux)
+txsim_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct txsim_softc *sc = (void*)parent;
+	struct txsim_softc *sc = device_private(parent);
 	struct txsim_attach_args ta;
 	
 	ta.ta_tc = tx_conf_get_tag();

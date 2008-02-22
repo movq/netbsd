@@ -1,4 +1,4 @@
-/*	$NetBSD: cal.c,v 1.23 2008/01/01 17:45:01 dholland Exp $	*/
+/*	$NetBSD: cal.c,v 1.29 2015/06/16 22:54:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cal.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: cal.c,v 1.23 2008/01/01 17:45:01 dholland Exp $");
+__RCSID("$NetBSD: cal.c,v 1.29 2015/06/16 22:54:10 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: cal.c,v 1.23 2008/01/01 17:45:01 dholland Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
+#include <term.h>
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
@@ -73,7 +73,7 @@ static int days_in_month[2][13] = {
 	{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
 };
 
-int empty[MAXDAYS] = {
+static int empty[MAXDAYS] = {
 	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,
 	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,
 	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,
@@ -81,15 +81,15 @@ int empty[MAXDAYS] = {
 	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,
 	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,	SPACE,
 };
-int shift_days[2][4][MAXDAYS + 1];
+static int shift_days[2][4][MAXDAYS + 1];
 
-char *month_names[12] = {
+static const char *month_names[12] = {
 	"January", "February", "March", "April", "May", "June",
 	"July", "August", "September", "October", "November", "December",
 };
 
-char *day_headings = " S  M Tu  W Th  F  S";
-char *j_day_headings = "  S   M  Tu   W  Th   F   S";
+static const char *day_headings = " S  M Tu  W Th  F  S";
+static const char *j_day_headings = "  S   M  Tu   W  Th   F   S";
 
 /* leap years according to the julian calendar */
 #define j_leap_year(y, m, d) \
@@ -152,7 +152,7 @@ char *j_day_headings = "  S   M  Tu   W  Th   F   S";
 #define	leap_years_since_year_1(yr) \
 	((yr) / 4 - centuries_since_reform(yr) + quad_centuries_since_reform(yr))
 
-struct reform {
+static struct reform {
 	const char *country;
 	int ambiguity, year, month, date;
 	long first_missing_day;
@@ -163,56 +163,55 @@ struct reform {
 	 * days that get displayed, plus a crib slot.
 	 */
 } *reform, reforms[] = {
-	{ "DEFAULT",		0, 1752,  9,  3 },
-	{ "Italy",		1, 1582, 10,  5 },
-	{ "Spain",		1, 1582, 10,  5 },
-	{ "Portugal",		1, 1582, 10,  5 },
-	{ "Poland",		1, 1582, 10,  5 },
-	{ "France",		2, 1582, 12, 10 },
-	{ "Luxembourg",		2, 1582, 12, 22 },
-	{ "Netherlands",	2, 1582, 12, 22 },
-	{ "Bavaria",		0, 1583, 10,  6 },
-	{ "Austria",		2, 1584,  1,  7 },
-	{ "Switzerland",	2, 1584,  1, 12 },
-	{ "Hungary",		0, 1587, 10, 22 },
-	{ "Germany",		0, 1700,  2, 19 },
-	{ "Norway",		0, 1700,  2, 19 },
-	{ "Denmark",		0, 1700,  2, 19 },
-	{ "Great Britain",	0, 1752,  9,  3 },
-	{ "England",		0, 1752,  9,  3 },
-	{ "America",		0, 1752,  9,  3 },
-	{ "Sweden",		0, 1753,  2, 18 },
-	{ "Finland",		0, 1753,  2, 18 },
-	{ "Japan",		0, 1872, 12, 20 },
-	{ "China",		0, 1911, 11,  7 },
-	{ "Bulgaria",		0, 1916,  4,  1 },
-	{ "U.S.S.R.",		0, 1918,  2,  1 },
-	{ "Serbia",		0, 1919,  1, 19 },
-	{ "Romania",		0, 1919,  1, 19 },
-	{ "Greece",		0, 1924,  3, 10 },
-	{ "Turkey",		0, 1925, 12, 19 },
-	{ "Egypt",		0, 1928,  9, 18 },
-	{ NULL,			0,    0,  0,  0 },
+	{ "DEFAULT",		0, 1752,  9,  3, 0, 0 },
+	{ "Italy",		1, 1582, 10,  5, 0, 0 },
+	{ "Spain",		1, 1582, 10,  5, 0, 0 },
+	{ "Portugal",		1, 1582, 10,  5, 0, 0 },
+	{ "Poland",		1, 1582, 10,  5, 0, 0 },
+	{ "France",		2, 1582, 12, 10, 0, 0 },
+	{ "Luxembourg",		2, 1582, 12, 22, 0, 0 },
+	{ "Netherlands",	2, 1582, 12, 22, 0, 0 },
+	{ "Bavaria",		0, 1583, 10,  6, 0, 0 },
+	{ "Austria",		2, 1584,  1,  7, 0, 0 },
+	{ "Switzerland",	2, 1584,  1, 12, 0, 0 },
+	{ "Hungary",		0, 1587, 10, 22, 0, 0 },
+	{ "Germany",		0, 1700,  2, 19, 0, 0 },
+	{ "Norway",		0, 1700,  2, 19, 0, 0 },
+	{ "Denmark",		0, 1700,  2, 19, 0, 0 },
+	{ "Great Britain",	0, 1752,  9,  3, 0, 0 },
+	{ "England",		0, 1752,  9,  3, 0, 0 },
+	{ "America",		0, 1752,  9,  3, 0, 0 },
+	{ "Sweden",		0, 1753,  2, 18, 0, 0 },
+	{ "Finland",		0, 1753,  2, 18, 0, 0 },
+	{ "Japan",		0, 1872, 12, 20, 0, 0 },
+	{ "China",		0, 1911, 11,  7, 0, 0 },
+	{ "Bulgaria",		0, 1916,  4,  1, 0, 0 },
+	{ "U.S.S.R.",		0, 1918,  2,  1, 0, 0 },
+	{ "Serbia",		0, 1919,  1, 19, 0, 0 },
+	{ "Romania",		0, 1919,  1, 19, 0, 0 },
+	{ "Greece",		0, 1924,  3, 10, 0, 0 },
+	{ "Turkey",		0, 1925, 12, 19, 0, 0 },
+	{ "Egypt",		0, 1928,  9, 18, 0, 0 },
+	{ NULL,			0,    0,  0,  0, 0, 0 },
 };
 
-int julian;
-int dow;
-int hilite;
-char *md, *me;
+static int julian;
+static int dow;
+static int hilite;
+static const char *md, *me;
 
-void	init_hilite(void);
-int	getnum(const char *);
-void	gregorian_reform(const char *);
-void	reform_day_array(int, int, int *, int *, int *,int *,int *,int *);
-int	ascii_day(char *, int);
-void	center(char *, int, int);
-void	day_array(int, int, int *);
-int	day_in_week(int, int, int);
-int	day_in_year(int, int, int);
-void	monthrange(int, int, int, int, int);
-int	main(int, char **);
-void	trim_trailing_spaces(char *);
-void	usage(void);
+static void	init_hilite(void);
+static int	getnum(const char *);
+static void	gregorian_reform(const char *);
+static void	reform_day_array(int, int, int *, int *, int *,int *,int *,int *);
+static int	ascii_day(char *, int);
+static void	center(const char *, int, int);
+static void	day_array(int, int, int *);
+static int	day_in_week(int, int, int);
+static int	day_in_year(int, int, int);
+static void	monthrange(int, int, int, int, int);
+static void	trim_trailing_spaces(char *);
+__dead static void	usage(void);
 
 int
 main(int argc, char **argv)
@@ -228,7 +227,7 @@ main(int argc, char **argv)
 	before = after = 0;
 	use_reform = yflag = year = 0;
 	when = NULL;
-	while ((ch = getopt(argc, argv, "A:B:d:hjR:ry3")) != -1) {
+	while ((ch = getopt(argc, argv, "A:B:C:d:hjR:ry3")) != -1) {
 		switch (ch) {
 		case 'A':
 			after = getnum(optarg);
@@ -239,6 +238,11 @@ main(int argc, char **argv)
 			before = getnum(optarg);
 			if (before < 0)
 				errx(1, "Argument to -B must be positive");
+			break;
+		case 'C':
+			after = before = getnum(optarg);
+			if (after < 0)
+				errx(1, "Argument to -C must be positive");
 			break;
 		case 'd':
 			dow = getnum(optarg);
@@ -338,7 +342,7 @@ main(int argc, char **argv)
 #define	MONTH_PER_ROW	3		/* how many monthes in a row */
 #define	J_MONTH_PER_ROW	2
 
-void
+static void
 monthrange(int month, int year, int before, int after, int yearly)
 {
 	int startmonth, startyear;
@@ -373,7 +377,7 @@ monthrange(int month, int year, int before, int after, int yearly)
 	endmonth = (month + after) % 12;
 
 	if (startyear < 0 || endyear > 9999) {
-		errx(1, "year should be in 1-9999\n");
+		errx(1, "year should be in 1-9999");
 	}
 
 	year = startyear;
@@ -484,7 +488,7 @@ monthrange(int month, int year, int before, int after, int yearly)
  *	out end to end.  You would have 42 numbers or spaces.  This routine
  *	builds that array for any month from Jan. 1 through Dec. 9999.
  */
-void
+static void
 day_array(int month, int year, int *days)
 {
 	int day, dw, dm;
@@ -523,7 +527,7 @@ day_array(int month, int year, int *days)
  * day_in_year --
  *	return the 1 based day number within the year
  */
-int
+static int
 day_in_year(int day, int month, int year)
 {
 	int i, leap;
@@ -540,7 +544,7 @@ day_in_year(int day, int month, int year)
  *	31 Dec. 9999.  Returns the day of the week of the first
  *	missing day for any given Gregorian shift.
  */
-int
+static int
 day_in_week(int day, int month, int year)
 {
 	long temp;
@@ -554,12 +558,12 @@ day_in_week(int day, int month, int year)
 	return ((FIRST_MISSING_DAY - dow + 6 + SATURDAY) % 7);
 }
 
-int
+static int
 ascii_day(char *p, int day)
 {
 	int display, val, rc;
 	char *b;
-	static char *aday[] = {
+	static const char *aday[] = {
 		"",
 		" 1", " 2", " 3", " 4", " 5", " 6", " 7",
 		" 8", " 9", "10", "11", "12", "13", "14",
@@ -599,7 +603,8 @@ ascii_day(char *p, int day)
 
 	rc = 0;
 	if (b != NULL) {
-		char *t, h[64];
+		const char *t;
+		char h[64];
 		int l;
 
 		l = p - b;
@@ -628,7 +633,7 @@ ascii_day(char *p, int day)
 	return (rc);
 }
 
-void
+static void
 trim_trailing_spaces(char *s)
 {
 	char *p;
@@ -642,8 +647,8 @@ trim_trailing_spaces(char *s)
 	*p = '\0';
 }
 
-void
-center(char *str, int len, int separate)
+static void
+center(const char *str, int len, int separate)
 {
 
 	len -= strlen(str);
@@ -661,7 +666,7 @@ center(char *str, int len, int separate)
  *	doing so would not select more than one different built-in
  *	reform point.
  */
-void
+static void
 gregorian_reform(const char *p)
 {
 	int year, month, date;
@@ -764,7 +769,7 @@ gregorian_reform(const char *p)
 		errx(1, "reform name %s invalid", p);
 
 	/*
-	 * 
+	 *
 	 */
 	reform->missing_days =
 		j_leap_days(reform->year, reform->month, reform->date) -
@@ -806,7 +811,7 @@ gregorian_reform(const char *p)
  *	and "julian day" representations) with respect for days
  *	skipped during a reform period.
  */
-void
+static void
 reform_day_array(int month, int year, int *done, int *date, int *diw, int *diy,
 	int *scal, int *jcal)
 {
@@ -860,10 +865,10 @@ reform_day_array(int month, int year, int *done, int *date, int *diw, int *diy,
 	*done += mdays;
 }
 
-int
+static int
 getnum(const char *p)
 {
-	long result;
+	unsigned long result;
 	char *ep;
 
 	errno = 0;
@@ -882,39 +887,38 @@ error:
 	/*NOTREACHED*/
 }
 
-void
+static void
 init_hilite(void)
 {
-	static char control[128];
-	char cap[1024];
-	char *tc;
+	const char *term;
+	int errret;
 
 	hilite++;
 
 	if (!isatty(fileno(stdout)))
 		return;
 
-	tc = getenv("TERM");
-	if (tc == NULL)
-		tc = "dumb";
-	if (tgetent(&cap[0], tc) != 1)
+	term = getenv("TERM");
+	if (term == NULL)
+		term = "dumb";
+	if (setupterm(term, fileno(stdout), &errret) != 0 && errret != 1)
 		return;
 
-	tc = &control[0];
-	if ((md = tgetstr(hilite > 1 ? "mr" : "md", &tc)))
-		*tc++ = '\0';
-	if ((me = tgetstr("me", &tc)))
-		*tc++ = '\0';
+	if (hilite > 1)
+		md = enter_reverse_mode;
+	else
+		md = enter_bold_mode;
+	me = exit_attribute_mode;
 	if (me == NULL || md == NULL)
 		md = me = NULL;
 }
 
-void
+static void
 usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "usage: cal [-3hjry] [-A after] [-B before] [-d day-of-week] "
+	    "usage: cal [-3hjry] [-A after] [-B before] [-C context] [-d day-of-week] "
 	    "[-R reform-spec]\n           [[month] year]\n");
 	exit(1);
 }

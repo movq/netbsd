@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $	*/
+/*	$NetBSD: mbrlabel.c,v 1.29 2018/03/30 13:14:25 mlelstv Exp $	*/
 
 /*
  * Copyright (C) 1998 Wolfgang Solfrank.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $");
+__RCSID("$NetBSD: mbrlabel.c,v 1.29 2018/03/30 13:14:25 mlelstv Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -55,17 +55,16 @@ __RCSID("$NetBSD: mbrlabel.c,v 1.26 2005/12/28 06:03:15 christos Exp $");
 #include "dkcksum.h"
 #include "extern.h"
 
-int	main(int, char **);
-void	usage(void);
-void	getlabel(int);
-void	setlabel(int, int);
-int	getparts(int, u_int32_t, u_int32_t, int);
-u_int16_t	getshort(void *);
-u_int32_t	getlong(void *);
+__dead static void	usage(void);
+static void	getlabel(int);
+static void	setlabel(int, int);
+static int	getparts(int, u_int32_t, u_int32_t, int);
+static u_int16_t	getshort(void *);
+static u_int32_t	getlong(void *);
 
 struct disklabel label;
 
-void
+static void
 getlabel(int sd)
 {
 
@@ -81,7 +80,7 @@ getlabel(int sd)
 		label.d_npartitions = getrawpartition() + 1;
 }
 
-void
+static void
 setlabel(int sd, int doraw)
 {
 	int one = 1;
@@ -98,7 +97,7 @@ setlabel(int sd, int doraw)
 
 }
 
-u_int16_t
+static u_int16_t
 getshort(void *p)
 {
 	unsigned char *cp = p;
@@ -106,7 +105,7 @@ getshort(void *p)
 	return (cp[0] | (cp[1] << 8));
 }
 
-u_int32_t
+static u_int32_t
 getlong(void *p)
 {
 	unsigned char *cp = p;
@@ -114,23 +113,35 @@ getlong(void *p)
 	return (cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24));
 }
 
-int
+static int
 getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 {
-	unsigned char		buf[DEV_BSIZE];
+	unsigned char		*buf;
 	struct mbr_partition	parts[MBR_PART_COUNT];
 	struct partition	npe;
 	off_t			loff;
 	int			i, j, unused, changed;
+	unsigned		bsize = label.d_secsize;
+
+	if (bsize < DEV_BSIZE) {
+		fprintf(stderr,"Invalid sector size %u\n", bsize);
+		exit(1);
+	}
+
+	buf = malloc(bsize);
+	if (buf == NULL) {
+		perror("malloc I/O buffer");
+		exit(1);
+	}
 
 	changed = 0;
-	loff = (off_t)off * DEV_BSIZE;
+	loff = (off_t)off * bsize;
 
 	if (lseek(sd, loff, SEEK_SET) != loff) {
 		perror("seek label");
 		exit(1);
 	}
-	if (read(sd, buf, sizeof buf) != DEV_BSIZE) {
+	if (read(sd, buf, bsize) != (ssize_t)bsize) {
 		if (off != MBR_BBSECTOR)
 			perror("read label (sector is possibly out of "
 			    "range)");
@@ -161,30 +172,49 @@ getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 			    "Found %s partition; size %u (%u MB), offset %u\n",
 			    fstypenames[npe.p_fstype],
 			    npe.p_size, npe.p_size / 2048, npe.p_offset);
+
 		for (j = 0; j < label.d_npartitions; j++) {
 			struct partition *lpe;
 
 			if (j == RAW_PART)
 				continue;
 			lpe = &label.d_partitions[j];
+
 			if (lpe->p_size == npe.p_size &&
-			    lpe->p_offset == npe.p_offset
-#ifdef notyet
-			    && (lpe->p_fstype == npe.p_fstype ||
-			     lpe->p_fstype == FS_UNUSED) */
-#endif
-			     ) {
+			    lpe->p_offset == npe.p_offset) {
 				if (verbose)
 					printf(
-			    "  skipping existing %s partition at slot %c.\n",
+					    "  skipping existing %s partition at slot %c.\n",
 					    fstypenames[lpe->p_fstype],
 					    j + 'a');
 				unused = -2;	/* flag as existing */
 				break;
 			}
+
 			if (unused == -1 && lpe->p_size == 0 &&
 			    lpe->p_fstype == FS_UNUSED)
 				unused = j;
+		}
+		if (unused == -1) {
+			for (j = 0; j < label.d_npartitions; j++) {
+				struct partition *lpe;
+
+				if (j == RAW_PART)
+					continue;
+				lpe = &label.d_partitions[j];
+
+				if ((npe.p_offset >= lpe->p_offset &&
+				    npe.p_offset < lpe->p_offset + lpe->p_size) ||
+				   (npe.p_offset + npe.p_size - 1 >= lpe->p_offset &&
+				    npe.p_offset + npe.p_size - 1 < lpe->p_offset + lpe->p_size)) {
+					printf(
+					    "  skipping overlapping %s partition at slot %c.\n",
+					    fstypenames[lpe->p_fstype],
+					    j + 'a');
+					unused = -2;	/* flag as existing */
+					break;
+				}
+			}
 		}
 		if (unused == -2)
 			continue;	/* entry exists, skip... */
@@ -203,23 +233,25 @@ getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 		if (verbose)
 			printf("  adding %s partition to slot %c.\n",
 			    fstypenames[npe.p_fstype], unused + 'a');
+
+		/*
+		 * XXX guess some filesystem parameters, these should be
+		 * scanned from the superblocks
+		 */
 		switch (npe.p_fstype) {
 		case FS_BSDFFS:
 		case FS_APPLEUFS:
-			npe.p_size = 16384;	/* XXX */
 			npe.p_fsize = 1024;
 			npe.p_frag = 8;
 			npe.p_cpg = 16;
 			break;
-#ifdef	__does_not_happen__
 		case FS_BSDLFS:
-			npe.p_size = 16384;	/* XXX */
 			npe.p_fsize = 1024;
 			npe.p_frag = 8;
-			npe.p_sgs = XXX;
+			npe.p_sgs = 7;
 			break;
-#endif
 		}
+
 		changed++;
 		label.d_partitions[unused] = npe;
 	}
@@ -234,13 +266,15 @@ getparts(int sd, u_int32_t off, u_int32_t extoff, int verbose)
 			    extoff ? extoff : poff, verbose);
 		}
 	}
+
+	free(buf);
 	return (changed);
 }
 
-void
+static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [-fqrw] [-s sector] rawdisk\n",
+	fprintf(stderr, "usage: %s [-fqrw] [-s sector] device\n",
 	    getprogname());
 	exit(1);
 }

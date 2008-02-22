@@ -1,5 +1,4 @@
-/*	$NetBSD: qsort.c,v 1.14 2005/12/24 21:11:16 perry Exp $	*/
-
+/*	$NetBSD: qsort.c,v 1.23 2017/05/19 19:48:19 christos Exp $	*/
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +33,7 @@
 #if 0
 static char sccsid[] = "@(#)qsort.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: qsort.c,v 1.14 2005/12/24 21:11:16 perry Exp $");
+__RCSID("$NetBSD: qsort.c,v 1.23 2017/05/19 19:48:19 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -44,9 +43,9 @@ __RCSID("$NetBSD: qsort.c,v 1.14 2005/12/24 21:11:16 perry Exp $");
 #include <errno.h>
 #include <stdlib.h>
 
-static inline char	*med3 __P((char *, char *, char *,
-    int (*)(const void *, const void *)));
-static inline void	 swapfunc __P((char *, char *, size_t, int));
+static inline char	*med3(char *, char *, char *,
+    int (*)(const void *, const void *));
+static inline void	 swapfunc(char *, char *, size_t, int);
 
 #define min(a, b)	(a) < (b) ? a : b
 
@@ -68,11 +67,9 @@ static inline void	 swapfunc __P((char *, char *, size_t, int));
 	es % sizeof(long) ? 2 : es == sizeof(long)? 0 : 1;
 
 static inline void
-swapfunc(a, b, n, swaptype)
-	char *a, *b;
-	size_t n;
-	int swaptype;
+swapfunc(char *a, char *b, size_t n, int swaptype)
 {
+
 	if (swaptype <= 1) 
 		swapcode(long, a, b, n)
 	else
@@ -90,29 +87,27 @@ swapfunc(a, b, n, swaptype)
 #define vecswap(a, b, n) if ((n) > 0) swapfunc((a), (b), (size_t)(n), swaptype)
 
 static inline char *
-med3(a, b, c, cmp)
-	char *a, *b, *c;
-	int (*cmp) __P((const void *, const void *));
+med3(char *a, char *b, char *c,
+    int (*cmp)(const void *, const void *))
 {
+
 	return cmp(a, b) < 0 ?
 	       (cmp(b, c) < 0 ? b : (cmp(a, c) < 0 ? c : a ))
               :(cmp(b, c) > 0 ? b : (cmp(a, c) < 0 ? a : c ));
 }
 
 void
-qsort(a, n, es, cmp)
-	void *a;
-	size_t n, es;
-	int (*cmp) __P((const void *, const void *));
+qsort(void *a, size_t n, size_t es,
+    int (*cmp)(const void *, const void *))
 {
 	char *pa, *pb, *pc, *pd, *pl, *pm, *pn;
-	int d, r, swaptype, swap_cnt;
+	size_t d, r, s;
+	int swaptype, cmp_result;
 
-	_DIAGASSERT(a != NULL);
+	_DIAGASSERT(a != NULL || n == 0 || es == 0);
 	_DIAGASSERT(cmp != NULL);
 
 loop:	SWAPINIT(a, es);
-	swap_cnt = 0;
 	if (n < 7) {
 		for (pm = (char *) a + es; pm < (char *) a + n * es; pm += es)
 			for (pl = pm; pl > (char *) a && cmp(pl - es, pl) > 0;
@@ -137,17 +132,15 @@ loop:	SWAPINIT(a, es);
 
 	pc = pd = (char *) a + (n - 1) * es;
 	for (;;) {
-		while (pb <= pc && (r = cmp(pb, a)) <= 0) {
-			if (r == 0) {
-				swap_cnt = 1;
+		while (pb <= pc && (cmp_result = cmp(pb, a)) <= 0) {
+			if (cmp_result == 0) {
 				swap(pa, pb);
 				pa += es;
 			}
 			pb += es;
 		}
-		while (pb <= pc && (r = cmp(pc, a)) >= 0) {
-			if (r == 0) {
-				swap_cnt = 1;
+		while (pb <= pc && (cmp_result = cmp(pc, a)) >= 0) {
+			if (cmp_result == 0) {
 				swap(pc, pd);
 				pd -= es;
 			}
@@ -156,30 +149,37 @@ loop:	SWAPINIT(a, es);
 		if (pb > pc)
 			break;
 		swap(pb, pc);
-		swap_cnt = 1;
 		pb += es;
 		pc -= es;
-	}
-	if (swap_cnt == 0) {  /* Switch to insertion sort */
-		for (pm = (char *) a + es; pm < (char *) a + n * es; pm += es)
-			for (pl = pm; pl > (char *) a && cmp(pl - es, pl) > 0; 
-			     pl -= es)
-				swap(pl, pl - es);
-		return;
 	}
 
 	pn = (char *) a + n * es;
 	r = min(pa - (char *) a, pb - pa);
 	vecswap(a, pb - r, r);
-	r = min(pd - pc, pn - pd - es);
+	r = min((size_t)(pd - pc), pn - pd - es);
 	vecswap(pb, pn - r, r);
-	if ((r = pb - pa) > es)
-		qsort(a, r / es, es, cmp);
-	if ((r = pd - pc) > es) { 
-		/* Iterate rather than recurse to save stack space */
-		a = pn - r;
-		n = r / es;
-		goto loop;
+	/*
+	 * To save stack space we sort the smaller side of the partition first
+	 * using recursion and eliminate tail recursion for the larger side.
+	 */
+	r = pb - pa;
+	s = pd - pc;
+	if (r < s) {
+		/* Recurse for 1st side, iterate for 2nd side. */
+		if (s > es) {
+			if (r > es)
+				qsort(a, r / es, es, cmp);
+			a = pn - s;
+			n = s / es;
+			goto loop;
+		}
+	} else {
+		/* Recurse for 2nd side, iterate for 1st side. */
+		if (r > es) {
+			if (s > es)
+				qsort(pn - s, s / es, es, cmp);
+			n = r / es;
+			goto loop;
+		}
 	}
-/*		qsort(pn - r, r / es, es, cmp);*/
 }

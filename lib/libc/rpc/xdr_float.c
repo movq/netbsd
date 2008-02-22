@@ -1,32 +1,34 @@
-/*	$NetBSD: xdr_float.c,v 1.34 2006/09/15 00:01:24 cherry Exp $	*/
+/*	$NetBSD: xdr_float.c,v 1.41 2016/02/15 11:07:48 martin Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
@@ -35,7 +37,7 @@
 static char *sccsid = "@(#)xdr_float.c 1.12 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)xdr_float.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_float.c,v 1.34 2006/09/15 00:01:24 cherry Exp $");
+__RCSID("$NetBSD: xdr_float.c,v 1.41 2016/02/15 11:07:48 martin Exp $");
 #endif
 #endif
 
@@ -55,6 +57,7 @@ __RCSID("$NetBSD: xdr_float.c,v 1.34 2006/09/15 00:01:24 cherry Exp $");
 #include <sys/param.h>
 
 #include <stdio.h>
+#include <string.h>
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
@@ -69,10 +72,7 @@ __weak_alias(xdr_float,_xdr_float)
  * This routine works on machines with IEEE754 FP and Vaxen.
  */
 
-#if defined(__m68k__) || defined(__sparc__) || defined(__i386__) || \
-    defined(__mips__) || defined(__ns32k__) || defined(__alpha__) || \
-    defined(__arm__) || defined(__powerpc__) || defined(__sh__) || \
-    defined(__x86_64__) || defined(__hppa__) || defined(__ia64__)
+#if !defined(__vax__)
 #include <machine/endian.h>
 #define IEEEFP
 #endif
@@ -109,15 +109,13 @@ static struct sgl_limits {
 #endif /* vax */
 
 bool_t
-xdr_float(xdrs, fp)
-	XDR *xdrs;
-	float *fp;
+xdr_float(XDR *xdrs, float *fp)
 {
 #ifndef IEEEFP
 	struct ieee_single is;
 	struct vax_single vs, *vsp;
 	struct sgl_limits *lim;
-	int i;
+	size_t i;
 #endif
 	switch (xdrs->x_op) {
 
@@ -125,7 +123,7 @@ xdr_float(xdrs, fp)
 #ifdef IEEEFP
 		return (XDR_PUTINT32(xdrs, (int32_t *)(void *)fp));
 #else
-		vs = *((struct vax_single *)fp);
+		vs = *((struct vax_single *)(void *)fp);
 		for (i = 0, lim = sgl_limits;
 			i < sizeof(sgl_limits)/sizeof(struct sgl_limits);
 			i++, lim++) {
@@ -147,7 +145,7 @@ xdr_float(xdrs, fp)
 #ifdef IEEEFP
 		return (XDR_GETINT32(xdrs, (int32_t *)(void *)fp));
 #else
-		vsp = (struct vax_single *)fp;
+		vsp = (struct vax_single *)(void *)fp;
 		if (!XDR_GETINT32(xdrs, (int32_t *)(void *)&is))
 			return (FALSE);
 		for (i = 0, lim = sgl_limits;
@@ -161,7 +159,7 @@ xdr_float(xdrs, fp)
 		}
 		vsp->exp = is.exp - IEEE_SNG_BIAS + VAX_SNG_BIAS;
 		vsp->mantissa2 = is.mantissa;
-		vsp->mantissa1 = (is.mantissa >> 16);
+		vsp->mantissa1 = ((unsigned int)is.mantissa >> 16);
 	doneit:
 		vsp->sign = is.sign;
 		return (TRUE);
@@ -211,9 +209,7 @@ static struct dbl_limits {
 
 
 bool_t
-xdr_double(xdrs, dp)
-	XDR *xdrs;
-	double *dp;
+xdr_double(XDR *xdrs, double *dp)
 {
 #ifdef IEEEFP
 	int32_t *i32p;
@@ -223,7 +219,7 @@ xdr_double(xdrs, dp)
 	struct	ieee_double id;
 	struct	vax_double vd;
 	struct dbl_limits *lim;
-	int i;
+	size_t i;
 #endif
 
 	switch (xdrs->x_op) {
@@ -245,7 +241,7 @@ xdr_double(xdrs, dp)
 #endif
 		return (rv);
 #else
-		vd = *((struct vax_double *)dp);
+		vd = *((struct vax_double *)(void *)dp);
 		for (i = 0, lim = dbl_limits;
 			i < sizeof(dbl_limits)/sizeof(struct dbl_limits);
 			i++, lim++) {
@@ -259,10 +255,11 @@ xdr_double(xdrs, dp)
 			}
 		}
 		id.exp = vd.exp - VAX_DBL_BIAS + IEEE_DBL_BIAS;
-		id.mantissa1 = (vd.mantissa1 << 13) | (vd.mantissa2 >> 3);
+		id.mantissa1 = (vd.mantissa1 << 13) |
+			    ((unsigned int)vd.mantissa2 >> 3);
 		id.mantissa2 = ((vd.mantissa2 & MASK(3)) << 29) |
 				(vd.mantissa3 << 13) |
-				((vd.mantissa4 >> 3) & MASK(13));
+				(((unsigned int)vd.mantissa4 >> 3) & MASK(13));
 	shipit:
 		id.sign = vd.sign;
 		lp = (int32_t *)(void *)&id;
@@ -300,14 +297,14 @@ xdr_double(xdrs, dp)
 			}
 		}
 		vd.exp = id.exp - IEEE_DBL_BIAS + VAX_DBL_BIAS;
-		vd.mantissa1 = (id.mantissa1 >> 13);
+		vd.mantissa1 = ((unsigned int)id.mantissa1 >> 13);
 		vd.mantissa2 = ((id.mantissa1 & MASK(13)) << 3) |
-				(id.mantissa2 >> 29);
-		vd.mantissa3 = (id.mantissa2 >> 13);
+				((unsigned int)id.mantissa2 >> 29);
+		vd.mantissa3 = ((unsigned int)id.mantissa2 >> 13);
 		vd.mantissa4 = (id.mantissa2 << 3);
 	doneit:
 		vd.sign = id.sign;
-		*dp = *((double *)(void *)&vd);
+		memcpy(dp, &vd, sizeof(double));
 		return (TRUE);
 #endif
 

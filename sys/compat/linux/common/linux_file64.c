@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_file64.c,v 1.45 2008/02/02 19:37:53 dsl Exp $	*/
+/*	$NetBSD: linux_file64.c,v 1.59 2017/07/28 15:34:06 riastradh Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2000, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.45 2008/02/02 19:37:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.59 2017/07/28 15:34:06 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.45 2008/02/02 19:37:53 dsl Exp $"
 #include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
-
-#ifndef alpha
 
 static void bsd_to_linux_stat(struct stat *, struct linux_stat64 *);
 
@@ -130,7 +121,7 @@ linux_sys_fstat64(struct lwp *l, const struct linux_sys_fstat64_args *uap, regis
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_fstat(l,  SCARG(uap, fd), &tmpst);
+	error = do_sys_fstat(SCARG(uap, fd), &tmpst);
 	if (error != 0)
 		return error;
 
@@ -146,7 +137,7 @@ linux_do_stat64(struct lwp *l, const struct linux_sys_stat64_args *uap, register
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), flags, &tmpst);
+	error = do_sys_stat(SCARG(uap, path), flags, &tmpst);
 	if (error != 0)
 		return error;
 
@@ -178,6 +169,34 @@ linux_sys_lstat64(struct lwp *l, const struct linux_sys_lstat64_args *uap, regis
 }
 
 int
+linux_sys_fstatat64(struct lwp *l, const struct linux_sys_fstatat64_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const char *) path;
+		syscallarg(struct linux_stat64 *) sp;
+		syscallarg(int) flag;
+	} */
+	struct linux_stat64 tmplst;
+	struct stat tmpst;
+	int error, nd_flag;
+
+	if (SCARG(uap, flag) & LINUX_AT_SYMLINK_NOFOLLOW)
+		nd_flag = NOFOLLOW;
+	else
+		nd_flag = FOLLOW;
+
+	error = do_sys_statat(l, SCARG(uap, fd), SCARG(uap, path), nd_flag, &tmpst);
+	if (error != 0)
+		return error;
+
+	bsd_to_linux_stat(&tmpst, &tmplst);
+
+	return copyout(&tmplst, SCARG(uap, sp), sizeof tmplst);
+}
+
+#ifndef __alpha__
+int
 linux_sys_truncate64(struct lwp *l, const struct linux_sys_truncate64_args *uap, register_t *retval)
 {
 	/* {
@@ -188,7 +207,7 @@ linux_sys_truncate64(struct lwp *l, const struct linux_sys_truncate64_args *uap,
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, path) = SCARG(uap, path);
-	SCARG(&ta, pad) = 0;
+	SCARG(&ta, PAD) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_truncate(l, &ta, retval);
@@ -205,12 +224,12 @@ linux_sys_ftruncate64(struct lwp *l, const struct linux_sys_ftruncate64_args *ua
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, fd) = SCARG(uap, fd);
-	SCARG(&ta, pad) = 0;
+	SCARG(&ta, PAD) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_ftruncate(l, &ta, retval);
 }
-#endif /* !alpha */
+#endif /* __alpha__ */
 
 /*
  * Linux 'readdir' call. This code is mostly taken from the
@@ -240,7 +259,7 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 	int len, reclen;		/* BSD-format */
 	char *outp;			/* Linux-format */
 	int resid, linux_reclen = 0;	/* Linux-format */
-	struct file *fp;
+	file_t *fp;
 	struct uio auio;
 	struct iovec aiov;
 	struct linux_dirent64 idb;
@@ -250,8 +269,8 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
 	if ((fp->f_flag & FREAD) == 0) {
@@ -261,11 +280,14 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 
 	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
-		error = EINVAL;
+		error = ENOTDIR;
 		goto out1;
 	}
 
-	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error)
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -303,8 +325,10 @@ again:
 	for (cookie = cookiebuf; len > 0; len -= reclen) {
 		bdp = (struct dirent *)inp;
 		reclen = bdp->d_reclen;
-		if (reclen & 3)
-			panic("linux_readdir");
+		if (reclen & 3) {
+			error = EIO;
+			goto out;
+		}
 		if (bdp->d_fileno == 0) {
 			inp += reclen;	/* it is a hole; squish it out */
 			if (cookie)
@@ -332,7 +356,8 @@ again:
 		idb.d_type = bdp->d_type;
 		idb.d_off = off;
 		idb.d_reclen = (u_short)linux_reclen;
-		strcpy(idb.d_name, bdp->d_name);
+		memcpy(idb.d_name, bdp->d_name, MIN(sizeof(idb.d_name),
+		   bdp->d_namlen + 1));
 		if ((error = copyout((void *)&idb, outp, linux_reclen)))
 			goto out;
 		/* advance past this real entry */
@@ -343,18 +368,22 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG(uap, dent))
+	if (outp == (void *)SCARG(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
 out1:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }

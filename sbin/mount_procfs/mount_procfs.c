@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_procfs.c,v 1.21 2007/07/16 17:06:54 pooka Exp $	*/
+/*	$NetBSD: mount_procfs.c,v 1.24 2011/08/29 14:35:02 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -69,15 +69,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_procfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_procfs.c,v 1.21 2007/07/16 17:06:54 pooka Exp $");
+__RCSID("$NetBSD: mount_procfs.c,v 1.24 2011/08/29 14:35:02 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,7 +103,7 @@ static const struct mntopt mopts[] = {
 };
 
 int	mount_procfs(int argc, char **argv);
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
@@ -121,7 +121,8 @@ mount_procfs(int argc, char *argv[])
 	char canon_dir[MAXPATHLEN];
 	mntoptparse_t mp;
 
-	mntflags = altflags = 0;
+	mntflags = 0;
+	altflags = PROCFSMNT_LINUXCOMPAT;
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch (ch) {
 		case 'o':

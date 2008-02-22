@@ -1,4 +1,4 @@
-/*      $NetBSD: subr.c,v 1.45 2007/12/13 14:59:00 pooka Exp $        */
+/*      $NetBSD: subr.c,v 1.51 2012/11/04 22:46:08 christos Exp $        */
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -27,9 +27,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: subr.c,v 1.45 2007/12/13 14:59:00 pooka Exp $");
+__RCSID("$NetBSD: subr.c,v 1.51 2012/11/04 22:46:08 christos Exp $");
 #endif /* !lint */
 
+#include <stdio.h>
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
@@ -43,7 +44,7 @@ __RCSID("$NetBSD: subr.c,v 1.45 2007/12/13 14:59:00 pooka Exp $");
 static void
 freedircache(struct psshfs_dir *base, size_t count)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < count; i++) {
 		free(base[i].entryname);
@@ -69,7 +70,9 @@ static void
 setpnva(struct puffs_usermount *pu, struct puffs_node *pn,
 	const struct vattr *vap)
 {
+	struct psshfs_ctx *pctx = puffs_getspecific(pu);
 	struct psshfs_node *psn = pn->pn_data;
+	struct vattr modva;
 
 	/*
 	 * Check if the file was modified from below us.
@@ -81,7 +84,13 @@ setpnva(struct puffs_usermount *pu, struct puffs_node *pn,
 		    && pn->pn_va.va_type == VREG)
 			puffs_inval_pagecache_node(pu, pn);
 
-	puffs_setvattr(&pn->pn_va, vap);
+	modva = *vap;
+	if (pctx->domangleuid && modva.va_uid == pctx->mangleuid)
+		modva.va_uid = pctx->myuid;
+	if (pctx->domanglegid && modva.va_gid == pctx->manglegid)
+		modva.va_gid = pctx->mygid;
+
+	puffs_setvattr(&pn->pn_va, &modva);
 	psn->attrread = time(NULL);
 }
 
@@ -89,7 +98,7 @@ struct psshfs_dir *
 lookup(struct psshfs_dir *bdir, size_t ndir, const char *name)
 {
 	struct psshfs_dir *test;
-	int i;
+	size_t i;
 
 	for (i = 0; i < ndir; i++) {
 		test = &bdir[i];
@@ -106,7 +115,7 @@ static struct psshfs_dir *
 lookup_by_entry(struct psshfs_dir *bdir, size_t ndir, struct puffs_node *entry)
 {
 	struct psshfs_dir *test;
-	int i;
+	size_t i;
 
 	for (i = 0; i < ndir; i++) {
 		test = &bdir[i];
@@ -134,7 +143,7 @@ closehandles(struct puffs_usermount *pu, struct psshfs_node *psn, int which)
 		reqid = NEXTREQ(pctx);
 		psbuf_req_data(pb1, SSH_FXP_CLOSE, reqid,
 		    psn->fhand_r, psn->fhand_r_len);
-		puffs_framev_enqueue_justsend(pu, pctx->sshfd, pb1, 1, 0);
+		puffs_framev_enqueue_justsend(pu, pctx->sshfd_data, pb1, 1, 0);
 		free(psn->fhand_r);
 		psn->fhand_r = NULL;
 	}
@@ -146,7 +155,7 @@ closehandles(struct puffs_usermount *pu, struct psshfs_node *psn, int which)
 		reqid = NEXTREQ(pctx);
 		psbuf_req_data(pb2, SSH_FXP_CLOSE, reqid,
 		    psn->fhand_w, psn->fhand_w_len);
-		puffs_framev_enqueue_justsend(pu, pctx->sshfd, pb2, 1, 0);
+		puffs_framev_enqueue_justsend(pu, pctx->sshfd_data, pb2, 1, 0);
 		free(psn->fhand_w);
 		psn->fhand_w = NULL;
 	}
@@ -220,7 +229,7 @@ getpathattr(struct puffs_usermount *pu, const char *path, struct vattr *vap)
 	PSSHFSAUTOVAR(pu);
 
 	psbuf_req_str(pb, SSH_FXP_LSTAT, reqid, path);
-	GETRESPONSE(pb);
+	GETRESPONSE(pb, pctx->sshfd);
 
 	rv = psbuf_expect_attrs(pb, vap);
 
@@ -229,7 +238,7 @@ getpathattr(struct puffs_usermount *pu, const char *path, struct vattr *vap)
 }
 
 int
-getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn)
+getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn, const char *path)
 {
 	struct psshfs_ctx *pctx = puffs_getspecific(pu);
 	struct psshfs_node *psn = pn->pn_data;
@@ -237,7 +246,7 @@ getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn)
 	int rv;
 
 	if (!psn->attrread || REFRESHTIMEOUT(pctx, time(NULL)-psn->attrread)) {
-		rv = getpathattr(pu, PNPATH(pn), &va);
+		rv = getpathattr(pu, path ? path : PNPATH(pn), &va);
 		if (rv)
 			return rv;
 
@@ -260,7 +269,8 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 	char *dhand = NULL;
 	size_t nent;
 	char *longname = NULL;
-	int idx, rv;
+	size_t idx;
+	int rv;
 
 	assert(pn->pn_va.va_type == VDIR);
 	idx = 0;
@@ -307,7 +317,7 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 		reqid = NEXTREQ(pctx);
 		psbuf_recycleout(pb);
 		psbuf_req_data(pb, SSH_FXP_READDIR, reqid, dhand, dhandlen);
-		GETRESPONSE(pb);
+		GETRESPONSE(pb, pctx->sshfd);
 
 		/* check for EOF */
 		if (psbuf_get_type(pb) == SSH_FXP_STATUS) {
@@ -335,6 +345,14 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 			}
 			free(longname);
 			longname = NULL;
+			
+			/*
+			 * In case of DOT, copy the attributes (mostly
+			 * because we want the link count for the root dir).
+			 */
+			if (strcmp(psn->dir[idx].entryname, ".") == 0) {
+				setpnva(pu, pn, &psn->dir[idx].va);
+			}
 
 			/*
 			 * Check if we already have a psshfs_dir for the
@@ -403,7 +421,7 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 
 struct puffs_node *
 makenode(struct puffs_usermount *pu, struct puffs_node *parent,
-	struct psshfs_dir *pd, const struct vattr *vap)
+	const struct psshfs_dir *pd, const struct vattr *vap)
 {
 	struct psshfs_node *psn_parent = parent->pn_data;
 	struct psshfs_node *psn;
@@ -421,7 +439,6 @@ makenode(struct puffs_usermount *pu, struct puffs_node *parent,
 	setpnva(pu, pn, vap);
 	psn->attrread = pd->attrread;
 
-	pd->entry = pn;
 	psn->parent = parent;
 	psn_parent->childcount++;
 
@@ -449,8 +466,10 @@ allocnode(struct puffs_usermount *pu, struct puffs_node *parent,
 	}
 
 	pn = makenode(pu, parent, pd, vap);
-	if (pn)
+	if (pn) {
 		pd->va.va_fileid = pn->pn_va.va_fileid;
+		pd->entry = pn;
+	}
 
 	return pn;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.h,v 1.20 2005/12/11 12:20:16 christos Exp $  */
+/*	$NetBSD: linux_exec.h,v 1.24 2017/02/12 21:02:19 chs Exp $  */
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	     This product includes software developed by the NetBSD
- *	     Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *	   contributors may be used to endorse or promote products derived
- *	   from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -84,12 +77,11 @@
 
 /*
  * Size of the auxiliary ELF table. On the PowerPC we need 16 extra bytes
- * in order to force an alignement on a 16 bytes boundary (this is expected
+ * in order to force an alignment on a 16 bytes boundary (this is expected
  * by PowerPC GNU ld.so).
  */
 #define LINUX_ELF_AUX_ARGSIZ \
-    ((howmany(LINUX_ELF_AUX_ENTRIES * sizeof(Aux32Info), sizeof(Elf32_Addr))) \
-    + 16)
+	(LINUX_ELF_AUX_ENTRIES * sizeof(Aux32Info) + LINUX_RANDOM_BYTES + 16)
 
 /* we have special powerpc ELF copyargs */
 #define LINUX_MACHDEP_ELF_COPYARGS

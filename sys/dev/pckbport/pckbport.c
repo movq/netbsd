@@ -1,4 +1,4 @@
-/* $NetBSD: pckbport.c,v 1.11 2008/01/04 21:18:04 ad Exp $ */
+/* $NetBSD: pckbport.c,v 1.17 2014/01/11 20:29:03 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2004 Ben Harris
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbport.c,v 1.11 2008/01/04 21:18:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbport.c,v 1.17 2014/01/11 20:29:03 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,10 +93,13 @@ static const char * const pckbport_slot_names[] = { "kbd", "aux" };
 
 static struct pckbport_tag pckbport_cntag;
 
-#define KBC_DEVCMD_ACK 0xfa
-#define KBC_DEVCMD_RESEND 0xfe
-
 #define	KBD_DELAY	DELAY(8)
+
+#ifdef PCKBPORTDEBUG
+#define DPRINTF(a)	printf a
+#else
+#define DPRINTF(a)
+#endif
 
 static int
 pckbport_poll_data1(pckbport_tag_t t, pckbport_slot_t slot)
@@ -128,13 +131,13 @@ pckbport_attach(void *cookie, struct pckbport_accessops const *ops)
 	return t;
 }
 
-struct device *
-pckbport_attach_slot(struct device *dev, pckbport_tag_t t,
+device_t
+pckbport_attach_slot(device_t dev, pckbport_tag_t t,
     pckbport_slot_t slot)
 {
 	struct pckbport_attach_args pa;
 	void *sdata;
-	struct device *found;
+	device_t found;
 	int alloced = 0;
 	int locs[PCKBPORTCF_NLOCS];
 
@@ -145,7 +148,7 @@ pckbport_attach_slot(struct device *dev, pckbport_tag_t t,
 		sdata = malloc(sizeof(struct pckbport_slotdata),
 		    M_DEVBUF, M_NOWAIT);
 		if (sdata == NULL) {
-			printf("%s: no memory\n", dev->dv_xname);
+			aprint_error_dev(dev, "no memory\n");
 			return 0;
 		}
 		t->t_slotdata[slot] = sdata;
@@ -261,35 +264,29 @@ pckbport_poll_cmd1(struct pckbport_tag *t, pckbport_slot_t slot,
 			if (c != -1)
 				break;
 		}
-
-		if (c == KBC_DEVCMD_ACK) {
+		switch (c) {
+		case KBR_ACK:
 			cmd->cmdidx++;
 			continue;
-		}
-		if (c == KBC_DEVCMD_RESEND) {
-#ifdef PCKBPORTDEBUG
-			printf("pckbport_cmd: RESEND\n");
-#endif
+		case KBR_BAT_DONE:
+		case KBR_BAT_FAIL:
+		case KBR_RESEND:
+			DPRINTF(("%s: %s\n", __func__, c == KBR_RESEND ?
+			    "RESEND" : (c == KBR_BAT_DONE ? "BAT_DONE" :
+			    "BAT_FAIL")));
 			if (cmd->retries++ < 5)
 				continue;
 			else {
-#ifdef PCKBPORTDEBUG
-				printf("pckbport: cmd failed\n");
-#endif
+				DPRINTF(("%s: cmd failed\n", __func__));
 				cmd->status = EIO;
 				return;
 			}
-		}
-		if (c == -1) {
-#ifdef PCKBPORTDEBUG
-			printf("pckbport_cmd: timeout\n");
-#endif
+		case -1:
+			DPRINTF(("%s: timeout\n", __func__));
 			cmd->status = EIO;
 			return;
 		}
-#ifdef PCKBPORTDEBUG
-		printf("pckbport_cmd: lost 0x%x\n", c);
-#endif
+		DPRINTF(("%s: lost 0x%x\n", __func__, c));
 	}
 
 	while (cmd->responseidx < cmd->responselen) {
@@ -303,9 +300,7 @@ pckbport_poll_cmd1(struct pckbport_tag *t, pckbport_slot_t slot,
 				break;
 		}
 		if (c == -1) {
-#ifdef PCKBPORTDEBUG
-			printf("pckbport_cmd: no data\n");
-#endif
+			DPRINTF(("%s: no data\n", __func__));
 			cmd->status = ETIMEDOUT;
 			return;
 		} else
@@ -315,8 +310,8 @@ pckbport_poll_cmd1(struct pckbport_tag *t, pckbport_slot_t slot,
 
 /* for use in autoconfiguration */
 int
-pckbport_poll_cmd(pckbport_tag_t t, pckbport_slot_t slot, u_char *cmd, int len,
-    int responselen, u_char *respbuf, int slow)
+pckbport_poll_cmd(pckbport_tag_t t, pckbport_slot_t slot, const u_char *cmd,
+    int len, int responselen, u_char *respbuf, int slow)
 {
 	struct pckbport_devcmd nc;
 
@@ -344,15 +339,12 @@ void
 pckbport_cleanqueue(struct pckbport_slotdata *q)
 {
 	struct pckbport_devcmd *cmd;
-#ifdef PCKBPORTDEBUG
-	int i;
-#endif
 
 	while ((cmd = TAILQ_FIRST(&q->cmdqueue))) {
 		TAILQ_REMOVE(&q->cmdqueue, cmd, next);
 #ifdef PCKBPORTDEBUG
-		printf("pckbport_cleanqueue: removing");
-		for (i = 0; i < cmd->cmdlen; i++)
+		printf("%s: removing", __func__);
+		for (int i = 0; i < cmd->cmdlen; i++)
 			printf(" %02x", cmd->cmd[i]);
 		printf("\n");
 #endif
@@ -404,6 +396,7 @@ pckbport_start(struct pckbport_tag *t, pckbport_slot_t slot)
 	struct pckbport_slotdata *q = t->t_slotdata[slot];
 	struct pckbport_devcmd *cmd = TAILQ_FIRST(&q->cmdqueue);
 
+	KASSERT(cmd != NULL);
 	if (q->polling) {
 		do {
 			pckbport_poll_cmd1(t, slot, cmd);
@@ -440,22 +433,17 @@ pckbport_cmdresponse(struct pckbport_tag *t, pckbport_slot_t slot, u_char data)
 	struct pckbport_slotdata *q = t->t_slotdata[slot];
 	struct pckbport_devcmd *cmd = TAILQ_FIRST(&q->cmdqueue);
 
-#ifdef DIAGNOSTIC
-	if (!cmd)
-		panic("pckbport_cmdresponse: no active command");
-#endif
+	KASSERT(cmd != NULL);
 	if (cmd->cmdidx < cmd->cmdlen) {
-		if (data != KBC_DEVCMD_ACK && data != KBC_DEVCMD_RESEND)
+		if (data != KBR_ACK && data != KBR_RESEND)
 			return 0;
 
-		if (data == KBC_DEVCMD_RESEND) {
+		if (data == KBR_RESEND) {
 			if (cmd->retries++ < 5)
 				/* try again last command */
 				goto restart;
 			else {
-#ifdef PCKBPORTDEBUG
-				printf("pckbport: cmd failed\n");
-#endif
+				DPRINTF(("%s: cmd failed\n", __func__));
 				cmd->status = EIO;
 				/* dequeue */
 			}
@@ -493,7 +481,7 @@ restart:
  * Put command into the device's command queue, return zero or errno.
  */
 int
-pckbport_enqueue_cmd(pckbport_tag_t t, pckbport_slot_t slot, u_char *cmd,
+pckbport_enqueue_cmd(pckbport_tag_t t, pckbport_slot_t slot, const u_char *cmd,
     int len, int responselen, int sync, u_char *respbuf)
 {
 	struct pckbport_slotdata *q = t->t_slotdata[slot];
@@ -555,7 +543,7 @@ pckbport_enqueue_cmd(pckbport_tag_t t, pckbport_slot_t slot, u_char *cmd,
 
 void
 pckbport_set_inputhandler(pckbport_tag_t t, pckbport_slot_t slot,
-    pckbport_inputfcn func, void *arg, char *name)
+    pckbport_inputfcn func, void *arg, const char *name)
 {
 
 	if (slot >= PCKBPORT_NSLOTS)
@@ -584,12 +572,11 @@ pckbportintr(pckbport_tag_t t, pckbport_slot_t slot, int data)
 	if (CMD_IN_QUEUE(q) && pckbport_cmdresponse(t, slot, data))
 		return;
 
-	if (t->t_inputhandler[slot])
+	if (t->t_inputhandler[slot]) {
 		(*t->t_inputhandler[slot])(t->t_inputarg[slot], data);
-#ifdef PCKBPORTDEBUG
-	else
-		printf("pckbportintr: slot %d lost %d\n", slot, data);
-#endif
+		return;
+	}
+	DPRINTF(("%s: slot %d lost %d\n", __func__, slot, data));
 }
 
 int

@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm.h,v 1.53 2008/01/02 11:49:15 ad Exp $	*/
+/*	$NetBSD: uvm.h,v 1.68 2017/01/02 20:08:32 cherry Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,11 +34,14 @@
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_uvmhist.h"
+#include "opt_uvm_page_trkown.h"
 #endif
 
 #include <uvm/uvm_extern.h>
 
+#ifdef _KERNEL
 #include <uvm/uvm_stat.h>
+#endif
 
 /*
  * pull in prototypes
@@ -66,12 +62,31 @@
 
 #ifdef _KERNEL
 
+#include <uvm/uvm_physseg.h>
+#include <sys/rndsource.h>
+
 /*
  * pull in VM_NFREELIST
  */
 #include <machine/vmparam.h>
 
 struct workqueue;
+
+/*
+ * per-cpu data
+ */
+
+struct uvm_cpu {
+	struct pgfreelist page_free[VM_NFREELIST]; /* unallocated pages */
+	int page_free_nextcolor;	/* next color to allocate from */
+	int page_idlezero_next;		/* which color to zero next */
+	bool page_idle_zero;		/* TRUE if we should try to zero
+					   pages in the idle loop */
+	int pages[PGFL_NQUEUES];	/* total of pages in page_free */
+	u_int emap_gen;			/* emap generation number */
+
+	krndsource_t rs;		/* entropy source */
+};
 
 /*
  * uvm structure (vm global state: collected in one structure for ease
@@ -83,10 +98,7 @@ struct uvm {
 
 		/* vm_page queues */
 	struct pgfreelist page_free[VM_NFREELIST]; /* unallocated pages */
-	int page_free_nextcolor;	/* next color to allocate from */
 	bool page_init_done;		/* TRUE if uvm_page_init() finished */
-	bool page_idle_zero;		/* TRUE if we should try to zero
-					   pages in the idle loop */
 
 		/* page daemon trigger */
 	int pagedaemon;			/* daemon sleeps on this */
@@ -95,19 +107,11 @@ struct uvm {
 		/* aiodone daemon */
 	struct workqueue *aiodone_queue;
 
-		/* page hash */
-	struct pglist *page_hash;	/* page hash table (vp/off->page) */
-	int page_nhash;			/* number of buckets */
-	int page_hashmask;		/* hash mask */
-
 	/* aio_done is locked by uvm.pagedaemon_lock and splbio! */
 	TAILQ_HEAD(, buf) aio_done;		/* done async i/o reqs */
 
-	/* swap-related items */
-	bool swap_running;
-	kcondvar_t scheduler_cv;
-	bool scheduler_kicked;
-	int swapout_enabled;
+	/* per-cpu data */
+	struct uvm_cpu *cpus[MAXCPUS];
 };
 
 /*
@@ -123,7 +127,6 @@ extern kmutex_t uvm_pageqlock;		/* lock for active/inactive page q */
 extern kmutex_t uvm_fpageqlock;		/* lock for free page q */
 extern kmutex_t uvm_kentry_lock;
 extern kmutex_t uvm_swap_data_lock;
-extern kmutex_t uvm_scheduler_mutex;
 
 #endif /* _KERNEL */
 

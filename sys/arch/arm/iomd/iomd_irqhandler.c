@@ -1,4 +1,4 @@
-/*	$NetBSD: iomd_irqhandler.c,v 1.16 2008/01/06 03:45:27 matt Exp $	*/
+/*	$NetBSD: iomd_irqhandler.c,v 1.22 2014/10/25 10:58:12 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iomd_irqhandler.c,v 1.16 2008/01/06 03:45:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iomd_irqhandler.c,v 1.22 2014/10/25 10:58:12 skrll Exp $");
 
 #include "opt_irqstats.h"
 
@@ -48,21 +48,20 @@ __KERNEL_RCSID(0, "$NetBSD: iomd_irqhandler.c,v 1.16 2008/01/06 03:45:27 matt Ex
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
-#include <uvm/uvm_extern.h>
 
+#include <arm/cpufunc.h>
 #include <arm/iomd/iomdreg.h>
 #include <arm/iomd/iomdvar.h>
 
 #include <machine/intr.h>
 #include <machine/cpu.h>
-#include <arm/arm32/katelib.h>
 
 irqhandler_t *irqhandlers[NIRQS];
 
 u_int current_mask;
 u_int actual_mask;
 u_int disabled_mask;
-u_int irqmasks[IPL_LEVELS];
+u_int irqmasks[NIPL];
 
 extern char *_intrnames;
 
@@ -109,7 +108,7 @@ irq_init(void)
 	 * We will start with no bits set and these will be updated as handlers
 	 * are installed at different IPL's.
 	 */
-	for (loop = 0; loop < IPL_LEVELS; ++loop)
+	for (loop = 0; loop < NIPL; ++loop)
 		irqmasks[loop] = 0;
 
 	current_mask = 0x00000000;
@@ -155,7 +154,7 @@ irq_claim(int irq, irqhandler_t *handler)
 		return -1;
 
 	/* Make sure the level is valid */
-	if (handler->ih_level < 0 || handler->ih_level >= IPL_LEVELS)
+	if (handler->ih_level < 0 || handler->ih_level >= NIPL)
     	        return -1;
 
 	oldirqstate = disable_interrupts(I32_bit);
@@ -179,14 +178,11 @@ irq_claim(int irq, irqhandler_t *handler)
 
 #ifdef IRQSTATS
 	/* Get the interrupt name from the head of the list */
+	char *iptr = _intrnames + (irq * 14);
 	if (handler->ih_name) {
-		char *ptr = _intrnames + (irq * 14);
-		strcpy(ptr, "             ");
-		strncpy(ptr, handler->ih_name,
-		    min(strlen(handler->ih_name), 13));
+		strlcpy(iptr, handler->ih_name, 14);
 	} else {
-		char *ptr = _intrnames + (irq * 14);
-		sprintf(ptr, "irq %2d     ", irq);
+		snprintf(iptr, 14, "irq %2d     ", irq);
 	}
 #endif	/* IRQSTATS */
 
@@ -197,7 +193,7 @@ irq_claim(int irq, irqhandler_t *handler)
 	 * If ih_level is out of range then don't bother to update
 	 * the masks.
 	 */
-	if (handler->ih_level >= 0 && handler->ih_level < IPL_LEVELS) {
+	if (handler->ih_level >= 0 && handler->ih_level < NIPL) {
 		irqhandler_t *ptr;
 
 		/*
@@ -256,9 +252,6 @@ irq_release(int irq, irqhandler_t *handler)
 	int level;
 	irqhandler_t *irqhand;
 	irqhandler_t **prehand;
-#ifdef IRQSTATS
-	extern char *_intrnames;
-#endif
 
 	/*
 	 * IRQ_INSTRUCT indicates that we should get the irq number
@@ -295,14 +288,11 @@ irq_release(int irq, irqhandler_t *handler)
 
 #ifdef IRQSTATS
 	/* Get the interrupt name from the head of the list */
+	char *iptr = _intrnames + (irq * 14);
 	if (irqhandlers[irq] && irqhandlers[irq]->ih_name) {
-		char *ptr = _intrnames + (irq * 14);
-		strcpy(ptr, "             ");
-		strncpy(ptr, irqhandlers[irq]->ih_name,
-		    min(strlen(irqhandlers[irq]->ih_name), 13));
+		strlcpy(iptr, irqhandlers[irq]->ih_name, 14);
 	} else {
-		char *ptr = _intrnames + (irq * 14);
-		sprintf(ptr, "irq %2d     ", irq);
+		snprintf(iptr, 14, "irq %2d     ", irq);
 	}
 #endif	/* IRQSTATS */
 
@@ -311,11 +301,11 @@ irq_release(int irq, irqhandler_t *handler)
 	 * If ih_level is out of range then don't bother to update
 	 * the masks.
 	 */
-	if (handler->ih_level >= 0 && handler->ih_level < IPL_LEVELS) {
+	if (handler->ih_level >= 0 && handler->ih_level < NIPL) {
 		irqhandler_t *ptr;
 
 		/* Clean the bit from all the masks */
-		for (level = 0; level < IPL_LEVELS; ++level)
+		for (level = 0; level < NIPL; ++level)
 			irqmasks[level] &= ~(1 << irq);
 
 		/*
@@ -366,8 +356,10 @@ intr_claim(int irq, int level, const char *name, int (*ih_func)(void *),
 	ih->ih_arg = ih_arg;
 	ih->ih_flags = 0;
 
-	if (irq_claim(irq, ih) != 0)
+	if (irq_claim(irq, ih) != 0) {
+		free(ih, M_DEVBUF);
 		return NULL;
+	}
 	return ih;
 }
 

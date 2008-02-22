@@ -1,5 +1,5 @@
-/*	$NetBSD: support.S,v 1.2 2006/04/08 14:52:09 cherry Exp $	*/
-	
+/*	$NetBSD: support.S,v 1.7 2016/08/05 16:53:36 scole Exp $	*/
+
 /*-
  * Copyright (c) 1998 Doug Rabson
  * All rights reserved.
@@ -55,11 +55,10 @@
  * rights to redistribute these changes.
  */
 
-#include "assym.h"
-
 #include <machine/asm.h>
 #include <machine/ia64_cpu.h>
 
+#include "assym.h"
 
 .text
 
@@ -98,7 +97,7 @@ ENTRY_NOPROFILE(ia64_change_mode, 0)
 1:	mov	r16=ip
 	mov	ar.rnat=r18
 	mov	cr.ipsr=r14		// psr for new mode
-	;; 
+	;;
 	add	r16=2f-1b,r16		// address to rfi to
 	;;
 	dep	r16=r15,r16,61,3	// new mode address for rfi
@@ -107,7 +106,7 @@ ENTRY_NOPROFILE(ia64_change_mode, 0)
 	mov	cr.ifs=r0
 	;;
 	rfi
-	
+
 2:	mov	ar.rsc=r19		// restore ar.rsc
 	br.ret.sptk.few rp		// now in new mode
 END(ia64_change_mode)
@@ -130,7 +129,7 @@ ENTRY(ia64_physical_mode, 0)
 	movl	r16=IA64_PSR_BN
 	;;
 	andcm	r14=r14,r15		// clear various xT bits
-	;; 
+	;;
 	or	r14=r14,r16		// make sure BN=1
 	or	ret0=ret0,r16		// make sure BN=1
 
@@ -175,7 +174,7 @@ ENTRY(ia64_call_efi_physical, 6)
 	;;
 	br.call.sptk.many rp=b6		// call EFI procedure
 	mov	gp=loc3			// restore kernel gp
-	;; 
+	;;
 	mov	r14=loc2		// psr to restore mode
 	br.call.sptk.many rp=ia64_change_mode
 	;;
@@ -184,7 +183,7 @@ ENTRY(ia64_call_efi_physical, 6)
 	;;
 	br.ret.sptk.many rp
 END(ia64_call_efi_physical)
-	
+
 /**************************************************************************/
 
 ENTRY(fusufault, 0)
@@ -213,7 +212,7 @@ ENTRY(casuptr, 3)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -267,7 +266,7 @@ ENTRY(subyte, 2)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -313,7 +312,7 @@ ENTRY(suword16, 2)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -359,7 +358,7 @@ ENTRY(suword32, 2)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -406,7 +405,7 @@ XENTRY(suword)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -460,7 +459,7 @@ ENTRY(fubyte, 1)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -506,7 +505,7 @@ ENTRY(fuword16, 2)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -552,7 +551,7 @@ ENTRY(fuword32, 2)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -599,7 +598,7 @@ XENTRY(fuword)
 	;;
 }
 {	.mlx
-	add		r15=LWP_PCB,r15
+	add		r15=L_PCB,r15
 	movl		r14=fusufault
 	;;
 }
@@ -675,7 +674,7 @@ ENTRY(copystr, 4)
 	;;
 	cmp.eq	p6,p0=r0,r15
 	cmp.ne	p7,p0=r0,in2
-	;; 
+	;;
 (p6)	br.cond.spnt.few 2f		// if (*from == 0), bail out
 (p7)	br.cond.sptk.few 1b		// if (len != 0) copy more
 
@@ -684,7 +683,7 @@ ENTRY(copystr, 4)
 	sub	r14=r14,in2		// *lenp = (i - len)
 	;;
 	st8	[in3]=r14
-	
+
 3:	cmp.eq	p6,p0=r0,r15
 (p6)	br.cond.spnt.few 4f		// *from == '\0'; leave quietly
 
@@ -705,16 +704,16 @@ ENTRY(copyinstr, 4)
 	.body
 
 	movl	loc2=VM_MAX_ADDRESS		// make sure that src addr
-	;; 
+	;;
 	cmp.geu	p6,p0=in0,loc2			// is in user space.
-	;; 
-(p6)	br.cond.spnt.few copyerr		// if it's not, error out.
+	;;
+(p6)	br.cond.spnt.few copyefault		// if it's not, error out.
 	movl	r14=copyerr			// set up fault handler.
 	add	r15=PC_CURLWP,r13		// find curthread
 	;;
 	ld8	r15=[r15]
 	;;
-	add	r15=LWP_PCB,r15			// find pcb
+	add	r15=L_PCB,r15			// find pcb
 	;;
 	ld8	r15=[r15]
 	;;
@@ -744,16 +743,16 @@ ENTRY(copyoutstr, 4)
 	.body
 
 	movl	loc2=VM_MAX_ADDRESS		// make sure that dest addr
-	;; 
+	;;
 	cmp.geu	p6,p0=in1,loc2			// is in user space.
-	;; 
-(p6)	br.cond.spnt.few copyerr		// if it's not, error out.
+	;;
+(p6)	br.cond.spnt.few copyefault		// if it's not, error out.
 	movl	r14=copyerr			// set up fault handler.
 	add	r15=PC_CURLWP,r13		// find curthread
 	;;
 	ld8	r15=[r15]
 	;;
-	add	r15=LWP_PCB,r15			// find pcb
+	add	r15=L_PCB,r15			// find pcb
 	;;
 	ld8	r15=[r15]
 	;;
@@ -770,88 +769,14 @@ ENTRY(copyoutstr, 4)
 	st8	[loc2]=r0			// kill the fault handler.
 	mov	ar.pfs=loc0			// restore ar.pfs
 	mov	rp=loc1				// restore ra.
-	br.ret.sptk.few rp			// ret0 left over from bcopy
+	br.ret.sptk.few rp			// ret0 left over from copystr
 END(copyoutstr)
 
-/*
- * Not the fastest bcopy in the world.
- */
-ENTRY(bcopy, 3)
-	mov	ret0=r0				// return zero for copy{in,out}
-	;; 
-	cmp.le	p6,p0=in2,r0			// bail if len <= 0
-(p6)	br.ret.spnt.few rp
-
-	sub	r14=in1,in0 ;;			// check for overlap
-	cmp.ltu	p6,p0=r14,in2			// dst-src < len
-(p6)	br.cond.spnt.few 5f
-
-	extr.u	r14=in0,0,3			// src & 7
-	extr.u	r15=in1,0,3 ;;			// dst & 7
-	cmp.eq	p6,p0=r14,r15			// different alignment?
-(p6)	br.cond.spnt.few 2f			// branch if same alignment
-
-1:	ld1	r14=[in0],1 ;;			// copy bytewise
-	st1	[in1]=r14,1
-	add	in2=-1,in2 ;;			// len--
-	cmp.ne	p6,p0=r0,in2
-(p6)	br.cond.dptk.few 1b			// loop
-	br.ret.sptk.few rp			// done
-
-2:	cmp.eq	p6,p0=r14,r0			// aligned?
-(p6)	br.cond.sptk.few 4f
-
-3:	ld1	r14=[in0],1 ;;			// copy bytewise
-	st1	[in1]=r14,1
-	extr.u	r15=in0,0,3			// src & 7
-	add	in2=-1,in2 ;;			// len--
-	cmp.eq	p6,p0=r0,in2			// done?
-	cmp.eq	p7,p0=r0,r15 ;;			// aligned now?
-(p6)	br.ret.spnt.few rp			// return if done
-(p7)	br.cond.spnt.few 4f			// go to main copy
-	br.cond.sptk.few 3b			// more bytes to copy
-
-	// At this point, in2 is non-zero
-
-4:	mov	r14=8 ;;
-	cmp.ltu	p6,p0=in2,r14 ;;		// len < 8?
-(p6)	br.cond.spnt.few 1b			// byte copy the end
-	ld8	r15=[in0],8 ;;			// copy word
-	st8	[in1]=r15,8
-	add	in2=-8,in2 ;;			// len -= 8
-	cmp.ne	p6,p0=r0,in2			// done?
-(p6)	br.cond.spnt.few 4b			// again
-
-	br.ret.sptk.few rp			// return
-
-	// Don't bother optimising overlap case
-
-5:	add	in0=in0,in2
-	add	in1=in1,in2 ;;
-	add	in0=-1,in0
-	add	in1=-1,in1 ;;
-
-6:	ld1	r14=[in0],-1 ;;
-	st1	[in1]=r14,-1
-	add	in2=-1,in2 ;;
-	cmp.ne	p6,p0=r0,in2
-(p6)	br.cond.spnt.few 6b
-
-	br.ret.sptk.few rp
-END(bcopy)
-
-ENTRY(memcpy,3)
-	mov	r14=in0 ;;
-	mov	in0=in1 ;;
-	mov	in1=r14
-	br.cond.sptk.few bcopy
-END(memcpy)
-	
 /*
  * int kcopy(const void *from, void *to, size_t len);
  * Copy len bytes, abort on fault.
  */
-	
+
 ENTRY(kcopy, 3)
 	.prologue
 	.regstk	3, 3, 3, 0
@@ -866,7 +791,7 @@ ENTRY(kcopy, 3)
 	;;
 	ld8	r15=[r15]
 	;;
-	add	r15=LWP_PCB,r15			// find pcb
+	add	r15=L_PCB,r15			// find pcb
 	;;
 	ld8	r15=[r15]
 	;;
@@ -877,14 +802,15 @@ ENTRY(kcopy, 3)
 	mov	out0=in0
 	mov	out1=in1
 	mov	out2=in2
+	mov	ret0=r0				// XXX netbsd kcopy same as freebsd?
 	;;
 	br.call.sptk.few rp=bcopy		// do the copy.
 	st8	[loc2]=r0			// kill the fault handler.
 	mov	ar.pfs=loc0			// restore ar.pfs
 	mov	rp=loc1				// restore ra.
-	br.ret.sptk.few rp			// ret0 left over from bcopy
-END(kcopy)		
-	
+	br.ret.sptk.few rp
+END(kcopy)
+
 ENTRY(copyin, 3)
 	.prologue
 	.regstk	3, 3, 3, 0
@@ -895,16 +821,16 @@ ENTRY(copyin, 3)
 	.body
 
 	movl	loc2=VM_MAX_ADDRESS		// make sure that src addr
-	;; 
+	;;
 	cmp.geu	p6,p0=in0,loc2			// is in user space.
-	;; 
-(p6)	br.cond.spnt.few copyerr		// if it's not, error out.
+	;;
+(p6)	br.cond.spnt.few copyefault		// if it's not, error out.
 	movl	r14=copyerr			// set up fault handler.
 	add	r15=PC_CURLWP,r13		// find curthread
 	;;
 	ld8	r15=[r15]
 	;;
-	add	r15=LWP_PCB,r15			// find pcb
+	add	r15=L_PCB,r15			// find pcb
 	;;
 	ld8	r15=[r15]
 	;;
@@ -915,12 +841,13 @@ ENTRY(copyin, 3)
 	mov	out0=in0
 	mov	out1=in1
 	mov	out2=in2
+	mov	ret0=r0				// return zero for copy{in,out}
 	;;
 	br.call.sptk.few rp=bcopy		// do the copy.
 	st8	[loc2]=r0			// kill the fault handler.
 	mov	ar.pfs=loc0			// restore ar.pfs
 	mov	rp=loc1				// restore ra.
-	br.ret.sptk.few rp			// ret0 left over from bcopy
+	br.ret.sptk.few rp
 END(copyin)
 
 ENTRY(copyout, 3)
@@ -933,16 +860,16 @@ ENTRY(copyout, 3)
 	.body
 
 	movl	loc2=VM_MAX_ADDRESS		// make sure that dest addr
-	;; 
+	;;
 	cmp.geu	p6,p0=in1,loc2			// is in user space.
-	;; 
-(p6)	br.cond.spnt.few copyerr		// if it's not, error out.
+	;;
+(p6)	br.cond.spnt.few copyefault		// if it's not, error out.
 	movl	r14=copyerr			// set up fault handler.
 	add	r15=PC_CURLWP,r13		// find curthread
 	;;
 	ld8	r15=[r15]
 	;;
-	add	r15=LWP_PCB,r15			// find pcb
+	add	r15=L_PCB,r15			// find pcb
 	;;
 	ld8	r15=[r15]
 	;;
@@ -953,25 +880,37 @@ ENTRY(copyout, 3)
 	mov	out0=in0
 	mov	out1=in1
 	mov	out2=in2
+	mov	ret0=r0				// return zero for copy{in,out}
 	;;
 	br.call.sptk.few rp=bcopy		// do the copy.
 	st8	[loc2]=r0			// kill the fault handler.
 	mov	ar.pfs=loc0			// restore ar.pfs
 	mov	rp=loc1				// restore ra.
-	br.ret.sptk.few rp			// ret0 left over from bcopy
+	br.ret.sptk.few rp
 END(copyout)
 
 ENTRY(copyerr, 0)
 	add	r14=PC_CURLWP,r13 ;;		// find curthread
 	ld8	r14=[r14] ;;
-	add	r14=LWP_PCB,r14 ;;		// curthread->td_addr
+	add	r14=L_PCB,r14 ;;		// curthread->td_addr
 	ld8	r14=[r14] ;;
 	add	r14=PCB_ONFAULT,r14 ;;		// &curthread->td_pcb->pcb_onfault
 	st8	[r14]=r0			// reset fault handler
-	
-	mov	ret0=EFAULT			// return EFAULT
+
 	br.ret.sptk.few rp
 END(copyerr)
+
+ENTRY(copyefault, 0)
+	add	r14=PC_CURLWP,r13 ;;		// find curthread
+	ld8	r14=[r14] ;;
+	add	r14=L_PCB,r14 ;;		// curthread->td_addr
+	ld8	r14=[r14] ;;
+	add	r14=PCB_ONFAULT,r14 ;;		// &curthread->td_pcb->pcb_onfault
+	st8	[r14]=r0			// reset fault handler
+
+	mov	ret0=EFAULT			// return EFAULT
+	br.ret.sptk.few rp
+END(copyefault)
 
 #if defined(GPROF)
 /*

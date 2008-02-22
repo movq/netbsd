@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.12 2008/02/22 08:46:48 matt Exp $	*/
+/*	$NetBSD: pcb.h,v 1.15 2017/05/22 17:12:11 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -56,8 +51,7 @@ struct pcb {
 	long	P1LR;		/*  Page 1 Length Register    */
 
 	/* Software registers, only used by kernel software */
-	void   *framep;		/* Pointer to syscall frame */
-	void   *iftrap;		/* Tells whether fault copy */
+	void   *pcb_onfault;	/* Tells whether fault copy */
 	paddr_t pcb_paddr;	/* physical address of PCB */
 	struct pmap *pcb_pm;	/* owning pmap */
 	struct pcb *pcb_pmnext;	/* next pcb that shares this pmap */

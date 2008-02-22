@@ -1,4 +1,4 @@
-/*	$NetBSD: utmp.h,v 1.11 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: utmp.h,v 1.13 2016/01/22 23:59:44 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,6 +39,9 @@
 #ifndef	_UTMP_H_
 #define	_UTMP_H_
 
+#include <sys/cdefs.h>
+#include <time.h> /* for time_t */
+
 #define	_PATH_UTMP	"/var/run/utmp"
 #define	_PATH_WTMP	"/var/log/wtmp"
 #define	_PATH_LASTLOG	"/var/log/lastlog"
@@ -63,7 +66,9 @@ struct utmp {
 __BEGIN_DECLS
 int utmpname(const char *);
 void setutent(void);
-struct utmp *getutent(void);
+#ifndef __LIBC12_SOURCE__
+struct utmp *getutent(void) __RENAME(__getutent50);
+#endif
 void endutent(void);
 __END_DECLS
 

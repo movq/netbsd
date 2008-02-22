@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.36 2006/10/03 13:02:32 tsutsui Exp $	*/
+/*	$NetBSD: machdep.h,v 1.39 2017/06/16 18:17:42 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -106,14 +106,13 @@ extern vaddr_t vmmap;	/* XXX - See mem.c */
 void	clock_init (void);
 void	cninit(void);
 
-void	dumpconf(void);
 void	dumpsys(void);
 
 void	enable_fpu(int);
 void	enable_init(void);
 void	enable_video(int);
 
-int 	fpu_emulate(struct trapframe *, struct fpframe *, ksiginfo_t *);
+int	fpu_emulate(struct trapframe *, struct fpframe *, ksiginfo_t *);
 
 /* Backward compatibility... */
 #define getsr	_getsr
@@ -126,9 +125,6 @@ void	intreg_init(void);
 
 void	isr_init(void);
 void	isr_config(void);
-
-void	m68881_save(struct fpframe *);
-void	m68881_restore(struct fpframe *);
 
 void	netintr(void);
 
@@ -187,7 +183,7 @@ void	loadcrp(struct mmu_rootptr *);
 
 void	pmap_bootstrap(vaddr_t);
 void	pmap_kcore_hdr(struct sun3x_kcore_hdr *);
-int 	pmap_pa_exists(paddr_t);
+int	pmap_pa_exists(paddr_t);
 
 #endif	/* SUN3X */
 

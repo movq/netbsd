@@ -1,8 +1,10 @@
-#	$NetBSD: VME177,v 1.27 2006/04/17 16:08:05 he Exp $
+#	$NetBSD: VME177,v 1.36 2017/09/14 07:58:42 mrg Exp $
 
-include		"arch/mvme68k/conf/std.mvme68k"
+include 	"arch/mvme68k/conf/std.mvme68k"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
+
+makeoptions	COPTS="-O2 -fno-reorder-blocks"	# see share/mk/sys.mk
 
 # Boards this kernel supports; need at least one
 options 	MVME177
@@ -16,7 +18,6 @@ maxusers	8
 
 #options 	SYSVSHM
 options 	KTRACE
-options 	COMPAT_43
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -33,32 +34,18 @@ file-system	TMPFS
 #file-system	PTYFS		# /dev/pts/N support
 
 #options 	NFSSERVER
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	FFS_EI		# FFS Endian Independent support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
 options 	INET
 #options 	GATEWAY		# IP packet forwarding
-#options 	ISO		# OSI networking
-#options 	TPIP
-#options 	EON
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 options 	COMPAT_AOUT_M68K	# compatibility with NetBSD/m68k a.out
-#options 	COMPAT_09
-#options 	COMPAT_10
-#options 	COMPAT_11
-#options 	COMPAT_12
-#options 	COMPAT_13
-#options 	COMPAT_14
-#options 	COMPAT_15
-#options 	COMPAT_16
-#options 	COMPAT_20
-#options 	COMPAT_30	# NetBSD 3.0 compatibility.
+include 	"conf/compat_netbsd30.config"
 #options 	COMPAT_SUNOS
 #options 	COMPAT_M68K4K	# compatibility with NetBSD/m68k4k binaries
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 ## force NFS root and swap
 #config	netbsd		root on ? type nfs
@@ -76,9 +63,8 @@ pseudo-device	loop
 pseudo-device	bpfilter
 pseudo-device	ksyms
 pseudo-device	pty
-pseudo-device	rnd
 pseudo-device	clockctl		# user control of clock subsystem
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
 mainbus0	at root
 

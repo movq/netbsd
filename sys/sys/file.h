@@ -1,4 +1,33 @@
-/*	$NetBSD: file.h,v 1.63 2008/02/06 21:51:36 ad Exp $	*/
+/*	$NetBSD: file.h,v 1.83 2017/11/30 20:25:56 christos Exp $	*/
+
+/*-
+ * Copyright (c) 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,14 +66,10 @@
 #include <sys/fcntl.h>
 #include <sys/unistd.h>
 
-#ifdef _KERNEL
-#include <sys/mallocvar.h>
+#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <sys/queue.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
-
-MALLOC_DECLARE(M_FILE);
-MALLOC_DECLARE(M_IOCTLOPS);
 
 struct proc;
 struct lwp;
@@ -52,20 +77,88 @@ struct uio;
 struct iovec;
 struct stat;
 struct knote;
+struct uvm_object;
+
+struct fileops {
+	const char *fo_name;
+	int	(*fo_read)	(struct file *, off_t *, struct uio *,
+				    kauth_cred_t, int);
+	int	(*fo_write)	(struct file *, off_t *, struct uio *,
+				    kauth_cred_t, int);
+	int	(*fo_ioctl)	(struct file *, u_long, void *);
+	int	(*fo_fcntl)	(struct file *, u_int, void *);
+	int	(*fo_poll)	(struct file *, int);
+	int	(*fo_stat)	(struct file *, struct stat *);
+	int	(*fo_close)	(struct file *);
+	int	(*fo_kqfilter)	(struct file *, struct knote *);
+	void	(*fo_restart)	(struct file *);
+	int	(*fo_mmap)	(struct file *, off_t *, size_t, int, int *,
+				 int *, struct uvm_object **, int *);
+	void	(*fo_spare2)	(void);
+};
+
+union file_data {
+	struct vnode *fd_vp;		// DTYPE_VNODE
+	struct socket *fd_so;		// DTYPE_SOCKET
+	struct pipe *fd_pipe;		// DTYPE_PIPE
+	struct kqueue *fd_kq;		// DTYPE_KQUEUE
+	void *fd_data;			// DTYPE_MISC
+	struct rnd_ctx *fd_rndctx;	// DTYPE_MISC (rnd)
+	struct audio_chan *fd_audioctx;	// DTYPE_MISC (audio)
+	struct pad_softc *fd_pad;	// DTYPE_MISC (pad)
+	int fd_devunit;			// DTYPE_MISC (tap)
+	struct bpf_d *fd_bpf;		// DTYPE_MISC (bpf)
+	struct fcrypt *fd_fcrypt;	// DTYPE_CRYPTO is not used
+	struct mqueue *fd_mq;		// DTYPE_MQUEUE
+	struct ksem *fd_ks;		// DTYPE_SEM
+	struct iscsifd *fd_iscsi;	// DTYPE_MISC (iscsi)
+};
 
 /*
  * Kernel file descriptor.  One entry for each open kernel vnode and
  * socket.
  *
- * Note that adjacent 'u_short' members within a single word must have
- * the same locking convention, or must be non-volatile, as sub-word
- * writes may not be atomic.  If possible, keep this structure smaller
- * than CACHE_LINE_SIZE on 32-bit architectures.
+ * This structure is exported via the KERN_FILE and KERN_FILE2 sysctl
+ * calls.  Only add members to the end, do not delete them.
  */
 struct file {
+	off_t		f_offset;	/* first, is 64-bit */
+	kauth_cred_t 	f_cred;		/* creds associated with descriptor */
+	const struct fileops *f_ops;
+	union file_data	f_undata;	/* descriptor data, e.g. vnode/socket */
 	LIST_ENTRY(file) f_list;	/* list of active files */
+	kmutex_t	f_lock;		/* lock on structure */
 	int		f_flag;		/* see fcntl.h */
-	u_char		f_iflags;	/* internal flags; FIF_* */
+	u_int		f_marker;	/* traversal marker (sysctl) */
+	u_int		f_type;		/* descriptor type */
+	u_int		f_advice;	/* access pattern hint; UVM_ADV_* */
+	u_int		f_count;	/* reference count */
+	u_int		f_msgcount;	/* references from message queue */
+	u_int		f_unpcount;	/* deferred close: see uipc_usrreq.c */
+	SLIST_ENTRY(file) f_unplist;	/* deferred close: see uipc_usrreq.c */
+};
+
+#define f_vnode		f_undata.fd_vp
+#define f_socket	f_undata.fd_so
+#define f_pipe		f_undata.fd_pipe
+#define f_kqueue	f_undata.fd_kq
+#define f_data		f_undata.fd_data
+#define f_mqueue	f_undata.fd_mq
+#define f_ksem		f_undata.fd_ks
+
+#define f_rndctx	f_undata.fd_rndctx
+#define f_audioctx	f_undata.fd_audioctx
+#define f_pad		f_undata.fd_pad
+#define f_devunit	f_undata.fd_devunit
+#define f_bpf		f_undata.fd_bpf
+#define f_fcrypt	f_undata.fd_fcrypt
+#define f_iscsi		f_undata.fd_iscsi
+#endif /* _KERNEL || _KMEMUSER */
+
+/*
+ * Descriptor types.
+ */
+
 #define	DTYPE_VNODE	1		/* file */
 #define	DTYPE_SOCKET	2		/* communications endpoint */
 #define	DTYPE_PIPE	3		/* pipe */
@@ -73,92 +166,13 @@ struct file {
 #define	DTYPE_MISC	5		/* misc file descriptor type */
 #define	DTYPE_CRYPTO	6		/* crypto */
 #define	DTYPE_MQUEUE	7		/* message queue */
-#define DTYPE_NAMES \
-    "0", "file", "socket", "pipe", "kqueue", "misc", "crypto", "mqueue"
-	u_char		f_type;		/* descriptor type */
-	u_short		f_advice;	/* access pattern hint; UVM_ADV_* */
-	u_int		f_count;	/* reference count */
-	u_int		f_msgcount;	/* references from message queue */
-	int		f_usecount;	/* number active users */
-	kauth_cred_t 	f_cred;		/* creds associated with descriptor */
-	const struct fileops {
-		int	(*fo_read)	(struct file *, off_t *, struct uio *,
-					    kauth_cred_t, int);
-		int	(*fo_write)	(struct file *, off_t *, struct uio *,
-					    kauth_cred_t, int);
-		int	(*fo_ioctl)	(struct file *, u_long, void *,
-					    struct lwp *);
-		int	(*fo_fcntl)	(struct file *, u_int, void *,
-					    struct lwp *);
-		int	(*fo_poll)	(struct file *, int, struct lwp *);
-		int	(*fo_stat)	(struct file *, struct stat *,
-					    struct lwp *);
-		int	(*fo_close)	(struct file *, struct lwp *);
-		int	(*fo_kqfilter)	(struct file *, struct knote *);
-	} *f_ops;
-	off_t		f_offset;
-	void		*f_data;	/* descriptor data, e.g. vnode/socket */
-	kmutex_t	f_lock;		/* lock on structure */
-	kcondvar_t	f_cv;		/* used when closing */
-};
+#define	DTYPE_SEM	8		/* semaphore */
 
-#define	FIF_WANTCLOSE		0x01	/* a close is waiting for usecount */
-#define	FIF_LARVAL		0x02	/* not fully constructed; don't use */
+#define DTYPE_NAMES	\
+    "0", "file", "socket", "pipe", "kqueue", "misc", "crypto", "mqueue", \
+    "semaphore"
 
-#define	FILE_IS_USABLE(fp)	(((fp)->f_iflags &			\
-				  (FIF_WANTCLOSE|FIF_LARVAL)) == 0)
-
-#define	FILE_SET_MATURE(fp)						\
-do {									\
-	(fp)->f_iflags &= ~FIF_LARVAL;					\
-} while (/*CONSTCOND*/0)
-
-#ifdef DIAGNOSTIC
-#define	FILE_USE_CHECK(fp, str)						\
-do {									\
-	if ((fp)->f_usecount < 0)					\
-		panic(str);						\
-} while (/* CONSTCOND */ 0)
-#else
-#define	FILE_USE_CHECK(fp, str)		/* nothing */
-#endif
-
-/*
- * FILE_USE() must be called with the file lock held.
- * and fd_getfile() returns the file locked)
- * Typical usage is either:
- *    fp = fd_getfile(..); FILE_USE(fp); ...; FILE_UNUSE(fp, l);
- * or:
- *    fp = fd_getfile(..); ...; FILE_UNLOCK(fp);
- */
-
-#define FILE_LOCK(fp) mutex_enter(&(fp)->f_lock)
-#define FILE_UNLOCK(fp) mutex_exit(&(fp)->f_lock)
-
-#define	FILE_USE(fp)							\
-do {									\
-	(fp)->f_usecount++;						\
-	FILE_USE_CHECK((fp), "f_usecount overflow");			\
-	FILE_UNLOCK(fp);						\
-} while (/* CONSTCOND */ 0)
-
-#define	FILE_UNUSE_WLOCK(fp, l, havelock)				\
-do {									\
-	if (!(havelock))						\
-		FILE_LOCK(fp);						\
-	if ((fp)->f_iflags & FIF_WANTCLOSE) {				\
-		FILE_UNLOCK(fp);					\
-		/* Will drop usecount */				\
-		(void) closef((fp), (l));				\
-		break;							\
-	} else {							\
-		(fp)->f_usecount--;					\
-		FILE_USE_CHECK((fp), "f_usecount underflow");		\
-	}								\
-	FILE_UNLOCK(fp);						\
-} while (/* CONSTCOND */ 0)
-#define	FILE_UNUSE(fp, l)		FILE_UNUSE_WLOCK(fp, l, 0)
-#define	FILE_UNUSE_HAVELOCK(fp, l)	FILE_UNUSE_WLOCK(fp, l, 1)
+#ifdef _KERNEL
 
 /*
  * Flags for fo_read and fo_write and do_fileread/write/v
@@ -169,7 +183,6 @@ do {									\
 LIST_HEAD(filelist, file);
 extern struct filelist	filehead;	/* head of list of open files */
 extern u_int		maxfiles;	/* kernel limit on # of open files */
-extern u_int		nfiles;		/* actual number of open files */
 
 extern const struct fileops vnops;	/* vnode operations for files */
 
@@ -183,22 +196,20 @@ int	do_filereadv(int, const struct iovec *, int, off_t *,
 int	do_filewritev(int, const struct iovec *, int, off_t *,
 	    int, register_t *);
 
-int	fsetown(struct proc *, pid_t *, int, const void *);
-int	fgetown(struct proc *, pid_t, int, void *);
+int	fsetown(pid_t *, u_long, const void *);
+int	fgetown(pid_t, u_long, void *);
 void	fownsignal(pid_t, int, int, int, void *);
 
-int	fdclone(struct lwp *, struct file *, int, int, const struct fileops *,
-    void *);
-
 /* Commonly used fileops */
-int	fnullop_fcntl(struct file *, u_int, void *, struct lwp *);
-int	fnullop_poll(struct file *, int, struct lwp *);
+int	fnullop_fcntl(struct file *, u_int, void *);
+int	fnullop_poll(struct file *, int);
 int	fnullop_kqfilter(struct file *, struct knote *);
 int	fbadop_read(struct file *, off_t *, struct uio *, kauth_cred_t, int);
 int	fbadop_write(struct file *, off_t *, struct uio *, kauth_cred_t, int);
-int	fbadop_ioctl(struct file *, u_long, void *, struct lwp *);
-int	fbadop_close(struct file *, struct lwp *);
-int	fbadop_stat(struct file *, struct stat *, struct lwp *);
+int	fbadop_ioctl(struct file *, u_long, void *);
+int	fbadop_close(struct file *);
+int	fbadop_stat(struct file *, struct stat *);
+void	fnullop_restart(struct file *);
 
 #endif /* _KERNEL */
 

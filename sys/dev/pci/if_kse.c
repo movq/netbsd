@@ -1,7 +1,11 @@
-/*	$NetBSD: if_kse.c,v 1.12 2008/02/07 01:21:56 dyoung Exp $	*/
+/*	$NetBSD: if_kse.c,v 1.32 2018/06/26 06:48:01 msaitoh Exp $	*/
 
-/*
- * Copyright (c) 2006 Tohru Nishimura
+/*-
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,28 +15,23 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Tohru Nishimura.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kse.c,v 1.12 2008/02/07 01:21:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kse.c,v 1.32 2018/06/26 06:48:01 msaitoh Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,9 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_kse.c,v 1.12 2008/02/07 01:21:56 dyoung Exp $");
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -203,7 +200,7 @@ struct kse_rxsoft {
 };
 
 struct kse_softc {
-	struct device sc_dev;		/* generic device information */
+	device_t sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
@@ -298,10 +295,10 @@ u_int kse_burstsize = 8;	/* DMA burst length tuning knob */
 u_int kse_monitor_rxintr;	/* fragmented UDP csum HW bug hook */
 #endif
 
-static int kse_match(struct device *, struct cfdata *, void *);
-static void kse_attach(struct device *, struct device *, void *);
+static int kse_match(device_t, cfdata_t, void *);
+static void kse_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(kse, sizeof(struct kse_softc),
+CFATTACH_DECL_NEW(kse, sizeof(struct kse_softc),
     kse_match, kse_attach, NULL, NULL);
 
 static int kse_ioctl(struct ifnet *, u_long, void *);
@@ -328,7 +325,7 @@ static void zerostats(struct kse_softc *);
 #endif
 
 static int
-kse_match(struct device *parent, struct cfdata *match, void *aux)
+kse_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -342,9 +339,9 @@ kse_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-kse_attach(struct device *parent, struct device *self, void *aux)
+kse_attach(device_t parent, device_t self, void *aux)
 {
-	struct kse_softc *sc = (struct kse_softc *)self;
+	struct kse_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -353,9 +350,10 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	struct ifmedia *ifm;
 	uint8_t enaddr[ETHER_ADDR_LEN];
 	bus_dma_segment_t seg;
-	int i, p, error, nseg;
+	int i, error, nseg;
 	pcireg_t pmode;
 	int pmreg;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	if (pci_mapreg_map(pa, 0x10,
 	    PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT,
@@ -364,6 +362,7 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_dmat = pa->pa_dmat;
 
 	/* Make sure bus mastering is enabled. */
@@ -381,12 +380,12 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 			 * this state, so punt.
 			 */
 			printf("%s: unable to wake from power state D3\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			return;
 		}
 		if (pmode != PCI_PMCSR_STATE_D0) {
 			printf("%s: waking up from power date D%d\n",
-			    sc->sc_dev.dv_xname, pmode);
+			    device_xname(sc->sc_dev), pmode);
 			pci_conf_write(pc, pa->pa_tag, pmreg + PCI_PMCSR,
 			    PCI_PMCSR_STATE_D0);
 		}
@@ -406,7 +405,7 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	i = CSR_READ_2(sc, MARH);
 	enaddr[1] = i; enaddr[0] = i >> 8;
 	printf("%s: Ethernet address: %s\n",
-		sc->sc_dev.dv_xname, ether_sprintf(enaddr));
+		device_xname(sc->sc_dev), ether_sprintf(enaddr));
 
 	/*
 	 * Enable chip function.
@@ -417,20 +416,19 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: unable to map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, kse_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Allocate the control data structures, and create and load the
@@ -439,47 +437,45 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct kse_control_data), PAGE_SIZE, 0, &seg, 1, &nseg, 0);
 	if (error != 0) {
-		printf("%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "unable to allocate control data, error = %d\n", error);
 		goto fail_0;
 	}
 	error = bus_dmamem_map(sc->sc_dmat, &seg, nseg,
 	    sizeof(struct kse_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_COHERENT);
 	if (error != 0) {
-		printf("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "unable to map control data, error = %d\n", error);
 		goto fail_1;
 	}
 	error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct kse_control_data), 1,
 	    sizeof(struct kse_control_data), 0, 0, &sc->sc_cddmamap);
 	if (error != 0) {
-		printf("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "unable to create control data DMA map, "
+		    "error = %d\n", error);
 		goto fail_2;
 	}
 	error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct kse_control_data), NULL, 0);
 	if (error != 0) {
-		printf("%s: unable to load control data DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 	for (i = 0; i < KSE_TXQUEUELEN; i++) {
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    KSE_NTXSEGS, MCLBYTES, 0, 0,
 		    &sc->sc_txsoft[i].txs_dmamap)) != 0) {
-			printf("%s: unable to create tx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev, "unable to create tx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_4;
 		}
 	}
 	for (i = 0; i < KSE_NRXDESC; i++) {
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    1, MCLBYTES, 0, 0, &sc->sc_rxsoft[i].rxs_dmamap)) != 0) {
-			printf("%s: unable to create rx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev, "unable to create rx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_5;
 		}
 		sc->sc_rxsoft[i].rxs_mbuf = NULL;
@@ -505,10 +501,10 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	printf("%s: 10baseT, 10baseT-FDX, 100baseTX, 100baseTX-FDX, auto\n",
-	    sc->sc_dev.dv_xname);
+	    device_xname(sc->sc_dev));
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = kse_ioctl;
@@ -531,11 +527,12 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
 
-	p = (sc->sc_chip == 0x8842) ? 3 : 1;
 #ifdef KSE_EVENT_COUNTERS
+	int p = (sc->sc_chip == 0x8842) ? 3 : 1;
 	for (i = 0; i < p; i++) {
 		struct ksext *ee = &sc->sc_ext;
-		sprintf(ee->evcntname[i], "%s.%d", sc->sc_dev.dv_xname, i+1);
+		snprintf(ee->evcntname[i], sizeof(ee->evcntname[i]),
+		    "%s.%d", device_xname(sc->sc_dev), i+1);
 		evcnt_attach_dynamic(&ee->pev[i][0], EVCNT_TYPE_MISC,
 		    NULL, ee->evcntname[i], "RxLoPriotyByte");
 		evcnt_attach_dynamic(&ee->pev[i][1], EVCNT_TYPE_MISC,
@@ -613,7 +610,7 @@ kse_attach(struct device *parent, struct device *self, void *aux)
 		if (sc->sc_rxsoft[i].rxs_dmamap != NULL)
 			bus_dmamap_destroy(sc->sc_dmat,
 			    sc->sc_rxsoft[i].rxs_dmamap);
-	}	
+	}
  fail_4:
 	for (i = 0; i < KSE_TXQUEUELEN; i++) {
 		if (sc->sc_txsoft[i].txs_dmamap != NULL)
@@ -716,7 +713,7 @@ kse_init(struct ifnet *ifp)
 			if ((error = add_rxbuf(sc, i)) != 0) {
 				printf("%s: unable to allocate or map rx "
 				    "buffer %d, error = %d\n",
-				     sc->sc_dev.dv_xname, i, error);
+				     device_xname(sc->sc_dev), i, error);
 				rxdrain(sc);
 				goto out;
 			}
@@ -799,7 +796,7 @@ kse_init(struct ifnet *ifp)
 	if (error) {
 		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		ifp->if_timer = 0;
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", device_xname(sc->sc_dev));
 	}
 	return error;
 }
@@ -829,11 +826,11 @@ kse_stop(struct ifnet *ifp, int disable)
 		}
 	}
 
-	if (disable)
-		rxdrain(sc);
-	
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+
+	if (disable)
+		rxdrain(sc);
 }
 
 static void
@@ -852,7 +849,7 @@ kse_watchdog(struct ifnet *ifp)
 {
 	struct kse_softc *sc = ifp->if_softc;
 
-	/*	
+	/*
 	 * Since we're not interrupting every packet, sweep
 	 * up before we report an error.
 	 */
@@ -860,7 +857,7 @@ kse_watchdog(struct ifnet *ifp)
 
 	if (sc->sc_txfree != KSE_NTXDESC) {
 		printf("%s: device timeout (txfree %d txsfree %d txnext %d)\n",
-		    sc->sc_dev.dv_xname, sc->sc_txfree, sc->sc_txsfree,
+		    device_xname(sc->sc_dev), sc->sc_txfree, sc->sc_txsfree,
 		    sc->sc_txnext);
 		ifp->if_oerrors++;
 
@@ -869,7 +866,7 @@ kse_watchdog(struct ifnet *ifp)
 	}
 	else if (ifp->if_flags & IFF_DEBUG)
 		printf("%s: recovered from device timeout\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	/* Try to get more packets going. */
 	kse_start(ifp);
@@ -917,7 +914,7 @@ kse_start(struct ifnet *ifp)
 			if (error == EFBIG) {
 				printf("%s: Tx packet consumes too many "
 				    "DMA segments, dropping...\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				    IFQ_DEQUEUE(&ifp->if_snd, m0);
 				    m_freem(m0);
 				    continue;
@@ -1002,13 +999,10 @@ kse_start(struct ifnet *ifp)
 		sc->sc_txnext = nexttx;
 		sc->sc_txsfree--;
 		sc->sc_txsnext = KSE_NEXTTXS(sc->sc_txsnext);
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 	}
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree == 0) {
@@ -1089,7 +1083,7 @@ add_rxbuf(struct kse_softc *sc, int idx)
 	    m->m_ext.ext_buf, m->m_ext.ext_size, NULL, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: can't load rx DMA map %d, error = %d\n",
-		    sc->sc_dev.dv_xname, idx, error);
+		    device_xname(sc->sc_dev), idx, error);
 		panic("kse_add_rxbuf");
 	}
 
@@ -1133,7 +1127,7 @@ kse_intr(void *arg)
 	if (isr & INT_DMLCS)
 		lnkchg(sc);
 	if (isr & INT_DMRBUS)
-		printf("%s: Rx descriptor full\n", sc->sc_dev.dv_xname);
+		printf("%s: Rx descriptor full\n", device_xname(sc->sc_dev));
 
 	CSR_WRITE_4(sc, INTST, isr);
 	return 1;
@@ -1155,7 +1149,7 @@ rxintr(struct kse_softc *sc)
 		    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 
 		rxstat = sc->sc_rxdescs[i].r0;
-		
+	
 		if (rxstat & R0_OWN) /* desc is left empty */
 			break;
 
@@ -1166,7 +1160,7 @@ rxintr(struct kse_softc *sc)
 #define PRINTERR(bit, str)						\
 			if (rxstat & (bit))				\
 				printf("%s: receive error: %s\n",	\
-				    sc->sc_dev.dv_xname, str)
+				    device_xname(sc->sc_dev), str)
 			PRINTERR(R0_TL, "frame too long");
 			PRINTERR(R0_RF, "runt frame");
 			PRINTERR(R0_CE, "bad FCS");
@@ -1194,8 +1188,7 @@ rxintr(struct kse_softc *sc)
 			continue;
 		}
 
-		ifp->if_ipackets++;
-		m->m_pkthdr.rcvif = ifp;
+		m_set_rcvif(m, ifp);
 		m->m_pkthdr.len = m->m_len = len;
 
 		if (sc->sc_mcsum) {
@@ -1205,11 +1198,7 @@ rxintr(struct kse_softc *sc)
 			if (rxstat & (R0_TCPE | R0_UDPE))
 				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 #ifdef KSEDIAGNOSTIC
 		if (kse_monitor_rxintr > 0) {
 			printf("m stat %x data %p len %d\n",
@@ -1264,7 +1253,7 @@ lnkchg(struct kse_softc *sc)
 	struct ifmediareq ifmr;
 
 #if 0 /* rambling link status */
-	printf("%s: link %s\n", sc->sc_dev.dv_xname,
+	printf("%s: link %s\n", device_xname(sc->sc_dev),
 	    (CSR_READ_2(sc, P1SR) & (1U << 5)) ? "up" : "down");
 #endif
 	ifmedia_sts(&sc->sc_ethercom.ec_if, &ifmr);
@@ -1324,11 +1313,11 @@ ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 		if (result & (1U << 3))
 			ifmr->ifm_active |= IFM_100_TX|IFM_FDX;
 		else if (result & (1U << 2))
-			ifmr->ifm_active |= IFM_100_TX;
+			ifmr->ifm_active |= IFM_100_TX|IFM_HDX;
 		else if (result & (1U << 1))
 			ifmr->ifm_active |= IFM_10_T|IFM_FDX;
 		else if (result & (1U << 0))
-			ifmr->ifm_active |= IFM_10_T;
+			ifmr->ifm_active |= IFM_10_T|IFM_HDX;
 		else
 			ifmr->ifm_active |= IFM_NONE;
 		if (ctl & (1U << 4))
@@ -1398,8 +1387,7 @@ ifmedia2_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 
 #ifdef KSE_EVENT_COUNTERS
 static void
-stat_tick(arg)
-	void *arg;
+stat_tick(void *arg)
 {
 	struct kse_softc *sc = arg;
 	struct ksext *ee = &sc->sc_ext;

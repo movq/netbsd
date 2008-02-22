@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_cardbus.c,v 1.56 2008/02/06 22:11:54 dyoung Exp $	*/
+/*	$NetBSD: if_tlp_cardbus.c,v 1.71 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,10 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.56 2008/02/06 22:11:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.71 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.56 2008/02/06 22:11:54 dyoung E
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -94,8 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.56 2008/02/06 22:11:54 dyoung E
 /*
  * PCI configuration space registers used by the Tulip.
  */
-#define	TULIP_PCI_IOBA		0x10	/* i/o mapped base */
-#define	TULIP_PCI_MMBA		0x14	/* memory mapped base */
+#define TULIP_PCI_IOBA PCI_BAR(0)	/* i/o mapped base */
+#define TULIP_PCI_MMBA PCI_BAR(1)	/* memory mapped base */
 #define	TULIP_PCI_CFDA		0x40	/* configuration driver area */
 
 #define	CFDA_SLEEP		0x80000000	/* sleep mode */
@@ -107,23 +95,20 @@ struct tulip_cardbus_softc {
 	/* CardBus-specific goo. */
 	void	*sc_ih;			/* interrupt handle */
 	cardbus_devfunc_t sc_ct;	/* our CardBus devfuncs */
-	cardbustag_t sc_tag;		/* our CardBus tag */
-	int	sc_csr;			/* CSR bits */
+	pcitag_t sc_tag;		/* our CardBus tag */
+	pcireg_t sc_csr;
 	bus_size_t sc_mapsize;		/* the size of mapped bus space
 					   region */
 
-	int	sc_cben;		/* CardBus enables */
 	int	sc_bar_reg;		/* which BAR to use */
 	pcireg_t sc_bar_val;		/* value of the BAR */
-
-	int	sc_intrline;		/* interrupt line */
 };
 
-int	tlp_cardbus_match(struct device *, struct cfdata *, void *);
-void	tlp_cardbus_attach(struct device *, struct device *, void *);
-int	tlp_cardbus_detach(struct device *, int);
+int	tlp_cardbus_match(device_t, cfdata_t, void *);
+void	tlp_cardbus_attach(device_t, device_t, void *);
+int	tlp_cardbus_detach(device_t, int);
 
-CFATTACH_DECL(tlp_cardbus, sizeof(struct tulip_cardbus_softc),
+CFATTACH_DECL_NEW(tlp_cardbus, sizeof(struct tulip_cardbus_softc),
     tlp_cardbus_match, tlp_cardbus_attach, tlp_cardbus_detach, tlp_activate);
 
 const struct tulip_cardbus_product {
@@ -196,13 +181,11 @@ void tlp_cardbus_get_quirks(struct tulip_cardbus_softc *,
     const u_int8_t *, const struct tlp_cardbus_quirks *);
 
 const struct tulip_cardbus_product *
-tlp_cardbus_lookup(ca)
-	const struct cardbus_attach_args *ca;
+tlp_cardbus_lookup(const struct cardbus_attach_args *ca)
 {
 	const struct tulip_cardbus_product *tcp;
 
-	for (tcp = tlp_cardbus_products;
-	     tlp_chip_names[tcp->tcp_chip] != NULL;
+	for (tcp = tlp_cardbus_products; tcp->tcp_chip != TULIP_CHIP_INVALID;
 	     tcp++) {
 		if (PCI_VENDOR(ca->ca_id) == tcp->tcp_vendor &&
 		    PCI_PRODUCT(ca->ca_id) == tcp->tcp_product)
@@ -212,10 +195,8 @@ tlp_cardbus_lookup(ca)
 }
 
 void
-tlp_cardbus_get_quirks(csc, enaddr, tpq)
-	struct tulip_cardbus_softc *csc;
-	const u_int8_t *enaddr;
-	const struct tlp_cardbus_quirks *tpq;
+tlp_cardbus_get_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr,
+    const struct tlp_cardbus_quirks *tpq)
 {
 
 	for (; tpq->tpq_func != NULL; tpq++) {
@@ -229,8 +210,7 @@ tlp_cardbus_get_quirks(csc, enaddr, tpq)
 }
 
 int
-tlp_cardbus_match(struct device *parent, struct cfdata *match,
-    void *aux)
+tlp_cardbus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -241,8 +221,7 @@ tlp_cardbus_match(struct device *parent, struct cfdata *match,
 }
 
 void
-tlp_cardbus_attach(struct device *parent, struct device *self,
-    void *aux)
+tlp_cardbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct tulip_cardbus_softc *csc = device_private(self);
 	struct tulip_softc *sc = &csc->sc_tulip;
@@ -253,6 +232,7 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 	bus_addr_t adr;
 	pcireg_t reg;
 
+	sc->sc_dev = self;
 	sc->sc_devno = 0;
 	sc->sc_dmat = ca->ca_dmat;
 	csc->sc_ct = ct;
@@ -294,8 +274,7 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 		 * differentiated by a "signature" register that
 		 * is like, but not identical, to a PCI ID register.
 		 */
-		reg = cardbus_conf_read(ct->ct_cc, ct->ct_cf, csc->sc_tag,
-		    0x80);
+		reg = Cardbus_conf_read(ct, csc->sc_tag, 0x80);
 		switch (reg) {
 		case 0x09811317:
 			sc->sc_chip = TULIP_CHIP_AN985;
@@ -313,39 +292,28 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 		break;
 	}
 
-	printf(": %s Ethernet, pass %d.%d\n",
-	    tlp_chip_names[sc->sc_chip],
+	aprint_normal(": %s Ethernet, pass %d.%d\n",
+	    tlp_chip_name(sc->sc_chip),
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/*
 	 * Map the device.
 	 */
-	csc->sc_csr = CARDBUS_COMMAND_MASTER_ENABLE;
+	csc->sc_csr = PCI_COMMAND_MASTER_ENABLE;
 	if (Cardbus_mapreg_map(ct, TULIP_PCI_MMBA,
-	    CARDBUS_MAPREG_TYPE_MEM, 0, &sc->sc_st, &sc->sc_sh, &adr,
+	    PCI_MAPREG_TYPE_MEM, 0, &sc->sc_st, &sc->sc_sh, &adr,
 	    &csc->sc_mapsize) == 0) {
-#if rbus
-#else
-		(*ct->ct_cf->cardbus_mem_open)(cc, 0, adr, adr+csc->sc_mapsize);
-#endif
-		csc->sc_cben = CARDBUS_MEM_ENABLE;
-		csc->sc_csr |= CARDBUS_COMMAND_MEM_ENABLE;
+		csc->sc_csr |= PCI_COMMAND_MEM_ENABLE;
 		csc->sc_bar_reg = TULIP_PCI_MMBA;
-		csc->sc_bar_val = adr | CARDBUS_MAPREG_TYPE_MEM;
+		csc->sc_bar_val = adr | PCI_MAPREG_TYPE_MEM;
 	} else if (Cardbus_mapreg_map(ct, TULIP_PCI_IOBA,
-	    CARDBUS_MAPREG_TYPE_IO, 0, &sc->sc_st, &sc->sc_sh, &adr,
+	    PCI_MAPREG_TYPE_IO, 0, &sc->sc_st, &sc->sc_sh, &adr,
 	    &csc->sc_mapsize) == 0) {
-#if rbus
-#else
-		(*ct->ct_cf->cardbus_io_open)(cc, 0, adr, adr+csc->sc_mapsize);
-#endif
-		csc->sc_cben = CARDBUS_IO_ENABLE;
-		csc->sc_csr |= CARDBUS_COMMAND_IO_ENABLE;
+		csc->sc_csr |= PCI_COMMAND_IO_ENABLE;
 		csc->sc_bar_reg = TULIP_PCI_IOBA;
-		csc->sc_bar_val = adr | CARDBUS_MAPREG_TYPE_IO;
+		csc->sc_bar_val = adr | PCI_MAPREG_TYPE_IO;
 	} else {
-		printf("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map device registers\n");
 		return;
 	}
 
@@ -410,8 +378,8 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 		 * MII-over-SIO, with no special reset routine.
 		 */
 		if (sc->sc_mediasw == NULL) {
-			printf("%s: defaulting to MII-over-SIO; no bets...\n",
-			    sc->sc_dev.dv_xname);
+			aprint_normal("%s: defaulting to MII-over-SIO; "
+			    "no bets...\n", device_xname(self));
 			sc->sc_mediasw = &tlp_sio_mii_mediasw;
 		}
 		break;
@@ -452,13 +420,9 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 
 	default:
  cant_cope:
-		printf("%s: sorry, unable to handle your board\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "sorry, unable to handle your board\n");
 		return;
 	}
-
-	/* Remember which interrupt line. */
-	csc->sc_intrline = ca->ca_intrline;
 
 	/*
 	 * Finish off the attach.
@@ -472,7 +436,7 @@ tlp_cardbus_attach(struct device *parent, struct device *self,
 }
 
 int
-tlp_cardbus_detach(struct device *self, int flags)
+tlp_cardbus_detach(device_t self, int flags)
 {
 	struct tulip_cardbus_softc *csc = device_private(self);
 	struct tulip_softc *sc = &csc->sc_tulip;
@@ -481,7 +445,7 @@ tlp_cardbus_detach(struct device *self, int flags)
 
 #if defined(DIAGNOSTIC)
 	if (ct == NULL)
-		panic("%s: data structure lacks", sc->sc_dev.dv_xname);
+		panic("%s: data structure lacks", device_xname(self));
 #endif
 
 	rv = tlp_detach(sc);
@@ -492,7 +456,7 @@ tlp_cardbus_detach(struct device *self, int flags)
 	 * Unhook the interrupt handler.
 	 */
 	if (csc->sc_ih != NULL)
-		cardbus_intr_disestablish(ct->ct_cc, ct->ct_cf, csc->sc_ih);
+		Cardbus_intr_disestablish(ct, csc->sc_ih);
 
 	/*
 	 * Release bus space and close window.
@@ -505,13 +469,10 @@ tlp_cardbus_detach(struct device *self, int flags)
 }
 
 int
-tlp_cardbus_enable(sc)
-	struct tulip_softc *sc;
+tlp_cardbus_enable(struct tulip_softc *sc)
 {
 	struct tulip_cardbus_softc *csc = (void *) sc;
 	cardbus_devfunc_t ct = csc->sc_ct;
-	cardbus_chipset_tag_t cc = ct->ct_cc;
-	cardbus_function_tag_t cf = ct->ct_cf;
 
 	/*
 	 * Power on the socket.
@@ -526,31 +487,24 @@ tlp_cardbus_enable(sc)
 	/*
 	 * Map and establish the interrupt.
 	 */
-	csc->sc_ih = cardbus_intr_establish(cc, cf, csc->sc_intrline, IPL_NET,
-	    tlp_intr, sc);
+	csc->sc_ih = Cardbus_intr_establish(ct, IPL_NET, tlp_intr, sc);
 	if (csc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt at %d\n",
-		    sc->sc_dev.dv_xname, csc->sc_intrline);
+		aprint_error_dev(sc->sc_dev,
+				 "unable to establish interrupt\n");
 		Cardbus_function_disable(csc->sc_ct);
 		return (1);
 	}
-	printf("%s: interrupting at %d\n", sc->sc_dev.dv_xname,
-	    csc->sc_intrline);
-
 	return (0);
 }
 
 void
-tlp_cardbus_disable(sc)
-	struct tulip_softc *sc;
+tlp_cardbus_disable(struct tulip_softc *sc)
 {
 	struct tulip_cardbus_softc *csc = (void *) sc;
 	cardbus_devfunc_t ct = csc->sc_ct;
-	cardbus_chipset_tag_t cc = ct->ct_cc;
-	cardbus_function_tag_t cf = ct->ct_cf;
 
 	/* Unhook the interrupt handler. */
-	cardbus_intr_disestablish(cc, cf, csc->sc_ih);
+	Cardbus_intr_disestablish(ct, csc->sc_ih);
 	csc->sc_ih = NULL;
 
 	/* Power down the socket. */
@@ -558,9 +512,7 @@ tlp_cardbus_disable(sc)
 }
 
 void
-tlp_cardbus_power(sc, why)
-	struct tulip_softc *sc;
-	int why;
+tlp_cardbus_power(struct tulip_softc *sc, int why)
 {
 
 	switch (why) {
@@ -574,13 +526,10 @@ tlp_cardbus_power(sc, why)
 }
 
 void
-tlp_cardbus_setup(csc)
-	struct tulip_cardbus_softc *csc;
+tlp_cardbus_setup(struct tulip_cardbus_softc *csc)
 {
 	struct tulip_softc *sc = &csc->sc_tulip;
 	cardbus_devfunc_t ct = csc->sc_ct;
-	cardbus_chipset_tag_t cc = ct->ct_cc;
-	cardbus_function_tag_t cf = ct->ct_cf;
 	pcireg_t reg;
 
 	/*
@@ -594,9 +543,9 @@ tlp_cardbus_setup(csc)
 		/*
 		 * Clear the "sleep mode" bit in the CFDA register.
 		 */
-		reg = cardbus_conf_read(cc, cf, csc->sc_tag, TULIP_PCI_CFDA);
+		reg = Cardbus_conf_read(ct, csc->sc_tag, TULIP_PCI_CFDA);
 		if (reg & (CFDA_SLEEP|CFDA_SNOOZE))
-			cardbus_conf_write(cc, cf, csc->sc_tag, TULIP_PCI_CFDA,
+			Cardbus_conf_write(ct, csc->sc_tag, TULIP_PCI_CFDA,
 			    reg & ~(CFDA_SLEEP|CFDA_SNOOZE));
 		break;
 
@@ -608,34 +557,28 @@ tlp_cardbus_setup(csc)
 	(void)cardbus_set_powerstate(ct, csc->sc_tag, PCI_PWR_D0);
 
 	/* Program the BAR. */
-	cardbus_conf_write(cc, cf, csc->sc_tag, csc->sc_bar_reg,
-	    csc->sc_bar_val);
-
-	/* Make sure the right access type is on the CardBus bridge. */
-	(*ct->ct_cf->cardbus_ctrl)(cc, csc->sc_cben);
-	(*ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+	Cardbus_conf_write(ct, csc->sc_tag, csc->sc_bar_reg, csc->sc_bar_val);
 
 	/* Enable the appropriate bits in the PCI CSR. */
-	reg = cardbus_conf_read(cc, cf, csc->sc_tag, PCI_COMMAND_STATUS_REG);
+	reg = Cardbus_conf_read(ct, csc->sc_tag, PCI_COMMAND_STATUS_REG);
 	reg &= ~(PCI_COMMAND_IO_ENABLE|PCI_COMMAND_MEM_ENABLE);
 	reg |= csc->sc_csr;
-	cardbus_conf_write(cc, cf, csc->sc_tag, PCI_COMMAND_STATUS_REG, reg);
+	Cardbus_conf_write(ct, csc->sc_tag, PCI_COMMAND_STATUS_REG, reg);
 
 	/*
 	 * Make sure the latency timer is set to some reasonable
 	 * value.
 	 */
-	reg = cardbus_conf_read(cc, cf, csc->sc_tag, PCI_BHLC_REG);
+	reg = Cardbus_conf_read(ct, csc->sc_tag, PCI_BHLC_REG);
 	if (PCI_LATTIMER(reg) < 0x20) {
 		reg &= ~(PCI_LATTIMER_MASK << PCI_LATTIMER_SHIFT);
 		reg |= (0x20 << PCI_LATTIMER_SHIFT);
-		cardbus_conf_write(cc, cf, csc->sc_tag, PCI_BHLC_REG, reg);
+		Cardbus_conf_write(ct, csc->sc_tag, PCI_BHLC_REG, reg);
 	}
 }
 
 void
-tlp_cardbus_x3201_reset(sc)
-	struct tulip_softc *sc;
+tlp_cardbus_x3201_reset(struct tulip_softc *sc)
 {
 	u_int32_t reg;
 
@@ -648,8 +591,7 @@ tlp_cardbus_x3201_reset(sc)
 }
 
 void
-tlp_cardbus_lxt_quirks(struct tulip_cardbus_softc *csc,
-    const u_int8_t *enaddr)
+tlp_cardbus_lxt_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr)
 {
 	struct tulip_softc *sc = &csc->sc_tulip;
 

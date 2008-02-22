@@ -1,32 +1,34 @@
-/*	$NetBSD: rpc_generic.c,v 1.22 2006/06/22 19:35:34 christos Exp $	*/
+/*	$NetBSD: rpc_generic.c,v 1.30 2017/05/03 21:39:27 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
  * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
@@ -41,7 +43,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: rpc_generic.c,v 1.22 2006/06/22 19:35:34 christos Exp $");
+__RCSID("$NetBSD: rpc_generic.c,v 1.30 2017/05/03 21:39:27 christos Exp $");
 #endif
 
 #include "namespace.h"
@@ -60,10 +62,12 @@ __RCSID("$NetBSD: rpc_generic.c,v 1.22 2006/06/22 19:35:34 christos Exp $");
 #include <stdio.h>
 #include <netdb.h>
 #include <netconfig.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 #include <rpc/nettype.h>
+
+#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -109,16 +113,16 @@ static const struct netid_af na_cvt[] = {
 };
 
 #if 0
-static char *strlocase __P((char *));
+static char *strlocase(char *);
 #endif
-static int getnettype __P((const char *));
+static int getnettype(const char *);
 
 /*
  * Cache the result of getrlimit(), so we don't have to do an
  * expensive call every time.
  */
 int
-__rpc_dtbsize()
+__rpc_dtbsize(void)
 {
 	static int tbsize;
 	struct rlimit rl;
@@ -142,9 +146,10 @@ __rpc_dtbsize()
  */
 u_int
 /*ARGSUSED*/
-__rpc_get_t_size(af, proto, size)
-	int af, proto;
-	int size;	/* Size requested */
+__rpc_get_t_size(
+	int af,
+	int proto,
+	int size)	/* Size requested */
 {
 	int maxsize, defsize;
 
@@ -171,8 +176,7 @@ __rpc_get_t_size(af, proto, size)
  * Find the appropriate address buffer size
  */
 u_int
-__rpc_get_a_size(af)
-	int af;
+__rpc_get_a_size(int af)
 {
 	switch (af) {
 	case AF_INET:
@@ -191,8 +195,7 @@ __rpc_get_a_size(af)
 
 #if 0
 static char *
-strlocase(p)
-	char *p;
+strlocase(char *p)
 {
 	char *t = p;
 
@@ -210,8 +213,7 @@ strlocase(p)
  * If nettype is NULL, it defaults to NETPATH.
  */
 static int
-getnettype(nettype)
-	const char *nettype;
+getnettype(const char *nettype)
 {
 	int i;
 
@@ -248,18 +250,15 @@ __rpc_getconfigp_setup(void)
 #endif
 
 struct netconfig *
-__rpc_getconfip(nettype)
-	const char *nettype;
+__rpc_getconfip(const char *nettype)
 {
 	char *netid;
-	char *netid_tcp = (char *) NULL;
-	char *netid_udp = (char *) NULL;
+	char *netid_tcp = NULL;
+	char *netid_udp = NULL;
 	static char *netid_tcp_main;
 	static char *netid_udp_main;
 	struct netconfig *dummy;
 #ifdef _REENTRANT
-	extern int __isthreaded;
-
 	if (__isthreaded == 0) {
 		netid_udp = netid_udp_main;
 		netid_tcp = netid_tcp_main;
@@ -287,6 +286,8 @@ __rpc_getconfip(nettype)
 			if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
 				if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
 					netid_tcp = strdup(nconf->nc_netid);
+					if (netid_tcp == NULL)
+						return NULL;
 #ifdef _REENTRANT
 					if (__isthreaded == 0)
 						netid_tcp_main = netid_tcp;
@@ -299,6 +300,8 @@ __rpc_getconfip(nettype)
 				} else
 				if (strcmp(nconf->nc_proto, NC_UDP) == 0) {
 					netid_udp = strdup(nconf->nc_netid);
+					if (netid_udp == NULL)
+						return NULL;
 #ifdef _REENTRANT
 					if (__isthreaded == 0)
 						netid_udp_main = netid_udp;
@@ -332,14 +335,13 @@ __rpc_getconfip(nettype)
  * __rpc_getconf().
  */
 void *
-__rpc_setconf(nettype)
-	const char *nettype;
+__rpc_setconf(const char *nettype)
 {
 	struct handle *handle;
 
 	/* nettype may be NULL; getnettype() supports that */
 
-	handle = (struct handle *) malloc(sizeof (struct handle));
+	handle = malloc(sizeof(*handle));
 	if (handle == NULL) {
 		return (NULL);
 	}
@@ -378,8 +380,7 @@ __rpc_setconf(nettype)
  * __rpc_setconf() should have been called previously.
  */
 struct netconfig *
-__rpc_getconf(vhandle)
-	void *vhandle;
+__rpc_getconf(void *vhandle)
 {
 	struct handle *handle;
 	struct netconfig *nconf;
@@ -455,8 +456,7 @@ __rpc_getconf(vhandle)
 }
 
 void
-__rpc_endconf(vhandle)
-	void * vhandle;
+__rpc_endconf(void *vhandle)
 {
 	struct handle *handle;
 
@@ -477,8 +477,7 @@ __rpc_endconf(vhandle)
  * Returns NULL if fails, else a non-NULL pointer.
  */
 void *
-rpc_nullproc(clnt)
-	CLIENT *clnt;
+rpc_nullproc(CLIENT *clnt)
 {
 	struct timeval TIMEOUT = {25, 0};
 
@@ -494,8 +493,7 @@ rpc_nullproc(clnt)
  * one succeeds in finding the netconf for the given fd.
  */
 struct netconfig *
-__rpcgettp(fd)
-	int fd;
+__rpcgettp(int fd)
 {
 	const char *netid;
 	struct __rpc_sockinfo si;
@@ -646,9 +644,12 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 
 	switch (af) {
 	case AF_INET:
+		if (nbuf->len < sizeof(*sinp)) {
+			return NULL;
+		}
 		sinp = nbuf->buf;
-		if (inet_ntop(af, &sinp->sin_addr, namebuf, sizeof namebuf)
-		    == NULL)
+		if (inet_ntop(af, &sinp->sin_addr, namebuf,
+		    (socklen_t)sizeof namebuf) == NULL)
 			return NULL;
 		port = ntohs(sinp->sin_port);
 		if (asprintf(&ret, "%s.%u.%u", namebuf, ((u_int32_t)port) >> 8,
@@ -657,9 +658,12 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		break;
 #ifdef INET6
 	case AF_INET6:
+		if (nbuf->len < sizeof(*sin6)) {
+			return NULL;
+		}
 		sin6 = nbuf->buf;
-		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof namebuf6)
-		    == NULL)
+		if (inet_ntop(af, &sin6->sin6_addr, namebuf6,
+		    (socklen_t)sizeof namebuf6) == NULL)
 			return NULL;
 		port = ntohs(sin6->sin6_port);
 		if (asprintf(&ret, "%s.%u.%u", namebuf6, ((u_int32_t)port) >> 8,
@@ -685,13 +689,15 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 	struct netbuf *ret = NULL;
 	char *addrstr, *p;
 	unsigned port, portlo, porthi;
+	size_t len;
 	struct sockaddr_in *sinp;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
 #endif
 	struct sockaddr_un *sun;
 
-	_DIAGASSERT(uaddr != NULL);
+	if (uaddr == NULL)
+		return NULL;
 
 	addrstr = strdup(uaddr);
 	if (addrstr == NULL)
@@ -717,13 +723,13 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		port = (porthi << 8) | portlo;
 	}
 
-	ret = (struct netbuf *)malloc(sizeof *ret);
+	ret = malloc(sizeof(*ret));
 	if (ret == NULL)
 		goto out;
 	
 	switch (af) {
 	case AF_INET:
-		sinp = (struct sockaddr_in *)malloc(sizeof *sinp);
+		sinp = malloc(sizeof(*sinp));
 		if (sinp == NULL)
 			goto out;
 		memset(sinp, 0, sizeof *sinp);
@@ -740,7 +746,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #ifdef INET6
 	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *)malloc(sizeof *sin6);
+		sin6 = malloc(sizeof(*sin6));
 		if (sin6 == NULL)
 			goto out;
 		memset(sin6, 0, sizeof *sin6);
@@ -757,13 +763,15 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #endif
 	case AF_LOCAL:
-		sun = (struct sockaddr_un *)malloc(sizeof *sun);
+		sun = malloc(sizeof(*sun));
 		if (sun == NULL)
 			goto out;
 		memset(sun, 0, sizeof *sun);
 		sun->sun_family = AF_LOCAL;
 		strncpy(sun->sun_path, addrstr, sizeof(sun->sun_path) - 1);
-		ret->len = ret->maxlen = sun->sun_len = SUN_LEN(sun);
+		len = SUN_LEN(sun);
+		_DIAGASSERT(__type_fit(uint8_t, len));
+		ret->len = ret->maxlen = sun->sun_len = (uint8_t)len;
 		ret->buf = sun;
 		break;
 	default:
@@ -891,5 +899,6 @@ __rpc_setnodelay(int fd, const struct __rpc_sockinfo *si)
 	int one = 1;
 	if (si->si_proto != IPPROTO_TCP)
 		return 0;
-	return setsockopt(fd, si->si_proto, TCP_NODELAY, &one, sizeof(one));
+	return setsockopt(fd, si->si_proto, TCP_NODELAY, &one,
+	    (socklen_t)sizeof(one));
 }

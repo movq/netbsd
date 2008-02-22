@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.4 2003/03/22 14:26:41 simonb Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.7 2011/07/09 16:03:01 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -30,7 +30,7 @@
 #ifndef _ALGOR_AUTOCONF_H_
 #define	_ALGOR_AUTOCONF_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /*
  * Machine-dependent structures for autoconfiguration
@@ -44,12 +44,13 @@ struct mainbus_attach_args {
 
 #ifdef _KERNEL
 extern char algor_ethaddr[];
-extern u_long cycles_per_hz;
-extern u_int delay_divisor;
 
-void	(*algor_iointr)(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+extern void	(*algor_iointr)(int, vaddr_t, uint32_t);
+extern void *	(*algor_intr_establish)(int, int (*)(void *), void *);
+extern void	(*algor_intr_disestablish)(void *);
 
-void	led_display(u_int8_t, u_int8_t, u_int8_t, u_int8_t);
+
+void	led_display(uint8_t, uint8_t, uint8_t, uint8_t);
 #endif /* _KERNEL */
 
 #endif	/* !_ALGOR_AUTOCONF_H_ */

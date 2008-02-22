@@ -1,4 +1,4 @@
-/*	$NetBSD: addch.c,v 1.15 2007/05/28 15:01:53 blymn Exp $	*/
+/*	$NetBSD: addch.c,v 1.18 2017/01/06 14:06:00 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)addch.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: addch.c,v 1.15 2007/05/28 15:01:53 blymn Exp $");
+__RCSID("$NetBSD: addch.c,v 1.18 2017/01/06 14:06:00 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -51,6 +51,7 @@ __RCSID("$NetBSD: addch.c,v 1.15 2007/05/28 15:01:53 blymn Exp $");
 int
 addch(chtype ch)
 {
+
 	return waddch(stdscr, ch);
 }
 
@@ -61,6 +62,7 @@ addch(chtype ch)
 int
 mvaddch(int y, int x, chtype ch)
 {
+
 	return mvwaddch(stdscr, y, x, ch);
 }
 
@@ -71,6 +73,7 @@ mvaddch(int y, int x, chtype ch)
 int
 mvwaddch(WINDOW *win, int y, int x, chtype ch)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -94,12 +97,10 @@ waddch(WINDOW *win, chtype ch)
 #endif
 
 #ifdef HAVE_WCHAR
-	cc.vals[0] = ch & __CHARTEXT;
-	cc.elements = 1;
-	cc.attributes = ch & __ATTRIBUTES;
+	__cursesi_chtype_to_cchar(ch, &cc);
 #else
-	buf.ch = (wchar_t) ch & __CHARTEXT;
-	buf.attr = (attr_t) ch & __ATTRIBUTES;
+	buf.ch = (wchar_t)ch & __CHARTEXT;
+	buf.attr = (attr_t)ch & __ATTRIBUTES;
 #endif
 
 #ifdef DEBUG
@@ -113,9 +114,9 @@ waddch(WINDOW *win, chtype ch)
 #endif
 
 #ifdef HAVE_WCHAR
-	return (wadd_wch(win, &cc));
+	return wadd_wch(win, &cc);
 #else
-	return (__waddch(win, &buf));
+	return __waddch(win, &buf);
 #endif
 }
 
@@ -126,5 +127,5 @@ __waddch(WINDOW *win, __LDATA *dp)
 
 	buf[0] = dp->ch;
 	buf[1] = '\0';
-	return (__waddbytes(win, buf, 1, dp->attr));
+	return _cursesi_waddbytes(win, buf, 1, dp->attr, 1);
 }

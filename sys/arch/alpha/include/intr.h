@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.63 2008/01/04 21:47:16 ad Exp $ */
+/* $NetBSD: intr.h,v 1.72 2017/01/14 00:35:37 christos Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,8 +61,7 @@
 #define _ALPHA_INTR_H_
 
 #include <sys/evcnt.h>
-
-#include <machine/atomic.h>
+#include <machine/cpu.h>
 
 /*
  * The Alpha System Control Block.  This is 8k long, and you get
@@ -94,7 +86,7 @@
 
 #define	SCB_NIOVECS	SCB_VECTOIDX(SCB_SIZE - SCB_IOVECBASE)
 
-struct scbvec { 
+struct scbvec {
 	void	(*scb_func)(void *, u_long);
 	void	*scb_arg;
 };
@@ -155,7 +147,7 @@ static __inline int
 _splraise(int s)
 {
 	int cur = alpha_pal_rdps() & ALPHA_PSL_IPL_MASK;
-	return (s > cur ? alpha_pal_swpipl(s) : cur);
+	return (s > cur ? (int)alpha_pal_swpipl(s) : cur);
 }
 
 #define	splraiseipl(icookie)	_splraise((icookie)._psl)
@@ -170,12 +162,11 @@ _splraise(int s)
 #define	ALPHA_IPI_SHOOTDOWN		(1UL << 2)
 #define	ALPHA_IPI_IMB			(1UL << 3)
 #define	ALPHA_IPI_AST			(1UL << 4)
-#define	ALPHA_IPI_SYNCH_FPU		(1UL << 5)
-#define	ALPHA_IPI_DISCARD_FPU		(1UL << 6)
-#define	ALPHA_IPI_PAUSE			(1UL << 7)
-#define	ALPHA_IPI_PMAP_REACTIVATE	(1UL << 8)
+#define	ALPHA_IPI_PAUSE			(1UL << 5)
+#define	ALPHA_IPI_XCALL			(1UL << 6)
+#define	ALPHA_IPI_GENERIC		(1UL << 7)
 
-#define	ALPHA_NIPIS		9	/* must not exceed 64 */
+#define	ALPHA_NIPIS			8	/* must not exceed 64 */
 
 struct cpu_info;
 struct trapframe;

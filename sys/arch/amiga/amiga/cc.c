@@ -1,4 +1,4 @@
-/*	$NetBSD: cc.c,v 1.18 2003/05/03 18:10:42 wiz Exp $	*/
+/*	$NetBSD: cc.c,v 1.27 2017/08/20 11:03:04 maxv Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,13 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cc.c,v 1.18 2003/05/03 18:10:42 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cc.c,v 1.27 2017/08/20 11:03:04 maxv Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/queue.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <amiga/amiga/custom.h>
 #include <amiga/amiga/cc.h>
@@ -53,7 +51,7 @@ vaddr_t CUSTOMADDR, CUSTOMbase;
 
 /* init all the "custom chips" */
 void
-custom_chips_init()
+custom_chips_init(void)
 {
 	cc_init_chipmem();
 	cc_init_vbl();
@@ -68,8 +66,7 @@ custom_chips_init()
 LIST_HEAD(vbllist, vbl_node) vbl_list;
 
 void
-turn_vbl_function_off(n)
-	struct vbl_node *n;
+turn_vbl_function_off(struct vbl_node *n)
 {
 	if (n->flags & VBLNF_OFF)
 		return;
@@ -81,24 +78,20 @@ turn_vbl_function_off(n)
 
 /* allow function to be called on next vbl interrupt. */
 void
-turn_vbl_function_on(n)
-	struct vbl_node *n;
+turn_vbl_function_on(struct vbl_node *n)
 {
 	n->flags &= (short) ~(VBLNF_OFF);
 }
 
 void
-add_vbl_function(add, priority, data)
-	struct vbl_node *add;
-	short priority;
-	void *data;
+add_vbl_function(struct vbl_node *add, short priority, void *data)
 {
 	int s;
 	struct vbl_node *n, *prev;
 
 	s = spl3();
 	prev = NULL;
-	for (n = vbl_list.lh_first; n != NULL; n = n->link.le_next) {
+	LIST_FOREACH(n, &vbl_list, link) {
 		if (add->priority > n->priority) {
 			/* insert add_node before. */
 			if (prev == NULL) {
@@ -111,7 +104,7 @@ add_vbl_function(add, priority, data)
 		}
 		prev = n;
 	}
-	if (add) {
+	if (add != NULL) {
 		if (prev == NULL) {
 			LIST_INSERT_HEAD(&vbl_list, add, link);
 		} else {
@@ -122,8 +115,7 @@ add_vbl_function(add, priority, data)
 }
 
 void
-remove_vbl_function(n)
-	struct vbl_node *n;
+remove_vbl_function(struct vbl_node *n)
 {
 	int s;
 
@@ -134,12 +126,12 @@ remove_vbl_function(n)
 
 /* Level 3 hardware interrupt */
 void
-vbl_handler()
+vbl_handler(void)
 {
 	struct vbl_node *n;
 
 	/* handle all vbl functions */
-	for (n = vbl_list.lh_first; n != NULL; n = n->link.le_next) {
+	LIST_FOREACH(n, &vbl_list, link) {
 		if (n->flags & VBLNF_TURNOFF) {
 			n->flags |= VBLNF_OFF;
 			n->flags &= ~(VBLNF_TURNOFF);
@@ -152,7 +144,7 @@ vbl_handler()
 }
 
 void
-cc_init_vbl()
+cc_init_vbl(void)
 {
 	LIST_INIT(&vbl_list);
 	/*
@@ -167,13 +159,13 @@ cc_init_vbl()
  */
 
 void
-cc_init_blitter()
+cc_init_blitter(void)
 {
 }
 
 /* test twice to cover blitter bugs if BLTDONE (BUSY) is set it is not done. */
 int
-is_blitter_busy()
+is_blitter_busy(void)
 {
 	u_short bb;
 
@@ -184,7 +176,7 @@ is_blitter_busy()
 }
 
 void
-wait_blit()
+wait_blit(void)
 {
 	/*
 	 * V40 state this covers all blitter bugs.
@@ -194,30 +186,27 @@ wait_blit()
 }
 
 void
-blitter_handler()
+blitter_handler(void)
 {
 	custom.intreq = INTF_BLIT;
 }
 
 
 void
-do_blit(size)
-	u_short size;
+do_blit(u_short size)
 {
 	custom.bltsize = size;
 }
 
 void
-set_blitter_control(con0, con1)
-	u_short con0, con1;
+set_blitter_control(u_short con0, u_short con1)
 {
 	custom.bltcon0 = con0;
 	custom.bltcon1 = con1;
 }
 
 void
-set_blitter_mods(a, b, c, d)
-	u_short a, b, c, d;
+set_blitter_mods(u_short a, u_short b, u_short c, u_short d)
 {
 	custom.bltamod = a;
 	custom.bltbmod = b;
@@ -226,16 +215,14 @@ set_blitter_mods(a, b, c, d)
 }
 
 void
-set_blitter_masks(fm, lm)
-	u_short fm, lm;
+set_blitter_masks(u_short fm, u_short lm)
 {
 	custom.bltafwm = fm;
 	custom.bltalwm = lm;
 }
 
 void
-set_blitter_data(da, db, dc)
-	u_short da, db, dc;
+set_blitter_data(u_short da, u_short db, u_short dc)
 {
 	custom.bltadat = da;
 	custom.bltbdat = db;
@@ -243,8 +230,7 @@ set_blitter_data(da, db, dc)
 }
 
 void
-set_blitter_pointers(a, b, c, d)
-	void *a, *b, *c, *d;
+set_blitter_pointers(void *a, void *b, void *c, void *d)
 {
 	custom.bltapt = a;
 	custom.bltbpt = b;
@@ -262,7 +248,7 @@ set_blitter_pointers(a, b, c, d)
  * sleep/wakeup system newly introduced in the vbl manager
  */
 void
-wait_tof()
+wait_tof(void)
 {
 	/*
 	 * wait until bottom of frame.
@@ -287,9 +273,7 @@ wait_tof()
 }
 
 cop_t *
-find_copper_inst(l, inst)
-	cop_t *l;
-	u_short inst;
+find_copper_inst(cop_t *l, u_short inst)
 {
 	cop_t *r = NULL;
 	while ((l->cp.data & 0xff01ff01) != 0xff01ff00) {
@@ -303,8 +287,7 @@ find_copper_inst(l, inst)
 }
 
 void
-install_copper_list(l)
-	cop_t *l;
+install_copper_list(cop_t *l)
 {
 	wait_tof();
 	wait_tof();
@@ -313,7 +296,7 @@ install_copper_list(l)
 
 
 void
-cc_init_copper()
+cc_init_copper(void)
 {
 }
 
@@ -321,7 +304,7 @@ cc_init_copper()
  * level 3 interrupt
  */
 void
-copper_handler()
+copper_handler(void)
 {
 	custom.intreq = INTF_COPER;
 }
@@ -339,7 +322,7 @@ struct audio_channel channel[4];
 struct vbl_node audio_vbl_node;
 
 void
-cc_init_audio()
+cc_init_audio(void)
 {
 	int i;
 
@@ -351,10 +334,10 @@ cc_init_audio()
 	/*
 	 * initialize audio channels to off.
 	 */
-	for (i=0; i < 4; i++) {
+	for (i = 0; i < 4; i++) {
 		channel[i].play_count = 0;
-		channel[i].isaudio=0;
-		channel[i].handler=NULL;
+		channel[i].isaudio = 0;
+		channel[i].handler = NULL;
 	}
 }
 
@@ -363,13 +346,12 @@ cc_init_audio()
  * Audio Interrupt Handler
  */
 void
-audio_handler()
+audio_handler(void)
 {
-	u_short audio_dma, disable_dma, flag, ir;
+	u_short audio_dma, flag, ir;
 	int i;
 
 	audio_dma = custom.dmaconr;
-	disable_dma = 0;
 
 	/*
 	 * only check channels who have DMA enabled.
@@ -435,9 +417,7 @@ out:
 }
 
 void
-play_sample(len, data, period, volume, channels, count)
-	u_short len, *data, period, volume, channels;
-	u_long count;
+play_sample(u_short len, u_short *data, u_short period, u_short volume, u_short channels, u_long count)
 {
 	u_short dmabits, ch;
 	register int i;
@@ -477,13 +457,13 @@ play_sample(len, data, period, volume, channels, count)
  * Chipmem allocator.
  */
 
-static CIRCLEQ_HEAD(chiplist, mem_node) chip_list;
-static CIRCLEQ_HEAD(freelist, mem_node) free_list;
+static TAILQ_HEAD(chiplist, mem_node) chip_list;
+static TAILQ_HEAD(freelist, mem_node) free_list;
 static u_long   chip_total;		/* total free. */
 static u_long   chip_size;		/* size of it all. */
 
 void
-cc_init_chipmem()
+cc_init_chipmem(void)
 {
 	int s = splhigh ();
 	struct mem_node *mem;
@@ -494,17 +474,16 @@ cc_init_chipmem()
 	mem = (struct mem_node *)chipmem_steal(chip_size);
 	mem->size = chip_total;
 
-	CIRCLEQ_INIT(&chip_list);
-	CIRCLEQ_INIT(&free_list);
+	TAILQ_INIT(&chip_list);
+	TAILQ_INIT(&free_list);
 
-	CIRCLEQ_INSERT_HEAD(&chip_list, mem, link);
-	CIRCLEQ_INSERT_HEAD(&free_list, mem, free_link);
+	TAILQ_INSERT_HEAD(&chip_list, mem, link);
+	TAILQ_INSERT_HEAD(&free_list, mem, free_link);
 	splx(s);
 }
 
 void *
-alloc_chipmem(size)
-	u_long size;
+alloc_chipmem(u_long size)
 {
 	int s;
 	struct mem_node *mn, *new;
@@ -520,20 +499,22 @@ alloc_chipmem(size)
 	/*
 	 * walk list of available nodes.
 	 */
-	mn = free_list.cqh_first;
-	while (size > mn->size && mn != (void *)&free_list)
-		mn = mn->free_link.cqe_next;
+	TAILQ_FOREACH(mn, &free_list, free_link)
+		if (size <= mn->size)
+			break;
 
-	if (mn == (void *)&free_list)
-		return(NULL);
+	if (mn == NULL) {
+		splx(s);
+		return NULL;
+	}
 
 	if ((mn->size - size) <= sizeof (*mn)) {
 		/*
 		 * our allocation would not leave room
 		 * for a new node in between.
 		 */
-		CIRCLEQ_REMOVE(&free_list, mn, free_link);
-		mn->free_link.cqe_next = NULL;
+		TAILQ_REMOVE(&free_list, mn, free_link);
+		mn->type = MNODE_USED;
 		size = mn->size;	 /* increase size. (or same) */
 		chip_total -= mn->size;
 		splx(s);
@@ -552,8 +533,8 @@ alloc_chipmem(size)
 	 * add split node to node list
 	 * and mark as not on free list
 	 */
-	CIRCLEQ_INSERT_AFTER(&chip_list, new, mn, link);
-	mn->free_link.cqe_next = NULL;
+	TAILQ_INSERT_AFTER(&chip_list, new, mn, link);
+	mn->type = MNODE_USED;
 
 	chip_total -= size + sizeof(struct mem_node);
 	splx(s);
@@ -561,8 +542,7 @@ alloc_chipmem(size)
 }
 
 void
-free_chipmem(mem)
-	void *mem;
+free_chipmem(void *mem)
 {
 	struct mem_node *mn, *next, *prev;
 	int s;
@@ -572,67 +552,68 @@ free_chipmem(mem)
 
 	s = splhigh();
 	mn = (struct mem_node *)mem - 1;
-	next = mn->link.cqe_next;
-	prev = mn->link.cqe_prev;
+	next = TAILQ_NEXT(mn, link);
+	prev = TAILQ_PREV(mn, chiplist, link);
 
 	/*
 	 * check ahead of us.
 	 */
-	if (next->link.cqe_next != (void *)&chip_list &&
-	    next->free_link.cqe_next) {
+	if (next->type == MNODE_FREE) {
 		/*
 		 * if next is: a valid node and a free node. ==> merge
 		 */
-		CIRCLEQ_INSERT_BEFORE(&free_list, next, mn, free_link);
-		CIRCLEQ_REMOVE(&chip_list, next, link);
-		CIRCLEQ_REMOVE(&chip_list, next, free_link);
+		TAILQ_INSERT_BEFORE(next, mn, free_link);
+		mn->type = MNODE_FREE;
+		TAILQ_REMOVE(&chip_list, next, link);
+		TAILQ_REMOVE(&free_list, next, free_link);
 		chip_total += mn->size + sizeof(struct mem_node);
 		mn->size += next->size + sizeof(struct mem_node);
 	}
-	if (prev->link.cqe_prev != (void *)&chip_list &&
-	    prev->free_link.cqe_prev) {
+	if (prev->type == MNODE_FREE) {
 		/*
 		 * if prev is: a valid node and a free node. ==> merge
 		 */
-		if (mn->free_link.cqe_next == NULL)
+		if (mn->type != MNODE_FREE)
 			chip_total += mn->size + sizeof(struct mem_node);
 		else {
 			/* already on free list */
-			CIRCLEQ_REMOVE(&free_list, mn, free_link);
+			TAILQ_REMOVE(&free_list, mn, free_link);
+			mn->type = MNODE_USED;
 			chip_total += sizeof(struct mem_node);
 		}
-		CIRCLEQ_REMOVE(&chip_list, mn, link);
+		TAILQ_REMOVE(&chip_list, mn, link);
 		prev->size += mn->size + sizeof(struct mem_node);
-	} else if (mn->free_link.cqe_next == NULL) {
+	} else if (mn->type != MNODE_FREE) {
 		/*
 		 * we still are not on free list and we need to be.
 		 * <-- | -->
 		 */
-		while (next->link.cqe_next != (void *)&chip_list &&
-		    prev->link.cqe_prev != (void *)&chip_list) {
-			if (next->free_link.cqe_next) {
-				CIRCLEQ_INSERT_BEFORE(&free_list, next, mn,
-				    free_link);
+		while (next != NULL && prev != NULL) {
+			if (next->type == MNODE_FREE) {
+				TAILQ_INSERT_BEFORE(next, mn, free_link);
+				mn->type = MNODE_FREE;
 				break;
 			}
-			if (prev->free_link.cqe_next) {
-				CIRCLEQ_INSERT_AFTER(&free_list, prev, mn,
+			if (prev->type == MNODE_FREE) {
+				TAILQ_INSERT_AFTER(&free_list, prev, mn,
 				    free_link);
+				mn->type = MNODE_FREE;
 				break;
 			}
-			prev = prev->link.cqe_prev;
-			next = next->link.cqe_next;
+			prev = TAILQ_PREV(prev, chiplist, link);
+			next = TAILQ_NEXT(next, link);
 		}
-		if (mn->free_link.cqe_next == NULL) {
-			if (next->link.cqe_next == (void *)&chip_list) {
+		if (mn->type != MNODE_FREE) {
+			if (next == NULL) {
 				/*
 				 * we are not on list so we can add
 				 * ourselves to the tail. (we walked to it.)
 				 */
-				CIRCLEQ_INSERT_TAIL(&free_list,mn,free_link);
+				TAILQ_INSERT_TAIL(&free_list,mn,free_link);
 			} else {
-				CIRCLEQ_INSERT_HEAD(&free_list,mn,free_link);
+				TAILQ_INSERT_HEAD(&free_list,mn,free_link);
 			}
+			mn->type = MNODE_FREE;
 		}
 		chip_total += mn->size;	/* add our helpings to the pool. */
 	}
@@ -640,8 +621,7 @@ free_chipmem(mem)
 }
 
 u_long
-sizeof_chipmem(mem)
-	void *mem;
+sizeof_chipmem(void *mem)
 {
 	struct mem_node *mn;
 
@@ -653,8 +633,7 @@ sizeof_chipmem(mem)
 }
 
 u_long
-avail_chipmem(largest)
-	int largest;
+avail_chipmem(int largest)
 {
 	struct mem_node *mn;
 	u_long val;
@@ -665,8 +644,7 @@ avail_chipmem(largest)
 		val = chip_total;
 	else {
 		s = splhigh();
-		for (mn = free_list.cqh_first; mn != (void *)&free_list;
-		     mn = mn->free_link.cqe_next) {
+		TAILQ_FOREACH(mn, &free_list, free_link) {
 			if (mn->size > val)
 				val = mn->size;
 		}

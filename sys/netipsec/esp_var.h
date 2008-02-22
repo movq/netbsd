@@ -1,5 +1,5 @@
-/*	$NetBSD: esp_var.h,v 1.3 2005/12/10 23:44:08 elad Exp $	*/
-/*	$FreeBSD: src/sys/netipsec/esp_var.h,v 1.1.4.1 2003/01/24 05:11:35 sam Exp $	*/
+/*	$NetBSD: esp_var.h,v 1.6 2018/04/19 08:27:38 maxv Exp $	*/
+/*	$FreeBSD: esp_var.h,v 1.1.4.1 2003/01/24 05:11:35 sam Exp $	*/
 /*	$OpenBSD: ip_esp.h,v 1.37 2002/06/09 16:26:10 itojun Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
@@ -40,40 +40,35 @@
 #ifndef _NETIPSEC_ESP_VAR_H_
 #define _NETIPSEC_ESP_VAR_H_
 
-/*
- * These define the algorithm indices into the histogram.  They're
- * presently based on the PF_KEY v2 protocol values which is bogus;
- * they should be decoupled from the protocol at which time we can
- * pack them and reduce the size of the array to a reasonable value.
- */
-#define	ESP_ALG_MAX	256		/* NB: could be < but skipjack is 249 */
+#define	ESP_STAT_HDROPS		0	/* packet shorter than header shows */
+#define	ESP_STAT_NOPF		1	/* protocol family not supported */
+#define	ESP_STAT_NOTDB		2
+#define	ESP_STAT_BADKCR		3
+#define	ESP_STAT_QFULL		4
+#define	ESP_STAT_NOXFORM	5
+#define	ESP_STAT_BADILEN	6
+#define	ESP_STAT_WRAP		7	/* replay counter wrapped around */
+#define	ESP_STAT_BADENC		8	/* bad encryption detected */
+#define	ESP_STAT_BADAUTH	9	/* (only valid for xforms with auth) */
+#define	ESP_STAT_REPLAY		10	/* possible packet replay detected */
+#define	ESP_STAT_INPUT		11	/* input ESP packets */
+#define	ESP_STAT_OUTPUT		12	/* output ESP packets */
+#define	ESP_STAT_INVALID	13	/* trying to use an invalid TDB */
+#define	ESP_STAT_IBYTES		14	/* input bytes */
+#define	ESP_STAT_OBYTES		15	/* output bytes */
+#define	ESP_STAT_TOOBIG		16	/* packet got larger than IP_MAXPACKET */
+#define	ESP_STAT_PDROPS		17	/* packet blocked due to policy */
+#define	ESP_STAT_CRYPTO		18	/* crypto processing failure */
+#define	ESP_STAT_TUNNEL		19	/* tunnel sanity check failure */
+#define	ESP_STAT_HIST		20	/* per-algorithm op count */
 
-struct espstat {
-	u_int64_t	esps_hdrops;	/* Packet shorter than header shows */
-	u_int64_t	esps_nopf;	/* Protocol family not supported */
-	u_int64_t	esps_notdb;
-	u_int64_t	esps_badkcr;
-	u_int64_t	esps_qfull;
-	u_int64_t	esps_noxform;
-	u_int64_t	esps_badilen;
-	u_int64_t	esps_wrap;	/* Replay counter wrapped around */
-	u_int64_t	esps_badenc;	/* Bad encryption detected */
-	u_int64_t	esps_badauth;	/* Only valid for transforms with auth */
-	u_int64_t	esps_replay;	/* Possible packet replay detected */
-	u_int64_t	esps_input;	/* Input ESP packets */
-	u_int64_t	esps_output;	/* Output ESP packets */
-	u_int64_t	esps_invalid;	/* Trying to use an invalid TDB */
-	u_int64_t	esps_ibytes;	/* Input bytes */
-	u_int64_t	esps_obytes;	/* Output bytes */
-	u_int64_t	esps_toobig;	/* Packet got larger than IP_MAXPACKET */
-	u_int64_t	esps_pdrops;	/* Packet blocked due to policy */
-	u_int64_t	esps_crypto;	/* Crypto processing failure */
-	u_int64_t	esps_tunnel;	/* Tunnel sanity check failure */
-	u_int64_t	esps_hist[ESP_ALG_MAX];	/* Per-algorithm op count */
-};
+/* space for SADB_EALG_STATS_NUM counters */
+#define	ESP_ALG_MAX		SADB_EALG_STATS_NUM
+#define	ESP_ALG_STR		SADB_EALG_STATS_STR
+#define	ESP_NSTATS		(ESP_STAT_HIST + ESP_ALG_MAX)
 
 #ifdef _KERNEL
+extern  const uint8_t esp_stats[256];
 extern	int esp_enable;
-extern	struct espstat espstat;
 #endif /* _KERNEL */
 #endif /* !_NETIPSEC_ESP_VAR_H_ */

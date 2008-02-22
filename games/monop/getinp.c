@@ -1,4 +1,4 @@
-/*	$NetBSD: getinp.c,v 1.16 2008/02/19 09:45:02 dholland Exp $	*/
+/*	$NetBSD: getinp.c,v 1.19 2012/06/19 05:35:32 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,14 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)getinp.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: getinp.c,v 1.16 2008/02/19 09:45:02 dholland Exp $");
+__RCSID("$NetBSD: getinp.c,v 1.19 2012/06/19 05:35:32 dholland Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include "monop.ext"
+
+#include "monop.h"
 
 #define	LINE	70
 
@@ -50,23 +51,17 @@ static char	buf[257];
 static int comp(const char *);
 
 int
-getinp(prompt, lst)
-	const char *prompt, *const lst[];
+getinp(const char *prompt, const char *const lst [])
 {
 	int i, n_match, match = 0;
 	char *sp;
-	int c;
 
 	for (;;) {
 		printf("%s", prompt);
-		for (sp = buf; (c = getchar()) != '\n'; ) {
-			if (c == -1)
-				return 0;
-			*sp = c;
-			if (sp != buf || *sp != ' ')
-				sp++;
+		fgets(buf, sizeof(buf), stdin);
+		if (feof(stdin)) {
+			return 0;
 		}
-		*sp = c;
 		if (buf[0] == '?' && buf[1] == '\n') {
 			printf("Valid inputs are: ");
 			for (i = 0, match = 18; lst[i]; i++) {
@@ -88,7 +83,8 @@ getinp(prompt, lst)
 			}
 			continue;
 		}
-		*sp = '\0';
+		if ((sp = strchr(buf, '\n')) != NULL)
+			*sp = '\0';
 		for (sp = buf; *sp; sp++)
 			*sp = tolower((unsigned char)*sp);
 		for (i = n_match = 0; lst[i]; i++)
@@ -105,8 +101,7 @@ getinp(prompt, lst)
 }
 
 static int
-comp(s1)
-	const char *s1;
+comp(const char *s1)
 {
 	const char *sp, *tsp;
 	char c;

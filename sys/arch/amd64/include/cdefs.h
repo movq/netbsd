@@ -1,8 +1,8 @@
-/*	$NetBSD: cdefs.h,v 1.1 2003/04/26 18:39:39 fvdl Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.3 2012/01/20 14:08:05 joerg Exp $	*/
 
-#ifndef	_MACHINE_CDEFS_H_
-#define	_MACHINE_CDEFS_H_
+#ifndef	_X86_64_CDEFS_H_
+#define	_X86_64_CDEFS_H_
 
-/* No arch-specific cdefs. */
+#define __ALIGNBYTES		(sizeof(long) - 1)
 
-#endif /* !_MACHINE_CDEFS_H_ */
+#endif /* !_X86_64_CDEFS_H_ */

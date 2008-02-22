@@ -1,4 +1,4 @@
-/* $NetBSD: kill.c,v 1.24 2006/03/17 22:30:11 christos Exp $ */
+/* $NetBSD: kill.c,v 1.28 2017/06/26 22:09:16 kre Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint) && !defined(SHELL)
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)kill.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kill.c,v 1.24 2006/03/17 22:30:11 christos Exp $");
+__RCSID("$NetBSD: kill.c,v 1.28 2017/06/26 22:09:16 kre Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,6 +49,8 @@ __RCSID("$NetBSD: kill.c,v 1.24 2006/03/17 22:30:11 christos Exp $");
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <inttypes.h>
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
@@ -56,21 +58,24 @@ __RCSID("$NetBSD: kill.c,v 1.24 2006/03/17 22:30:11 christos Exp $");
 #include <sys/ioctl.h>
 
 #ifdef SHELL            /* sh (aka ash) builtin */
+int killcmd(int, char *argv[]);
 #define main killcmd
 #include "../../bin/sh/bltin/bltin.h"
 #endif /* SHELL */ 
 
-static void nosig(char *);
+__dead static void nosig(const char *);
 static void printsignals(FILE *);
-static int signame_to_signum(char *);
-static void usage(void);
-int main(int, char *[]);
+static int signum(const char *);
+static pid_t processnum(const char *);
+__dead static void usage(void);
 
 int
 main(int argc, char *argv[])
 {
-	int errors, numsig, pid;
-	char *ep;
+	int errors;
+	int numsig;
+	pid_t pid;
+	const char *sn;
 
 	setprogname(argv[0]);
 	setlocale(LC_ALL, "");
@@ -80,60 +85,91 @@ main(int argc, char *argv[])
 	numsig = SIGTERM;
 
 	argc--, argv++;
-	if (strcmp(*argv, "-l") == 0) {
-		argc--, argv++;
-		if (argc > 1)
-			usage();
-		if (argc == 1) {
-			if (isdigit((unsigned char)**argv) == 0)
-				usage();
-			numsig = strtol(*argv, &ep, 10);
-			if (*ep != '\0') {
-				errx(EXIT_FAILURE, "illegal signal number: %s",
-						*argv);
-				/* NOTREACHED */
+
+	/*
+	 * Process exactly 1 option, if there is one.
+	 */
+	if (argv[0][0] == '-') {
+		switch (argv[0][1]) {
+		case 'l':
+			if (argv[0][2] != '\0')
+				sn = argv[0] + 2;
+			else {
+				argc--; argv++;
+				sn = argv[0];
 			}
-			if (numsig >= 128)
-				numsig -= 128;
-			if (numsig <= 0 || numsig >= NSIG)
-				nosig(*argv);
-			printf("%s\n", sys_signame[numsig]);
+			if (argc > 1)
+				usage();
+			if (argc == 1) {
+				if (isdigit((unsigned char)*sn) == 0)
+					usage();
+				numsig = signum(sn);
+				if (numsig >= 128)
+					numsig -= 128;
+				if (numsig == 0 || signalnext(numsig) == -1)
+					nosig(sn);
+				sn = signalname(numsig);
+				if (sn == NULL)
+					errx(EXIT_FAILURE,
+					   "unknown signal number: %d", numsig);
+				printf("%s\n", sn);
+				exit(0);
+			}
+			printsignals(stdout);
 			exit(0);
+
+		case 's':
+			if (argv[0][2] != '\0')
+				sn = argv[0] + 2;
+			else {
+				argc--, argv++;
+				if (argc < 1) {
+					warnx(
+					    "option requires an argument -- s");
+					usage();
+				}
+				sn = argv[0];
+			}
+			if (strcmp(sn, "0") == 0)
+				numsig = 0;
+			else if ((numsig = signalnumber(sn)) == 0) {
+				if (sn != argv[0])
+					goto trysignal;
+				nosig(sn);
+			}
+			argc--, argv++;
+			break;
+
+		case '-':
+			if (argv[0][2] == '\0') {
+				/* process this one again later */
+				break;
+			}
+			/* FALL THROUGH */
+		case '\0':
+			usage();
+			break;
+
+		default:
+ trysignal:
+			sn = *argv + 1;
+			if (((numsig = signalnumber(sn)) == 0)) {
+				if (isdigit((unsigned char)*sn))
+					numsig = signum(sn);
+				else
+					nosig(sn);
+			}
+
+			if (numsig != 0 && signalnext(numsig) == -1)
+				nosig(sn);
+			argc--, argv++;
+			break;
 		}
-		printsignals(stdout);
-		exit(0);
 	}
 
-	if (!strcmp(*argv, "-s")) {
+	/* deal with the optional '--' end of options option */
+	if (argc > 0 && strcmp(*argv, "--") == 0)
 		argc--, argv++;
-		if (argc < 1) {
-			warnx("option requires an argument -- s");
-			usage();
-		}
-		if (strcmp(*argv, "0")) {
-			if ((numsig = signame_to_signum(*argv)) < 0)
-				nosig(*argv);
-		} else
-			numsig = 0;
-		argc--, argv++;
-	} else if (**argv == '-') {
-		char *sn = *argv + 1;
-		if (isalpha((unsigned char)*sn)) {
-			if ((numsig = signame_to_signum(sn)) < 0)
-				nosig(sn);
-		} else if (isdigit((unsigned char)*sn)) {
-			numsig = strtol(sn, &ep, 10);
-			if (*ep) {
-				errx(EXIT_FAILURE, "illegal signal number: %s",
-						sn);
-				/* NOTREACHED */
-			}
-			if (numsig < 0 || numsig >= NSIG)
-				nosig(sn);
-		} else
-			nosig(sn);
-		argc--, argv++;
-	}
 
 	if (argc == 0)
 		usage();
@@ -150,21 +186,21 @@ main(int argc, char *argv[])
 			}
 		} else 
 #endif
-		{
-			pid = strtol(*argv, &ep, 10);
-			if (!**argv || *ep) {
-				warnx("illegal process id: %s", *argv);
+			if ((pid = processnum(*argv)) == (pid_t)-1) {
 				errors = 1;
 				continue;
 			}
-		}
+
 		if (kill(pid, numsig) == -1) {
 			warn("%s", *argv);
 			errors = 1;
 		}
 #ifdef SHELL
-		/* Wakeup the process if it was suspended, so it can
-		   exit without an explicit 'fg'. */
+		/*
+		 * Wakeup the process if it was suspended, so it can
+		 * exit without an explicit 'fg'.
+		 *	(kernel handles this for SIGKILL)
+		 */
 		if (numsig == SIGTERM || numsig == SIGHUP)
 			kill(pid, SIGCONT);
 #endif
@@ -175,21 +211,41 @@ main(int argc, char *argv[])
 }
 
 static int
-signame_to_signum(char *sig)
+signum(const char *sn)
 {
-	int n;
+	intmax_t n;
+	char *ep;
 
-	if (strncasecmp(sig, "sig", 3) == 0)
-		sig += 3;
-	for (n = 1; n < NSIG; n++) {
-		if (!strcasecmp(sys_signame[n], sig))
-			return (n);
+	n = strtoimax(sn, &ep, 10);
+
+	/* check for correctly parsed number */
+	if (*ep || n <= INT_MIN || n >= INT_MAX )
+		errx(EXIT_FAILURE, "illegal signal number: %s", sn);
+		/* NOTREACHED */
+
+	return (int)n;
+}
+
+static pid_t
+processnum(const char *s)
+{
+	intmax_t n;
+	char *ep;
+
+	n = strtoimax(s, &ep, 10);
+
+	/* check for correctly parsed number */
+	if (*ep || n == INTMAX_MIN || n == INTMAX_MAX || (pid_t)n != n ||
+	    n == -1) {
+		warnx("illegal process%s id: %s", (n < 0 ? " group" : ""), s);
+		n = -1;
 	}
-	return (-1);
+
+	return (pid_t)n;
 }
 
 static void
-nosig(char *name)
+nosig(const char *name)
 {
 
 	warnx("unknown signal %s; valid signals:", name);
@@ -202,27 +258,38 @@ static void
 printsignals(FILE *fp)
 {
 	int sig;
-	int len, nl;
+	int len, nl, pad;
 	const char *name;
 	int termwidth = 80;
 
-	if (isatty(fileno(fp))) {
+	if ((name = getenv("COLUMNS")) != 0)
+		termwidth = atoi(name);
+	else if (isatty(fileno(fp))) {
 		struct winsize win;
+
 		if (ioctl(fileno(fp), TIOCGWINSZ, &win) == 0 && win.ws_col > 0)
 			termwidth = win.ws_col;
 	}
 
-	for (len = 0, sig = 1; sig < NSIG; sig++) {
-		name = sys_signame[sig];
-		nl = 1 + strlen(name);
+	for (pad = 0, len = 0, sig = 0; (sig = signalnext(sig)) != 0; ) {
+		name = signalname(sig);
+		if (name == NULL)
+			continue;
 
-		if (len + nl >= termwidth) {
+		nl = strlen(name);
+
+		if (len > 0 && nl + len + pad >= termwidth) {
 			fprintf(fp, "\n");
 			len = 0;
-		} else
-			if (len != 0)
-				fprintf(fp, " ");
-		len += nl;
+			pad = 0;
+		} else if (pad > 0 && len != 0)
+			fprintf(fp, "%*s", pad, "");
+		else
+			pad = 0;
+
+		len += nl + pad;
+		pad = (nl | 7) + 1 - nl;
+
 		fprintf(fp, "%s", name);
 	}
 	if (len != 0)
@@ -232,12 +299,13 @@ printsignals(FILE *fp)
 static void
 usage(void)
 {
+	const char *pn = getprogname();
 
 	fprintf(stderr, "usage: %s [-s signal_name] pid ...\n"
-	    "       %s -l [exit_status]\n"
-	    "       %s -signal_name pid ...\n"
-	    "       %s -signal_number pid ...\n",
-	    getprogname(), getprogname(), getprogname(), getprogname());
+			"       %s -l [exit_status]\n"
+			"       %s -signal_name pid ...\n"
+			"       %s -signal_number pid ...\n",
+	    pn, pn, pn, pn);
 	exit(1);
 	/* NOTREACHED */
 }

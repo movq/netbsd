@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_tt.c,v 1.15 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: grfabs_tt.c,v 1.23 2010/04/13 11:31:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grfabs_tt.c,v 1.15 2005/12/11 12:16:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grfabs_tt.c,v 1.23 2010/04/13 11:31:11 tsutsui Exp $");
 
 #ifdef TT_VIDEO
 /*
@@ -56,16 +51,16 @@ __KERNEL_RCSID(0, "$NetBSD: grfabs_tt.c,v 1.15 2005/12/11 12:16:54 christos Exp 
 /*
  * Function decls
  */
-static void       init_view __P((view_t *, bmap_t *, dmode_t *, box_t *));
-static bmap_t	  *alloc_bitmap __P((u_long, u_long, u_char));
-static colormap_t *alloc_colormap __P((dmode_t *));
-static void 	  free_bitmap __P((bmap_t *));
-static void	  tt_display_view __P((view_t *));
-static view_t	  *tt_alloc_view __P((dmode_t *, dimen_t *, u_char));
-static void	  tt_free_view __P((view_t *));
-static void	  tt_remove_view __P((view_t *));
-static void	  tt_save_view __P((view_t *));
-static int	  tt_use_colormap __P((view_t *, colormap_t *));
+static void       init_view(view_t *, bmap_t *, dmode_t *, box_t *);
+static bmap_t	  *alloc_bitmap(u_long, u_long, u_char);
+static colormap_t *alloc_colormap(dmode_t *);
+static void 	  free_bitmap(bmap_t *);
+static void	  tt_display_view(view_t *);
+static view_t	  *tt_alloc_view(dmode_t *, dimen_t *, u_char);
+static void	  tt_free_view(view_t *);
+static void	  tt_remove_view(view_t *);
+static void	  tt_save_view(view_t *);
+static int	  tt_use_colormap(view_t *, colormap_t *);
 
 /*
  * Our function switch table
@@ -113,8 +108,7 @@ static dmode_t vid_modes[] = {
  */
 
 void
-tt_probe_video(modelp)
-MODES	*modelp;
+tt_probe_video(MODES *modelp)
 {
 	dmode_t	*dm;
 	int	i;
@@ -142,8 +136,7 @@ MODES	*modelp;
 }
 
 static void
-tt_display_view(v)
-view_t *v;
+tt_display_view(view_t *v)
 {
 	dmode_t	*dm = v->mode;
 	bmap_t	*bm = v->bitmap;
@@ -167,8 +160,7 @@ view_t *v;
 }
 
 void
-tt_remove_view(v)
-view_t *v;
+tt_remove_view(view_t *v)
 {
 	dmode_t *mode = v->mode;
 
@@ -183,16 +175,15 @@ view_t *v;
 }
 
 void
-tt_save_view(v)
-view_t *v;
+tt_save_view(view_t *v)
 {
 }
 
 void
-tt_free_view(v)
-view_t *v;
+tt_free_view(view_t *v)
 {
-	if(v) {
+
+	if (v) {
 		tt_remove_view(v);
 		if (v->colormap != &gra_con_cmap)
 			free(v->colormap, M_DEVBUF);
@@ -203,9 +194,7 @@ view_t *v;
 }
 
 static int
-tt_use_colormap(v, cm)
-view_t		*v;
-colormap_t	*cm;
+tt_use_colormap(view_t *v, colormap_t *cm)
 {
 	dmode_t			*dm;
 	volatile u_short	*creg;
@@ -266,7 +255,8 @@ colormap_t	*cm;
 	 */
 	if (v->flags & VF_DISPLAY)
 		creg = &creg[cm->first];
-	else creg = NULL;
+	else
+		creg = NULL;
 
 	vcreg  = &vcm->entry[cm->first];
 	ncreg -= cm->first;
@@ -287,18 +277,16 @@ colormap_t	*cm;
 }
 
 static view_t *
-tt_alloc_view(mode, dim, depth)
-dmode_t	*mode;
-dimen_t	*dim;
-u_char   depth;
+tt_alloc_view(dmode_t *mode, dimen_t *dim, u_char depth)
 {
 	view_t *v;
 	bmap_t *bm;
 
 	if (!atari_realconfig)
 		v = &gra_con_view;
-	else v = malloc(sizeof(*v), M_DEVBUF, M_NOWAIT);
-	if(v == NULL)
+	else
+		v = malloc(sizeof(*v), M_DEVBUF, M_NOWAIT);
+	if (v == NULL)
 		return (NULL);
 	
 	bm = alloc_bitmap(mode->size.width, mode->size.height, mode->depth);
@@ -319,24 +307,18 @@ u_char   depth;
 }
 
 static void
-init_view(v, bm, mode, dbox)
-view_t	*v;
-bmap_t	*bm;
-dmode_t	*mode;
-box_t	*dbox;
+init_view(view_t *v, bmap_t *bm, dmode_t *mode, box_t *dbox)
 {
 	v->bitmap = bm;
 	v->mode   = mode;
 	v->flags  = 0;
-	bcopy(dbox, &v->display, sizeof(box_t));
+	memcpy(&v->display, dbox, sizeof(box_t));
 }
 
 /* bitmap functions */
 
 static bmap_t *
-alloc_bitmap(width, height, depth)
-u_long	width, height;
-u_char	depth;
+alloc_bitmap(u_long width, u_long height, u_char depth)
 {
 	u_long  total_size, bm_size;
 	void	*hw_address;
@@ -376,21 +358,19 @@ u_char	depth;
 	bm->vga_mappable  = 0;
 	bm->vga_base      = 0;
 
-	bzero(bm->plane, bm_size);
+	memset(bm->plane, 0, bm_size);
 	return (bm);
 }
 
 static void
-free_bitmap(bm)
-bmap_t *bm;
+free_bitmap(bmap_t *bm)
 {
 	if (bm)
 		free_stmem(bm);
 }
 
 static colormap_t *
-alloc_colormap(dm)
-dmode_t		*dm;
+alloc_colormap(dmode_t *dm)
 {
 	int		nentries, i;
 	colormap_t	*cm;
@@ -420,8 +400,7 @@ dmode_t		*dm;
 	if (!atari_realconfig) {
 		cm = &gra_con_cmap;
 		cm->entry = gra_con_colors;
-	}
-	else {
+	} else {
 		int size;
 
 		size = sizeof(*cm) + (nentries * sizeof(cm->entry[0]));

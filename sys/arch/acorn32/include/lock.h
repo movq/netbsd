@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.6 2005/12/28 19:09:29 perry Exp $	*/
+/*	$NetBSD: lock.h,v 1.9 2009/01/15 01:11:32 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,19 +32,21 @@
 #ifndef _ACORN32_LOCK_H_
 #define _ACORN32_LOCK_H_
 
+#include <sys/param.h>
+
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
 #endif
 
-#if defined(_KERNEL) && defined(MULTIPROCESSOR)
+#if defined(_HARDKERNEL) && defined(MULTIPROCESSOR)
 
 #include <arm/cpufunc.h>
 
 static __inline int
-__swp(int __val, volatile int *__ptr)
+__swp(int __val, volatile unsigned char *__ptr)
 {
 
-	__asm volatile("swp %0, %1, [%2]"
+	__asm volatile("swpb %0, %1, [%2]"
 	    : "=r" (__val) : "r" (__val), "r" (__ptr) : "memory");
 	return __val;
 }
@@ -90,7 +85,7 @@ __cpu_simple_unlock(__cpu_simple_lock_t *alp)
 	*alp = __SIMPLELOCK_UNLOCKED;
 }
 
-#else /* !(_KERNEL && MULTIPROCESSOR) */
+#else /* !(_HARDKERNEL && MULTIPROCESSOR) */
 #include <arm/lock.h>
-#endif /* !(_KERNEL && MULTIPROCESSOR) */
+#endif /* !(_HARDKERNEL && MULTIPROCESSOR) */
 #endif

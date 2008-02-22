@@ -1,4 +1,4 @@
-/*	$NetBSD: chpass.c,v 1.32 2007/02/21 20:32:10 hubertf Exp $	*/
+/*	$NetBSD: chpass.c,v 1.35 2011/08/31 16:24:57 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)chpass.c	8.4 (Berkeley) 4/2/94";
 #else 
-__RCSID("$NetBSD: chpass.c,v 1.32 2007/02/21 20:32:10 hubertf Exp $");
+__RCSID("$NetBSD: chpass.c,v 1.35 2011/08/31 16:24:57 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,9 +73,9 @@ void	(*Pw_error)(const char *, int, int);
 extern	int _yp_check(char **);	/* buried deep inside libc */
 #endif
 
-void	baduser(void);
-void	cleanup(void);
-void	usage(void);
+__dead static void	baduser(void);
+static void	cleanup(void);
+__dead static void	usage(void);
 
 int
 main(int argc, char **argv)
@@ -244,7 +244,7 @@ main(int argc, char **argv)
 #ifdef	YP
 	if (use_yp) {
 		if (pw_yp(pw, uid))
-			yppw_error((char *)NULL, 0, 1);
+			yppw_error(NULL, 0, 1);
 		else
 			exit(0);
 		/* Will not exit from this if. */
@@ -290,14 +290,14 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-void
+static void
 baduser(void)
 {
 
 	errx(1, "%s", strerror(EACCES));
 }
 
-void
+static void
 usage(void)
 {
 
@@ -308,7 +308,7 @@ usage(void)
 	exit(1);
 }
 
-void
+static void
 cleanup(void)
 {
 

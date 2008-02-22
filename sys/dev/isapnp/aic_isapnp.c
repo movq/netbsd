@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_isapnp.c,v 1.15 2007/10/19 12:00:30 ad Exp $	*/
+/*	$NetBSD: aic_isapnp.c,v 1.21 2009/09/22 13:20:36 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic_isapnp.c,v 1.15 2007/10/19 12:00:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic_isapnp.c,v 1.21 2009/09/22 13:20:36 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,15 +57,14 @@ struct aic_isapnp_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-int	aic_isapnp_match(struct device *, struct cfdata *, void *);
-void	aic_isapnp_attach(struct device *, struct device *, void *);
+static int	aic_isapnp_match(device_t, cfdata_t, void *);
+static void	aic_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(aic_isapnp, sizeof(struct aic_isapnp_softc),
+CFATTACH_DECL_NEW(aic_isapnp, sizeof(struct aic_isapnp_softc),
     aic_isapnp_match, aic_isapnp_attach, NULL, NULL);
 
 int
-aic_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+aic_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -83,18 +75,18 @@ aic_isapnp_match(struct device *parent, struct cfdata *match,
 }
 
 void
-aic_isapnp_attach(struct device *parent, struct device *self,
-    void *aux)
+aic_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct aic_isapnp_softc *isc = device_private(self);
 	struct aic_softc *sc = &isc->sc_aic;
 	struct isapnp_attach_args *ipa = aux;
 
+	sc->sc_dev = self;
+
 	printf("\n");
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
@@ -102,7 +94,7 @@ aic_isapnp_attach(struct device *parent, struct device *self,
 	sc->sc_ioh = ipa->ipa_io[0].h;
 
 	if (!aic_find(sc->sc_iot, sc->sc_ioh)) {
-		printf("%s: couldn't find device\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't find device\n");
 		return;
 	}
 
@@ -112,6 +104,5 @@ aic_isapnp_attach(struct device *parent, struct device *self,
 	isc->sc_ih = isa_intr_establish(ipa->ipa_ic, ipa->ipa_irq[0].num,
 	    ipa->ipa_irq[0].type, IPL_BIO, aicintr, sc);
 	if (isc->sc_ih == NULL)
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt\n");
 }

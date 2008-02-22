@@ -1,7 +1,6 @@
-/*	$NetBSD: xdvar.h,v 1.11 2006/08/27 19:18:08 christos Exp $	*/
+/*	$NetBSD: xdvar.h,v 1.13 2012/10/27 17:18:38 chs Exp $	*/
 
 /*
- *
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -13,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +31,7 @@
  * this file defines the software structure we use to control the
  * 753/7053.
  *
- * author: Chuck Cranor <chuck@ccrc.wustl.edu>
+ * author: Chuck Cranor <chuck@netbsd>
  */
 
 #include <sys/callout.h>
@@ -103,7 +97,7 @@ struct xd_iorq {
  */
 
 struct xd_softc {
-	struct device sc_dev;		/* device struct, reqd by autoconf */
+	device_t sc_dev;		/* device struct, reqd by autoconf */
 	struct disk sc_dk;		/* generic disk info */
 	struct xdc_softc *parent;	/* parent */
 	u_short flags;			/* flags */
@@ -137,7 +131,7 @@ struct xd_softc {
  */
 
 struct xdc_softc {
-	struct device sc_dev;		/* device struct, reqd by autoconf */
+	device_t sc_dev;		/* device struct, reqd by autoconf */
 	struct evcnt sc_intrcnt;	/* event counter (for vmstat -i) */
 
 	struct callout sc_tick_ch;

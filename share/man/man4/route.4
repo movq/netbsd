@@ -1,4 +1,4 @@
-.\"	$NetBSD: route.4,v 1.15 2003/08/07 10:31:03 agc Exp $
+.\"	$NetBSD: route.4,v 1.31 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)route.4	8.6 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd April 11, 2017
 .Dt ROUTE 4
 .Os
 .Sh NAME
@@ -74,11 +74,12 @@ Normally the protocol specifies the route
 through each interface as a
 .Dq direct
 connection to the destination host
-or network.  If the route is direct, the transport layer of
-a protocol family usually requests the packet be sent to the
-same host specified in the packet.  Otherwise, the interface
-is requested to address the packet to the gateway listed in the routing entry
-(i.e. the packet is forwarded).
+or network.
+If the route is direct, the transport layer of a protocol family
+usually requests the packet be sent to the same host specified in
+the packet.
+Otherwise, the interface is requested to address the packet to the
+gateway listed in the routing entry (i.e. the packet is forwarded).
 .Pp
 When routing a packet,
 the kernel will attempt to find
@@ -95,9 +96,9 @@ A wildcard routing entry is specified with a zero
 destination address value, and a mask of all zeroes.
 Wildcard routes will be used
 when the system fails to find other routes matching the
-destination.  The combination of wildcard
-routes and routing redirects can provide an economical
-mechanism for routing traffic.
+destination.
+The combination of wildcard routes and routing redirects can provide
+an economical mechanism for routing traffic.
 .Pp
 One opens the channel for passing routing control messages
 by using the socket call shown in the synopsis above:
@@ -126,29 +127,35 @@ bit mask within the header, and the sequence is least significant
 to most significant bit within the vector.
 .Pp
 Any messages sent to the kernel are returned, and copies are sent
-to all interested listeners.  The kernel will provide the process
-ID for the sender, and the sender may use an additional sequence
-field to distinguish between outstanding messages.  However,
-message replies may be lost when kernel buffers are exhausted.
+to all interested listeners.
+The exception to this is a new address marked as tentative, where copies
+will be sent once Duplicate Address Detection has completed and
+the tentative flag cleared or the duplicated flag set.
+Also, new address messages will also be emitted when other flags on the address
+change such as deprecated and detached.
+The kernel will provide the process ID for the sender, and the
+sender may use an additional sequence field to distinguish between
+outstanding messages.
+However, message replies may be lost when kernel buffers are exhausted.
 .Pp
 The kernel may reject certain messages, and will indicate this
 by filling in the
-.Ar rtm_errno
+.Fa rtm_errno
 field.
 The routing code returns
-.Dv EEXIST
+.Er EEXIST
 if
 requested to duplicate an existing entry,
-.Dv ESRCH
+.Er ESRCH
 if
 requested to delete a non-existent entry,
 or
-.Dv ENOBUFS
+.Er ENOBUFS
 if insufficient resources were available
 to install a new route.
 In the current implementation, all routing processes run locally,
 and the values for
-.Ar rtm_errno
+.Fa rtm_errno
 are available through the normal
 .Em errno
 mechanism, even if the routing reply message is lost.
@@ -166,6 +173,23 @@ A process may ignore all messages from the routing socket
 by doing a
 .Xr shutdown 2
 system call for further input.
+.Pp
+A process can specify which route message types it's interested in by passing
+an array of route messsage types to the
+.Xr setsockopt 2
+call with the
+.Dv RO_MSGFILTER
+option at the
+.Dv PF_ROUTE
+level.
+For example, to only get specific messages:
+.Bd -literal -offset indent
+unsigned char rtfilter[] = { RTM_IFINFO, RTM_IFANNOUNCE };
+
+if (setsockopt(routefd, PF_ROUTE, RO_MSGFILTER,
+    &rtfilter, (socklen_t)sizeof(rtfilter)) == -1)
+	err(1, "setsockopt(RO_MSGFILTER)");
+.Ed
 .Pp
 If a route is in use when it is deleted,
 the routing entry will be marked down and removed from the routing table,
@@ -189,12 +213,16 @@ The messages are:
 #define	RTM_LOSING	0x5    /* Kernel Suspects Partitioning */
 #define	RTM_REDIRECT	0x6    /* Told to use different route */
 #define	RTM_MISS	0x7    /* Lookup failed on this address */
-#define	RTM_RESOLVE	0xb    /* request to resolve dst to LL addr */
-#define	RTM_NEWADDR	0xc    /* address being added to iface */
-#define	RTM_DELADDR	0xd    /* address being removed from iface */
-#define	RTM_OIFINFO	0xe    /* Old (pre-1.5) RTM_IFINFO message */
-#define	RTM_IFINFO	0xf    /* iface/link going up/down etc. */
+#define	RTM_ONEWADDR	0xc    /* Old (pre-8.0) RTM_NEWADDR message */
+#define	RTM_ODELADDR	0xd    /* Old (pre-8.0) RTM_DELADDR message */
+#define	RTM_OOIFINFO	0xe    /* Old (pre-1.5) RTM_IFINFO message */
+#define	RTM_OIFINFO	0xf    /* Old (pre-6.0) RTM_IFINFO message */
 #define	RTM_IFANNOUNCE	0x10   /* iface arrival/departure */
+#define	RTM_IFINFO	0x14   /* iface/link going up/down etc. */
+#define	RTM_OCHGADDR	0x15   /* Old (pre-8.0) RTM_CHGADDR message */
+#define	RTM_NEWADDR	0x16   /* address being added to iface */
+#define	RTM_DELADDR	0x17   /* address being removed from iface */
+#define	RTM_CHGADDR	0x18   /* address properties changed */
 .Ed
 .Pp
 A message header consists of one of the following:
@@ -204,7 +232,7 @@ struct rt_msghdr {
     u_char  rtm_version;       /* future binary compatibility */
     u_char  rtm_type;          /* message type */
     u_short rtm_index;         /* index for associated ifp */
-    int     rtm_flags;         /* flags, incl kern \*[Am] message, e.g. DONE */
+    int     rtm_flags;         /* flags, incl kern & message, e.g. DONE */
     int     rtm_addrs;         /* bitmask identifying sockaddrs in msg */
     pid_t   rtm_pid;           /* identify sender */
     int     rtm_seq;           /* for sender to identify action */
@@ -228,9 +256,11 @@ struct ifa_msghdr {
     u_short ifam_msglen;       /* to skip over non-understood messages */
     u_char  ifam_version;      /* future binary compatibility */
     u_char  ifam_type;         /* message type */
-    int     ifam_addrs;        /* like rtm_addrs */
-    int     ifam_flags;        /* value of ifa_flags */
     u_short ifam_index;        /* index for associated ifp */
+    int     ifam_flags;        /* value of ifa_flags */
+    int     ifam_addrs;        /* like rtm_addrs */
+    pid_t   ifam_pid;          /* identify sender */
+    int     ifam_addrflags;    /* family specific address flags */
     int     ifam_metric;       /* value of ifa_metric */
 };
 
@@ -247,21 +277,22 @@ struct if_announcemsghdr {
 The
 .Dv RTM_IFINFO
 message uses a
-.Ar if_msghdr
+.Vt if_msghdr
 header, the
-.Dv RTM_NEWADDR
+.Dv RTM_NEWADDR ,
+.Dv RTM_CHGADDR ,
 and
 .Dv RTM_DELADDR
 messages use a
-.Ar ifa_msghdr
+.Vt ifa_msghdr
 header,
 the
 .Dv RTM_IFANNOUNCE
 message uses a
-.Ar if_announcemsghdr
+.Vt if_announcemsghdr
 header,
 and all other messages use the
-.Ar rt_msghdr
+.Vt rt_msghdr
 header.
 .Pp
 The metrics structure is:
@@ -282,22 +313,24 @@ struct rt_metrics {
 .Pp
 Flags include the values:
 .Bd -literal
-#define	RTF_UP        0x1      /* route usable */
-#define	RTF_GATEWAY   0x2      /* destination is a gateway */
-#define	RTF_HOST      0x4      /* host entry (net otherwise) */
-#define	RTF_REJECT    0x8      /* host or net unreachable */
-#define	RTF_DYNAMIC   0x10     /* created dynamically (by redirect) */
-#define	RTF_MODIFIED  0x20     /* modified dynamically (by redirect) */
-#define	RTF_DONE      0x40     /* message confirmed */
-#define	RTF_MASK      0x80     /* subnet mask present */
-#define	RTF_CLONING   0x100    /* generate new routes on use */
-#define	RTF_XRESOLVE  0x200    /* external daemon resolves name */
-#define	RTF_LLINFO    0x400    /* generated by ARP or ESIS */
-#define	RTF_STATIC    0x800    /* manually added */
-#define	RTF_BLACKHOLE 0x1000   /* just discard pkts (during updates) */
-#define	RTF_CLONED    0x2000   /* this is a cloned route */
-#define	RTF_PROTO2    0x4000   /* protocol specific routing flag */
-#define	RTF_PROTO1    0x8000   /* protocol specific routing flag */
+#define	RTF_UP        0x1       /* route usable */
+#define	RTF_GATEWAY   0x2       /* destination is a gateway */
+#define	RTF_HOST      0x4       /* host entry (net otherwise) */
+#define	RTF_REJECT    0x8       /* host or net unreachable */
+#define	RTF_DYNAMIC   0x10      /* created dynamically (by redirect) */
+#define	RTF_MODIFIED  0x20      /* modified dynamically (by redirect) */
+#define	RTF_DONE      0x40      /* message confirmed */
+#define	RTF_MASK      0x80      /* subnet mask present */
+#define RTF_CONNECTED 0x100     /* hosts on this route are neighbours */
+#define RTF_LLDATA    0x400     /* used by apps to add/del L2 entries */
+#define	RTF_STATIC    0x800     /* manually added */
+#define	RTF_BLACKHOLE 0x1000    /* just discard pkts (during updates) */
+#define	RTF_PROTO2    0x4000    /* protocol specific routing flag */
+#define	RTF_PROTO1    0x8000    /* protocol specific routing flag */
+#define	RTF_SRC       0x10000   /* route has fixed source address */
+#define	RTF_ANNOUNCE  0x20000   /* announce new ARP or NDP entry */
+#define	RTF_LOCAL     0x40000   /* route represents a local address */
+#define	RTF_BROADCAST 0x80000   /* route represents a bcast address */
 .Ed
 .Pp
 Specifiers for metric values in rmx_locks and rtm_inits are:
@@ -322,7 +355,41 @@ Specifiers for which addresses are present in the messages are:
 #define RTA_IFA       0x20   /* interface addr sockaddr present */
 #define RTA_AUTHOR    0x40   /* sockaddr for author of redirect */
 #define RTA_BRD       0x80   /* for NEWADDR, broadcast or p-p dest addr */
+#define RTA_TAG       0x100  /* route tag */
+.Ed
+.Pp
+Flags for IPv6 addresses:
+.Bd -literal
+#define IN6_IFF_ANYCAST		0x01	/* anycast address */
+#define IN6_IFF_TENTATIVE	0x02	/* tentative address */
+#define IN6_IFF_DUPLICATED	0x04	/* DAD detected duplicate */
+#define IN6_IFF_DETACHED	0x08	/* may be detached from the link */
+#define IN6_IFF_DEPRECATED	0x10	/* deprecated address */
+#define IN6_IFF_NODAD		0x20	/* don't perform DAD on this address
+					 * (used only at first SIOC* call)
+					 */
+#define IN6_IFF_AUTOCONF	0x40	/* autoconfigurable address. */
+#define IN6_IFF_TEMPORARY	0x80	/* temporary (anonymous) address. */
 .Ed
 .Sh SEE ALSO
 .Xr socket 2 ,
 .Xr sysctl 3
+.Sh HISTORY
+Since
+.Nx 8.0 ,
+.Cm RTF_CLONED ,
+.Cm RTF_CLONING ,
+.Cm RTF_LLINFO ,
+.Cm RTF_XRESOLVE
+and
+.Cm RTM_RESOLVE
+were obsolete.
+.Cm RTF_CONNECTED
+and
+.Cm RTF_LLDATA
+appeared in
+.Nx 8.0 .
+.Pp
+.Vt ifa_msghdr
+gained the fields ifam_pid and ifam_addrflags in
+.Nx 8.0 .

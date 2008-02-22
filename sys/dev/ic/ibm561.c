@@ -1,4 +1,4 @@
-/* $NetBSD: ibm561.c,v 1.7 2005/12/11 12:21:27 christos Exp $ */
+/* $NetBSD: ibm561.c,v 1.11 2012/02/12 16:34:11 matt Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibm561.c,v 1.7 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibm561.c,v 1.11 2012/02/12 16:34:11 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,8 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibm561.c,v 1.7 2005/12/11 12:21:27 christos Exp $");
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/ic/ibm561reg.h>
@@ -142,11 +133,11 @@ ibm561_funcs(void)
 }
 
 struct ramdac_cookie *
-ibm561_register(v, sched_update, wr, rd)
-	void *v;
-	int (*sched_update)(void *, void (*)(void *));
-	void (*wr)(void *, u_int, u_int8_t);
-	u_int8_t (*rd)(void *, u_int);
+ibm561_register(
+	void *v,
+	int (*sched_update)(void *, void (*)(void *)),
+	void (*wr)(void *, u_int, u_int8_t),
+	u_int8_t (*rd)(void *, u_int))
 {
 	struct ibm561data *data;
 
@@ -167,12 +158,12 @@ ibm561_register(v, sched_update, wr, rd)
 struct ibm561data *saved_console_data;
 
 void
-ibm561_cninit(v, sched_update, wr, rd, dotclock)
-	void *v;
-	int (*sched_update)(void *, void (*)(void *));
-	void (*wr)(void *, u_int, u_int8_t);
-	u_int8_t (*rd)(void *, u_int);
-	u_int dotclock;
+ibm561_cninit(
+	void *v,
+	int (*sched_update)(void *, void (*)(void *)),
+	void (*wr)(void *, u_int, u_int8_t),
+	u_int8_t (*rd)(void *, u_int),
+	u_int dotclock)
 {
 	struct ibm561data tmp, *data = &tmp;
 	memset(data, 0x0, sizeof *data);
@@ -187,8 +178,7 @@ ibm561_cninit(v, sched_update, wr, rd, dotclock)
 }
 
 void
-ibm561_init(rc)
-	struct ramdac_cookie *rc;
+ibm561_init(struct ramdac_cookie *rc)
 {
 	struct	ibm561data *data = (struct ibm561data *)rc;
 	int	i;
@@ -263,9 +253,7 @@ ibm561_init(rc)
 }
 
 int
-ibm561_set_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+ibm561_set_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct ibm561data *data = (struct ibm561data *)rc;
 	u_int count, index;
@@ -300,9 +288,7 @@ ibm561_set_cmap(rc, cmapp)
 }
 
 int
-ibm561_get_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+ibm561_get_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct ibm561data *data = (struct ibm561data *)rc;
 	u_int count, index;
@@ -333,49 +319,37 @@ ibm561_get_cmap(rc, cmapp)
  */
 
 int
-ibm561_set_cursor(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+ibm561_set_cursor(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	return EINVAL;
 }
 
 int
-ibm561_get_cursor(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+ibm561_get_cursor(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	return EINVAL;
 }
 
 int
-ibm561_set_curpos(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+ibm561_set_curpos(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 	return EINVAL;
 }
 
 int
-ibm561_get_curpos(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+ibm561_get_curpos(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 	return EINVAL;
 }
 
 int
-ibm561_get_curmax(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+ibm561_get_curmax(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 	return EINVAL;
 }
 
 int
-ibm561_set_dotclock(rc, dotclock)
-	struct ramdac_cookie *rc;
-	unsigned dotclock;
+ibm561_set_dotclock(struct ramdac_cookie *rc, unsigned dotclock)
 {
 	struct ibm561data *data = (struct ibm561data *)rc;
 
@@ -413,8 +387,7 @@ ibm561_set_dotclock(rc, dotclock)
  */
 
 void
-ibm561_update(vp)
-	void *vp;
+ibm561_update(void *vp)
 {
 	struct ibm561data *data = (struct ibm561data *)vp;
 	int	i;

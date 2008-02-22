@@ -1,4 +1,4 @@
-/* $NetBSD: sbgbus.c,v 1.10 2005/12/11 12:18:12 christos Exp $ */
+/* $NetBSD: sbgbus.c,v 1.13 2011/07/10 23:32:03 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,32 +33,33 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbgbus.c,v 1.10 2005/12/11 12:18:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbgbus.c,v 1.13 2011/07/10 23:32:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/locore.h>
-#include <machine/sb1250/sb1250_regs.h>
-#include <machine/sb1250/sb1250_genbus.h>
+#include "ioconf.h"
+
+#include <mips/locore.h>
+
+#include <sbmips/sb1250/sb1250_regs.h>
+#include <sbmips/sb1250/sb1250_genbus.h>
+
 #include <sbmips/dev/sbobio/sbobiovar.h>
 #include <sbmips/dev/sbgbus/sbgbusvar.h>
 
-extern struct cfdriver sbgbus_cd;
+static int	sbgbus_match(device_t, cfdata_t, void *);
+static void	sbgbus_attach(device_t, device_t, void *);
 
-static int	sbgbus_match(struct device *, struct cfdata *, void *);
-static void	sbgbus_attach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(sbgbus, sizeof(struct device),
+CFATTACH_DECL_NEW(sbgbus, 0,
     sbgbus_match, sbgbus_attach, NULL, NULL);
 
-static int	sbgbussearch(struct device *, struct cfdata *,
-			     const int *, void *);
+static int	sbgbussearch(device_t, cfdata_t, const int *, void *);
 static int	sbgbusprint(void *, const char *);
 
 static int
-sbgbus_match(struct device *parent, struct cfdata *match, void *aux)
+sbgbus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct sbobio_attach_args *sap = aux;
 
@@ -69,7 +70,7 @@ sbgbus_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-sbgbus_attach(struct device *parent, struct device *self, void *aux)
+sbgbus_attach(device_t parent, device_t self, void *aux)
 {
 
 	/* Configure children using indirect configuration. */
@@ -95,7 +96,7 @@ sbgbusprint(void *aux, const char *pnp)
 }
 
 static int
-sbgbussearch(struct device *parent, struct cfdata *cf,
+sbgbussearch(device_t parent, cfdata_t cf,
 	     const int *ldesc, void *aux)
 {
 	struct sbgbus_attach_args sga;
@@ -132,11 +133,11 @@ sbgbussearch(struct device *parent, struct cfdata *cf,
 		} else {
 			uint64_t rv;
 
-			rv = mips3_ld((void *)MIPS_PHYS_TO_KSEG1(
+			rv = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(
 			    A_IO_EXT_CS_BASE(sga.sga_chipsel) +
 			    R_IO_EXT_START_ADDR));
 			sga.sga_startphys = (rv & M_IO_START_ADDR) << S_IO_ADDRBASE;
-			rv = mips3_ld((void *)MIPS_PHYS_TO_KSEG1(
+			rv = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(
 			    A_IO_EXT_CS_BASE(sga.sga_chipsel) +
 			    R_IO_EXT_MULT_SIZE));
 			sga.sga_size = (rv & M_IO_MULT_SIZE) << S_IO_REGSIZE;

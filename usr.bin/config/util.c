@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.7 2007/12/12 00:03:34 lukem Exp $	*/
+/*	$NetBSD: util.c,v 1.20 2015/09/01 13:42:48 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,7 +44,11 @@
 #include "nbtool_config.h"
 #endif
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: util.c,v 1.20 2015/09/01 13:42:48 uebayasi Exp $");
+
 #include <sys/types.h>
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,11 +59,55 @@
 #include "defs.h"
 
 static void cfgvxerror(const char *, int, const char *, va_list)
-	     __attribute__((__format__(__printf__, 3, 0)));
+	     __printflike(3, 0);
+static void cfgvxdbg(const char *, int, const char *, va_list)
+	     __printflike(3, 0);
 static void cfgvxwarn(const char *, int, const char *, va_list)
-	     __attribute__((__format__(__printf__, 3, 0)));
+	     __printflike(3, 0);
 static void cfgvxmsg(const char *, int, const char *, const char *, va_list)
-     __attribute__((__format__(__printf__, 4, 0)));
+     __printflike(4, 0);
+
+/************************************************************/
+
+/*
+ * Prefix stack
+ */
+
+static void
+prefixlist_push(struct prefixlist *pl, const char *path)
+{
+	struct prefix *prevpf = SLIST_FIRST(pl);
+	struct prefix *pf;
+	char *cp;
+
+	pf = ecalloc(1, sizeof(struct prefix));
+
+	if (prevpf != NULL) {
+		cp = emalloc(strlen(prevpf->pf_prefix) + 1 +
+		    strlen(path) + 1);
+		(void) sprintf(cp, "%s/%s", prevpf->pf_prefix, path);
+		pf->pf_prefix = intern(cp);
+		free(cp);
+	} else
+		pf->pf_prefix = intern(path);
+
+	SLIST_INSERT_HEAD(pl, pf, pf_next);
+}
+
+static void
+prefixlist_pop(struct prefixlist *allpl, struct prefixlist *pl)
+{
+	struct prefix *pf;
+
+	if ((pf = SLIST_FIRST(pl)) == NULL) {
+		cfgerror("no prefixes on the stack to pop");
+		return;
+	}
+
+	SLIST_REMOVE_HEAD(pl, pf_next);
+	/* Remember this prefix for emitting -I... directives later. */
+	SLIST_INSERT_HEAD(allpl, pf, pf_next);
+}
 
 /*
  * Push a prefix onto the prefix stack.
@@ -67,22 +115,7 @@ static void cfgvxmsg(const char *, int, const char *, const char *, va_list)
 void
 prefix_push(const char *path)
 {
-	struct prefix *pf;
-	char *cp;
-
-	pf = ecalloc(1, sizeof(struct prefix));
-
-	if (! SLIST_EMPTY(&prefixes) && *path != '/') {
-		cp = emalloc(strlen(SLIST_FIRST(&prefixes)->pf_prefix) + 1 +
-		    strlen(path) + 1);
-		(void) sprintf(cp, "%s/%s",
-		    SLIST_FIRST(&prefixes)->pf_prefix, path);
-		pf->pf_prefix = intern(cp);
-		free(cp);
-	} else
-		pf->pf_prefix = intern(path);
-
-	SLIST_INSERT_HEAD(&prefixes, pf, pf_next);
+	prefixlist_push(&prefixes, path);
 }
 
 /*
@@ -91,16 +124,25 @@ prefix_push(const char *path)
 void
 prefix_pop(void)
 {
-	struct prefix *pf;
+	prefixlist_pop(&allprefixes, &prefixes);
+}
 
-	if ((pf = SLIST_FIRST(&prefixes)) == NULL) {
-		cfgerror("no prefixes on the stack to pop");
-		return;
-	}
+/*
+ * Push a buildprefix onto the buildprefix stack.
+ */
+void
+buildprefix_push(const char *path)
+{
+	prefixlist_push(&buildprefixes, path);
+}
 
-	SLIST_REMOVE_HEAD(&prefixes, pf_next);
-	/* Remember this prefix for emitting -I... directives later. */
-	SLIST_INSERT_HEAD(&allprefixes, pf, pf_next);
+/*
+ * Pop a buildprefix off the buildprefix stack.
+ */
+void
+buildprefix_pop(void)
+{
+	prefixlist_pop(&allbuildprefixes, &buildprefixes);
 }
 
 /*
@@ -135,8 +177,18 @@ sourcepath(const char *file)
 	return (cp);
 }
 
+/************************************************************/
+
+/*
+ * Data structures
+ */
+
+/*
+ * nvlist
+ */
+
 struct nvlist *
-newnv(const char *name, const char *str, void *ptr, int i, struct nvlist *next)
+newnv(const char *name, const char *str, void *ptr, long long i, struct nvlist *next)
 {
 	struct nvlist *nv;
 
@@ -145,7 +197,7 @@ newnv(const char *name, const char *str, void *ptr, int i, struct nvlist *next)
 	nv->nv_name = name;
 	nv->nv_str = str;
 	nv->nv_ptr = ptr;
-	nv->nv_int = i;
+	nv->nv_num = i;
 	return nv;
 }
 
@@ -187,6 +239,226 @@ nvcat(struct nvlist *nv1, struct nvlist *nv2)
 	return nv1;
 }
 
+/*
+ * Option definition lists
+ */
+
+struct defoptlist *
+defoptlist_create(const char *name, const char *val, const char *lintval)
+{
+	struct defoptlist *dl;
+
+	dl = emalloc(sizeof(*dl));
+	dl->dl_next = NULL;
+	dl->dl_name = name;
+	dl->dl_value = val;
+	dl->dl_lintvalue = lintval;
+	dl->dl_obsolete = 0;
+	dl->dl_depends = NULL;
+	return dl;
+}
+
+void
+defoptlist_destroy(struct defoptlist *dl)
+{
+	struct defoptlist *next;
+
+	while (dl != NULL) {
+		next = dl->dl_next;
+		dl->dl_next = NULL;
+
+		// XXX should we assert that dl->dl_deps is null to
+		// be sure the deps have already been destroyed?
+		free(dl);
+
+		dl = next;
+	}
+}
+
+struct defoptlist *
+defoptlist_append(struct defoptlist *dla, struct defoptlist *dlb)
+{
+	struct defoptlist *dl;
+
+	if (dla == NULL)
+		return dlb;
+
+	for (dl = dla; dl->dl_next != NULL; dl = dl->dl_next)
+		;
+
+	dl->dl_next = dlb;
+	return dla;
+}
+
+/*
+ * Locator lists
+ */
+
+struct loclist *
+loclist_create(const char *name, const char *string, long long num)
+{
+	struct loclist *ll;
+
+	ll = emalloc(sizeof(*ll));
+	ll->ll_name = name;
+	ll->ll_string = string;
+	ll->ll_num = num;
+	ll->ll_next = NULL;
+	return ll;
+}
+
+void
+loclist_destroy(struct loclist *ll)
+{
+	struct loclist *next;
+
+	while (ll != NULL) {
+		next = ll->ll_next;
+		ll->ll_next = NULL;
+		free(ll);
+		ll = next;
+	}
+}
+
+/*
+ * Attribute lists
+ */
+
+struct attrlist *
+attrlist_create(void)
+{
+	struct attrlist *al;
+
+	al = emalloc(sizeof(*al));
+	al->al_next = NULL;
+	al->al_this = NULL;
+	return al;
+}
+
+struct attrlist *
+attrlist_cons(struct attrlist *next, struct attr *a)
+{
+	struct attrlist *al;
+
+	al = attrlist_create();
+	al->al_next = next;
+	al->al_this = a;
+	return al;
+}
+
+void
+attrlist_destroy(struct attrlist *al)
+{
+	assert(al->al_next == NULL);
+	assert(al->al_this == NULL);
+	free(al);
+}
+
+void
+attrlist_destroyall(struct attrlist *al)
+{
+	struct attrlist *next;
+
+	while (al != NULL) {
+		next = al->al_next;
+		al->al_next = NULL;
+		/* XXX should we make the caller guarantee this? */
+		al->al_this = NULL;
+		attrlist_destroy(al);
+		al = next;
+	}
+}
+
+/*
+ * Condition expressions
+ */
+
+/*
+ * Create an expression node.
+ */
+struct condexpr *
+condexpr_create(enum condexpr_types type)
+{
+	struct condexpr *cx;
+
+	cx = emalloc(sizeof(*cx));
+	cx->cx_type = type;
+	switch (type) {
+
+	    case CX_ATOM:
+		cx->cx_atom = NULL;
+		break;
+
+	    case CX_NOT:
+		cx->cx_not = NULL;
+		break;
+
+	    case CX_AND:
+		cx->cx_and.left = NULL;
+		cx->cx_and.right = NULL;
+		break;
+
+	    case CX_OR:
+		cx->cx_or.left = NULL;
+		cx->cx_or.right = NULL;
+		break;
+	
+	    default:
+		panic("condexpr_create: invalid expr type %d", (int)type);
+	}
+	return cx;
+}
+
+/*
+ * Free an expression tree.
+ */
+void
+condexpr_destroy(struct condexpr *expr)
+{
+	switch (expr->cx_type) {
+
+	    case CX_ATOM:
+		/* nothing */
+		break;
+
+	    case CX_NOT:
+		condexpr_destroy(expr->cx_not);
+		break;
+
+	    case CX_AND:
+		condexpr_destroy(expr->cx_and.left);
+		condexpr_destroy(expr->cx_and.right);
+		break;
+
+	    case CX_OR:
+		condexpr_destroy(expr->cx_or.left);
+		condexpr_destroy(expr->cx_or.right);
+		break;
+
+	    default:
+		panic("condexpr_destroy: invalid expr type %d",
+		      (int)expr->cx_type);
+	}
+	free(expr);
+}
+
+/************************************************************/
+
+/*
+ * Diagnostic messages
+ */
+
+void
+cfgdbg(const char *fmt, ...)
+{
+	va_list ap;
+	extern const char *yyfile;
+
+	va_start(ap, fmt);
+	cfgvxdbg(yyfile, currentline(), fmt, ap);
+	va_end(ap);
+}
+
 void
 cfgwarn(const char *fmt, ...)
 {
@@ -206,6 +478,12 @@ cfgxwarn(const char *file, int line, const char *fmt, ...)
 	va_start(ap, fmt);
 	cfgvxwarn(file, line, fmt, ap);
 	va_end(ap);
+}
+
+static void
+cfgvxdbg(const char *file, int line, const char *fmt, va_list ap)
+{
+	cfgvxmsg(file, line, "debug: ", fmt, ap);
 }
 
 static void

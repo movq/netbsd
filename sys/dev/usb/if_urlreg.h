@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urlreg.h,v 1.4 2007/08/27 16:08:42 xtraeme Exp $	*/
+/*	$NetBSD: if_urlreg.h,v 1.11 2016/04/23 10:15:31 skrll Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -28,6 +28,8 @@
  * SUCH DAMAGE.
  *
  */
+
+#include <sys/rndsource.h>
 
 #define	URL_IFACE_INDEX		0
 #define	URL_CONFIG_NO		1
@@ -132,7 +134,7 @@ typedef	uWord url_rxhdr_t;	/* Recive Header */
 
 struct url_chain {
 	struct url_softc	*url_sc;
-	usbd_xfer_handle	url_xfer;
+	struct usbd_xfer	*url_xfer;
 	char			*url_buf;
 	struct mbuf		*url_mbuf;
 	int			url_idx;
@@ -142,7 +144,7 @@ struct url_cdata {
 	struct url_chain	url_tx_chain[URL_TX_LIST_CNT];
 	struct url_chain	url_rx_chain[URL_TX_LIST_CNT];
 #if 0
-	/* XXX: Intrrupt Endpoint is not yet supported! */
+	/* XXX: Interrupt Endpoint is not yet supported! */
 	struct url_intrpkg	url_ibuf;
 #endif
 	int			url_tx_prod;
@@ -152,19 +154,19 @@ struct url_cdata {
 };
 
 struct url_softc {
-	USBBASEDEVICE		sc_dev;	/* base device */
-	usbd_device_handle	sc_udev;
+	device_t		sc_dev;	/* base device */
+	struct usbd_device *	sc_udev;
 
 	/* USB */
-	usbd_interface_handle	sc_ctl_iface;
+	struct usbd_interface *	sc_ctl_iface;
 	/* int			sc_ctl_iface_no; */
 	int			sc_bulkin_no; /* bulk in endpoint */
 	int			sc_bulkout_no; /* bulk out endpoint */
 	int			sc_intrin_no; /* intr in endpoint */
-	usbd_pipe_handle	sc_pipe_rx;
-	usbd_pipe_handle	sc_pipe_tx;
-	usbd_pipe_handle	sc_pipe_intr;
-	usb_callout_t		sc_stat_ch;
+	struct usbd_pipe *	sc_pipe_rx;
+	struct usbd_pipe *	sc_pipe_tx;
+	struct usbd_pipe *	sc_pipe_intr;
+	struct callout		sc_stat_ch;
 	u_int			sc_rx_errs;
 	/* u_int		sc_intr_errs; */
 	struct timeval		sc_rx_notice;
@@ -175,17 +177,15 @@ struct url_softc {
 	krwlock_t		sc_mii_rwlock;
 	int			sc_link;
 #define	sc_media url_mii.mii_media
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 	struct url_cdata	sc_cdata;
 
 	int                     sc_attached;
 	int			sc_dying;
-        int                     sc_refcnt;
+	int                     sc_refcnt;
 
 	struct usb_task		sc_tick_task;
 	struct usb_task		sc_stop_task;
 
-	u_int16_t		sc_flags;
+	uint16_t		sc_flags;
 };

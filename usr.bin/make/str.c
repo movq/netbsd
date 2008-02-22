@@ -1,4 +1,4 @@
-/*	$NetBSD: str.c,v 1.28 2008/02/15 21:29:50 christos Exp $	*/
+/*	$NetBSD: str.c,v 1.38 2017/04/21 22:15:44 sjg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: str.c,v 1.28 2008/02/15 21:29:50 christos Exp $";
+static char rcsid[] = "$NetBSD: str.c,v 1.38 2017/04/21 22:15:44 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char     sccsid[] = "@(#)str.c	5.8 (Berkeley) 6/1/90";
 #else
-__RCSID("$NetBSD: str.c,v 1.28 2008/02/15 21:29:50 christos Exp $");
+__RCSID("$NetBSD: str.c,v 1.38 2017/04/21 22:15:44 sjg Exp $");
 #endif
 #endif				/* not lint */
 #endif
@@ -102,7 +102,7 @@ str_concat(const char *s1, const char *s2, int flags)
 	len2 = strlen(s2);
 
 	/* allocate length plus separator plus EOS */
-	result = emalloc((u_int)(len1 + len2 + 2));
+	result = bmake_malloc((unsigned int)(len1 + len2 + 2));
 
 	/* copy first string into place */
 	memcpy(result, s1, len1);
@@ -145,7 +145,7 @@ brk_string(const char *str, int *store_argc, Boolean expand, char **buffer)
 	const char *p;
 	int len;
 	int argmax = 50, curlen = 0;
-    	char **argv = emalloc((argmax + 1) * sizeof(char *));
+    	char **argv;
 
 	/* skip leading space chars. */
 	for (; *str == ' ' || *str == '\t'; ++str)
@@ -153,7 +153,13 @@ brk_string(const char *str, int *store_argc, Boolean expand, char **buffer)
 
 	/* allocate room for a copy of the string */
 	if ((len = strlen(str) + 1) > curlen)
-		*buffer = emalloc(curlen = len);
+		*buffer = bmake_malloc(curlen = len);
+
+	/*
+	 * initial argmax based on len
+	 */
+	argmax = MAX((len / 5), 50);
+	argv = bmake_malloc((argmax + 1) * sizeof(char *));
 
 	/*
 	 * copy the string; at the same time, parse backslashes,
@@ -175,7 +181,11 @@ brk_string(const char *str, int *store_argc, Boolean expand, char **buffer)
 				inquote = (char) ch;
 				/* Don't miss "" or '' */
 				if (start == NULL && p[1] == inquote) {
-					start = t + 1;
+					if (!expand) {
+						start = t;
+						*t++ = ch;
+					} else
+						start = t + 1;
 					p++;
 					inquote = '\0';
 					break;
@@ -206,20 +216,27 @@ brk_string(const char *str, int *store_argc, Boolean expand, char **buffer)
 			*t++ = '\0';
 			if (argc == argmax) {
 				argmax *= 2;		/* ramp up fast */
-				argv = (char **)erealloc(argv,
+				argv = (char **)bmake_realloc(argv,
 				    (argmax + 1) * sizeof(char *));
 			}
 			argv[argc++] = start;
 			start = NULL;
-			if (ch == '\n' || ch == '\0')
+			if (ch == '\n' || ch == '\0') {
+				if (expand && inquote) {
+					free(argv);
+					free(*buffer);
+					*buffer = NULL;
+					return NULL;
+				}
 				goto done;
+			}
 			continue;
 		case '\\':
 			if (!expand) {
 				if (!start)
 					start = t;
 				*t++ = '\\';
-				if (*(p+1) == '\0') // catch '\' at end of line
+				if (*(p+1) == '\0') /* catch '\' at end of line */
 					continue;
 				ch = *++p;
 				break;
@@ -308,6 +325,8 @@ Str_FindSubstring(const char *string, const char *substring)
  * matching operation permits the following special characters in the
  * pattern: *?\[] (see the man page for details on what these mean).
  *
+ * XXX this function does not detect or report malformed patterns.
+ *
  * Side effects: None.
  */
 int
@@ -354,16 +373,26 @@ Str_Match(const char *string, const char *pattern)
 		 * by a range (two characters separated by "-").
 		 */
 		if (*pattern == '[') {
+			int nomatch;
+
 			++pattern;
+			if (*pattern == '^') {
+				++pattern;
+				nomatch = 1;
+			} else
+				nomatch = 0;
 			for (;;) {
-				if ((*pattern == ']') || (*pattern == 0))
+				if ((*pattern == ']') || (*pattern == 0)) {
+					if (nomatch)
+						break;
 					return(0);
+				}
 				if (*pattern == *string)
 					break;
 				if (pattern[1] == '-') {
 					c2 = pattern[2];
 					if (c2 == 0)
-						return(0);
+						return(nomatch);
 					if ((*pattern <= *string) &&
 					    (c2 >= *string))
 						break;
@@ -374,6 +403,8 @@ Str_Match(const char *string, const char *pattern)
 				}
 				++pattern;
 			}
+			if (nomatch && (*pattern != ']') && (*pattern != 0))
+				return 0;
 			while ((*pattern != ']') && (*pattern != 0))
 				++pattern;
 			goto thisCharOK;
@@ -476,20 +507,20 @@ Str_SYSVMatch(const char *word, const char *pattern, int *len)
  *-----------------------------------------------------------------------
  */
 void
-Str_SYSVSubst(Buffer buf, char *pat, char *src, int len)
+Str_SYSVSubst(Buffer *buf, char *pat, char *src, int len)
 {
     char *m;
 
     if ((m = strchr(pat, '%')) != NULL) {
 	/* Copy the prefix */
-	Buf_AddBytes(buf, m - pat, (Byte *)pat);
+	Buf_AddBytes(buf, m - pat, pat);
 	/* skip the % */
 	pat = m + 1;
     }
 
     /* Copy the pattern */
-    Buf_AddBytes(buf, len, (Byte *)src);
+    Buf_AddBytes(buf, len, src);
 
     /* append the rest */
-    Buf_AddBytes(buf, strlen(pat), (Byte *)pat);
+    Buf_AddBytes(buf, strlen(pat), pat);
 }

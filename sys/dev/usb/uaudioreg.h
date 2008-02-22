@@ -1,4 +1,4 @@
-/*	$NetBSD: uaudioreg.h,v 1.14 2007/02/26 13:15:32 drochner Exp $	*/
+/*	$NetBSD: uaudioreg.h,v 1.16 2012/05/18 07:52:54 jdc Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -120,7 +113,7 @@ struct usb_audio_streaming_type1_descriptor {
 	uByte		bBitResolution;
 	uByte		bSamFreqType;
 #define UA_SAMP_CONTNUOUS 0
-	uByte		tSamFreq[3*2]; /* room for low and high */
+	uByte		tSamFreq[3*AUFMT_MAX_FREQUENCIES];
 #define UA_GETSAMP(p, n) ((p)->tSamFreq[(n)*3+0] | ((p)->tSamFreq[(n)*3+1] << 8) | ((p)->tSamFreq[(n)*3+2] << 16))
 #define UA_SAMP_LO(p) UA_GETSAMP(p, 0)
 #define UA_SAMP_HI(p) UA_GETSAMP(p, 1)

@@ -1,4 +1,4 @@
-/*	$NetBSD: i2cvar.h,v 1.6 2007/07/09 21:00:33 ad Exp $	*/
+/*	$NetBSD: i2cvar.h,v 1.17 2018/06/26 06:34:55 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -38,7 +38,9 @@
 #ifndef _DEV_I2C_I2CVAR_H_
 #define	_DEV_I2C_I2CVAR_H_
 
+#include <sys/device.h>
 #include <dev/i2c/i2c_io.h>
+#include <prop/proplib.h>
 
 /* Flags passed to i2c routines. */
 #define	I2C_F_WRITE		0x00	/* new transfer is a write */
@@ -47,6 +49,20 @@
 #define	I2C_F_STOP		0x04	/* send stop after byte */
 #define	I2C_F_POLL		0x08	/* poll, don't sleep */
 #define	I2C_F_PEC		0x10	/* smbus packet error checking */
+
+/* i2c bus instance properties */
+#define	I2C_PROP_INDIRECT_PROBE_STRATEGY	\
+				"i2c-indirect-probe-strategy"
+#define	I2C_PROBE_STRATEGY_QUICK_WRITE		\
+				"smbus-quick-write"
+#define	I2C_PROBE_STRATEGY_RECEIVE_BYTE		\
+				"smbus-receive-byte"
+#define	I2C_PROBE_STRATEGY_NONE			\
+				"none"
+
+#define	I2C_PROP_INDIRECT_DEVICE_WHITELIST	\
+				"i2c-indirect-device-whitelist"
+	/* value is a prop_array of prop_strings */
 
 struct ic_intr_list {
 	LIST_ENTRY(ic_intr_list) il_next;
@@ -110,20 +126,66 @@ typedef struct i2c_controller {
 struct i2cbus_attach_args {
 	i2c_tag_t iba_tag;		/* the controller */
 	int iba_type;			/* bus type */
+	prop_array_t iba_child_devices;	/* child devices (direct config) */
 };
 
 /* Used to attach devices on the i2c bus. */
 struct i2c_attach_args {
 	i2c_tag_t	ia_tag;		/* our controller */
 	i2c_addr_t	ia_addr;	/* address of device */
-	int		ia_size;	/* size (for EEPROMs) */
 	int		ia_type;	/* bus type */
+	/* only set if using direct config */
+	const char *	ia_name;	/* name of the device */
+	int		ia_ncompat;	/* number of pointers in the
+					   ia_compat array */
+	const char **	ia_compat;	/* chip names */
+	prop_dictionary_t ia_prop;	/* dictionnary for this device */
+	/*
+	 * The following is of limited usefulness and should only be used
+	 * in rare cases where we really know what we are doing. Example:
+	 * a machine dependent i2c driver (located in sys/arch/$arch/dev)
+	 * needing to access some firmware properties.
+	 * Depending on the firmware in use, an identifier for the device
+	 * may be present. Example: on OpenFirmware machines the device
+	 * tree OF node - if available. This info is hard to transport
+	 * down to MD drivers through the MI i2c bus otherwise.
+	 * 
+	 * On ACPI platforms this is the ACPI_HANDLE of the device.
+	 */
+	uintptr_t	ia_cookie;	/* OF node in openfirmware machines */
 };
 
 /*
  * API presented to i2c controllers.
  */
 int	iicbus_print(void *, const char *);
+
+/*
+ * API presented to i2c devices.
+ */
+int	iic_compatible_match(const struct i2c_attach_args *,
+			     const struct device_compatible_entry *,
+			     const struct device_compatible_entry **);
+bool	iic_use_direct_match(const struct i2c_attach_args *, const cfdata_t,
+			     const struct device_compatible_entry *, int *);
+
+/*
+ * Constants to indicate the quality of a match made by a driver's
+ * match routine, from lowest to higest:
+ *
+ *	-- Address only; no other checks were made.
+ *
+ *	-- Address + device probed and recognized.
+ *
+ *	-- Direct-config match by "compatible" string.
+ *
+ *	-- Direct-config match by specific driver name.
+ */
+#define	I2C_MATCH_ADDRESS_ONLY		1
+#define	I2C_MATCH_ADDRESS_AND_PROBE	2
+#define	I2C_MATCH_DIRECT_COMPATIBLE	10
+#define	I2C_MATCH_DIRECT_COMPATIBLE_MAX	99
+#define	I2C_MATCH_DIRECT_SPECIFIC	100
 
 #ifdef _I2C_PRIVATE
 /*

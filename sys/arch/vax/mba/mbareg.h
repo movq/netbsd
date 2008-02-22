@@ -1,4 +1,4 @@
-/*	$NetBSD: mbareg.h,v 1.4 2000/06/04 18:04:39 ragge Exp $ */
+/*	$NetBSD: mbareg.h,v 1.6 2017/05/22 17:13:09 ragge Exp $ */
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -110,13 +105,13 @@ struct mba_regs {
 #define	MBADS_DPR	0x100		/* Unit present */
 
 /* Definitions in mba_device md_dt */
-#define	MBADT_RP04	0x10
-#define MBADT_RP05	0x11
-#define MBADT_RP06	0x12
-#define MBADT_RP07	0x22
-#define MBADT_RM02	0x15
-#define MBADT_RM03	0x14
-#define MBADT_RM05	0x17
-#define MBADT_RM80	0x16
+#define	MBADT_RP04	0x2010
+#define MBADT_RP05	0x2011
+#define MBADT_RP06	0x2012
+#define MBADT_RP07	0x2022
+#define MBADT_RM02	0x2015
+#define MBADT_RM03	0x2014
+#define MBADT_RM05	0x2017
+#define MBADT_RM80	0x2016
 #define	MBADT_DRQ	0x800		/* Dual ported */
 #define	MBADT_MOH	0x2000		/* Moving head device */

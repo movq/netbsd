@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_hash.c,v 1.1 2007/07/28 12:53:52 pooka Exp $	*/
+/*	$NetBSD: subr_hash.c,v 1.7 2016/07/06 05:20:48 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,11 +37,41 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_hash.c,v 1.1 2007/07/28 12:53:52 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_hash.c,v 1.7 2016/07/06 05:20:48 ozaki-r Exp $");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
+#include <sys/bitops.h>
+#include <sys/kmem.h>
 #include <sys/systm.h>
+#include <sys/pslist.h>
+
+static size_t
+hash_list_size(enum hashtype htype)
+{
+	LIST_HEAD(, generic) *hashtbl_list;
+	SLIST_HEAD(, generic) *hashtbl_slist;
+	TAILQ_HEAD(, generic) *hashtbl_tailq;
+	struct pslist_head *hashtbl_pslist;
+	size_t esize;
+
+	switch (htype) {
+	case HASH_LIST:
+		esize = sizeof(*hashtbl_list);
+		break;
+	case HASH_PSLIST:
+		esize = sizeof(*hashtbl_pslist);
+		break;
+	case HASH_SLIST:
+		esize = sizeof(*hashtbl_slist);
+		break;
+	case HASH_TAILQ:
+		esize = sizeof(*hashtbl_tailq);
+		break;
+	default:
+		panic("hashdone: invalid table type");
+	}
+	return esize;
+}
 
 /*
  * General routine to allocate a hash table.
@@ -50,43 +80,44 @@ __KERNEL_RCSID(0, "$NetBSD: subr_hash.c,v 1.1 2007/07/28 12:53:52 pooka Exp $");
  * suitable for masking a value to use as an index into the returned array.
  */
 void *
-hashinit(u_int elements, enum hashtype htype, struct malloc_type *mtype,
-    int mflags, u_long *hashmask)
+hashinit(u_int elements, enum hashtype htype, bool waitok, u_long *hashmask)
 {
-	u_long hashsize, i;
 	LIST_HEAD(, generic) *hashtbl_list;
+	SLIST_HEAD(, generic) *hashtbl_slist;
 	TAILQ_HEAD(, generic) *hashtbl_tailq;
+	struct pslist_head *hashtbl_pslist;
+	u_long hashsize, i;
 	size_t esize;
 	void *p;
 
-	if (elements == 0)
-		panic("hashinit: bad cnt");
-	for (hashsize = 1; hashsize < elements; hashsize <<= 1)
-		continue;
+	KASSERT(elements > 0);
 
-	switch (htype) {
-	case HASH_LIST:
-		esize = sizeof(*hashtbl_list);
-		break;
-	case HASH_TAILQ:
-		esize = sizeof(*hashtbl_tailq);
-		break;
-	default:
-#ifdef DIAGNOSTIC
-		panic("hashinit: invalid table type");
-#else
+#define MAXELEMENTS (1U << ((sizeof(elements) * NBBY) - 1))
+	if (elements > MAXELEMENTS)
+		elements = MAXELEMENTS;
+
+	hashsize = 1UL << (ilog2(elements - 1) + 1);
+	esize = hash_list_size(htype);
+
+	p = kmem_alloc(hashsize * esize, waitok ? KM_SLEEP : KM_NOSLEEP);
+	if (p == NULL)
 		return NULL;
-#endif
-	}
-
-	if ((p = malloc(hashsize * esize, mtype, mflags)) == NULL)
-		return (NULL);
 
 	switch (htype) {
 	case HASH_LIST:
 		hashtbl_list = p;
 		for (i = 0; i < hashsize; i++)
 			LIST_INIT(&hashtbl_list[i]);
+		break;
+	case HASH_PSLIST:
+		hashtbl_pslist = p;
+		for (i = 0; i < hashsize; i++)
+			PSLIST_INIT(&hashtbl_pslist[i]);
+		break;
+	case HASH_SLIST:
+		hashtbl_slist = p;
+		for (i = 0; i < hashsize; i++)
+			SLIST_INIT(&hashtbl_slist[i]);
 		break;
 	case HASH_TAILQ:
 		hashtbl_tailq = p;
@@ -95,15 +126,15 @@ hashinit(u_int elements, enum hashtype htype, struct malloc_type *mtype,
 		break;
 	}
 	*hashmask = hashsize - 1;
-	return (p);
+	return p;
 }
 
 /*
  * Free memory from hash table previosly allocated via hashinit().
  */
 void
-hashdone(void *hashtbl, struct malloc_type *mtype)
+hashdone(void *hashtbl, enum hashtype htype, u_long hashmask)
 {
-
-	free(hashtbl, mtype);
+	const size_t esize = hash_list_size(htype);
+	kmem_free(hashtbl, esize * (hashmask + 1));
 }

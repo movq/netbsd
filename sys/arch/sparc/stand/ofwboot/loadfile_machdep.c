@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.c,v 1.4 2007/10/17 19:57:16 garbled Exp $	*/
+/*	$NetBSD: loadfile_machdep.c,v 1.16 2016/11/04 20:04:11 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,12 +30,14 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
 #include <machine/ctlreg.h>
 #include <machine/vmparam.h>
 #include <machine/promlib.h>
+#include <machine/hypervisor.h>
 
 #include "boot.h"
 #include "openfirm.h"
@@ -64,8 +59,19 @@ extern vaddr_t	itlb_va_to_pa(vaddr_t);
 extern vaddr_t	dtlb_va_to_pa(vaddr_t);
 
 static void	tlb_init(void);
-
+static void	tlb_init_sun4u(void);
+#ifdef SUN4V
+static void	tlb_init_sun4v(void);
+#endif
+void	sparc64_finalize_tlb_sun4u(u_long);
+#ifdef SUN4V
+void	sparc64_finalize_tlb_sun4v(u_long);
+#endif
 static int	mmu_mapin(vaddr_t, vsize_t);
+static int	mmu_mapin_sun4u(vaddr_t, vsize_t);
+#ifdef SUN4V
+static int	mmu_mapin_sun4v(vaddr_t, vsize_t);
+#endif
 static ssize_t	mmu_read(int, void *, size_t);
 static void*	mmu_memcpy(void *, const void *, size_t);
 static void*	mmu_memset(void *, int, size_t);
@@ -77,7 +83,9 @@ static void*	ofw_memcpy(void *, const void *, size_t);
 static void*	ofw_memset(void *, int, size_t);
 static void	ofw_freeall(void);
 
+#if 0
 static int	nop_mapin(vaddr_t, vsize_t);
+#endif
 static ssize_t	nop_read(int, void *, size_t);
 static void*	nop_memcpy(void *, const void *, size_t);
 static void*	nop_memset(void *, int, size_t);
@@ -110,6 +118,9 @@ static struct memsw {
 
 static struct memsw *memsw = &memswa[0];
 
+#ifdef SUN4V
+static int sun4v = 0;
+#endif
 
 /*
  * Check if a memory region is already mapped. Return length and virtual
@@ -125,13 +136,13 @@ kvamap_extract(vaddr_t va, vsize_t len, vaddr_t *new_va)
 		if (kvamap[i].start == NULL)
 			break;
 		if ((kvamap[i].start <= va) && (va < kvamap[i].end)) {
-			uint64_t va_len = kvamap[i].end - va + kvamap[i].start;
+			uint64_t va_len = kvamap[i].end - va;
 			len = (va_len < len) ? len - va_len : 0;
 			*new_va = kvamap[i].end;
 		}
 	}
 
-	return (len);
+	return len;
 }
 
 /*
@@ -162,15 +173,52 @@ kvamap_enter(uint64_t va, uint64_t len)
 static void
 tlb_init(void)
 {
-	phandle_t child;
 	phandle_t root;
+#ifdef SUN4V	
 	char buf[128];
-	u_int bootcpu;
-	u_int cpu;
+#endif	
 
 	if (dtlb_store != NULL) {
 		return;
 	}
+
+	if ( (root = prom_findroot()) == -1) {
+		panic("tlb_init: prom_findroot()");
+	}
+#ifdef SUN4V		
+	if (_prom_getprop(root, "compatible", buf, sizeof(buf)) > 0 &&
+		    strcmp(buf, "sun4v") == 0) {
+		tlb_init_sun4v();
+		sun4v = 1;
+	}
+	else {
+#endif
+		tlb_init_sun4u();
+#ifdef SUN4V		
+	}
+#endif
+
+	dtlb_store = alloc(dtlb_slot_max * sizeof(*dtlb_store));
+	itlb_store = alloc(itlb_slot_max * sizeof(*itlb_store));
+	if (dtlb_store == NULL || itlb_store == NULL) {
+		panic("tlb_init: malloc");
+	}
+
+	dtlb_slot = itlb_slot = 0;
+}
+
+/*
+ * Initialize TLB as required by MMU mapping functions - sun4u.
+ */
+static void
+tlb_init_sun4u(void)
+{
+	phandle_t child;
+	phandle_t root;
+	char buf[128];
+	bool foundcpu = false;
+	u_int bootcpu;
+	u_int cpu;
 
 	bootcpu = get_cpuid();
 
@@ -188,26 +236,50 @@ tlb_init(void)
 			if (_prom_getprop(child, "upa-portid", &cpu,
 			    sizeof(cpu)) == -1 && _prom_getprop(child, "portid",
 			    &cpu, sizeof(cpu)) == -1)
-				panic("main: prom_getprop");
+				panic("tlb_init: prom_getprop");
+			foundcpu = true;
 			if (cpu == bootcpu)
 				break;
 		}
 	}
+	if (!foundcpu)
+		panic("tlb_init: no cpu found!");
 	if (cpu != bootcpu)
-		panic("init_tlb: no node for bootcpu?!?!");
+		panic("tlb_init: no node for bootcpu?!?!");
 	if (_prom_getprop(child, "#dtlb-entries", &dtlb_slot_max,
 	    sizeof(dtlb_slot_max)) == -1 ||
 	    _prom_getprop(child, "#itlb-entries", &itlb_slot_max,
 	    sizeof(itlb_slot_max)) == -1)
-		panic("init_tlb: prom_getprop");
-	dtlb_store = alloc(dtlb_slot_max * sizeof(*dtlb_store));
-	itlb_store = alloc(itlb_slot_max * sizeof(*itlb_store));
-	if (dtlb_store == NULL || itlb_store == NULL) {
-		panic("init_tlb: malloc");
-	}
-
-	dtlb_slot = itlb_slot = 0;
+		panic("tlb_init: prom_getprop");
 }
+
+#ifdef SUN4V
+/*
+ * Initialize TLB as required by MMU mapping functions - sun4v.
+ */
+static void
+tlb_init_sun4v(void)
+{
+	psize_t len;
+	paddr_t pa;
+	int64_t hv_rc;
+
+	hv_mach_desc((paddr_t)NULL, &len); /* Trick to get actual length */
+	if ( !len ) {
+		panic("init_tlb: hv_mach_desc() failed");
+	}
+	pa = OF_alloc_phys(len, 16);
+	if ( pa == -1 ) {
+		panic("OF_alloc_phys() failed");
+	}
+	hv_rc = hv_mach_desc(pa, &len);
+	if (hv_rc != H_EOK) {
+		panic("hv_mach_desc() failed");
+	}
+	/* XXX dig out TLB node info - 64 is ok for loading the kernel */
+	dtlb_slot_max = itlb_slot_max = 64;
+}
+#endif
 
 /*
  * Map requested memory region with permanent 4MB pages.
@@ -215,14 +287,30 @@ tlb_init(void)
 static int
 mmu_mapin(vaddr_t rva, vsize_t len)
 {
-	int64_t data;
-	vaddr_t va, pa, mva;
-
 	len  = roundup2(len + (rva & PAGE_MASK_4M), PAGE_SIZE_4M);
 	rva &= ~PAGE_MASK_4M;
 
 	tlb_init();
-	for (pa = (vaddr_t)-1; len > 0; rva = va) {
+
+#if SUN4V	
+	if ( sun4v )
+		return mmu_mapin_sun4v(rva, len);
+	else
+#endif		
+		return mmu_mapin_sun4u(rva, len);
+}
+
+/*
+ * Map requested memory region with permanent 4MB pages - sun4u.
+ */
+static int
+mmu_mapin_sun4u(vaddr_t rva, vsize_t len)
+{
+	uint64_t data;
+	paddr_t pa;
+	vaddr_t va, mva;
+
+	for (pa = (paddr_t)-1; len > 0; rva = va) {
 		if ( (len = kvamap_extract(rva, len, &va)) == 0) {
 			/* The rest is already mapped */
 			break;
@@ -231,13 +319,11 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		if (dtlb_va_to_pa(va) == (u_long)-1 ||
 		    itlb_va_to_pa(va) == (u_long)-1) {
 			/* Allocate a physical page, claim the virtual area */
-			if (pa == (vaddr_t)-1) {
-				pa = (vaddr_t)OF_alloc_phys(PAGE_SIZE_4M,
-				    PAGE_SIZE_4M);
-				if (pa == (vaddr_t)-1)
+			if (pa == (paddr_t)-1) {
+				pa = OF_alloc_phys(PAGE_SIZE_4M, PAGE_SIZE_4M);
+				if (pa == (paddr_t)-1)
 					panic("out of memory");
-				mva = (vaddr_t)OF_claim_virt(va,
-				    PAGE_SIZE_4M, 0);
+				mva = OF_claim_virt(va, PAGE_SIZE_4M);
 				if (mva != va) {
 					panic("can't claim virtual page "
 					    "(wanted %#lx, got %#lx)",
@@ -256,9 +342,10 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 			if (itlb_slot >= itlb_slot_max)
 				panic("mmu_mapin: out of itlb_slots");
 
-			DPRINTF(("mmu_mapin: %p:%p\n", va, pa));
+			DPRINTF(("mmu_mapin: 0x%lx:0x%x.0x%x\n", va,
+			    hi(pa), lo(pa)));
 
-			data = TSB_DATA(0,		/* global */
+			data = SUN4U_TSB_DATA(0,	/* global */
 					PGSZ_4M,	/* 4mb page */
 					pa,		/* phys.address */
 					1,		/* privileged */
@@ -266,15 +353,16 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 					1,		/* cache */
 					1,		/* alias */
 					1,		/* valid */
-					0		/* endianness */
+					0,		/* endianness */
+					0		/* wc */
 					);
-			data |= TLB_L | TLB_CV; /* locked, virt.cache */
+			data |= SUN4U_TLB_L | SUN4U_TLB_CV; /* locked, virt.cache */
 
 			dtlb_store[dtlb_slot].te_pa = pa;
 			dtlb_store[dtlb_slot].te_va = va;
 			dtlb_slot++;
 			dtlb_enter(va, hi(data), lo(data));
-			pa = (vaddr_t)-1;
+			pa = (paddr_t)-1;
 		}
 
 		kvamap_enter(va, PAGE_SIZE_4M);
@@ -283,12 +371,93 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		va += PAGE_SIZE_4M;
 	}
 
-	if (pa != (vaddr_t)-1) {
+	if (pa != (paddr_t)-1) {
 		OF_free_phys(pa, PAGE_SIZE_4M);
 	}
 
 	return (0);
 }
+
+#ifdef SUN4V
+/*
+ * Map requested memory region with permanent 4MB pages - sun4v.
+ */
+static int
+mmu_mapin_sun4v(vaddr_t rva, vsize_t len)
+{
+	uint64_t data;
+	paddr_t pa;
+	vaddr_t va, mva;
+	int64_t hv_rc;
+
+	for (pa = (paddr_t)-1; len > 0; rva = va) {
+		if ( (len = kvamap_extract(rva, len, &va)) == 0) {
+			/* The rest is already mapped */
+			break;
+		}
+
+		/* Allocate a physical page, claim the virtual area */
+		if (pa == (paddr_t)-1) {
+			pa = OF_alloc_phys(PAGE_SIZE_4M, PAGE_SIZE_4M);
+			if (pa == (paddr_t)-1)
+				panic("out of memory");
+			mva = OF_claim_virt(va, PAGE_SIZE_4M);
+			if (mva != va) {
+				panic("can't claim virtual page "
+				    "(wanted %#lx, got %#lx)",
+				    va, mva);
+			}
+		}
+
+		/*
+		 * Actually, we can only allocate two pages less at
+		 * most (depending on the kernel TSB size).
+		 */
+		if (dtlb_slot >= dtlb_slot_max)
+			panic("mmu_mapin: out of dtlb_slots");
+		if (itlb_slot >= itlb_slot_max)
+			panic("mmu_mapin: out of itlb_slots");
+		
+		DPRINTF(("mmu_mapin: 0x%lx:0x%x.0x%x\n", va,
+		    hi(pa), lo(pa)));
+
+		data = SUN4V_TSB_DATA(
+			0,		/* global */
+			PGSZ_4M,	/* 4mb page */
+			pa,		/* phys.address */
+			1,		/* privileged */
+			1,		/* write */
+			1,		/* cache */
+			1,		/* alias */
+			1,		/* valid */
+			0,		/* endianness */
+			0		/* wc */
+			);
+		data |= SUN4V_TLB_CV; /* virt.cache */
+		
+		dtlb_store[dtlb_slot].te_pa = pa;
+		dtlb_store[dtlb_slot].te_va = va;
+		dtlb_slot++;
+		hv_rc = hv_mmu_map_perm_addr(va, data, MAP_DTLB);
+		if ( hv_rc != H_EOK ) {
+			panic("hv_mmu_map_perm_addr() failed - rc = %ld", hv_rc);
+		}
+
+		kvamap_enter(va, PAGE_SIZE_4M);
+
+		pa = (paddr_t)-1;
+
+		len -= len > PAGE_SIZE_4M ? PAGE_SIZE_4M : len;
+		va += PAGE_SIZE_4M;
+	}
+
+	if (pa != (paddr_t)-1) {
+		OF_free_phys(pa, PAGE_SIZE_4M);
+	}
+
+	return (0);
+}
+#endif
 
 static ssize_t
 mmu_read(int f, void *addr, size_t size)
@@ -438,14 +607,40 @@ sparc64_memset(void *dst, int c, size_t size)
 void
 sparc64_finalize_tlb(u_long data_va)
 {
+#ifdef SUN4V
+	if ( sun4v )
+		sparc64_finalize_tlb_sun4v(data_va);
+	else
+#endif	
+		sparc64_finalize_tlb_sun4u(data_va);
+}
+
+/*
+ * Remove write permissions from text mappings in the dTLB - sun4u.
+ * Add entries in the iTLB.
+ */
+void
+sparc64_finalize_tlb_sun4u(u_long data_va)
+{
 	int i;
 	int64_t data;
+	bool writable_text = false;
 
 	for (i = 0; i < dtlb_slot; i++) {
-		if (dtlb_store[i].te_va >= data_va)
-			continue;
+		if (dtlb_store[i].te_va >= data_va) {
+			/*
+			 * If (for whatever reason) the start of the
+			 * writable section is right at the start of
+			 * the kernel, we need to map it into the ITLB
+			 * nevertheless (and don't make it readonly).
+			 */
+			if (i == 0 && dtlb_store[i].te_va == data_va)
+				writable_text = true;
+			else
+				continue;
+		}
 
-		data = TSB_DATA(0,		/* global */
+		data = SUN4U_TSB_DATA(0,	/* global */
 				PGSZ_4M,	/* 4mb page */
 				dtlb_store[i].te_pa,	/* phys.address */
 				1,		/* privileged */
@@ -453,15 +648,88 @@ sparc64_finalize_tlb(u_long data_va)
 				1,		/* cache */
 				1,		/* alias */
 				1,		/* valid */
-				0		/* endianness */
+				0,		/* endianness */
+				0		/* wc */
 				);
-		data |= TLB_L | TLB_CV; /* locked, virt.cache */
-		dtlb_replace(dtlb_store[i].te_va, hi(data), lo(data));
+		data |= SUN4U_TLB_L | SUN4U_TLB_CV; /* locked, virt.cache */
+		if (!writable_text)
+			dtlb_replace(dtlb_store[i].te_va, hi(data), lo(data));
 		itlb_store[itlb_slot] = dtlb_store[i];
 		itlb_slot++;
 		itlb_enter(dtlb_store[i].te_va, hi(data), lo(data));
 	}
+	if (writable_text)
+		printf("WARNING: kernel text mapped writable!\n");
+
 }
+
+#ifdef SUN4V
+/*
+ * Remove write permissions from text mappings in the dTLB - sun4v.
+ * Add entries in the iTLB.
+ */
+void
+sparc64_finalize_tlb_sun4v(u_long data_va)
+{
+	int i;
+	int64_t data;
+	bool writable_text = false;
+	int64_t hv_rc;
+
+	for (i = 0; i < dtlb_slot; i++) {
+		if (dtlb_store[i].te_va >= data_va) {
+			/*
+			 * If (for whatever reason) the start of the
+			 * writable section is right at the start of
+			 * the kernel, we need to map it into the ITLB
+			 * nevertheless (and don't make it readonly).
+			 */
+			if (i == 0 && dtlb_store[i].te_va == data_va)
+				writable_text = true;
+			else
+				continue;
+		}
+
+		data = SUN4V_TSB_DATA(
+			0,		/* global */
+			PGSZ_4M,	/* 4mb page */
+			dtlb_store[i].te_pa,	/* phys.address */
+			1,		/* privileged */
+			0,		/* write */
+			1,		/* cache */
+			1,		/* alias */
+			1,		/* valid */
+			0,		/* endianness */
+			0		/* wc */
+			);
+		data |= SUN4V_TLB_CV|SUN4V_TLB_X; /* virt.cache, executable */
+		if (!writable_text) {
+			hv_rc = hv_mmu_unmap_perm_addr(dtlb_store[i].te_va,
+			                               MAP_DTLB);
+			if ( hv_rc != H_EOK ) {
+				panic("hv_mmu_unmap_perm_addr() failed - "
+				      "rc = %ld", hv_rc);
+			}
+			hv_rc = hv_mmu_map_perm_addr(dtlb_store[i].te_va, data,
+			                             MAP_DTLB);
+			if ( hv_rc != H_EOK ) {
+				panic("hv_mmu_map_perm_addr() failed - "
+				      "rc = %ld", hv_rc);
+			}
+		}
+		
+		itlb_store[itlb_slot] = dtlb_store[i];
+		itlb_slot++;
+		hv_rc = hv_mmu_map_perm_addr(dtlb_store[i].te_va, data,
+		                             MAP_ITLB);
+		if ( hv_rc != H_EOK ) {
+			panic("hv_mmu_map_perm_addr() failed - rc = %ld", hv_rc);
+		}
+	}
+	if (writable_text)
+		printf("WARNING: kernel text mapped writable!\n");
+}
+#endif
 
 /*
  * Record kernel mappings in bootinfo structure.

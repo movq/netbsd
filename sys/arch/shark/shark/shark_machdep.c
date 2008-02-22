@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.29 2008/01/19 13:11:21 chris Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.44 2017/08/15 08:39:11 maya Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,9 +38,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.29 2008/01/19 13:11:21 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.44 2017/08/15 08:39:11 maya Exp $");
 
 #include "opt_ddb.h"
+#include "opt_modular.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -51,33 +52,34 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.29 2008/01/19 13:11:21 chris Exp
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <arm/fiq.h>
-
 #include <dev/cons.h>
+#include <dev/ofw/openfirm.h>
+#include <dev/isa/isavar.h>
+#include <dev/ofisa/ofisavar.h>
 
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 
-#include <machine/frame.h>
-#include <machine/bootconfig.h>
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/pio.h>
-#include <arm/arm32/machdep.h>
+#include <arm/fiq.h>
+#include <arm/locore.h>
 #include <arm/undefined.h>
+#include <arm/arm32/machdep.h>
 
-#include <dev/ofw/openfirm.h>
+#include <machine/bootconfig.h>
+#include <machine/pio.h>
 #include <machine/ofw.h>
 #include <machine/isa_machdep.h>
-#include <dev/isa/isavar.h>
-#include <dev/ofisa/ofisavar.h>
 #include <shark/shark/sequoia.h>
 
 #include "isadma.h"
+#include "vlpci.h"
 
 #include "wd.h"
 #include "cd.h"
@@ -100,21 +102,19 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.29 2008/01/19 13:11:21 chris Exp
 extern pv_addr_t irqstack;
 extern pv_addr_t undstack;
 extern pv_addr_t abtstack;
-extern pv_addr_t kernelstack;
-extern u_int data_abort_handler_address;
-extern u_int prefetch_abort_handler_address;
-extern u_int undefined_handler_address;
 
 /*
  *  Imported routines
  */
-extern void data_abort_handler		__P((trapframe_t *frame));
-extern void prefetch_abort_handler	__P((trapframe_t *frame));
-extern void undefinedinstruction_bounce	__P((trapframe_t *frame));
-extern void consinit		__P((void));
-int	ofbus_match __P((struct device *, struct cfdata *, void *));
-void	ofbus_attach __P((struct device *, struct device *, void *));
+extern void data_abort_handler(trapframe_t *frame);
+extern void prefetch_abort_handler(trapframe_t *frame);
+extern void undefinedinstruction_bounce(trapframe_t *frame);
+extern void consinit(void);
+int	ofbus_match(device_t, cfdata_t, void *);
+void	ofbus_attach(device_t, device_t, void *);
 
+
+paddr_t isa_io_physaddr, isa_mem_physaddr;
 
 /*
  *  Exported variables
@@ -140,19 +140,23 @@ int ofw_handleticks = 0;	/* set to TRUE by cpu_initclocks */
 extern unsigned int sa1_cache_clean_addr;
 extern unsigned int sa1_cache_clean_size;
 
-CFATTACH_DECL(ofbus_root, sizeof(struct device),
+#if NVLPCI > 0
+extern vaddr_t vlpci_mem_vaddr;
+#endif
+
+CFATTACH_DECL_NEW(ofbus_root, 0,
     ofbus_match, ofbus_attach, NULL, NULL);
 
 /*
  *  Exported routines
  */
 /* Move to header file? */
-extern void cpu_reboot		__P((int, char *));
-extern void ofrootfound		__P((void));
+extern void cpu_reboot(int, char *);
+extern void ofrootfound(void);
 
 /* Local routines */
-static void process_kernel_args	__P((void));
-void ofw_device_register(struct device *, void *);
+static void process_kernel_args(void);
+void ofw_device_register(device_t, void *);
 
 /* Kernel text starts at the base of the kernel address space. */
 #define	KERNEL_TEXT_BASE	(KERNEL_BASE + 0x00000000)
@@ -169,9 +173,7 @@ void ofw_device_register(struct device *, void *);
  */
 
 void
-cpu_reboot(howto, bootstr)
-	int howto;
-	char *bootstr;
+cpu_reboot(int howto, char *bootstr)
 {
 	/* Just call OFW common routine. */
 	ofw_boot(howto, bootstr);
@@ -204,7 +206,6 @@ initarm(void *arg)
 {
 	ofw_handle_t ofw_handle = arg;
 	paddr_t  pclean;
-	paddr_t  isa_io_physaddr, isa_mem_physaddr;
 	vaddr_t  isa_io_virtaddr, isa_mem_virtaddr;
 	paddr_t  isadmaphysbufs;
 	extern char shark_fiq[], shark_fiq_end[];
@@ -228,6 +229,10 @@ initarm(void *arg)
 	/* XXX - this should be done in the isa-bus attach routine! -JJK */
 	isa_mem_virtaddr = ofw_map(isa_mem_physaddr, L1_S_SIZE, 0);
 	isa_io_virtaddr  = ofw_map(isa_io_physaddr,  L1_S_SIZE, 0);
+#if NVLPCI > 0
+	/* XXX should get address from OF */
+	vlpci_mem_vaddr  = ofw_map(0x02000000,  0x00100000, 0);
+#endif
 
 	/* Set-up the ISA system: must be done before consinit */
 	isa_init(isa_io_virtaddr, isa_mem_virtaddr);
@@ -297,20 +302,6 @@ initarm(void *arg)
 
 	if (fiq_claim(&shark_fiqhandler))
 		panic("Cannot claim FIQ vector.");
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-#ifdef __ELF__
-	ksyms_init(0, NULL, NULL);	/* XXX */
-#else
-	{
-		struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
-		extern int end;
-		extern char *esym;
-
-		ksyms_init(kernexec->a_syms, &end, esym);
-	}
-#endif /* __ELF__ */
-#endif /* NKSYMS || defined(DDB) || defined(LKM) */
 
 #ifdef DDB
 	db_machine_init();
@@ -382,11 +373,11 @@ ofrootfound(void)
 }
 
 void
-ofw_device_register(struct device *dev, void *aux)
+ofw_device_register(device_t dev, void *aux)
 {
-	static struct device *parent;
+	static device_t parent;
 #if NSD > 0 || NCD > 0
-	static struct device *scsipidev;
+	static device_t scsipidev;
 #endif
 	static char *boot_component;
 	struct ofbus_attach_args *oba;
@@ -404,7 +395,7 @@ ofw_device_register(struct device *dev, void *aux)
 			*cp++ = '\0';
 			if (cp[0] == '\\')
 				cp++;
-			booted_kernel = cp; 
+			booted_kernel = cp;
 
 			/* Zap ".aout" suffix, arm32 libkvm now requires ELF */
 			cplen = strlen(cp);

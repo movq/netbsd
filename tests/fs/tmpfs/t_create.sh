@@ -1,6 +1,6 @@
-# $NetBSD: t_create.sh,v 1.1 2007/11/12 15:18:21 jmmv Exp $
+# $NetBSD: t_create.sh,v 1.8 2011/03/05 07:41:11 pooka Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,9 +37,9 @@ create_head() {
 create_body() {
 	test_mount
 
-	atf_check 'test -f a' 1 null null
-	atf_check 'touch a' 0 null null
-	atf_check 'test -f a' 0 null null
+	atf_check -s eq:1 -o empty -e empty test -f a
+	atf_check -s eq:0 -o empty -e empty touch a
+	atf_check -s eq:0 -o empty -e empty test -f a
 
 	test_unmount
 }
@@ -59,15 +52,16 @@ attrs_head() {
 	atf_set "require.user" "root"
 }
 attrs_body() {
+	user=$(atf_config_get unprivileged-user)
 	# Allow the unprivileged user to access the work directory.
-	chmod 711 .
+	chown ${user} .
 
 	test_mount
 
 	umask 022
-	atf_check 'test -f a' 1 null null
-	atf_check 'touch a' 0 null null
-	atf_check 'test -f a' 0 null null
+	atf_check -s eq:1 -o empty -e empty test -f a
+	atf_check -s eq:0 -o empty -e empty touch a
+	atf_check -s eq:0 -o empty -e empty test -f a
 
 	eval $(stat -s . | sed -e 's|st_|dst_|g')
 	eval $(stat -s a)
@@ -77,26 +71,24 @@ attrs_body() {
 	test ${st_gid} -eq ${dst_gid} || atf_fail "Incorrect gid"
 	test ${st_mode} = 0100644 || atf_fail "Incorrect mode"
 
-	user=$(atf_config_get unprivileged-user)
+	atf_check -s eq:0 -o empty -e empty mkdir b c
 
-	atf_check 'mkdir b c' 0 null null
-
-	atf_check "chown ${user}:0 b" 0 null null
+	atf_check -s eq:0 -o empty -e empty chown ${user}:0 b
 	eval $(stat -s b)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 0 ] || atf_fail "Incorrect group"
 
-	atf_check "chown ${user}:100 c" 0 null null
+	atf_check -s eq:0 -o empty -e empty chown ${user}:100 c
 	eval $(stat -s c)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 100 ] || atf_fail "Incorrect group"
 
-	su ${user} -c 'touch b/a'
+	atf_check -s eq:0 -o empty -e empty su -m ${user} -c 'touch b/a'
 	eval $(stat -s b/a)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 0 ] || atf_fail "Incorrect group"
 
-	su ${user} -c 'touch c/a'
+	atf_check -s eq:0 -o empty -e empty su -m ${user} -c 'touch c/a'
 	eval $(stat -s c/a)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 100 ] || atf_fail "Incorrect group"
@@ -113,7 +105,7 @@ kqueue_head() {
 kqueue_body() {
 	test_mount
 
-	atf_check 'mkdir dir' 0 null null
+	atf_check -s eq:0 -o empty -e empty mkdir dir
 	echo 'touch dir/a' | kqueue_monitor 1 dir
 	kqueue_check dir NOTE_WRITE
 

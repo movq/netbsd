@@ -1,32 +1,34 @@
-/*	$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $	*/
+/*	$NetBSD: svc.c,v 1.39 2015/11/13 15:22:12 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
@@ -35,7 +37,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $");
+__RCSID("$NetBSD: svc.c,v 1.39 2015/11/13 15:22:12 christos Exp $");
 #endif
 #endif
 
@@ -57,12 +59,14 @@ __RCSID("$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>
 #endif
 
+#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -86,7 +90,9 @@ __weak_alias(xprt_unregister,_xprt_unregister)
 __weak_alias(rpc_control,_rpc_control)
 #endif
 
+/* __svc_xports[-1] is reserved for raw */
 SVCXPRT **__svc_xports;
+int __svc_maxxports;
 int __svc_maxrec;
 
 #define	RQCRED_SIZE	400		/* this size is excessive */
@@ -107,7 +113,7 @@ static struct svc_callout {
 	rpcprog_t	    sc_prog;
 	rpcvers_t	    sc_vers;
 	char		   *sc_netid;
-	void		    (*sc_dispatch) __P((struct svc_req *, SVCXPRT *));
+	void		    (*sc_dispatch)(struct svc_req *, SVCXPRT *);
 } *svc_head;
 
 #ifdef _REENTRANT
@@ -115,39 +121,81 @@ extern rwlock_t svc_lock;
 extern rwlock_t svc_fd_lock;
 #endif
 
-static struct svc_callout *svc_find __P((rpcprog_t, rpcvers_t,
-					 struct svc_callout **, char *));
-static void __xprt_do_unregister __P((SVCXPRT *xprt, bool_t dolock));
+static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
+					 struct svc_callout **, char *);
+static void __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock);
 
 /* ***************  SVCXPRT related stuff **************** */
+
+static bool_t
+xprt_alloc(int sock)
+{
+	int oldmaxxports, newmaxxports;
+	SVCXPRT **oldxports, **newxports;
+
+	if (++sock < 0)
+		return FALSE;
+
+	newmaxxports = svc_fdset_getsize(sock);
+	if (newmaxxports == -1)
+		return FALSE;
+
+	if (__svc_xports != NULL && newmaxxports < __svc_maxxports)
+		return TRUE;
+
+	oldxports = __svc_xports;
+	oldmaxxports = __svc_maxxports;
+	if (oldxports != NULL) {
+		/* revert saving [-1] slot */
+		--oldxports;
+		++oldmaxxports;
+	}
+
+	/* reserve an extra slot for [-1] */
+	newmaxxports++;
+	newxports = realloc(oldxports, newmaxxports * sizeof(SVCXPRT *));
+	if (newxports == NULL) {
+		warn("%s: out of memory", __func__);
+		return FALSE;
+	}
+
+	memset(&newxports[oldmaxxports], 0,
+	    (newmaxxports - oldmaxxports) * sizeof(SVCXPRT *));
+
+	/* save one slot for [-1] */
+	__svc_xports = newxports + 1;
+	__svc_maxxports = newmaxxports - 1;
+
+	return TRUE;
+}
 
 /*
  * Activate a transport handle.
  */
-void
-xprt_register(xprt)
-	SVCXPRT *xprt;
+bool_t
+xprt_register(SVCXPRT *xprt)
 {
 	int sock;
 
 	_DIAGASSERT(xprt != NULL);
 
+	rwlock_wrlock(&svc_fd_lock);
 	sock = xprt->xp_fd;
 
-	rwlock_wrlock(&svc_fd_lock);
-	if (__svc_xports == NULL) {
-		__svc_xports = (SVCXPRT **)
-			mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
-		if (__svc_xports == NULL)
-			return;
-		memset(__svc_xports, '\0', FD_SETSIZE * sizeof(SVCXPRT *));
-	}
-	if (sock < FD_SETSIZE) {
-		__svc_xports[sock] = xprt;
-		FD_SET(sock, &svc_fdset);
-		svc_maxfd = max(svc_maxfd, sock);
+	if (!xprt_alloc(sock))
+		goto out;
+
+	__svc_xports[sock] = xprt;
+	if (sock != -1) {
+		if (svc_fdset_set(sock) == -1)
+			return FALSE;
 	}
 	rwlock_unlock(&svc_fd_lock);
+	return (TRUE);
+
+out:
+	rwlock_unlock(&svc_fd_lock);
+	return (FALSE);
 }
 
 void
@@ -166,27 +214,32 @@ __xprt_unregister_unlocked(SVCXPRT *xprt)
  * De-activate a transport handle. 
  */
 static void
-__xprt_do_unregister(xprt, dolock)
-	SVCXPRT *xprt;
-	bool_t dolock;
+__xprt_do_unregister(SVCXPRT *xprt, bool_t dolock)
 { 
-	int sock;
+	int sock, *fdmax;
 
 	_DIAGASSERT(xprt != NULL);
 
-	sock = xprt->xp_fd;
-
 	if (dolock)
 		rwlock_wrlock(&svc_fd_lock);
-	if ((sock < FD_SETSIZE) && (__svc_xports[sock] == xprt)) {
-		__svc_xports[sock] = NULL;
-		FD_CLR(sock, &svc_fdset);
-		if (sock >= svc_maxfd) {
-			for (svc_maxfd--; svc_maxfd>=0; svc_maxfd--)
-				if (__svc_xports[svc_maxfd])
-					break;
-		}
-	}
+
+	sock = xprt->xp_fd;
+	if (sock >= __svc_maxxports || __svc_xports[sock] != xprt)
+		goto out;
+
+	__svc_xports[sock] = NULL;
+	if (sock == -1)
+		goto out;
+	fdmax = svc_fdset_getmax();
+	if (fdmax == NULL || sock < *fdmax)
+		goto clr;
+
+	for ((*fdmax)--; *fdmax >= 0; (*fdmax)--)
+		if (__svc_xports[*fdmax])
+			break;
+clr:
+	svc_fdset_clr(sock);
+out:
 	if (dolock)
 		rwlock_unlock(&svc_fd_lock);
 }
@@ -197,12 +250,9 @@ __xprt_do_unregister(xprt, dolock)
  * program number comes in.
  */
 bool_t
-svc_reg(xprt, prog, vers, dispatch, nconf)
-	SVCXPRT *xprt;
-	const rpcprog_t prog;
-	const rpcvers_t vers;
-	void (*dispatch) __P((struct svc_req *, SVCXPRT *));
-	const struct netconfig *nconf;
+svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
+	void (*dispatch)(struct svc_req *, SVCXPRT *),
+	const struct netconfig *nconf)
 {
 	bool_t dummy;
 	struct svc_callout *prev;
@@ -248,15 +298,20 @@ svc_reg(xprt, prog, vers, dispatch, nconf)
 		return (FALSE);
 	}
 
+	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
+		if ((((SVCXPRT *) xprt)->xp_netid = strdup(netid)) == NULL) {
+			warn("svc_reg");
+			mem_free(s, sizeof(struct svc_callout));
+			rwlock_unlock(&svc_lock);
+			return FALSE;
+		}
+
 	s->sc_prog = prog;
 	s->sc_vers = vers;
 	s->sc_dispatch = dispatch;
 	s->sc_netid = netid;
 	s->sc_next = svc_head;
 	svc_head = s;
-
-	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-		((SVCXPRT *) xprt)->xp_netid = strdup(netid);
 
 rpcb_it:
 	rwlock_unlock(&svc_lock);
@@ -273,9 +328,7 @@ rpcb_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unreg(prog, vers)
-	const rpcprog_t prog;
-	const rpcvers_t vers;
+svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -306,12 +359,8 @@ svc_unreg(prog, vers)
  * program number comes in.
  */
 bool_t
-svc_register(xprt, prog, vers, dispatch, protocol)
-	SVCXPRT *xprt;
-	u_long prog;
-	u_long vers;
-	void (*dispatch) __P((struct svc_req *, SVCXPRT *));
-	int protocol;
+svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
+	void (*dispatch)(struct svc_req *, SVCXPRT *), int protocol)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -346,9 +395,7 @@ pmap_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unregister(prog, vers)
-	u_long prog;
-	u_long vers;
+svc_unregister(u_long prog, u_long vers)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -373,11 +420,7 @@ svc_unregister(prog, vers)
  * struct.
  */
 static struct svc_callout *
-svc_find(prog, vers, prev, netid)
-	rpcprog_t prog;
-	rpcvers_t vers;
-	struct svc_callout **prev;
-	char *netid;
+svc_find(rpcprog_t prog, rpcvers_t vers, struct svc_callout **prev, char *netid)
 {
 	struct svc_callout *s, *p;
 
@@ -402,10 +445,7 @@ svc_find(prog, vers, prev, netid)
  * Send a reply to an rpc request
  */
 bool_t
-svc_sendreply(xprt, xdr_results, xdr_location)
-	SVCXPRT *xprt;
-	xdrproc_t xdr_results;
-	const char *xdr_location;
+svc_sendreply(SVCXPRT *xprt, xdrproc_t xdr_results, const char *xdr_location)
 {
 	struct rpc_msg rply; 
 
@@ -424,8 +464,7 @@ svc_sendreply(xprt, xdr_results, xdr_location)
  * No procedure error reply
  */
 void
-svcerr_noproc(xprt)
-	SVCXPRT *xprt;
+svcerr_noproc(SVCXPRT *xprt)
 {
 	struct rpc_msg rply;
 
@@ -442,8 +481,7 @@ svcerr_noproc(xprt)
  * Can't decode args error reply
  */
 void
-svcerr_decode(xprt)
-	SVCXPRT *xprt;
+svcerr_decode(SVCXPRT *xprt)
 {
 	struct rpc_msg rply; 
 
@@ -460,8 +498,7 @@ svcerr_decode(xprt)
  * Some system error
  */
 void
-svcerr_systemerr(xprt)
-	SVCXPRT *xprt;
+svcerr_systemerr(SVCXPRT *xprt)
 {
 	struct rpc_msg rply; 
 
@@ -482,8 +519,7 @@ svcerr_systemerr(xprt)
  * protocol: the portmapper (or rpc binder).
  */
 void
-__svc_versquiet_on(xprt)
-	SVCXPRT *xprt;
+__svc_versquiet_on(SVCXPRT *xprt)
 {
 	u_long	tmp;
 
@@ -494,8 +530,7 @@ __svc_versquiet_on(xprt)
 }
 
 void
-__svc_versquiet_off(xprt)
-	SVCXPRT *xprt;
+__svc_versquiet_off(SVCXPRT *xprt)
 {
 	u_long	tmp;
 
@@ -506,15 +541,13 @@ __svc_versquiet_off(xprt)
 }
 
 void
-svc_versquiet(xprt)
-	SVCXPRT *xprt;
+svc_versquiet(SVCXPRT *xprt)
 {
 	__svc_versquiet_on(xprt);
 }
 
 int
-__svc_versquiet_get(xprt)
-	SVCXPRT *xprt;
+__svc_versquiet_get(SVCXPRT *xprt)
 {
 
 	_DIAGASSERT(xprt != NULL);
@@ -527,9 +560,7 @@ __svc_versquiet_get(xprt)
  * Authentication error reply
  */
 void
-svcerr_auth(xprt, why)
-	SVCXPRT *xprt;
-	enum auth_stat why;
+svcerr_auth(SVCXPRT *xprt, enum auth_stat why)
 {
 	struct rpc_msg rply;
 
@@ -546,8 +577,7 @@ svcerr_auth(xprt, why)
  * Auth too weak error reply
  */
 void
-svcerr_weakauth(xprt)
-	SVCXPRT *xprt;
+svcerr_weakauth(SVCXPRT *xprt)
 {
 
 	_DIAGASSERT(xprt != NULL);
@@ -559,8 +589,7 @@ svcerr_weakauth(xprt)
  * Program unavailable error reply
  */
 void 
-svcerr_noprog(xprt)
-	SVCXPRT *xprt;
+svcerr_noprog(SVCXPRT *xprt)
 {
 	struct rpc_msg rply;  
 
@@ -577,10 +606,7 @@ svcerr_noprog(xprt)
  * Program version mismatch error reply
  */
 void  
-svcerr_progvers(xprt, low_vers, high_vers)
-	SVCXPRT *xprt; 
-	rpcvers_t low_vers;
-	rpcvers_t high_vers;
+svcerr_progvers(SVCXPRT *xprt, rpcvers_t low_vers, rpcvers_t high_vers)
 {
 	struct rpc_msg rply;
 
@@ -614,29 +640,28 @@ svcerr_progvers(xprt, low_vers, high_vers)
  */
 
 void
-svc_getreq(rdfds)
-	int rdfds;
+svc_getreq(int rdfds)
 {
-	fd_set readfds;
+	fd_set *readfds = svc_fdset_copy(NULL);
+	if (readfds == NULL)
+		return;
 
-	FD_ZERO(&readfds);
-	readfds.fds_bits[0] = rdfds;
-	svc_getreqset(&readfds);
+	readfds->fds_bits[0] = (unsigned int)rdfds;
+	svc_getreqset(readfds);
+	free(readfds);
 }
 
 void
-svc_getreqset(readfds)
-	fd_set *readfds;
+svc_getreqset2(fd_set *readfds, int maxsize)
 {
-	int bit, fd;
-	int32_t mask, *maskp;
-	int sock;
+	uint32_t mask, *maskp;
+	int sock, bit, fd;
 
 	_DIAGASSERT(readfds != NULL);
 
 	maskp = readfds->fds_bits;
-	for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS) {
-	    for (mask = *maskp++; (bit = ffs(mask)) != 0;
+	for (sock = 0; sock < maxsize; sock += NFDBITS) {
+	    for (mask = *maskp++; (bit = ffs((int)mask)) != 0;
 		mask ^= (1 << (bit - 1))) {
 		/* sock has input waiting */
 		fd = sock + bit - 1;
@@ -646,8 +671,13 @@ svc_getreqset(readfds)
 }
 
 void
-svc_getreq_common(fd)
-	int fd;
+svc_getreqset(fd_set *readfds)
+{
+	svc_getreqset2(readfds, FD_SETSIZE);
+}
+
+void
+svc_getreq_common(int fd)
 {
 	SVCXPRT *xprt;
 	struct svc_req r;
@@ -734,9 +764,7 @@ call_done:
 
 
 void
-svc_getreq_poll(pfdp, pollretval)
-	struct pollfd	*pfdp;
-	int	pollretval;
+svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 {
 	int i;
 	int fds_found;
@@ -754,7 +782,7 @@ svc_getreq_poll(pfdp, pollretval)
 			 *	via someone select()ing from svc_fdset or
 			 *	pollts()ing from svc_pollset[].  Thus it's safe
 			 *	to handle the POLLNVAL event by simply turning
-			 *	the corresponding bit off in svc_fdset.  The
+			 *	the corresponding bit off in the fdset.  The
 			 *	svc_pollset[] array is derived from svc_fdset
 			 *	and so will also be updated eventually.
 			 *
@@ -762,7 +790,7 @@ svc_getreq_poll(pfdp, pollretval)
 			 */
 			if (p->revents & POLLNVAL) {
 				rwlock_wrlock(&svc_fd_lock);
-				FD_CLR(p->fd, &svc_fdset);
+				svc_fdset_clr(p->fd);
 				rwlock_unlock(&svc_fd_lock);
 			} else
 				svc_getreq_common(p->fd);

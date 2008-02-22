@@ -1,4 +1,4 @@
-/*	$NetBSD: copy.S,v 1.6 2007/11/12 12:58:10 skrll Exp $	*/
+/*	$NetBSD: copy.S,v 1.22 2014/03/06 17:48:09 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 /*	$OpenBSD: locore.S,v 1.46 2001/09/20 18:33:03 mickey Exp $	*/
 
 /*
- * Copyright (c) 1998-2001 Michael Shalayeff
+ * Copyright (c) 1998-2004 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,11 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -110,36 +98,35 @@
 LEAF_ENTRY_NOPROFILE(name)			! \
 	ldil	L%VM_MAXUSER_ADDRESS, %t1	! \
 	comb,>>= %arg0, %t1, fusubadaddr	! \
-	ldil	L%curlwp, %t1			! \
-	ldw	R%curlwp(%t1), %t1		! \
-	ldw	L_ADDR(%t1), %t1		! \
+	GET_CURLWP(%t1)				! \
+	ldw	L_PCB(%t1), %t1			! \
 	ldil	L%fusufault, %t2		! \
 	ldo	R%fusufault(%t2), %t2		! \
-	ldw	U_PCB+PCB_ONFAULT(%t1), %t3	! \
-	stw	%t2, U_PCB+PCB_ONFAULT(%t1)	! \
-	ldw	U_PCB+PCB_SPACE(%t1), %t2	! \
+	ldw	PCB_ONFAULT(%t1), %t3		! \
+	stw	%t2, PCB_ONFAULT(%t1)		! \
+	ldw	PCB_SPACE(%t1), %t2		! \
 	mtsp	%t2, %sr1
 
 #define	FUX(name,insn)				  \
 	FUSUX(name)				! \
 	insn	0(%sr1, %arg0), %ret0		! \
 	bv	%r0(%rp)			! \
-	stw	%r0, U_PCB+PCB_ONFAULT(%t1)	! \
+	stw	%r0, PCB_ONFAULT(%t1)		! \
 EXIT(name)
 
 #define	SUX(name,insn)				  \
 	FUSUX(name)				! \
 	insn	%arg1, 0(%sr1, %arg0)		! \
 	bv	%r0(%rp)			! \
-	stw	%r0, U_PCB+PCB_ONFAULT(%t1)	! \
+	stw	%r0, PCB_ONFAULT(%t1)		! \
 EXIT(name)
 
 LEAF_ENTRY_NOPROFILE(fusufault)
-	stw	%r0, U_PCB+PCB_ONFAULT(%t1)
+	stw	%r0, PCB_ONFAULT(%t1)
 ALTENTRY(fusubadaddr)
 	bv	0(%rp)
 	ldi	-1, %ret0
-EXIT(fusuexit)
+EXIT(fusufault)
 
 FUX(fubyte,   ldb)
 FUX(fusword,  ldh)
@@ -152,49 +139,44 @@ SUX(suswintr, sth)
 
 	.align	64
 
-LEAF_ENTRY_NOPROFILE(_copy_on_fault)
-	/* reset fault handler */
-	stw	%r0, PCB_ONFAULT+U_PCB(%r31)
-ALTENTRY(copy_on_fault)
-	bv	0(%rp)
-	ldi	EFAULT, %ret0
-EXIT(_copy_on_fault)
-
 /*
  * int spstrcpy (pa_space_t ssp, const void *src, pa_space_t dsp, void *dst,
- *		 size_t size, size_t *rsize)
- * do a space to space strncpy, return actual copy size in the rsize;
+ *     size_t size, size_t *rsize)
+ *
+ * Do a space to space size bounded string copy and return actual copy size in
+ * rsize. If the copy ran out of space before '\0' is seen return ENAMETOOLONG
+ *
  */
 LEAF_ENTRY(spstrcpy)
 	/* setup fault handler */
-	ldil	L%curlwp, %r31
-	ldw	R%curlwp(%r31), %r31
-	ldw	L_ADDR(%r31), %r31
-	ldil	L%_copy_on_fault, %t2
-	ldo	R%_copy_on_fault(%t2), %t2
-	stw	%t2, PCB_ONFAULT+U_PCB(%r31)
+	GET_CURLWP(%r31)
+	ldw	L_PCB(%r31), %r31
+	ldil	L%L$spstrcpy_fault, %t2
+	ldo	R%L$spstrcpy_fault(%t2), %t2
+	stw	%t2, PCB_ONFAULT(%r31)
 
-	ldw	HPPA_FRAME_ARG(4)(%sp), %ret1
-	mfsp	%sr2, %ret0	/* XXX need this? */
+	ldw	HPPA_FRAME_ARG(4)(%sp), %t2	/* size */
 	mtsp	%arg0, %sr1
 	mtsp	%arg2, %sr2
-	add	%ret1, %arg1, %ret1
-	copy	%arg1, %arg0
+	copy	%arg1, %arg0			/* save src */
 
-$spstrcpy_loop:
+L$spstrcpy_loop:
+	comb,=,n %r0, %t2, L$spstrcpy_exit
 	ldbs,ma	1(%sr1, %arg1), %t1
-	comb,=	%ret1, %arg1, $spstrcpy_exit
 	stbs,ma	%t1, 1(%sr2, %arg3)
-	comb,<>,n %r0, %t1, $spstrcpy_loop
+	comb,<>	%r0, %t1, L$spstrcpy_loop
+	ldo	-1(%t2), %t2
 
-$spstrcpy_exit:
+L$spstrcpy_exit:
+	comiclr,= 0, %t1, %ret0
+	ldi	ENAMETOOLONG,%ret0
+
+L$spstrcpy_fault:
 	/* reset fault handler */
-	stw	%r0, PCB_ONFAULT+U_PCB(%r31)
-	copy	%r0, %ret0
-	mtsp	%ret0, %sr2	/* XXX need this? */
+	stw	%r0, PCB_ONFAULT(%r31)
 	sub	%arg1, %arg0, %arg1
-	ldw	HPPA_FRAME_ARG(5)(%sp), %arg0
-	comb,=,n %r0, %arg0, 0
+	ldw	HPPA_FRAME_ARG(5)(%sp), %arg0		/* rsize */
+	comiclr,= 0, %arg0, %r0
 	stw	%arg1, 0(%arg0)
 	bv,n	0(%rp)
 EXIT(spstrcpy)
@@ -238,10 +220,9 @@ EXIT(name)
 
 /* This loads curlwp's space into the given register. */
 #define SPACE_CURLWP(reg)			  \
-	ldil	L%curlwp, reg			! \
-	ldw	R%curlwp(reg), reg		! \
-	ldw	L_ADDR(reg), reg		! \
-	ldw	U_PCB+PCB_SPACE(reg), reg
+	GET_CURLWP(reg)				! \
+	ldw	L_PCB(reg), reg			! \
+	ldw	PCB_SPACE(reg), reg
 
 /* This loads the kernel's space into the given register. */
 #define SPACE_KERNEL(reg)			  \
@@ -269,9 +250,10 @@ EXIT(name)
 	_SPCOPY(namestr, CALL_SPSTRCPY, spaceargs)
 
 /*
+ * int kcopy(const void *src, void *dst, size_t len);
  * int copystr(const void *src, void *dst, size_t size, size_t *lenp);
  */
-_SPCOPY(copystr, CALL_SPSTRCPY,
+SPCOPY(kcopy, copystr,
 	SPACE_KERNEL(%arg0) ! SPACE_KERNEL(%arg2))
 
 /*
@@ -334,7 +316,7 @@ EXIT(hppa_ktext_stw)
 ENTRY(hppa_ktext_stb, HPPA_FRAME_SIZE)
 
 	/*
-	 * Make the deposit location for the byte in the 
+	 * Make the deposit location for the byte in the
 	 * aligned word.
 	 */
 	ldi     7, %t2
@@ -351,3 +333,45 @@ ENTRY(hppa_ktext_stb, HPPA_FRAME_SIZE)
 	b	hppa_ktext_stw
 	copy	%t2, %arg1
 EXIT(hppa_ktext_stb)
+
+STRONG_ALIAS(ucas_int,ucas_32)
+STRONG_ALIAS(ucas_ptr,ucas_32)
+
+	.global ucas_ras_start
+	.global ucas_ras_end
+
+/*
+ * Compare-and-swap the pointer in the user-space.
+ *
+ * int	ucas_32(volatile int32_t *uptr, int32_t old, int32_t new, int32_t *ret);
+ */
+LEAF_ENTRY(ucas_32)
+	ldil	L%VM_MAXUSER_ADDRESS, %t1
+	comb,>>= %arg0, %t1, 1f
+
+	/* setup fault handler */
+	GET_CURLWP(%r31)
+	ldw	L_PCB(%r31), %r31
+	ldil	L%L$ucas_32_fault, %t2
+	ldo	R%L$ucas_32_fault(%t2), %t2
+	stw	%t2, PCB_ONFAULT(%r31)
+
+	ldw	PCB_SPACE(%r31), %t1
+	mtsp	%t1, %sr1
+
+ucas_ras_start:
+	ldw	0(%sr1, %arg0), %t1
+	comb,<>	%arg1, %t1, ucas_ras_end
+	 copy	%r0, %ret0
+	stw	%arg2, 0(%sr1, %arg0)
+ucas_ras_end:
+	stw	%t1, 0(%arg3)
+
+L$ucas_32_fault:
+	bv	0(%rp)
+	 stw	%r0, PCB_ONFAULT(%r31)
+
+1:
+	bv	0(%rp)
+	 ldi	EFAULT, %ret0
+EXIT(ucas_32)

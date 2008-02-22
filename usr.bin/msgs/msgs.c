@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.c,v 1.18 2003/08/07 11:15:17 agc Exp $	*/
+/*	$NetBSD: msgs.c,v 1.25 2016/09/05 00:40:29 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)msgs.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: msgs.c,v 1.18 2003/08/07 11:15:17 agc Exp $");
+__RCSID("$NetBSD: msgs.c,v 1.25 2016/09/05 00:40:29 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -109,7 +109,7 @@ typedef	char	bool;
 
 FILE	*msgsrc;
 FILE	*newmsg;
-char	*sep = "-";
+const char *sep = "-";
 char	inbuf[BUFSIZ];
 char	fname[MAXPATHLEN];
 char	cmdbuf[MAXPATHLEN + 16];
@@ -139,15 +139,14 @@ int	Lpp = 0;
 time_t	t;
 time_t	keep;
 
-void	ask __P((char *));
-void	gfrsub __P((FILE *));
-int	linecnt __P((FILE *));
-int	main __P((int, char *[]));
-int	next __P((char *));
-char	*nxtfld __P((char *));
-void	onintr __P((int));
-void	onsusp __P((int));
-void	prmesg __P((int));
+void	ask(const char *);
+void	gfrsub(FILE *);
+int	linecnt(FILE *);
+int	next(char *, size_t);
+char	*nxtfld(char *);
+void	onintr(int);
+void	onsusp(int);
+void	prmesg(int);
 
 /* option initialization */
 bool	hdrs = NO;
@@ -161,8 +160,7 @@ bool	lastcmd = NO;
 jmp_buf	tstpbuf;
 
 int
-main(argc, argv)
-	int argc; char *argv[];
+main(int argc, char *argv[])
 {
 	bool newrc, already;
 	int rcfirst = 0;		/* first message to print (from .rc) */
@@ -579,7 +577,8 @@ cmnd:
 					break;
 				}
 				if (isdigit((unsigned char)*in)) {
-					msg = next(in);
+					msg = next(in, sizeof(inbuf) -
+					    (in - inbuf));
 					sep = in;
 					break;
 				}
@@ -627,8 +626,7 @@ cmnd:
 }
 
 void
-prmesg(length)
-	int length;
+prmesg(int length)
 {
 	FILE *outf;
 	char *env_pager;
@@ -647,7 +645,7 @@ prmesg(length)
 		if (!outf)
 			outf = stdout;
 		else
-			setbuf(outf, (char *)NULL);
+			setbuf(outf, NULL);
 	}
 	else
 		outf = stdout;
@@ -677,8 +675,7 @@ prmesg(length)
 }
 
 void
-onintr(dummy)
-	int dummy;
+onintr(int dummy)
 {
 	signal(SIGINT, onintr);
 	if (mailing)
@@ -703,8 +700,7 @@ onintr(dummy)
  * We have just gotten a susp.  Suspend and prepare to resume.
  */
 void
-onsusp(dummy)
-	int dummy;
+onsusp(int dummy)
 {
 
 	signal(SIGTSTP, SIG_DFL);
@@ -716,8 +712,7 @@ onsusp(dummy)
 }
 
 int
-linecnt(f)
-	FILE *f;
+linecnt(FILE *f)
 {
 	off_t oldpos = ftell(f);
 	int l = 0;
@@ -731,18 +726,16 @@ linecnt(f)
 }
 
 int
-next(buf)
-	char *buf;
+next(char *buf, size_t bufsiz)
 {
 	int i;
 	sscanf(buf, "%d", &i);
-	snprintf(buf, sizeof (buf), "Goto %d", i);
+	snprintf(buf, bufsiz, "Goto %d", i);
 	return(--i);
 }
 
 void
-ask(prompt)
-	char *prompt;
+ask(const char *prompt)
 {
 	char	inch;
 	int	n, cmsg;
@@ -806,6 +799,7 @@ ask(prompt)
 			perror(fname);
 			mailing = NO;
 			fseek(newmsg, oldpos, 0);
+			fclose(cpfrom);
 			ask(prompt);
 			return;
 		}
@@ -828,8 +822,7 @@ ask(prompt)
 }
 
 void
-gfrsub(infile)
-	FILE *infile;
+gfrsub(FILE *infile)
 {
 	off_t frompos;
 
@@ -905,8 +898,7 @@ gfrsub(infile)
 }
 
 char *
-nxtfld(s)
-	char *s;
+nxtfld(char *s)
 {
 	if (*s) while (*s && *s > ' ') s++;	/* skip over this field */
 	if (*s) while (*s && *s <= ' ') s++;	/* find start of next field */

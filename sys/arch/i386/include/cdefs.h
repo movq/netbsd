@@ -1,8 +1,12 @@
-/*	$NetBSD: cdefs.h,v 1.6 1999/03/20 01:40:26 thorpej Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.9 2012/01/20 14:08:06 joerg Exp $	*/
 
-#ifndef	_MACHINE_CDEFS_H_
-#define	_MACHINE_CDEFS_H_
+#ifndef	_I386_CDEFS_H_
+#define	_I386_CDEFS_H_
 
-/* No arch-specific cdefs. */
+#if defined(_STANDALONE)
+#define	__compactcall	__attribute__((__regparm__(3)))
+#endif
 
-#endif /* !_MACHINE_CDEFS_H_ */
+#define __ALIGNBYTES	(sizeof(int) - 1)
+
+#endif /* !_I386_CDEFS_H_ */

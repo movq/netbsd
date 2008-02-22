@@ -1,7 +1,7 @@
-/* $NetBSD: envsys.h,v 1.20 2007/12/07 11:47:49 xtraeme Exp $ */
+/* $NetBSD: envsys.h,v 1.38 2018/05/27 06:40:31 wiz Exp $ */
 
 /*-
- * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2007, 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,29 +47,9 @@
 #define ENVSYS_MAXSENSORS	512
 #define ENVSYS_DESCLEN		32
 
-/* struct used by a sensor */
-struct envsys_data {
-	TAILQ_ENTRY(envsys_data)	sensors_head;
-	uint32_t	sensor;		/* sensor number */
-	uint32_t	units;		/* type of sensor */
-	uint32_t	state;		/* sensor state */
-	uint32_t	flags;		/* sensor flags */
-	uint32_t	rpms;		/* for fans, nominal RPMs */
-	int32_t		rfact;		/* for volts, factor x 10^4 */
-	int32_t		value_cur;	/* current value */
-	int32_t		value_max;	/* max value */
-	int32_t		value_min;	/* min value */
-	int32_t		value_avg;	/* avg value */
-	int		upropset;	/* userland property set? */
-	bool		monitor;	/* monitoring enabled/disabled */
-	char		desc[ENVSYS_DESCLEN];	/* sensor description */
-};
-
-typedef struct envsys_data envsys_data_t;
-
 /* sensor units */
 enum envsys_units {
-	ENVSYS_STEMP		= 0,	/* Temperature */
+	ENVSYS_STEMP		= 0,	/* Temperature (microkelvins) */
 	ENVSYS_SFANRPM,			/* Fan RPM */
 	ENVSYS_SVOLTS_AC,		/* AC Volts */
 	ENVSYS_SVOLTS_DC,		/* DC Volts */
@@ -90,6 +63,8 @@ enum envsys_units {
 	ENVSYS_DRIVE,			/* Drive */
 	ENVSYS_BATTERY_CAPACITY,	/* Battery capacity */
 	ENVSYS_BATTERY_CHARGE,		/* Battery charging/discharging */
+	ENVSYS_SRELHUMIDITY,		/* relative humidity */
+	ENVSYS_LUX,			/* illuminance in lux */
 	ENVSYS_NSENSORS
 };
 
@@ -116,7 +91,10 @@ enum envsys_drive_states {
 	ENVSYS_DRIVE_POWERDOWN,		/* drive is powered down */
 	ENVSYS_DRIVE_FAIL,		/* drive failed */
 	ENVSYS_DRIVE_PFAIL,		/* drive is degraded */
-	ENVSYS_DRIVE_MIGRATING		/* drive is migrating */
+	ENVSYS_DRIVE_MIGRATING,		/* drive is migrating */
+	ENVSYS_DRIVE_OFFLINE,		/* drive is offline */
+	ENVSYS_DRIVE_BUILD,		/* drive is building */
+	ENVSYS_DRIVE_CHECK		/* drive is checking its state */
 };
 
 /* sensor battery capacity states */
@@ -124,25 +102,20 @@ enum envsys_battery_capacity_states {
 	ENVSYS_BATTERY_CAPACITY_NORMAL	= 1,	/* normal cap in battery */
 	ENVSYS_BATTERY_CAPACITY_WARNING,	/* warning cap in battery */
 	ENVSYS_BATTERY_CAPACITY_CRITICAL,	/* critical cap in battery */
+	ENVSYS_BATTERY_CAPACITY_HIGH,		/* high cap in battery */
+	ENVSYS_BATTERY_CAPACITY_MAX,		/* maximum cap in battery */
 	ENVSYS_BATTERY_CAPACITY_LOW		/* low cap in battery */
 };
 
-/* sensor flags */
-#define ENVSYS_FPERCENT 	0x00000001	/* sensor wants a percentage */
-#define ENVSYS_FVALID_MAX	0x00000002	/* max value is ok */
-#define ENVSYS_FVALID_MIN	0x00000004	/* min value is ok */
-#define ENVSYS_FVALID_AVG	0x00000008	/* avg value is ok */
-#define ENVSYS_FCHANGERFACT	0x00000010	/* sensor can change rfact */
+/* sensor indicator states */
+enum envsys_indicator_states {
+	ENVSYS_INDICATOR_FALSE		= 0,
+	ENVSYS_INDICATOR_TRUE		= 1
+};
 
-/* monitoring flags */
-#define ENVSYS_FMONCRITICAL	0x00000020	/* monitor a critical state */
-#define ENVSYS_FMONCRITUNDER	0x00000040	/* monitor a critunder state */
-#define ENVSYS_FMONCRITOVER	0x00000080	/* monitor a critover state */
-#define ENVSYS_FMONWARNUNDER	0x00000100	/* monitor a warnunder state */
-#define ENVSYS_FMONWARNOVER	0x00000200	/* monitor a warnover state */
-#define ENVSYS_FMONSTCHANGED	0x00000400	/* monitor a battery/drive state */
-#define ENVSYS_FMONNOTSUPP	0x00000800	/* monitoring not supported */
-
+/*
+ * IOCTLs
+ */
 #define ENVSYS_GETDICTIONARY	_IOWR('E', 0, struct plistref)
 #define ENVSYS_SETDICTIONARY	_IOWR('E', 1, struct plistref)
 #define ENVSYS_REMOVEPROPS	_IOWR('E', 2, struct plistref)
@@ -155,7 +128,7 @@ enum envsys_battery_capacity_states {
 /* get sensor data */
 
 struct envsys_tre_data {
-	u_int sensor;
+	unsigned int sensor;
 	union {				/* all data is given */
 		uint32_t data_us;	/* in microKelvins, */
 		int32_t data_s;		/* rpms, volts, amps, */
@@ -164,7 +137,7 @@ struct envsys_tre_data {
 
 	uint32_t	warnflags;	/* warning flags */
 	uint32_t	validflags;	/* sensor valid flags */
-	u_int		units;		/* type of sensor */
+	unsigned int	units;		/* type of sensor */
 };
 typedef struct envsys_tre_data envsys_tre_data_t;
 
@@ -190,7 +163,7 @@ typedef struct envsys_tre_data envsys_tre_data_t;
 #ifdef ENVSYSUNITNAMES
 static const char * const envsysunitnames[] = {
     "degC", "RPM", "VAC", "V", "Ohms", "W",
-    "A", "Wh", "Ah", "bool", "integer", "drive", "Unk"
+    "A", "Wh", "Ah", "bool", "integer", "drive", "%rH", "lux", "Unk"
 };
 static const char * const envsysdrivestatus[] = {
     "unknown", "empty", "ready", "powering up", "online", "idle", "active",
@@ -212,11 +185,11 @@ static const char * const envsysdrivestatus[] = {
 /* set and check sensor info */
 
 struct envsys_basic_info {
-	u_int	sensor;		/* sensor number */
-	u_int	units;		/* type of sensor */
+	unsigned int sensor;	/* sensor number */
+	unsigned int units;	/* type of sensor */
 	char	desc[33];	/* sensor description */
-	u_int	rfact;		/* for volts, (int)(factor x 10^4) */
-	u_int	rpms;		/* for fans, set nominal RPMs */
+	unsigned int rfact;	/* for volts, (int)(factor x 10^4) */
+	unsigned int rpms;	/* for fans, set nominal RPMs */
 	uint32_t validflags;	/* sensor valid flags */
 };
 typedef struct envsys_basic_info envsys_basic_info_t;

@@ -1,8 +1,7 @@
-/* $NetBSD: spc.c,v 1.5 2005/12/11 12:17:14 christos Exp $ */
+/* $NetBSD: spc.c,v 1.8 2011/02/12 23:10:22 tsutsui Exp $ */
 
-/*
- * Copyright (c) 2003 Izumi Tsutsui.
- * All rights reserved.
+/*-
+ * Copyright (c) 2003 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,10 +25,11 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_useleds.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: spc.c,v 1.5 2005/12/11 12:17:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spc.c,v 1.8 2011/02/12 23:10:22 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,8 +56,12 @@ __KERNEL_RCSID(0, "$NetBSD: spc.c,v 1.5 2005/12/11 12:17:14 christos Exp $");
 #include <hp300/dev/dmareg.h>
 #include <hp300/dev/dmavar.h>
 
-static int	spc_dio_match(struct device *, struct cfdata *, void *);
-static void	spc_dio_attach(struct device *, struct device *, void *);
+#ifdef USELEDS
+#include <hp300/hp300/leds.h>
+#endif
+
+static int	spc_dio_match(device_t, cfdata_t, void *);
+static void	spc_dio_attach(device_t, device_t, void *);
 static void	spc_dio_dmastart(struct spc_softc *, void *, size_t, int);
 static void	spc_dio_dmadone(struct spc_softc *);
 static void	spc_dio_dmago(void *);
@@ -78,11 +80,11 @@ struct spc_dio_softc {
 #define SCSI_DATAIN	0x04		/* DMA direction */
 };
 
-CFATTACH_DECL(spc, sizeof(struct spc_dio_softc),
+CFATTACH_DECL_NEW(spc, sizeof(struct spc_dio_softc),
     spc_dio_match, spc_dio_attach, NULL, NULL);
 
 static int
-spc_dio_match(struct device *parent, struct cfdata *cf, void *aux)
+spc_dio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
@@ -98,39 +100,40 @@ spc_dio_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-spc_dio_attach(struct device *parent, struct device *self, void *aux)
+spc_dio_attach(device_t parent, device_t self, void *aux)
 {
-	struct spc_dio_softc *dsc = (struct spc_dio_softc *)self;
+	struct spc_dio_softc *dsc = device_private(self);
 	struct spc_softc *sc = &dsc->sc_spc;
 	struct dio_attach_args *da = aux;
 	bus_space_tag_t iot = &dsc->sc_tag;
 	bus_space_handle_t iohsc, iohspc;
 	uint8_t id;
 
+	sc->sc_dev = self;
 	memcpy(iot, da->da_bst, sizeof(struct bus_space_tag));
 	dio_set_bus_space_oddbyte(iot);
 
 	if (bus_space_map(iot, da->da_addr, da->da_size, 0, &iohsc)) {
-		printf(": can't map SCSI registers\n");
+		aprint_error(": can't map SCSI registers\n");
 		return;
 	}
 
 	if (bus_space_subregion(iot, iohsc, SPC_OFFSET, SPC_SIZE, &iohspc)) {
-		printf(": can't map SPC registers\n");
+		aprint_error(": can't map SPC registers\n");
 		return;
 	}
 
-	printf(": 98265A SCSI");
+	aprint_normal(": 98265A SCSI");
 
 	bus_space_write_1(iot, iohsc, HPSCSI_ID, 0xff);
 	DELAY(100);
 	id = bus_space_read_1(iot, iohsc, HPSCSI_ID);
 	if ((id & ID_WORD_DMA) == 0) {
-		printf(", 32-bit DMA");
+		aprint_normal(", 32-bit DMA");
 		dsc->sc_dflags |= SCSI_DMA32;
 	}
 	id &= ID_MASK;
-	printf(", SCSI ID %d\n", id);
+	aprint_normal(", SCSI ID %d\n", id);
 
 	sc->sc_iot = iot;
 	sc->sc_ioh = iohspc;
@@ -169,14 +172,14 @@ spc_dio_dmastart(struct spc_softc *sc, void *addr, size_t size, int datain)
 
 	if (dmareq(&dsc->sc_dq) != 0)
 		/* DMA channel is available, so start DMA immediately */
-		spc_dio_dmago((void *)dsc);
+		spc_dio_dmago(dsc);
 	/* else dma start function will be called later from dmafree(). */
 }
 
 static void
 spc_dio_dmago(void *arg)
 {
-	struct spc_dio_softc *dsc = (struct spc_dio_softc *)arg;
+	struct spc_dio_softc *dsc = arg;
 	struct spc_softc *sc = &dsc->sc_spc;
 	bus_space_tag_t iot;
 	bus_space_handle_t iohsc, iohspc;
@@ -229,6 +232,9 @@ spc_dio_dmago(void *arg)
 	bus_space_write_1(iot, iohspc, SCMD, cmd);
 
 	sc->sc_flags |= SPC_DOINGDMA;
+#ifdef USELEDS
+	ledcontrol(LED_DISK, 0, 0);
+#endif
 }
 
 static void
@@ -250,7 +256,7 @@ spc_dio_dmadone(struct spc_softc *sc)
 		while ((bus_space_read_1(iot, ioh, SSTS) & SSTS_BUSY) != 0) {
 			if (--timeout < 0)
 				printf("%s: DMA complete timeout\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			DELAY(1);
 		}
 	}
@@ -272,12 +278,15 @@ spc_dio_dmadone(struct spc_softc *sc)
 	sc->sc_dleft -= trans;
 
 	sc->sc_flags &= ~SPC_DOINGDMA;
+#ifdef USELEDS
+	ledcontrol(0, LED_DISK, 0);
+#endif
 }
 
 static void
 spc_dio_dmastop(void *arg)
 {
-	struct spc_dio_softc *dsc = (struct spc_dio_softc *)arg;
+	struct spc_dio_softc *dsc = arg;
 	struct spc_softc *sc = &dsc->sc_spc;
 	uint8_t cmd;
 
@@ -288,4 +297,7 @@ spc_dio_dmastop(void *arg)
 
 	dsc->sc_dflags &= ~SCSI_HAVEDMA;
 	sc->sc_flags &= ~SPC_DOINGDMA;
+#ifdef USELEDS
+	ledcontrol(0, LED_DISK, 0);
+#endif
 }

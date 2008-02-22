@@ -1,5 +1,5 @@
-/*	$NetBSD: pflogd.h,v 1.3 2005/07/01 12:43:50 peter Exp $	*/
-/*	$OpenBSD: pflogd.h,v 1.2 2004/01/15 20:15:14 canacar Exp $ */
+/*	$NetBSD: pflogd.h,v 1.5 2012/02/29 23:42:28 joerg Exp $	*/
+/*	$OpenBSD: pflogd.h,v 1.3 2006/01/15 16:38:04 canacar Exp $ */
 
 /*
  * Copyright (c) 2003 Can Erkin Acar
@@ -36,12 +36,13 @@
 #define PFLOGD_MAXSNAPLEN	INT_MAX
 #define PFLOGD_BUFSIZE		65536	/* buffer size for incoming packets */
 
-void  logmsg(int priority, const char *message, ...);
+void  logmsg(int priority, const char *message, ...) __printflike(2, 3);
 
 /* Privilege separation */
 int	priv_init(void);
 int	priv_set_snaplen(int snaplen);
 int	priv_open_log(void);
+int	priv_move_log(void);
 pcap_t *pcap_open_live_fd(int fd, int snaplen, char *ebuf);
 
 void set_pcap_filter(void);

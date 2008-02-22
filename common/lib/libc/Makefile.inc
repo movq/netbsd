@@ -1,10 +1,18 @@
-# $NetBSD: Makefile.inc,v 1.8 2008/01/22 12:34:58 nakayama Exp $
+# $NetBSD: Makefile.inc,v 1.17 2017/11/30 05:47:24 riastradh Exp $
+
+.include <bsd.own.mk>
 
 COMMON_DIR:=${.PARSEDIR}
-COMMON_CODEDIRS=atomic gen gmon inet md net quad stdlib string
-COMMON_CODEDIRS+=hash/sha1 hash/sha2 hash/rmd160
+COMMON_CODEDIRS=atomic gen gmon inet md net stdlib string sys
+COMMON_CODEDIRS+=hash/sha1 hash/sha2 hash/sha3 hash/rmd160 hash/murmurhash
 
-.if defined(LIBKERN_ARCH) && !empty(LIBKERN_ARCH) && \
+.if defined(COMMON_MACHINE_ARCH) && !empty(COMMON_MACHINE_ARCH) && \
+    exists(${COMMON_DIR}/arch/${COMMON_MACHINE_ARCH})
+COMMON_ARCHSUBDIR=	${COMMON_MACHINE_ARCH}
+.elif defined(COMMON_MACHINE_CPU) && !empty(COMMON_MACHINE_CPU) && \
+    exists(${COMMON_DIR}/arch/${COMMON_MACHINE_CPU})
+COMMON_ARCHSUBDIR=	${COMMON_MACHINE_CPU}
+.elif defined(LIBKERN_ARCH) && !empty(LIBKERN_ARCH) && \
     exists(${KERNDIR}/arch/${LIBKERN_ARCH})
 COMMON_ARCHSUBDIR=	${LIBKERN_ARCH}
 .elif exists(${COMMON_DIR}/arch/${MACHINE_ARCH})
@@ -22,6 +30,11 @@ COMMON_ARCHDIR=${COMMON_DIR}/arch/${COMMON_ARCHSUBDIR}
 .if exists(${COMMON_ARCHDIR}/${i}/Makefile.inc)
 .include "${COMMON_ARCHDIR}/${i}/Makefile.inc"
 .endif
+.if !empty(CPPFLAGS:M-DLIBKERN_OPTIMISE_SPACE) && \
+    exists(${COMMON_ARCHDIR}/$i/small)
+.PATH.S: ${COMMON_ARCHDIR}/$i/small
+.endif
+
 .if exists(${COMMON_ARCHDIR}/$i)
 .PATH.c: ${COMMON_ARCHDIR}/$i
 .PATH.S: ${COMMON_ARCHDIR}/$i

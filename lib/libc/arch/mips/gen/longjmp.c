@@ -1,4 +1,4 @@
-/*	$NetBSD: longjmp.c,v 1.1 2005/09/17 11:49:39 tsutsui Exp $	*/
+/*	$NetBSD: longjmp.c,v 1.6 2016/01/24 16:01:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@ __longjmp14(jmp_buf env, int val)
 	ucontext_t uc;
 
 	/* Ensure non-zero SP and sigcontext magic number is present */
-	if (sc->sc_regs[_R_SP] == 0 || sc->sc_regs[_R_ZERO] != 0xACEDBADE)
+	if (sc->sc_regs[_R_SP] == 0 || sc->sc_regs[_R_ZERO] != (__register_t)0xACEDBADEU)
 		goto err;
 
 	/* Ensure non-zero return value */
@@ -77,7 +70,7 @@ __longjmp14(jmp_buf env, int val)
 	uc.uc_link = 0;
 
 	/* Save return value in context */
-	uc.uc_mcontext.__gregs[_R_V0] = val;
+	uc.uc_mcontext.__gregs[_REG_V0] = val;
 
 	/* Copy saved registers */
 	uc.uc_mcontext.__gregs[_REG_S0] = sc->sc_regs[_R_S0];
@@ -89,6 +82,9 @@ __longjmp14(jmp_buf env, int val)
 	uc.uc_mcontext.__gregs[_REG_S6] = sc->sc_regs[_R_S6];
 	uc.uc_mcontext.__gregs[_REG_S7] = sc->sc_regs[_R_S7];
 	uc.uc_mcontext.__gregs[_REG_S8] = sc->sc_regs[_R_S8];
+#if defined(__mips_n32) || defined(__mips_n64)
+	uc.uc_mcontext.__gregs[_REG_GP] = sc->sc_regs[_R_GP];
+#endif
 	uc.uc_mcontext.__gregs[_REG_SP] = sc->sc_regs[_R_SP];
 	uc.uc_mcontext.__gregs[_REG_RA] = sc->sc_regs[_R_RA];
 	uc.uc_mcontext.__gregs[_REG_EPC] = sc->sc_pc;

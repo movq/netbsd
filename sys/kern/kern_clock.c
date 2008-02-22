@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_clock.c,v 1.117 2008/01/20 18:09:11 joerg Exp $	*/
+/*	$NetBSD: kern_clock.c,v 1.136 2018/02/04 17:31:51 maxv Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2004, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -18,13 +18,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,11 +69,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.117 2008/01/20 18:09:11 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.136 2018/02/04 17:31:51 maxv Exp $");
 
-#include "opt_ntp.h"
-#include "opt_multiprocessor.h"
+#ifdef _KERNEL_OPT
+#include "opt_dtrace.h"
 #include "opt_perfctrs.h"
+#include "opt_gprof.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,10 +90,20 @@ __KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.117 2008/01/20 18:09:11 joerg Exp $
 #include <sys/time.h>
 #include <sys/timetc.h>
 #include <sys/cpu.h>
+#include <sys/atomic.h>
 
 #ifdef GPROF
 #include <sys/gmon.h>
 #endif
+
+#ifdef KDTRACE_HOOKS
+#include <sys/dtrace_bsd.h>
+#include <sys/cpu.h>
+
+cyclic_clock_func_t	cyclic_clock_func[MAXCPUS];
+#endif
+
+static int sysctl_kern_clockrate(SYSCTLFN_PROTO);
 
 /*
  * Clock handling routines.
@@ -160,6 +165,7 @@ get_intr_timecount(struct timecounter *tc)
 void
 initclocks(void)
 {
+	static struct sysctllog *clog;
 	int i;
 
 	/*
@@ -189,6 +195,19 @@ initclocks(void)
 			panic("hardscheddiv");
 	}
 
+	sysctl_createv(&clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "clockrate",
+		       SYSCTL_DESCR("Kernel clock rates"),
+		       sysctl_kern_clockrate, 0, NULL,
+		       sizeof(struct clockinfo),
+		       CTL_KERN, KERN_CLOCKRATE, CTL_EOL);
+	sysctl_createv(&clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "hardclock_ticks",
+		       SYSCTL_DESCR("Number of hardclock ticks"),
+		       NULL, 0, &hardclock_ticks, sizeof(hardclock_ticks),
+		       CTL_KERN, KERN_HARDCLOCK_TICKS, CTL_EOL);
 }
 
 /*
@@ -198,25 +217,12 @@ void
 hardclock(struct clockframe *frame)
 {
 	struct lwp *l;
-	struct proc *p;
-	struct cpu_info *ci = curcpu();
-	struct ptimer *pt;
+	struct cpu_info *ci;
 
+	ci = curcpu();
 	l = ci->ci_data.cpu_onproc;
-	if (!CURCPU_IDLE_P()) {
-		p = l->l_proc;
-		/*
-		 * Run current process's virtual and profile time, as needed.
-		 */
-		if (CLKF_USERMODE(frame) && p->p_timers &&
-		    (pt = LIST_FIRST(&p->p_timers->pts_virtual)) != NULL)
-			if (itimerdecr(pt, tick) == 0)
-				itimerfire(pt);
-		if (p->p_timers &&
-		    (pt = LIST_FIRST(&p->p_timers->pts_prof)) != NULL)
-			if (itimerdecr(pt, tick) == 0)
-				itimerfire(pt);
-	}
+
+	timer_tick(l, CLKF_USERMODE(frame));
 
 	/*
 	 * If no separate statistics clock is available, run it from here.
@@ -236,25 +242,22 @@ hardclock(struct clockframe *frame)
 	if ((--ci->ci_schedstate.spc_ticks) <= 0)
 		sched_tick(ci);
 
-#if defined(MULTIPROCESSOR)
-	/*
-	 * If we are not the primary CPU, we're not allowed to do
-	 * any more work.
-	 */
-	if (CPU_IS_PRIMARY(ci) == 0)
-		return;
-#endif
-
-	hardclock_ticks++;
-
-	tc_ticktock();
+	if (CPU_IS_PRIMARY(ci)) {
+		hardclock_ticks++;
+		tc_ticktock();
+	}
 
 	/*
-	 * Update real-time timeout queue.  Callouts are processed at a
-	 * very low CPU priority, so we don't keep the relatively high
-	 * clock interrupt priority any longer than necessary.
+	 * Update real-time timeout queue.
 	 */
 	callout_hardclock();
+
+#ifdef KDTRACE_HOOKS
+	cyclic_clock_func_t func = cyclic_clock_func[cpu_index(ci)];
+	if (func) {
+		(*func)((struct clockframe *)frame);
+	}
+#endif
 }
 
 /*
@@ -345,7 +348,6 @@ proftick(struct clockframe *frame)
 void
 schedclock(struct lwp *l)
 {
-
 	if ((l->l_flag & LW_IDLE) != 0)
 		return;
 
@@ -393,6 +395,7 @@ statclock(struct clockframe *frame)
 	}
 
 	if (CLKF_USERMODE(frame)) {
+		KASSERT(p != NULL);
 		if ((p->p_stflag & PST_PROFIL) && profsrc == PROFSRC_CLOCK)
 			addupc_intr(l, CLKF_PC(frame));
 		if (--spc->spc_pscnt > 0) {
@@ -461,7 +464,28 @@ statclock(struct clockframe *frame)
 	spc->spc_pscnt = psdiv;
 
 	if (p != NULL) {
-		++l->l_cpticks;
+		atomic_inc_uint(&l->l_cpticks);
 		mutex_spin_exit(&p->p_stmutex);
 	}
+}
+
+/*
+ * sysctl helper routine for kern.clockrate. Assembles a struct on
+ * the fly to be returned to the caller.
+ */
+static int
+sysctl_kern_clockrate(SYSCTLFN_ARGS)
+{
+	struct clockinfo clkinfo;
+	struct sysctlnode node;
+
+	clkinfo.tick = tick;
+	clkinfo.tickadj = tickadj;
+	clkinfo.hz = hz;
+	clkinfo.profhz = profhz;
+	clkinfo.stathz = stathz ? stathz : hz;
+
+	node = *rnode;
+	node.sysctl_data = &clkinfo;
+	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_pcc.c,v 1.21 2008/01/12 09:54:27 tsutsui Exp $	*/
+/*	$NetBSD: vme_pcc.c,v 1.26 2012/10/27 17:18:04 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996-2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_pcc.c,v 1.21 2008/01/12 09:54:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_pcc.c,v 1.26 2012/10/27 17:18:04 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -68,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: vme_pcc.c,v 1.21 2008/01/12 09:54:27 tsutsui Exp $")
 #include <mvme68k/dev/vme_pccvar.h>
 
 
-int vme_pcc_match(struct device *, struct cfdata *, void *);
-void vme_pcc_attach(struct device *, struct device *, void *);
+int vme_pcc_match(device_t, cfdata_t, void *);
+void vme_pcc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(vmepcc, sizeof(struct vme_pcc_softc),
+CFATTACH_DECL_NEW(vmepcc, sizeof(struct vme_pcc_softc),
     vme_pcc_match, vme_pcc_attach, NULL, NULL);
 
 extern struct cfdriver vmepcc_cd;
@@ -135,10 +128,7 @@ static struct mvmebus_range vme_pcc_masters[] = {
 
 /* ARGSUSED */
 int
-vme_pcc_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+vme_pcc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pcc_attach_args *pa;
 
@@ -155,17 +145,15 @@ vme_pcc_match(parent, cf, aux)
 }
 
 void
-vme_pcc_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+vme_pcc_attach(device_t parent, device_t self, void *aux)
 {
 	struct pcc_attach_args *pa;
 	struct vme_pcc_softc *sc;
 	vme_am_t am;
 	uint8_t reg;
 
-	sc = (struct vme_pcc_softc *) self;
+	sc = device_private(self);
+	sc->sc_mvmebus.sc_dev = self;
 	pa = aux;
 
 	/* Map the VMEchip's registers */
@@ -254,12 +242,7 @@ vme_pcc_attach(parent, self, aux)
 }
 
 void
-vme_pcc_intr_establish(csc, prior, level, vector, first, func, arg, evcnt)
-	void *csc;
-	int prior, level, vector, first;
-	int (*func)(void *);
-	void *arg;
-	struct evcnt *evcnt;
+vme_pcc_intr_establish(void *csc, int prior, int level, int vector, int first, int (*func)(void *), void *arg, struct evcnt *evcnt)
 {
 	struct vme_pcc_softc *sc = csc;
 
@@ -270,7 +253,7 @@ vme_pcc_intr_establish(csc, prior, level, vector, first, func, arg, evcnt)
 
 	if (first) {
 		evcnt_attach_dynamic(evcnt, EVCNT_TYPE_INTR,
-		    isrlink_evcnt(prior), sc->sc_mvmebus.sc_dev.dv_xname,
+		    isrlink_evcnt(prior), device_xname(sc->sc_mvmebus.sc_dev),
 		    mvmebus_irq_name[level]);
 
 		/*
@@ -283,10 +266,7 @@ vme_pcc_intr_establish(csc, prior, level, vector, first, func, arg, evcnt)
 }
 
 void
-vme_pcc_intr_disestablish(csc, level, vector, last, evcnt)
-	void *csc;
-	int level, vector, last;
-	struct evcnt *evcnt;
+vme_pcc_intr_disestablish(void *csc, int level, int vector, int last, struct evcnt *evcnt)
 {
 	struct vme_pcc_softc *sc = csc;
 

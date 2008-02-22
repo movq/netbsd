@@ -1,4 +1,4 @@
-.\"   $NetBSD: nfsd.8,v 1.20 2006/01/01 17:03:54 yamt Exp $
+.\"   $NetBSD: nfsd.8,v 1.24 2016/03/17 15:25:46 christos Exp $
 .\"
 .\" Copyright (c) 1989, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)nfsd.8	8.4 (Berkeley) 3/29/95
 .\"
-.Dd January 2, 2006
+.Dd March 17, 2016
 .Dt NFSD 8
 .Os
 .Sh NAME
@@ -39,8 +39,8 @@
 server
 .Sh SYNOPSIS
 .Nm
-.Op Fl 6rut
-.Op Fl n Ar num_servers
+.Op Fl 46drut
+.Op Fl n Ar num_threads
 .Sh DESCRIPTION
 .Nm
 runs on a server machine to service
@@ -56,6 +56,8 @@ transport are started.
 .Pp
 The following options are available:
 .Bl -tag -width Ds
+.It Fl d
+Turn on debugging, don't fork and log to stderr.
 .It Fl r
 Register the
 .Tn NFS
@@ -68,34 +70,33 @@ or
 .Fl t
 options to re-register NFS if the portmap server is restarted.
 .It Fl n
-Specifies how many servers to create.
+Specifies how many server threads to create.
+The default is 4.
+A server should run enough threads to handle
+the maximum level of concurrency from its clients.
+.It Fl 4
+Only listen to IPv4 requests.
+By default
+.Nm
+listens to both IPv6 and IPv4 and tries to register for both.
 .It Fl 6
-Listen to IPv6 requests as well as IPv4 requests. If IPv6 support is not
-available, nfsd will silently continue and just use IPv4.
+Only listen to IPv6 requests.
 .It Fl t
-Serve
+Serve only
 .Tn TCP NFS
 clients.
+By default
+.Nm
+serves both
+.Tn TCP NFS
+and
+.Tn UDP NFS
+clients
 .It Fl u
-Serve
+Serve only
 .Tn UDP NFS
 clients.
 .El
-.Pp
-For example,
-.Dq Li "nfsd -t -u -n 6"
-serves
-.Tn UDP
-and
-.Tn TCP
-transports using six daemons.
-.Pp
-A server should run enough daemons to handle
-the maximum level of concurrency from its clients,
-typically four to six.
-The maximum number of daemon is 1024, the default is 4.
-If the number of servers on the command line exceeds 1024, it is reset to
-the default.
 .Pp
 .Nm
 listens for service requests at the port indicated in the
@@ -104,10 +105,15 @@ server specification; see
 .%T "Network File System Protocol Specification" ,
 RFC 1094 and
 .%T "NFS: Network File System Version 3 Protocol Specification" .
-.Pp
-The
-.Nm
-utility exits 0 on success, and \*[Gt]0 if an error occurs.
+.Sh EXIT STATUS
+.Ex -std nfsd
+.Sh EXAMPLES
+.Dq Li "nfsd -n 6"
+serves
+.Tn UDP
+and
+.Tn TCP
+transports using six threads.
 .Sh SEE ALSO
 .Xr nfsstat 1 ,
 .Xr nfssvc 2 ,

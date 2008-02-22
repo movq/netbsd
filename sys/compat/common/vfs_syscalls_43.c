@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_43.c,v 1.45 2007/12/20 23:02:45 dsl Exp $	*/
+/*	$NetBSD: vfs_syscalls_43.c,v 1.62 2017/12/03 15:23:30 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,10 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.45 2007/12/20 23:02:45 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.62 2017/12/03 15:23:30 christos Exp $");
 
 #if defined(_KERNEL_OPT)
-#include "fs_union.h"
+#include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.45 2007/12/20 23:02:45 dsl Exp
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
+#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/unistd.h>
 #include <sys/resourcevar.h>
@@ -69,8 +70,37 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.45 2007/12/20 23:02:45 dsl Exp
 
 #include <compat/sys/stat.h>
 #include <compat/sys/mount.h>
+#include <compat/sys/dirent.h>
 
+#include <compat/common/compat_util.h>
+#include <compat/common/compat_mod.h>
+
+static void cvttimespec(struct timespec *, struct timespec50 *);
 static void cvtstat(struct stat *, struct stat43 *);
+
+/*
+ * Convert from an old to a new timespec structure.
+ */
+static void
+cvttimespec(struct timespec *ts, struct timespec50 *ots)
+{
+
+	if (ts->tv_sec > INT_MAX) {
+#if defined(DEBUG) || 1
+		static bool first = true;
+
+		if (first) {
+			first = false;
+			printf("%s[%s:%d]: time_t does not fit\n",
+			    __func__, curlwp->l_proc->p_comm,
+			    curlwp->l_lid);
+		}
+#endif
+		ots->tv_sec = INT_MAX;
+	} else
+		ots->tv_sec = ts->tv_sec;
+	ots->tv_nsec = ts->tv_nsec;
+}
 
 /*
  * Convert from an old to a new stat structure.
@@ -79,6 +109,8 @@ static void
 cvtstat(struct stat *st, struct stat43 *ost)
 {
 
+	/* Handle any padding. */
+	memset(ost, 0, sizeof *ost);
 	ost->st_dev = st->st_dev;
 	ost->st_ino = st->st_ino;
 	ost->st_mode = st->st_mode & 0xffff;
@@ -90,9 +122,9 @@ cvtstat(struct stat *st, struct stat43 *ost)
 		ost->st_size = st->st_size;
 	else
 		ost->st_size = -2;
-	ost->st_atime = st->st_atime;
-	ost->st_mtime = st->st_mtime;
-	ost->st_ctime = st->st_ctime;
+	cvttimespec(&st->st_atimespec, &ost->st_atimespec);
+	cvttimespec(&st->st_mtimespec, &ost->st_mtimespec);
+	cvttimespec(&st->st_ctimespec, &ost->st_ctimespec);
 	ost->st_blksize = st->st_blksize;
 	ost->st_blocks = st->st_blocks;
 	ost->st_flags = st->st_flags;
@@ -114,7 +146,7 @@ compat_43_sys_stat(struct lwp *l, const struct compat_43_sys_stat_args *uap, reg
 	struct stat43 osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error)
 		return (error);
 	cvtstat(&sb, &osb);
@@ -137,12 +169,18 @@ compat_43_sys_lstat(struct lwp *l, const struct compat_43_sys_lstat_args *uap, r
 	struct stat sb, sb1;
 	struct stat43 osb;
 	int error;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int ndflags;
 
+	error = pathbuf_copyin(SCARG(uap, path), &pb);
+	if (error) {
+		return error;
+	}
+
 	ndflags = NOFOLLOW | LOCKLEAF | LOCKPARENT | TRYEMULROOT;
 again:
-	NDINIT(&nd, LOOKUP, ndflags, UIO_USERSPACE, SCARG(uap, path));
+	NDINIT(&nd, LOOKUP, ndflags, pb);
 	if ((error = namei(&nd))) {
 		if (error == EISDIR && (ndflags & LOCKPARENT) != 0) {
 			/*
@@ -152,6 +190,7 @@ again:
 			ndflags &= ~LOCKPARENT;
 			goto again;
 		}
+		pathbuf_destroy(pb);
 		return (error);
 	}
 	/*
@@ -160,6 +199,7 @@ again:
 	 */
 	vp = nd.ni_vp;
 	dvp = nd.ni_dvp;
+	pathbuf_destroy(pb);
 	if (vp->v_type != VLNK) {
 		if ((ndflags & LOCKPARENT) != 0) {
 			if (dvp == vp)
@@ -167,18 +207,18 @@ again:
 			else
 				vput(dvp);
 		}
-		error = vn_stat(vp, &sb, l);
+		error = vn_stat(vp, &sb);
 		vput(vp);
 		if (error)
 			return (error);
 	} else {
-		error = vn_stat(dvp, &sb, l);
+		error = vn_stat(dvp, &sb);
 		vput(dvp);
 		if (error) {
 			vput(vp);
 			return (error);
 		}
-		error = vn_stat(vp, &sb1, l);
+		error = vn_stat(vp, &sb1);
 		vput(vp);
 		if (error)
 			return (error);
@@ -204,27 +244,16 @@ compat_43_sys_fstat(struct lwp *l, const struct compat_43_sys_fstat_args *uap, r
 		syscallarg(int) fd;
 		syscallarg(struct stat43 *) sb;
 	} */
-	struct proc *p = l->l_proc;
-	int fd = SCARG(uap, fd);
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
 	struct stat ub;
 	struct stat43 oub;
 	int error;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_stat)(fp, &ub, l);
-	FILE_UNUSE(fp, l);
-
+	error = do_sys_fstat(SCARG(uap, fd), &ub);
 	if (error == 0) {
 		cvtstat(&ub, &oub);
 		error = copyout((void *)&oub, (void *)SCARG(uap, sb),
 		    sizeof (oub));
 	}
-
 
 	return (error);
 }
@@ -298,7 +327,7 @@ compat_43_sys_lseek(struct lwp *l, const struct compat_43_sys_lseek_args *uap, r
 	SCARG(&nuap, fd) = SCARG(uap, fd);
 	SCARG(&nuap, offset) = SCARG(uap, offset);
 	SCARG(&nuap, whence) = SCARG(uap, whence);
-	error = sys_lseek(l, &nuap, (void *)&qret);
+	error = sys_lseek(l, &nuap, (register_t *)&qret);
 	*(long *)retval = qret;
 	return (error);
 }
@@ -347,169 +376,159 @@ compat_43_sys_getdirentries(struct lwp *l, const struct compat_43_sys_getdirentr
 		syscallarg(u_int) count;
 		syscallarg(long *) basep;
 	} */
-	struct proc *p = l->l_proc;
+	struct dirent *bdp;
 	struct vnode *vp;
+	void *tbuf;			/* Current-format */
+	char *inp;			/* Current-format */
+	int len, reclen;		/* Current-format */
+	char *outp;			/* Dirent12-format */
+	int resid, old_reclen = 0;	/* Dirent12-format */
 	struct file *fp;
-	struct uio auio, kuio;
-	struct iovec aiov, kiov;
-	struct dirent *dp, *edp;
-	char *dirbuf;
-	size_t count = min(MAXBSIZE, (size_t)SCARG(uap, count));
-
-	int error, eofflag, readcnt;
+	struct uio auio;
+	struct iovec aiov;
+	struct dirent43 idb;
+	off_t off;		/* true file offset */
+	int buflen, error, eofflag, nbytes;
+	struct vattr va;
+	off_t *cookiebuf = NULL, *cookie;
+	int ncookies;
 	long loff;
-
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+		 
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
+
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
-		goto out;
+		goto out1;
 	}
-	vp = (struct vnode *)fp->f_data;
-unionread:
+
+	vp = fp->f_vnode;
 	if (vp->v_type != VDIR) {
-		error = EINVAL;
-		goto out;
+		error = ENOTDIR;
+		goto out1;
 	}
-	aiov.iov_base = SCARG(uap, buf);
-	aiov.iov_len = count;
+
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error)
+		goto out1;
+
+	loff = fp->f_offset;
+	nbytes = SCARG(uap, count);
+	buflen = min(MAXBSIZE, nbytes);
+	if (buflen < va.va_blocksize)
+		buflen = va.va_blocksize;
+	tbuf = malloc(buflen, M_TEMP, M_WAITOK);
+
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	off = fp->f_offset;
+again:
+	aiov.iov_base = tbuf;
+	aiov.iov_len = buflen;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_resid = count;
-	KASSERT(l == curlwp);
-	auio.uio_vmspace = l->l_proc->p_vmspace;
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	loff = auio.uio_offset = fp->f_offset;
-#	if (BYTE_ORDER != LITTLE_ENDIAN)
-		if ((vp->v_mount->mnt_iflag & IMNT_DTYPE) == 0) {
-			error = VOP_READDIR(vp, &auio, fp->f_cred, &eofflag,
-			    (off_t **)0, (int *)0);
-			fp->f_offset = auio.uio_offset;
-		} else
-#	endif
-	{
-		kuio = auio;
-		kuio.uio_iov = &kiov;
-		kiov.iov_len = count;
-		dirbuf = malloc(count, M_TEMP, M_WAITOK);
-		kiov.iov_base = dirbuf;
-		UIO_SETUP_SYSSPACE(&kuio);
-		error = VOP_READDIR(vp, &kuio, fp->f_cred, &eofflag,
-			    (off_t **)0, (int *)0);
-		fp->f_offset = kuio.uio_offset;
-		if (error == 0) {
-			readcnt = count - kuio.uio_resid;
-			edp = (struct dirent *)&dirbuf[readcnt];
-			for (dp = (struct dirent *)dirbuf; dp < edp; ) {
-#				if (BYTE_ORDER == LITTLE_ENDIAN)
-					/*
-					 * The expected low byte of
-					 * dp->d_namlen is our dp->d_type.
-					 * The high MBZ byte of dp->d_namlen
-					 * is our dp->d_namlen.
-					 */
-					dp->d_type = dp->d_namlen;
-					dp->d_namlen = 0;
-#				else
-					/*
-					 * The dp->d_type is the high byte
-					 * of the expected dp->d_namlen,
-					 * so must be zero'ed.
-					 */
-					dp->d_type = 0;
-#				endif
-				if (dp->d_reclen > 0) {
-					dp = (struct dirent *)
-					    ((char *)dp + dp->d_reclen);
-				} else {
-					error = EIO;
-					break;
-				}
-			}
-			if (dp >= edp)
-				error = uiomove(dirbuf, readcnt, &auio);
-		}
-		free(dirbuf, M_TEMP);
-	}
-	VOP_UNLOCK(vp, 0);
+	auio.uio_resid = buflen;
+	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
+	/*
+         * First we read into the malloc'ed buffer, then
+         * we massage it into user space, one record at a time.
+         */
+	error = VOP_READDIR(vp, &auio, fp->f_cred, &eofflag, &cookiebuf,
+	    &ncookies);
 	if (error)
 		goto out;
 
-#ifdef UNION
-{
-	extern int (**union_vnodeop_p)(void *);
-	extern struct vnode *union_dircache(struct vnode *);
+	inp = (char *)tbuf;
+	outp = SCARG(uap, buf);
+	resid = nbytes;
+	if ((len = buflen - auio.uio_resid) == 0)
+		goto eof;
 
-	if ((count == auio.uio_resid) &&
-	    (vp->v_op == union_vnodeop_p)) {
-		struct vnode *lvp;
-
-		lvp = union_dircache(vp);
-		if (lvp != NULLVP) {
-			struct vattr va;
-
-			/*
-			 * If the directory is opaque,
-			 * then don't show lower entries
-			 */
-			error = VOP_GETATTR(vp, &va, fp->f_cred);
-			if (va.va_flags & OPAQUE) {
-				vput(lvp);
-				lvp = NULL;
-			}
+	for (cookie = cookiebuf; len > 0; len -= reclen) {
+		bdp = (struct dirent *)inp;
+		reclen = bdp->d_reclen;
+		if (reclen & 3) {
+			error = EIO;
+			goto out;
 		}
-
-		if (lvp != NULLVP) {
-			error = VOP_OPEN(lvp, FREAD, fp->f_cred);
-			VOP_UNLOCK(lvp, 0);
-
-			if (error) {
-				vrele(lvp);
-				goto out;
-			}
-			fp->f_data = (void *) lvp;
-			fp->f_offset = 0;
-			error = vn_close(vp, FREAD, fp->f_cred, l);
-			if (error)
-				goto out;
-			vp = lvp;
-			goto unionread;
+		if (bdp->d_fileno == 0) {
+			inp += reclen;	/* it is a hole; squish it out */
+			if (cookie)
+				off = *cookie++;
+			else
+				off += reclen;
+			continue;
 		}
+		if (bdp->d_namlen >= sizeof(idb.d_name))
+			idb.d_namlen = sizeof(idb.d_name) - 1;
+		else
+			idb.d_namlen = bdp->d_namlen;
+		old_reclen = _DIRENT_RECLEN(&idb, bdp->d_namlen);
+		if (reclen > len || resid < old_reclen) {
+			/* entry too big for buffer, so just stop */
+			outp++;
+			break;
+		}
+		/*
+		 * Massage in place to make a Dirent12-shaped dirent (otherwise
+		 * we have to worry about touching user memory outside of
+		 * the copyout() call).
+		 */
+		idb.d_fileno = (uint32_t)bdp->d_fileno;
+		idb.d_reclen = (uint16_t)old_reclen;
+		idb.d_fileno = (uint32_t)bdp->d_fileno;
+		(void)memcpy(idb.d_name, bdp->d_name, idb.d_namlen);
+		memset(idb.d_name + idb.d_namlen, 0,
+		    idb.d_reclen - _DIRENT_NAMEOFF(&idb) - idb.d_namlen);
+		if ((error = copyout(&idb, outp, old_reclen)))
+			goto out;
+		/* advance past this real entry */
+		inp += reclen;
+		if (cookie)
+			off = *cookie++; /* each entry points to itself */
+		else
+			off += reclen;
+		/* advance output past Dirent12-shaped entry */
+		outp += old_reclen;
+		resid -= old_reclen;
 	}
-}
-#endif /* UNION */
 
-	if ((count == auio.uio_resid) &&
-	    (vp->v_vflag & VV_ROOT) &&
-	    (vp->v_mount->mnt_flag & MNT_UNION)) {
-		struct vnode *tvp = vp;
-		vp = vp->v_mount->mnt_vnodecovered;
-		VREF(vp);
-		fp->f_data = (void *) vp;
-		fp->f_offset = 0;
-		vrele(tvp);
-		goto unionread;
+	/* if we squished out the whole block, try again */
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
+		goto again;
 	}
-	error = copyout((void *)&loff, (void *)SCARG(uap, basep),
-	    sizeof(long));
-	*retval = count - auio.uio_resid;
- out:
-	FILE_UNUSE(fp, l);
-	return (error);
+	fp->f_offset = off;	/* update the vnode offset */
+
+eof:
+	*retval = nbytes - resid;
+out:
+	VOP_UNLOCK(vp);
+	if (cookiebuf)
+		free(cookiebuf, M_TEMP);
+	free(tbuf, M_TEMP);
+out1:
+	fd_putfile(SCARG(uap, fd));
+	if (error)
+		return error;
+	return copyout(&loff, SCARG(uap, basep), sizeof(long));
 }
 
 /*
  * sysctl helper routine for vfs.generic.conf lookups.
  */
 #if defined(COMPAT_09) || defined(COMPAT_43) || defined(COMPAT_44)
+
 static int
 sysctl_vfs_generic_conf(SYSCTLFN_ARGS)
 {
         struct vfsconf vfc;
-        extern const char * const mountcompatnames[];
-        extern int nmountcompatnames;
 	struct sysctlnode node;
 	struct vfsops *vfsp;
 	u_int vfsnum;
@@ -541,9 +560,9 @@ sysctl_vfs_generic_conf(SYSCTLFN_ARGS)
 /*
  * Top level filesystem related information gathering.
  */
-SYSCTL_SETUP(compat_sysctl_vfs_setup, "compat sysctl vfs subtree setup")
+void
+compat_sysctl_vfs(struct sysctllog **clog)
 {
-	extern int nmountcompatnames;
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,

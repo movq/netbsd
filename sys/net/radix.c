@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.38 2007/07/12 04:28:59 dyoung Exp $	*/
+/*	$NetBSD: radix.c,v 1.47 2016/12/12 03:55:57 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -36,22 +36,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.38 2007/07/12 04:28:59 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.47 2016/12/12 03:55:57 ozaki-r Exp $");
 
 #ifndef _NET_RADIX_H_
 #include <sys/param.h>
+#include <sys/queue.h>
+#include <sys/kmem.h>
 #ifdef	_KERNEL
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #define	M_DONTWAIT M_NOWAIT
 #include <sys/domain.h>
-#include <netinet/ip_encap.h>
 #else
 #include <stdlib.h>
 #endif
-#include <machine/stdarg.h>
 #include <sys/syslog.h>
 #include <net/radix.h>
 #endif
@@ -495,9 +497,9 @@ rn_addmask(
 	if (mlen <= skip)
 		return mask_rnhead->rnh_nodes;
 	if (skip > 1)
-		Bcopy(rn_ones + 1, addmask_key + 1, skip - 1);
+		memmove(addmask_key + 1, rn_ones + 1, skip - 1);
 	if ((m0 = mlen) > skip)
-		Bcopy(netmask + skip, addmask_key + skip, mlen - skip);
+		memmove(addmask_key + skip, netmask + skip, mlen - skip);
 	/*
 	 * Trim trailing zeroes.
 	 */
@@ -510,19 +512,19 @@ rn_addmask(
 		return mask_rnhead->rnh_nodes;
 	}
 	if (m0 < last_zeroed)
-		Bzero(addmask_key + m0, last_zeroed - m0);
+		memset(addmask_key + m0, 0, last_zeroed - m0);
 	*addmask_key = last_zeroed = mlen;
 	x = rn_search(addmask_key, rn_masktop);
-	if (Bcmp(addmask_key, x->rn_key, mlen) != 0)
+	if (memcmp(addmask_key, x->rn_key, mlen) != 0)
 		x = 0;
 	if (x || search)
 		return x;
 	R_Malloc(x, struct radix_node *, max_keylen + 2 * sizeof (*x));
 	if ((saved_x = x) == NULL)
 		return NULL;
-	Bzero(x, max_keylen + 2 * sizeof (*x));
+	memset(x, 0, max_keylen + 2 * sizeof (*x));
 	cp = netmask = (void *)(x + 2);
-	Bcopy(addmask_key, (void *)(x + 2), mlen);
+	memmove(x + 2, addmask_key, mlen);
 	x = rn_insert(cp, mask_rnhead, &maskduplicated, x);
 	if (maskduplicated) {
 		log(LOG_ERR, "rn_addmask: mask impossibly already in tree\n");
@@ -578,7 +580,7 @@ rn_new_radix_mask(
 		log(LOG_ERR, "Mask for route not entered\n");
 		return NULL;
 	}
-	Bzero(m, sizeof *m);
+	memset(m, 0, sizeof(*m));
 	m->rm_b = tt->rn_b;
 	m->rm_flags = tt->rn_flags;
 	if (tt->rn_flags & RNF_NORMAL)
@@ -770,7 +772,7 @@ rn_delete1(
 	saved_tt = tt;
 	top = x;
 	if (tt == NULL ||
-	    Bcmp(v + head_off, tt->rn_key + head_off, vlen - head_off))
+	    memcmp(v + head_off, tt->rn_key + head_off, vlen - head_off) != 0)
 		return NULL;
 	/*
 	 * Delete our route from mask lists.
@@ -1003,10 +1005,65 @@ rn_walktree(
 	/* NOTREACHED */
 }
 
-int
-rn_inithead(head, off)
+struct radix_node *
+rn_search_matched(struct radix_node_head *h,
+    int (*matcher)(struct radix_node *, void *), void *w)
+{
+	bool matched;
+	struct radix_node *base, *next, *rn;
+	/*
+	 * This gets complicated because we may delete the node
+	 * while applying the function f to it, so we need to calculate
+	 * the successor node in advance.
+	 */
+	rn = rn_walkfirst(h->rnh_treetop, NULL, NULL);
+	for (;;) {
+		base = rn;
+		next = rn_walknext(rn, NULL, NULL);
+		/* Process leaves */
+		while ((rn = base) != NULL) {
+			base = rn->rn_dupedkey;
+			if (!(rn->rn_flags & RNF_ROOT)) {
+				matched = (*matcher)(rn, w);
+				if (matched)
+					return rn;
+			}
+		}
+		rn = next;
+		if (rn->rn_flags & RNF_ROOT)
+			return NULL;
+	}
+	/* NOTREACHED */
+}
+
+struct delayinit {
 	void **head;
 	int off;
+	SLIST_ENTRY(delayinit) entries;
+};
+static SLIST_HEAD(, delayinit) delayinits = SLIST_HEAD_INITIALIZER(delayheads);
+static int radix_initialized;
+
+/*
+ * Initialize a radix tree once radix is initialized.  Only for bootstrap.
+ * Assume that no concurrency protection is necessary at this stage.
+ */
+void
+rn_delayedinit(void **head, int off)
+{
+	struct delayinit *di;
+
+	if (radix_initialized)
+		return;
+
+	di = kmem_alloc(sizeof(*di), KM_SLEEP);
+	di->head = head;
+	di->off = off;
+	SLIST_INSERT_HEAD(&delayinits, di, entries);
+}
+
+int
+rn_inithead(void **head, int off)
 {
 	struct radix_node_head *rnh;
 
@@ -1020,15 +1077,13 @@ rn_inithead(head, off)
 }
 
 int
-rn_inithead0(rnh, off)
-	struct radix_node_head *rnh;
-	int off;
+rn_inithead0(struct radix_node_head *rnh, int off)
 {
 	struct radix_node *t;
 	struct radix_node *tt;
 	struct radix_node *ttt;
 
-	Bzero(rnh, sizeof (*rnh));
+	memset(rnh, 0, sizeof(*rnh));
 	t = rn_newpair(rn_zeros, off, rnh->rnh_nodes);
 	ttt = rnh->rnh_nodes + 2;
 	t->rn_r = ttt;
@@ -1047,39 +1102,43 @@ rn_inithead0(rnh, off)
 }
 
 void
-rn_init()
+rn_init(void)
 {
 	char *cp, *cplim;
+	struct delayinit *di;
 #ifdef _KERNEL
-	static int initialized;
-	__link_set_decl(domains, struct domain);
-	struct domain *const *dpp;
+	struct domain *dp;
 
-	if (initialized)
-		return;
-	initialized = 1;
+	if (radix_initialized)
+		panic("radix already initialized");
+	radix_initialized = 1;
 
-	__link_set_foreach(dpp, domains) {
-		if ((*dpp)->dom_maxrtkey > max_keylen)
-			max_keylen = (*dpp)->dom_maxrtkey;
+	DOMAIN_FOREACH(dp) {
+		if (dp->dom_maxrtkey > max_keylen)
+			max_keylen = dp->dom_maxrtkey;
 	}
-#ifdef INET
-	encap_setkeylen();
-#endif
 #endif
 	if (max_keylen == 0) {
 		log(LOG_ERR,
 		    "rn_init: radix functions require max_keylen be set\n");
 		return;
 	}
+
 	R_Malloc(rn_zeros, char *, 3 * max_keylen);
 	if (rn_zeros == NULL)
 		panic("rn_init");
-	Bzero(rn_zeros, 3 * max_keylen);
+	memset(rn_zeros, 0, 3 * max_keylen);
 	rn_ones = cp = rn_zeros + max_keylen;
 	addmask_key = cplim = rn_ones + max_keylen;
 	while (cp < cplim)
 		*cp++ = -1;
 	if (rn_inithead((void *)&mask_rnhead, 0) == 0)
 		panic("rn_init 2");
+
+	while ((di = SLIST_FIRST(&delayinits)) != NULL) {
+		if (!rn_inithead(di->head, di->off))
+			panic("delayed rn_inithead failed");
+		SLIST_REMOVE_HEAD(&delayinits, entries);
+		kmem_free(di, sizeof(*di));
+	}
 }

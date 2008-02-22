@@ -1,4 +1,4 @@
-/*	$NetBSD: loop-bsd.c,v 1.9 2006/10/07 17:27:57 elad Exp $	*/
+/*	$NetBSD: loop-bsd.c,v 1.12 2016/06/08 01:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: loop-bsd.c,v 1.9 2006/10/07 17:27:57 elad Exp $");
+__RCSID("$NetBSD: loop-bsd.c,v 1.12 2016/06/08 01:11:49 christos Exp $");
 #endif
 
 #include <errno.h>
@@ -53,9 +48,7 @@ __RCSID("$NetBSD: loop-bsd.c,v 1.9 2006/10/07 17:27:57 elad Exp $");
 #include "log.h"
 
 int
-mopOpenRC(p, trans)
-	struct if_info *p;
-	int	trans;
+mopOpenRC(struct if_info *p, int trans)
 {
 #ifndef NORC
 	return (*(p->iopen))(p->if_name,
@@ -68,9 +61,7 @@ mopOpenRC(p, trans)
 }
 
 int
-mopOpenDL(p, trans)
-	struct if_info *p;
-	int	trans;
+mopOpenDL(struct if_info *p, int trans)
 {
 #ifndef NODL
 	return (*(p->iopen))(p->if_name,
@@ -83,12 +74,12 @@ mopOpenDL(p, trans)
 }
 
 void
-mopReadRC()
+mopReadRC(void)
 {
 }
 
 void
-mopReadDL()
+mopReadDL(void)
 {
 }
 
@@ -98,14 +89,14 @@ mopReadDL()
  */
 struct if_info *iflist;
 
-void   mopProcess    __P((struct if_info *, u_char *));
+void   mopProcess(struct if_info *, u_char *);
 
 /*
  * Loop indefinitely listening for MOP requests on the
  * interfaces in 'iflist'.
  */
 void
-Loop()
+Loop(void)
 {
 	u_char *buf, *bp, *ep;
 	int     cc, n, m;

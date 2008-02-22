@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.64 2007/03/04 14:46:46 yamt Exp $ */
+/* $NetBSD: bus_dma.c,v 1.69 2012/10/02 23:54:51 christos Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.64 2007/03/04 14:46:46 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.69 2012/10/02 23:54:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +45,10 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.64 2007/03/04 14:46:46 yamt Exp $");
 #include <uvm/uvm_extern.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
+
+#include <dev/bus_dma/bus_dmamem_common.h>
 
 int	_bus_dmamap_load_buffer_direct(bus_dma_tag_t,
 	    bus_dmamap_t, void *, bus_size_t, struct vmspace *, int,
@@ -483,54 +478,10 @@ _bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
     bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags, paddr_t low, paddr_t high)
 {
-	paddr_t curaddr, lastaddr;
-	struct vm_page *m;    
-	struct pglist mlist;
-	int curseg, error;
 
-	/* Always round the size. */
-	size = round_page(size);
-
-	/*
-	 * Allocate pages from the VM system.
-	 */
-	error = uvm_pglistalloc(size, low, high, alignment, boundary,
-	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
-	if (error)
-		return (error);
-
-	/*
-	 * Compute the location, size, and number of segments actually
-	 * returned by the VM code.
-	 */
-	m = mlist.tqh_first;
-	curseg = 0;
-	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
-	segs[curseg].ds_len = PAGE_SIZE;
-	m = m->pageq.tqe_next;
-
-	for (; m != NULL; m = m->pageq.tqe_next) {
-		curaddr = VM_PAGE_TO_PHYS(m);
-#ifdef DIAGNOSTIC
-		if (curaddr < avail_start || curaddr >= high) {
-			printf("uvm_pglistalloc returned non-sensical"
-			    " address 0x%lx\n", curaddr);
-			panic("_bus_dmamem_alloc");
-		}
-#endif
-		if (curaddr == (lastaddr + PAGE_SIZE))
-			segs[curseg].ds_len += PAGE_SIZE;
-		else {
-			curseg++;
-			segs[curseg].ds_addr = curaddr;
-			segs[curseg].ds_len = PAGE_SIZE;
-		}
-		lastaddr = curaddr;
-	}
-
-	*rsegs = curseg + 1;
-
-	return (0);
+	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
+					       segs, nsegs, rsegs, flags,
+					       low, high));
 }
 
 /*
@@ -540,25 +491,8 @@ _bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 void
 _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 {
-	struct vm_page *m;
-	bus_addr_t addr;
-	struct pglist mlist;
-	int curseg;
 
-	/*
-	 * Build a list of pages to free back to the VM system.
-	 */
-	TAILQ_INIT(&mlist);
-	for (curseg = 0; curseg < nsegs; curseg++) {
-		for (addr = segs[curseg].ds_addr;
-		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
-		    addr += PAGE_SIZE) {
-			m = PHYS_TO_VM_PAGE(addr);
-			TAILQ_INSERT_TAIL(&mlist, m, pageq);
-		}
-	}
-
-	uvm_pglistfree(&mlist);
+	_bus_dmamem_free_common(t, segs, nsegs);
 }
 
 /*
@@ -569,11 +503,6 @@ int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     size_t size, void **kvap, int flags)
 {
-	vaddr_t va;
-	bus_addr_t addr;
-	int curseg;
-	const uvm_flag_t kmflags =
-	    (flags & BUS_DMA_NOWAIT) != 0 ? UVM_KMF_NOWAIT : 0;
 
 	/*
 	 * If we're only mapping 1 segment, use K0SEG, to avoid
@@ -584,29 +513,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		return (0);
 	}
 
-	size = round_page(size);
-
-	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY | kmflags);
-
-	if (va == 0)
-		return (ENOMEM);
-
-	*kvap = (void *)va;
-
-	for (curseg = 0; curseg < nsegs; curseg++) {
-		for (addr = segs[curseg].ds_addr;
-		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
-		    addr += PAGE_SIZE, va += PAGE_SIZE, size -= PAGE_SIZE) {
-			if (size == 0)
-				panic("_bus_dmamem_map: size botch");
-			pmap_enter(pmap_kernel(), va, addr,
-			    VM_PROT_READ | VM_PROT_WRITE,
-			    PMAP_WIRED | VM_PROT_READ | VM_PROT_WRITE);
-		}
-	}
-	pmap_update(pmap_kernel());
-
-	return (0);
+	return (_bus_dmamem_map_common(t, segs, nsegs, size, kvap, flags, 0));
 }
 
 /*
@@ -617,11 +524,6 @@ void
 _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 {
 
-#ifdef DIAGNOSTIC
-	if ((u_long)kva & PGOFSET)
-		panic("_bus_dmamem_unmap");
-#endif
-
 	/*
 	 * Nothing to do if we mapped it with K0SEG.
 	 */
@@ -629,10 +531,7 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 	    kva <= (void *)ALPHA_K0SEG_END)
 		return;
 
-	size = round_page(size);
-	pmap_remove(pmap_kernel(), (vaddr_t)kva, (vaddr_t)kva + size);
-	pmap_update(pmap_kernel());
-	uvm_km_free(kernel_map, (vaddr_t)kva, size, UVM_KMF_VAONLY);
+	_bus_dmamem_unmap_common(t, kva, size);
 }
 
 /*
@@ -643,26 +542,11 @@ paddr_t
 _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     off_t off, int prot, int flags)
 {
-	int i;
+	bus_addr_t rv;
 
-	for (i = 0; i < nsegs; i++) {
-#ifdef DIAGNOSTIC
-		if (off & PGOFSET)
-			panic("_bus_dmamem_mmap: offset unaligned");
-		if (segs[i].ds_addr & PGOFSET)
-			panic("_bus_dmamem_mmap: segment unaligned");
-		if (segs[i].ds_len & PGOFSET)
-			panic("_bus_dmamem_mmap: segment size not multiple"
-			    " of page size");
-#endif
-		if (off >= segs[i].ds_len) {
-			off -= segs[i].ds_len;
-			continue;
-		}
+	rv = _bus_dmamem_mmap_common(t, segs, nsegs, off, prot, flags);
+	if (rv == (bus_addr_t)-1)
+		return (-1);
 
-		return (alpha_btop((char *)segs[i].ds_addr + off));
-	}
-
-	/* Page not found. */
-	return (-1);
+	return (alpha_btop((char *)rv));
 }

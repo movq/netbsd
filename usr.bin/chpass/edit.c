@@ -1,4 +1,4 @@
-/*	$NetBSD: edit.c,v 1.19 2005/06/02 01:42:11 lukem Exp $	*/
+/*	$NetBSD: edit.c,v 1.22 2015/10/27 14:47:45 shm Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)edit.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: edit.c,v 1.19 2005/06/02 01:42:11 lukem Exp $");
+__RCSID("$NetBSD: edit.c,v 1.22 2015/10/27 14:47:45 shm Exp $");
 #endif
 #endif /* not lint */
 
@@ -139,6 +139,7 @@ display(char *tempname, int fd, struct passwd *pw)
 
 	(void)fchown(fd, getuid(), getgid());
 	(void)fclose(fp);
+	free(bp);
 }
 
 int
@@ -214,9 +215,9 @@ bad:					(void)fclose(fp);
 	    "%s:%s:%d:%d:%s:%lu:%lu:%s:%s:%s",
 	    pw->pw_name, pw->pw_passwd, pw->pw_uid, pw->pw_gid, pw->pw_class,
 	    (u_long)pw->pw_change, (u_long)pw->pw_expire, pw->pw_gecos,
-	    pw->pw_dir, pw->pw_shell) >= sizeof(buf)) {
+	    pw->pw_dir, pw->pw_shell) >= (int)sizeof(buf)) {
 		warnx("entries too long");
 		return (0);
 	}
-	return (pw_scan(buf, pw, (int *)NULL));
+	return (pw_scan(buf, pw, NULL));
 }

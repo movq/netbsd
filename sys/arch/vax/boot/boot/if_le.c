@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.10 2006/06/11 08:35:00 he Exp $ */
+/*	$NetBSD: if_le.c,v 1.13 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 1997, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -67,7 +61,7 @@
 
 #define	QW_ALLOC(x)	(((uintptr_t)alloc((x) + 7) + 7) & ~7)
 
-static int le_get(struct iodesc *, void *, size_t, time_t);
+static int le_get(struct iodesc *, void *, size_t, saseconds_t);
 static int le_put(struct iodesc *, void *, size_t);
 static void copyout(void *from, int dest, int len);
 static void copyin(int src, void *to, int len);
@@ -172,7 +166,7 @@ igen:
 		initblock = (struct initblock *)
 			(QW_ALLOC(sizeof(struct initblock)) + addoff);
 		initblock->ib_mode = LE_MODE_NORMAL;
-		bcopy(eaddr, initblock->ib_padr, 6);
+		memcpy(initblock->ib_padr, eaddr, 6);
 		initblock->ib_ladrf1 = 0;
 		initblock->ib_ladrf2 = 0;
 
@@ -239,7 +233,7 @@ igen:
 }
 
 int
-le_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timeout)
+le_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timeout)
 {
 	int csr, len;
 	volatile int to = 100000 * timeout;
@@ -267,8 +261,9 @@ retry:
 			copyin((rdesc[next_rdesc].bd_adrflg&0xffffff),
 			    pkt, len);
 		else
-			bcopy((char *)(rdesc[next_rdesc].bd_adrflg&0xffffff) +
-			    addoff, pkt, len);
+			memcpy(pkt,
+			    (char *)(rdesc[next_rdesc].bd_adrflg&0xffffff) +
+			    addoff, len);
 	}
 
 	rdesc[next_rdesc].bd_mcnt = 0;
@@ -307,8 +302,8 @@ retry:
 	if (kopiera)
 		copyout(pkt, (tdesc[next_tdesc].bd_adrflg & 0xffffff), len);
 	else
-		bcopy(pkt, (char *)(tdesc[next_tdesc].bd_adrflg & 0xffffff) +
-		    addoff, len);
+		memcpy((char *)(tdesc[next_tdesc].bd_adrflg & 0xffffff) +
+		    addoff, pkt, len);
 	tdesc[next_tdesc].bd_bcnt =
 	    (len < ETHER_MIN_LEN ? -ETHER_MIN_LEN : -len);
 	tdesc[next_tdesc].bd_mcnt = 0;

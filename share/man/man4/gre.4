@@ -1,6 +1,6 @@
-.\" $NetBSD: gre.4,v 1.37 2007/05/27 19:15:48 dyoung Exp $
+.\" $NetBSD: gre.4,v 1.45 2017/07/03 21:30:58 wiz Exp $
 .\"
-.\" Copyright 1998 (c) The NetBSD Foundation, Inc.
+.\" Copyright (c) 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"     This product includes software developed by the NetBSD
-.\"	Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 4, 2006
+.Dd January 4, 2009
 .Dt GRE 4
 .Os
 .Sh NAME
@@ -123,7 +116,7 @@ This is the address the encapsulated packets are sent to (i.e. the
 real address of the remote tunnel endpoint.)
 .It GRESPROTO :
 Set the operation mode to the specified IP protocol value.
-The protocol is passed to the interface in (struct ifreq)-\*[Gt]ifr_flags.
+The protocol is passed to the interface in (struct ifreq)->ifr_flags.
 The operation mode can also be given as
 .Bl -tag -width link0xxx
 .It link0 link2
@@ -142,7 +135,7 @@ Query operation mode.
 Delegate a socket from userland to a tunnel interface in UDP
 encapsulation mode.
 The file descriptor for the socket is passed in
-(struct ifreq)-\*[Gt]ifr_value.
+(struct ifreq)->ifr_value.
 .El
 .Pp
 Note that the IP addresses of the tunnel endpoints may be the same as the
@@ -151,14 +144,16 @@ ones defined with
 for the interface (as if IP is encapsulated), but need not be, as e.g. when
 encapsulating AppleTalk.
 .Sh EXAMPLES
+.Ss Example 1: Basic GRE tunneling
 Configuration example:
 .Bd -literal
-Host X-- Host A  ----------------tunnel---------- cisco D------Host E
-          \\                                          |
+Host X-- Router A  --------------tunnel---------- Router D ----Host E
+          |                                          |
            \\                                        /
-             +------Host B----------Host C----------+
+            +----- Router B ----- Router C --------+
 .Ed
-On host A
+.Pp
+On Router A
 .Pq Nx :
 .Bd -literal
    # route add default B
@@ -167,18 +162,19 @@ On host A
    # ifconfig greN tunnel A D
    # route add E D
 .Ed
-On Host D (Cisco):
+.Pp
+On Router D (Cisco):
 .Bd -literal
    Interface TunnelX
     ip unnumbered D   ! e.g. address from Ethernet interface
     tunnel source D   ! e.g. address from Ethernet interface
     tunnel destination A
-   ip route C \*[Lt]some interface and mask\*[Gt]
+   ip route C <some interface and mask>
    ip route A mask C
    ip route X mask tunnelX
 .Ed
-OR
-On Host D
+.Pp
+or on Router D
 .Pq Nx :
 .Bd -literal
    # route add default C
@@ -189,16 +185,17 @@ On Host D
 .Pp
 If all goes well, you should see packets flowing ;-)
 .Pp
-If you want to reach Host A over the tunnel (from Host D (Cisco)), then
-you have to have an alias on Host A for e.g. the Ethernet interface like:
+If you want to reach Router A over the tunnel (from Router D (Cisco)), then
+you have to have an alias on Router A for e.g. the Ethernet interface like:
 .Bd -literal
-     ifconfig \*[Lt]etherif\*[Gt] alias Y
+     ifconfig <etherif> alias Y
 .Ed
-and on the cisco
+.Pp
+and on the Cisco
 .Bd -literal
      ip route Y mask tunnelX
 .Ed
-.Pp
+.Ss Example 2: Linking private subnets
 A similar setup can be used to create a link between two private networks
 (for example in the 192.168 subnet) over the Internet:
 .Bd -literal
@@ -207,11 +204,12 @@ A similar setup can be used to create a link between two private networks
                     \\                            /
                       +----- the Internet ------+
 .Ed
-Assuming router A has the (external) IP address A and the internal address
-192.168.1.1, while router B has external address B and internal address
+.Pp
+Assuming Router A has the (external) IP address A and the internal address
+192.168.1.1, while Router B has external address B and internal address
 192.168.2.1, the following commands will configure the tunnel:
 .Pp
-On router A:
+On Router A:
 .Bd -literal
    # ifconfig greN create
    # ifconfig greN 192.168.1.1 192.168.2.1
@@ -219,14 +217,14 @@ On router A:
    # route add -net 192.168.2 -netmask 255.255.255.0 192.168.2.1
 .Ed
 .Pp
-On router B:
+On Router B:
 .Bd -literal
    # ifconfig greN create
    # ifconfig greN 192.168.2.1 192.168.1.1
    # ifconfig greN tunnel B A
    # route add -net 192.168.1 -netmask 255.255.255.0 192.168.1.1
 .Ed
-.Pp
+.Ss Example 3: Encapsulating GRE in UDP
 To setup the same tunnel as above, but using GRE in UDP encapsulation
 instead of GRE encapsulation, set flags
 .Ar link0
@@ -234,7 +232,7 @@ and
 .Ar link2 ,
 and specify source and destination UDP ports.
 .Pp
-On router A:
+On Router A:
 .Bd -literal
    # ifconfig greN create
    # ifconfig greN link0 link2
@@ -243,38 +241,45 @@ On router A:
    # route add -net 192.168.2 -netmask 255.255.255.0 192.168.2.1
 .Ed
 .Pp
-On router B:
+On Router B:
 .Bd -literal
    # ifconfig greN create
    # ifconfig greN link0 link2
    # ifconfig greN 192.168.2.1 192.168.1.1
    # ifconfig greN tunnel B,port-B A,port-A
    # route add -net 192.168.1 -netmask 255.255.255.0 192.168.1.1
-.Pp
+.Ed
+.Ss Example 4: Realizing IPv6 connectivity
 Along these lines, you can use GRE tunnels to interconnect two IPv6
 networks over an IPv4 infrastructure, or to hook up to the IPv6 internet
 via an IPv4 tunnel to a Cisco router.
 .Bd -literal
-2001:db8:1::/64 -- NetBSD A  -----tunnel----- Cisco B --- IPv6 Internet
+2001:db8:1::/64 -- NetBSD A  ---- Tunnel ---- Cisco B --- IPv6 Internet
                    \\                              /
                     \\                            /
-                      +----- the Internet ------+
-
+                     +------ the Internet ------+
 .Ed
+.Pp
 The example will use the following addressing:
-.Nx
+.Bl -hang
+.It Nx
 A has the IPv4 address A and the IPv6 address 2001:db8:1::1 (connects
 to internal network 2001:db8:1::/64).
-Cisco B has external IPv4 address B.
-All the IPv6 internet world is behind B, so A wants to route 0::0/0
+.It Cisco B
+has external IPv4 address B.
+.It All the IPv6 internet world
+is behind B, so A wants to route 0::0/0
 (the IPv6 default route) into the tunnel.
-The GRE tunnel will use a transit network: 2001:db8:ffff::1/64 on
+.It The GRE tunnel
+will use a transit network: 2001:db8:ffff::1/64 on
 the
 .Nx
 side, and ::2/64 on the Cisco side.
+.El
+.Pp
 Then the following commands will configure the tunnel:
 .Pp
-On router A
+On Router A
 .Pq Nx :
 .Bd -literal
    # ifconfig greN create
@@ -284,7 +289,7 @@ On router A
    # route add -inet6 0::0/0 2001:db8:ffff::2 -ifp greN
 .Ed
 .Pp
-On router B (Cisco):
+On Router B (Cisco):
 .Bd -literal
    Interface TunnelX
      tunnel mode gre ip
@@ -292,7 +297,6 @@ On router B (Cisco):
      tunnel source B                    ! e.g. address from LAN interface
      tunnel destination A               ! where the tunnel is connected to
    ipv6 route 2001:db8::/64 TunnelX     ! route this network through tunnel
-.Ed
 .Ed
 .Sh NOTES
 The MTU of
@@ -332,8 +336,8 @@ A description of GRE encapsulation can be found in RFC 1701 and RFC 1702.
 .Pp
 A description of MOBILE encapsulation can be found in RFC 2004.
 .Sh AUTHORS
-.An Heiko W.Rupp Aq hwr@pilhuhn.de
-.An David Young Aq dyoung@NetBSD.org
+.An Heiko W.Rupp Aq Mt hwr@pilhuhn.de
+.An David Young Aq Mt dyoung@NetBSD.org
 .Pq GRE in UDP encapsulation, bug fixes
 .Sh BUGS
 The GRE RFCs are not yet fully implemented (no GRE options).

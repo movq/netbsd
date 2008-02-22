@@ -1,15 +1,13 @@
-/* $NetBSD: uslsa.c,v 1.5 2008/02/18 05:24:24 dyoung Exp $ */
+/* $NetBSD: uslsa.c,v 1.25 2017/12/22 14:41:55 jakllsch Exp $ */
+
+/* from ugensa.c */
 
 /*
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jonathan A. Kollasch <jakllsch@kollasch.net>.  Craig Shelley's Linux
- * driver provided invaluable documentation.
- *
- * This code is derived from ugensa.c, software contributed to
- * The NetBSD Foundation by Roland C. Dowdeswell <elric@netbsd.org>.
+ * by Roland C. Dowdeswell <elric@netbsd.org>.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -19,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +31,38 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+ * Copyright (c) 2007, 2009 Jonathan A. Kollasch.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uslsa.c,v 1.5 2008/02/18 05:24:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uslsa.c,v 1.25 2017/12/22 14:41:55 jakllsch Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,110 +79,47 @@ __KERNEL_RCSID(0, "$NetBSD: uslsa.c,v 1.5 2008/02/18 05:24:24 dyoung Exp $");
 
 #include <dev/usb/ucomvar.h>
 
-#ifdef DEBUG
-#define USLSA_DEBUG
-#endif
+#include <dev/usb/uslsareg.h>
+
+#include <fs/unicode.h>
 
 #ifdef USLSA_DEBUG
-#define DPRINTF(x)	if (uslsadebug) printf x
-#define DPRINTFN(n,x)	if (uslsadebug>(n)) printf x
+#define DPRINTF(x)	if (uslsadebug) device_printf x
 int uslsadebug = 0;
 #else
 #define DPRINTF(x)
-#define DPRINTFN(n,x)
 #endif
 
-#define USLSA_REQUEST_SET	0x41
-#define USLSA_REQUEST_GET	0xc1
-
-#define USLSA_REQ_SET_STATE	0x00
-
-#define USLSA_REQ_SET_BPS	0x01
-#define USLSA_REQ_GET_BPS	0x02
-
-#define USLSA_REQ_SET_DPS	0x03
-#define USLSA_REQ_GET_DPS	0x04
-
-#define USLSA_REQ_SET_BREAK	0x05
-#define USLSA_REQ_GET_BREAK	0x06
-
-#define USLSA_REQ_SET_FLOW	0x07
-#define USLSA_REQ_GET_FLOW	0x08
-
-#define USLSA_REQ_SET_MODEM	0x13
-#define USLSA_REQ_GET_MODEM	0x14
-
-#define USLSA_REQ_SET_MISC	0x19
-#define USLSA_REQ_GET_MISC	0x20
-
-#define USLSA_STATE_DISABLE	0x0000
-#define USLSA_STATE_ENABLE	0x0001
-
-#define USLSA_BPS(b)	(3686400/b)
-
-#define USLSA_DPS_DATA_MASK		0x0f00
-#define	USLSA_DPS_DATA_FIVE		0x0500
-#define	USLSA_DPS_DATA_SIX		0x0600
-#define	USLSA_DPS_DATA_SEVEN		0x0700
-#define	USLSA_DPS_DATA_EIGHT		0x0800
-#define	USLSA_DPS_DATA_NINE		0x0900
-
-#define USLSA_DPS_PARITY_MASK		0x00f0
-#define USLSA_DPS_PARITY_SPACE		0x0040
-#define USLSA_DPS_PARITY_MARK		0x0030
-#define USLSA_DPS_PARITY_EVEN		0x0020
-#define USLSA_DPS_PARITY_ODD		0x0010
-#define USLSA_DPS_PARITY_NONE		0x0000
-
-#define USLSA_DPS_STOP_MASK		0x000f
-#define USLSA_DPS_STOP_TWO		0x0002
-#define USLSA_DPS_STOP_ONE_FIVE		0x0001
-#define USLSA_DPS_STOP_ONE		0x0000
-
-#define USLSA_BREAK_DISABLE	0x0001
-#define USLSA_BREAK_ENABLE	0x0000
-
-#define USLSA_FLOW_SET_RTS	0x0200
-#define USLSA_FLOW_SET_DTR	0x0100
-#define USLSA_FLOW_MSR_MASK	0x00f0
-#define USLSA_FLOW_MSR_DCD	0x0080
-#define USLSA_FLOW_MSR_RI	0x0040
-#define USLSA_FLOW_MSR_DSR	0x0020
-#define USLSA_FLOW_MSR_CTS	0x0010
-#define USLSA_FLOW_RTS		0x0002
-#define USLSA_FLOW_DTR		0x0001
-
 struct uslsa_softc {
-	USBBASEDEVICE		sc_dev;		/* base device */
-	usbd_device_handle	sc_udev;	/* device */
-	usbd_interface_handle	sc_iface;	/* interface */
-
+	device_t		sc_dev;		/* base device */
 	device_t		sc_subdev;	/* ucom device */
-
-	u_char			sc_dying;	/* disconnecting */
-
-	u_char			sc_lsr;		/* local status register */
-	u_char			sc_msr;		/* uslsa status register */
+	struct usbd_device *	sc_udev;	/* usb device */
+	struct usbd_interface *	sc_iface;	/* interface */
+	uint8_t			sc_ifnum;	/* interface number */
+	bool			sc_dying;	/* disconnecting */
 };
 
 static void uslsa_get_status(void *sc, int, u_char *, u_char *);
 static void uslsa_set(void *, int, int, int);
 static int uslsa_param(void *, int, struct termios *);
+static int uslsa_ioctl(void *, int, u_long, void *, int, proc_t *);
+
 static int uslsa_open(void *, int);
 static void uslsa_close(void *, int);
 
+static int uslsa_usbd_errno(usbd_status);
 static int uslsa_request_set(struct uslsa_softc *, uint8_t, uint16_t);
-static void uslsa_set_flow(struct uslsa_softc *, tcflag_t, tcflag_t);
+static int uslsa_set_flow(struct uslsa_softc *, tcflag_t, tcflag_t);
 
-struct ucom_methods uslsa_methods = {
-	uslsa_get_status,
-	uslsa_set,
-	uslsa_param,
-	NULL,
-	uslsa_open,
-	uslsa_close,
-	NULL,
-	NULL,
+static const struct ucom_methods uslsa_methods = {
+	.ucom_get_status = uslsa_get_status,
+	.ucom_set = uslsa_set,
+	.ucom_param = uslsa_param,
+	.ucom_ioctl = uslsa_ioctl,
+	.ucom_open = uslsa_open,
+	.ucom_close = uslsa_close,
+	.ucom_read = NULL,
+	.ucom_write = NULL,
 };
 
 #define USLSA_CONFIG_INDEX	0
@@ -185,147 +143,126 @@ static const struct usb_devno uslsa_devs[] = {
         { USB_VENDOR_SILABS,            USB_PRODUCT_SILABS_CP210X_2 },
         { USB_VENDOR_SILABS,            USB_PRODUCT_SILABS_SUNNTO },
         { USB_VENDOR_SILABS2,           USB_PRODUCT_SILABS2_DCU11CLONE },
-        { USB_VENDOR_USI,               USB_PRODUCT_USI_MC60 }
+        { USB_VENDOR_USI,               USB_PRODUCT_USI_MC60 },
+	{ USB_VENDOR_WMR,		USB_PRODUCT_WMR_RIGBLASTER },
 };
-#define uslsa_lookup(v, p) usb_lookup(uslsa_devs, v, p)
 
-int uslsa_match(device_t, struct cfdata *, void *);
-void uslsa_attach(device_t, device_t, void *);
-void uslsa_childdet(device_t, device_t);
-int uslsa_detach(device_t, int);
-int uslsa_activate(device_t, enum devact);
-extern struct cfdriver uslsa_cd;
-CFATTACH_DECL2(uslsa, sizeof(struct uslsa_softc), uslsa_match,
+static int uslsa_match(device_t, cfdata_t, void *);
+static void uslsa_attach(device_t, device_t, void *);
+static void uslsa_childdet(device_t, device_t);
+static int uslsa_detach(device_t, int);
+static int uslsa_activate(device_t, enum devact);
+
+CFATTACH_DECL2_NEW(uslsa, sizeof(struct uslsa_softc), uslsa_match,
     uslsa_attach, uslsa_detach, uslsa_activate, NULL, uslsa_childdet);
 
-USB_MATCH(uslsa)
+static int
+uslsa_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(uslsa, uaa);
+	const struct usbif_attach_arg *uiaa = aux;
 
-	return (uslsa_lookup(uaa->vendor, uaa->product) != NULL ?
-	        UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
+	if (usb_lookup(uslsa_devs, uiaa->uiaa_vendor, uiaa->uiaa_product)
+	    != NULL)
+		return UMATCH_VENDOR_PRODUCT;
+	else
+		return UMATCH_NONE;
 }
 
-USB_ATTACH(uslsa)
+static void
+uslsa_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(uslsa, sc, uaa);
-	usbd_device_handle dev = uaa->device;
-	usbd_interface_handle iface;
-	usb_interface_descriptor_t *id;
-	usb_endpoint_descriptor_t *ed;
+	struct uslsa_softc *sc;
+	const struct usbif_attach_arg *uiaa = aux;
+	const usb_interface_descriptor_t *id;
+	const usb_endpoint_descriptor_t *ed;
 	char *devinfop;
-	char *devname;
-	usbd_status err;
-	struct ucom_attach_args uca;
+	struct ucom_attach_args ucaa;
 	int i;
 
-	devname = USBDEVNAME(sc->sc_dev);
+	sc = device_private(self);
 
-	DPRINTFN(10, ("\nuslsa_attach: sc=%p\n", sc));
+	sc->sc_dev = self;
+	sc->sc_udev = uiaa->uiaa_device;
+	sc->sc_iface = uiaa->uiaa_iface;
 
-	/* Move the device into the configured state. */
-	err = usbd_set_config_index(dev, USLSA_CONFIG_INDEX, 1);
-	if (err) {
-		printf("\n%s: failed to set configuration, err=%s\n",
-	 	       devname, usbd_errstr(err));
-		goto bad;
-	}
+	aprint_naive("\n");
+	aprint_normal("\n");
 
-	err = usbd_device2interface_handle(dev, USLSA_IFACE_INDEX, &iface);
-	if (err) {
-		printf("\n%s: failed to get interface, err=%s\n",
-		       devname, usbd_errstr(err));
-		goto bad;
-	}
-
-	devinfop = usbd_devinfo_alloc(dev, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", devname, devinfop);
+	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	id = usbd_get_interface_descriptor(iface);
+	id = usbd_get_interface_descriptor(sc->sc_iface);
 
-	sc->sc_udev = dev;
-	sc->sc_iface = iface;
+	sc->sc_ifnum = id->bInterfaceNumber;
 
-	uca.info = "Silicon Labs CP210x";
-	uca.portno = UCOM_UNK_PORTNO;
-	uca.ibufsize = USLSA_BUFSIZE;
-	uca.obufsize = USLSA_BUFSIZE;
-	uca.ibufsizepad = USLSA_BUFSIZE;
-	uca.opkthdrlen = 0;
-	uca.device = dev;
-	uca.iface = iface;
-	uca.methods = &uslsa_methods;
-	uca.arg = sc;
+	ucaa.ucaa_info = "Silicon Labs CP210x";
+	ucaa.ucaa_portno = UCOM_UNK_PORTNO;
+	ucaa.ucaa_ibufsize = USLSA_BUFSIZE;
+	ucaa.ucaa_obufsize = USLSA_BUFSIZE;
+	ucaa.ucaa_ibufsizepad = USLSA_BUFSIZE;
+	ucaa.ucaa_opkthdrlen = 0;
+	ucaa.ucaa_device = sc->sc_udev;
+	ucaa.ucaa_iface = sc->sc_iface;
+	ucaa.ucaa_methods = &uslsa_methods;
+	ucaa.ucaa_arg = sc;
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-	                   USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
 
-	uca.bulkin = uca.bulkout = -1;
+	ucaa.ucaa_bulkin = ucaa.ucaa_bulkout = -1;
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		int addr, dir, attr;
 
-		ed = usbd_interface2endpoint_descriptor(iface, i);
+		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
-			printf("%s: could not read endpoint descriptor"
-			       ": %s\n", devname, usbd_errstr(err));
-			goto bad;
+			aprint_error_dev(self,
+			    "could not read endpoint descriptor\n");
+			sc->sc_dying = true;
+			return;
 		}
 		addr = ed->bEndpointAddress;
 		dir = UE_GET_DIR(ed->bEndpointAddress);
 		attr = ed->bmAttributes & UE_XFERTYPE;
-		if (dir == UE_DIR_IN && attr == UE_BULK)
-			uca.bulkin = addr;
-		else if (dir == UE_DIR_OUT && attr == UE_BULK)
-			uca.bulkout = addr;
-		else
-			printf("%s: unexpected endpoint\n", devname);
+		if (dir == UE_DIR_IN && attr == UE_BULK) {
+			ucaa.ucaa_bulkin = addr;
+		} else if (dir == UE_DIR_OUT && attr == UE_BULK) {
+			ucaa.ucaa_bulkout = addr;
+		} else {
+			aprint_error_dev(self, "unexpected endpoint\n");
+		}
 	}
-	if (uca.bulkin == -1) {
-		printf("%s: Could not find data bulk in\n",
-		       USBDEVNAME(sc->sc_dev));
-		goto bad;
-	}
-	if (uca.bulkout == -1) {
-		printf("%s: Could not find data bulk out\n",
-		       USBDEVNAME(sc->sc_dev));
-		goto bad;
+	aprint_debug_dev(sc->sc_dev, "EPs: in=%#x out=%#x\n",
+		ucaa.ucaa_bulkin, ucaa.ucaa_bulkout);
+	if ((ucaa.ucaa_bulkin == -1) || (ucaa.ucaa_bulkout == -1)) {
+		aprint_error_dev(self, "could not find endpoints\n");
+		sc->sc_dying = true;
+		return;
 	}
 
-	DPRINTF(("uslsa: in=0x%x out=0x%x\n", uca.bulkin, uca.bulkout));
-	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &uca,
+	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, &ucaa,
 	                                    ucomprint, ucomsubmatch);
 
-	USB_ATTACH_SUCCESS_RETURN;
-
-bad:
-	DPRINTF(("uslsa_attach: ATTACH ERROR\n"));
-	sc->sc_dying = 1;
-	USB_ATTACH_ERROR_RETURN;
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	
+	return;
 }
 
-int
+static int
 uslsa_activate(device_t self, enum devact act)
 {
 	struct uslsa_softc *sc = device_private(self);
-	int rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-		break;
-
 	case DVACT_DEACTIVATE:
-		sc->sc_dying = 1;
-		if (sc->sc_subdev)
-			rv = config_deactivate(sc->sc_subdev);
-		break;
+		sc->sc_dying = true;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
 }
 
-void
+static void
 uslsa_childdet(device_t self, device_t child)
 {
 	struct uslsa_softc *sc = device_private(self);
@@ -334,22 +271,36 @@ uslsa_childdet(device_t self, device_t child)
 	sc->sc_subdev = NULL;
 }
 
-USB_DETACH(uslsa)
+static int
+uslsa_detach(device_t self, int flags)
 {
-	USB_DETACH_START(uslsa, sc);
+	struct uslsa_softc *sc = device_private(self);
 	int rv = 0;
 
-	DPRINTF(("uslsa_detach: sc=%p flags=%d\n", sc, flags));
+	DPRINTF((self, "%s(%p, %#x)\n", __func__, self, flags));
 
-	sc->sc_dying = 1;
+	sc->sc_dying = true;
 
-	if (sc->sc_subdev != NULL)
+	if (sc->sc_subdev != NULL) {
 		rv = config_detach(sc->sc_subdev, flags);
+	}
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	                   USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
 
 	return (rv);
+}
+
+static int
+uslsa_usbd_errno(usbd_status status)
+{
+	switch (status) {
+	case USBD_NORMAL_COMPLETION:
+		return 0;
+	case USBD_STALLED:
+		return EINVAL;
+	default:
+		return EIO;
+	}
 }
 
 static void
@@ -357,34 +308,43 @@ uslsa_get_status(void *vsc, int portno, u_char *lsr, u_char *msr)
 {
 	struct uslsa_softc *sc;
 	usb_device_request_t req;
-	usbd_status err;
-	int actlen;
-	uint16_t flowreg;
+	usbd_status status;
+	uint8_t mdmsts;
 
 	sc = vsc;
 
-	DPRINTF(("uslsa_get_status:\n"));
+	DPRINTF((sc->sc_dev, "%s(%p, %d, ....)\n", __func__, vsc, portno));
 
-	req.bmRequestType = USLSA_REQUEST_GET;
-	req.bRequest = USLSA_REQ_GET_FLOW;
+	if (sc->sc_dying) {
+		return;
+	}
+
+	req.bmRequestType = UT_READ_VENDOR_INTERFACE;
+	req.bRequest = SLSA_R_GET_MDMSTS;
 	USETW(req.wValue, 0);
-	USETW(req.wIndex, 0);
-	USETW(req.wLength, sizeof(flowreg));
+	USETW(req.wIndex, sc->sc_ifnum);
+	USETW(req.wLength, SLSA_RL_GET_MDMSTS);
 
-	err = usbd_do_request_flags(sc->sc_udev, &req, &flowreg,
-	    USBD_SHORT_XFER_OK, &actlen, USBD_DEFAULT_TIMEOUT);
-	if (err)
-		printf("%s: uslsa_get_status: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+	status = usbd_do_request(sc->sc_udev, &req, &mdmsts);
+	if (status != USBD_NORMAL_COMPLETION) {
+		device_printf(sc->sc_dev, "%s: GET_MDMSTS %s\n",
+		    __func__, usbd_errstr(status));
+		return;
+	}
 
-	DPRINTF(("uslsa_get_status: flowreg=0x%x\n", flowreg));
+	DPRINTF((sc->sc_dev, "%s: GET_MDMSTS %#x\n", __func__, mdmsts));
 
-	sc->sc_msr = (u_char)(USLSA_FLOW_MSR_MASK & flowreg);
+	if (lsr != NULL) {
+		*lsr = 0;
+	}
 
-	if (lsr != NULL)
-		*lsr = sc->sc_lsr;
-	if (msr != NULL)
-		*msr = sc->sc_msr;
+	if (msr != NULL) {
+		*msr = 0;
+		*msr |= ISSET(mdmsts, SLSA_MDMSTS_CTS) ? UMSR_CTS : 0;
+		*msr |= ISSET(mdmsts, SLSA_MDMSTS_DSR) ? UMSR_DSR : 0;
+		*msr |= ISSET(mdmsts, SLSA_MDMSTS_RI) ? UMSR_RI : 0;
+		*msr |= ISSET(mdmsts, SLSA_MDMSTS_DCD) ? UMSR_DCD : 0;
+	}
 }
 
 static void
@@ -394,30 +354,34 @@ uslsa_set(void *vsc, int portno, int reg, int onoff)
 
 	sc = vsc;
 
-	DPRINTF(("uslsa_set: sc=%p, port=%d reg=%d onoff=%d\n", sc, portno,
-	         reg, onoff));
+	DPRINTF((sc->sc_dev, "%s(%p, %d, %d, %d)\n", __func__, vsc, portno,
+	    reg, onoff));
+
+	if (sc->sc_dying) {
+		return;
+	}
 
 	switch (reg) {
 	case UCOM_SET_DTR:
-		if (uslsa_request_set(sc, USLSA_REQ_SET_FLOW,
-			(onoff ? (USLSA_FLOW_DTR | USLSA_FLOW_SET_DTR) :
-			    USLSA_FLOW_SET_DTR)))
-			printf("%s: uslsa_set_dtr failed\n",
-			       USBDEVNAME(sc->sc_dev));
+		if (uslsa_request_set(sc, SLSA_R_SET_MHS,
+		    SLSA_RV_SET_MHS_DTR_MASK |
+		    (onoff ? SLSA_RV_SET_MHS_DTR : 0))) {
+			device_printf(sc->sc_dev, "SET_MHS/DTR failed\n");
+		}
 		break;
 	case UCOM_SET_RTS:
-		if (uslsa_request_set(sc, USLSA_REQ_SET_FLOW,
-			(onoff ? (USLSA_FLOW_RTS | USLSA_FLOW_SET_RTS) :
-			    USLSA_FLOW_SET_RTS)))
-			printf("%s: uslsa_set_rts failed\n",
-			       USBDEVNAME(sc->sc_dev));
+		if (uslsa_request_set(sc, SLSA_R_SET_MHS,
+		    SLSA_RV_SET_MHS_RTS_MASK |
+		    (onoff ? SLSA_RV_SET_MHS_RTS : 0))) {
+			device_printf(sc->sc_dev, "SET_MHS/RTS failed\n");
+		}
 		break;
 	case UCOM_SET_BREAK:
-		if (uslsa_request_set(sc, USLSA_REQ_SET_BREAK,
-			(onoff ? USLSA_BREAK_ENABLE :
-			    USLSA_BREAK_DISABLE)))
-			printf("%s: uslsa_set_break failed\n",
-			       USBDEVNAME(sc->sc_dev));
+		if (uslsa_request_set(sc, SLSA_R_SET_BREAK,
+		    (onoff ? SLSA_RV_SET_BREAK_ENABLE :
+		     SLSA_RV_SET_BREAK_DISABLE))) {
+			device_printf(sc->sc_dev, "SET_BREAK failed\n");
+		}
 		break;
 	default:
 		break;
@@ -425,81 +389,111 @@ uslsa_set(void *vsc, int portno, int reg, int onoff)
 }
 
 static int
-uslsa_param(void *vsc, int portno, struct termios * t)
+uslsa_param(void *vsc, int portno, struct termios *t)
 {
 	struct uslsa_softc *sc;
-	uint16_t data;
+	usb_device_request_t req;
+	usbd_status status;
+	uint16_t value;
+	uint32_t baud;
+	int ret;
 
 	sc = vsc;
 
-	DPRINTF(("uslsa_param: sc=%p\n", sc));
+	DPRINTF((sc->sc_dev, "%s(%p, %d, %p)\n", __func__, vsc, portno, t));
 
-	switch (t->c_ospeed) {
-	case B600:
-	case B1200:
-	case B2400:
-	case B4800:
-	case B9600:
-	case B19200:
-	case B38400:
-	case B57600:
-	case B115200:
-	case B230400:
-	case B460800:
-	case B921600:
-		data = USLSA_BPS(t->c_ospeed);
-		break;
-	default:
-		printf("%s: uslsa_param: unsupported data rate, "
-		       "forcing default of 115200bps\n",
-		       USBDEVNAME(sc->sc_dev));
-		data = USLSA_BPS(B115200);
-	};
+	if (sc->sc_dying) {
+		return EIO;
+	}
 
-	if (uslsa_request_set(sc, USLSA_REQ_SET_BPS, data))
-		printf("%s: uslsa_param: setting data rate failed\n",
-		       USBDEVNAME(sc->sc_dev));
+	req.bmRequestType = UT_WRITE_VENDOR_INTERFACE;
+	req.bRequest = SLSA_R_SET_BAUDRATE;
+	USETW(req.wValue, 0);
+	USETW(req.wIndex, sc->sc_ifnum);
+	USETW(req.wLength, 4);
 
-	data = 0;
+	baud = t->c_ospeed;
+	status = usbd_do_request(sc->sc_udev, &req, &baud);
+	if (status != USBD_NORMAL_COMPLETION) {
+		/* fallback method for devices that don't know SET_BAUDRATE */
+		/* hope we calculate it right */
+		device_printf(sc->sc_dev, "%s: set baudrate %d, failed %s,"
+				" using set bauddiv\n",
+		    __func__, baud, usbd_errstr(status));
 
-	if (ISSET(t->c_cflag, CSTOPB))
-		data |= USLSA_DPS_STOP_TWO;
-	else
-		data |= USLSA_DPS_STOP_ONE;
+		value = SLSA_RV_BAUDDIV(t->c_ospeed);
+		if ((ret = uslsa_request_set(sc, SLSA_R_SET_BAUDDIV, value))
+		    != 0) {
+			device_printf(sc->sc_dev, "%s: SET_BAUDDIV failed\n",
+			       __func__);
+			return ret;
+		}
+	}
+
+	value = 0;
+
+	if (ISSET(t->c_cflag, CSTOPB)) {
+		value |= SLSA_RV_LINE_CTL_STOP_2;
+	} else {
+		value |= SLSA_RV_LINE_CTL_STOP_1;
+	}
 
 	if (ISSET(t->c_cflag, PARENB)) {
-		if (ISSET(t->c_cflag, PARODD))
-			data |= USLSA_DPS_PARITY_ODD;
-		else
-			data |= USLSA_DPS_PARITY_EVEN;
-	} else
-		data |= USLSA_DPS_PARITY_NONE;
+		if (ISSET(t->c_cflag, PARODD)) {
+			value |= SLSA_RV_LINE_CTL_PARITY_ODD;
+		} else {
+			value |= SLSA_RV_LINE_CTL_PARITY_EVEN;
+		}
+	} else {
+		value |= SLSA_RV_LINE_CTL_PARITY_NONE;
+	}
 
 	switch (ISSET(t->c_cflag, CSIZE)) {
 	case CS5:
-		data |= USLSA_DPS_DATA_FIVE;
+		value |= SLSA_RV_LINE_CTL_LEN_5;
 		break;
 	case CS6:
-		data |= USLSA_DPS_DATA_SIX;
+		value |= SLSA_RV_LINE_CTL_LEN_6;
 		break;
 	case CS7:
-		data |= USLSA_DPS_DATA_SEVEN;
+		value |= SLSA_RV_LINE_CTL_LEN_7;
 		break;
 	case CS8:
-		data |= USLSA_DPS_DATA_EIGHT;
+		value |= SLSA_RV_LINE_CTL_LEN_8;
 		break;
 	}
 
-	DPRINTF(("uslsa_param: setting DPS register to 0x%x\n", data));
-	if (uslsa_request_set(sc, USLSA_REQ_SET_DPS, data))
-		printf("%s: setting DPS register failed: invalid argument\n",
-		       USBDEVNAME(sc->sc_dev));
+	DPRINTF((sc->sc_dev, "%s: setting LINE_CTL to 0x%x\n",
+	    __func__, value));
+	if ((ret = uslsa_request_set(sc, SLSA_R_SET_LINE_CTL, value)) != 0) {
+		device_printf(sc->sc_dev, "SET_LINE_CTL failed\n");
+		return ret;
+	}
 
-	uslsa_set_flow(sc, t->c_cflag, t->c_iflag);
+	if ((ret = uslsa_set_flow(sc, t->c_cflag, t->c_iflag)) != 0) {
+		device_printf(sc->sc_dev, "SET_LINE_CTL failed\n");
+	}
+
+	return ret;
+}
+
+static int
+uslsa_ioctl(void *vsc, int portno, u_long cmd, void *data, int flag, proc_t *p)
+{
+	struct uslsa_softc *sc;
+
+	sc = vsc;
+
+	switch (cmd) {
+	case TIOCMGET:
+		ucom_status_change(device_private(sc->sc_subdev));
+		return EPASSTHROUGH;
+	default:
+		return EPASSTHROUGH;
+	}
 
 	return 0;
 }
-
 
 static int
 uslsa_open(void *vsc, int portno)
@@ -508,99 +502,96 @@ uslsa_open(void *vsc, int portno)
 
 	sc = vsc;
 
-	DPRINTF(("uslsa_open: sc=%p\n", sc));
+	DPRINTF((sc->sc_dev, "%s(%p, %d)\n", __func__, vsc, portno));
 
-	if (sc->sc_dying)
-		return (EIO);
+	if (sc->sc_dying) {
+		return EIO;
+	}
 
-	if (uslsa_request_set(sc, USLSA_REQ_SET_STATE, USLSA_STATE_ENABLE))
-		return (EIO);
-
-	return 0;
+	return uslsa_request_set(sc, SLSA_R_IFC_ENABLE,
+	    SLSA_RV_IFC_ENABLE_ENABLE);
 }
 
-void
+static void
 uslsa_close(void *vsc, int portno)
 {
 	struct uslsa_softc *sc;
 
 	sc = vsc;
 
-	if (sc->sc_dying)
+	DPRINTF((sc->sc_dev, "%s(%p, %d)\n", __func__, vsc, portno));
+
+	if (sc->sc_dying) {
 		return;
+	}
 
-	DPRINTF(("uslsa_close: sc=%p\n", sc));
-
-	if (uslsa_request_set(sc, USLSA_REQ_SET_STATE,
-	    USLSA_STATE_DISABLE))
-		printf("%s: disable-on-close failed\n",
-		       USBDEVNAME(sc->sc_dev));
+	(void)uslsa_request_set(sc, SLSA_R_IFC_ENABLE,
+	    SLSA_RV_IFC_ENABLE_DISABLE);
 }
 
-/*
- * uslsa_request_set(), wrapper for doing sets with usbd_do_request()
- */
 static int
 uslsa_request_set(struct uslsa_softc * sc, uint8_t request, uint16_t value)
 {
 	usb_device_request_t req;
-	usbd_status err;
+	usbd_status status;
 
-	req.bmRequestType = USLSA_REQUEST_SET;
+	req.bmRequestType = UT_WRITE_VENDOR_INTERFACE;
 	req.bRequest = request;
 	USETW(req.wValue, value);
-	USETW(req.wIndex, 0);
+	USETW(req.wIndex, sc->sc_ifnum);
 	USETW(req.wLength, 0);
 
-	err = usbd_do_request(sc->sc_udev, &req, 0);
-	if (err)
-		printf("%s: uslsa_request: %s\n",
-		       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
-	return err;
+	status = usbd_do_request(sc->sc_udev, &req, NULL);
+
+	return uslsa_usbd_errno(status);
 }
 
-/*
- * uslsa_set_flow() does some magic to set up hardware flow control
- */
-static void
+static int
 uslsa_set_flow(struct uslsa_softc *sc, tcflag_t cflag, tcflag_t iflag)
 {
-	uint8_t mysterydata[16];
+	struct slsa_fcs fcs;
 	usb_device_request_t req;
-	usbd_status err;
+	uint32_t ulControlHandshake;
+	uint32_t ulFlowReplace;
+	usbd_status status;
 
-	DPRINTF(("uslsa_set_flow: cflag = 0x%x, iflag = 0x%x\n",
-	         cflag, iflag));
+	DPRINTF((sc->sc_dev, "%s(%p, %#x, %#x)\n", __func__, sc, cflag, iflag));
 
-	req.bmRequestType = USLSA_REQUEST_GET;
-	req.bRequest = USLSA_REQ_GET_MODEM;
+	req.bmRequestType = UT_READ_VENDOR_INTERFACE;
+	req.bRequest = SLSA_R_GET_FLOW;
 	USETW(req.wValue, 0);
-	USETW(req.wIndex, 0);
-	USETW(req.wLength, 16);
+	USETW(req.wIndex, sc->sc_ifnum);
+	USETW(req.wLength, SLSA_RL_GET_FLOW);
 
-	err = usbd_do_request(sc->sc_udev, &req, mysterydata);
-	if (err)
-		printf("%s: uslsa_set_flow: %s\n",
-		       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
-
-	if (ISSET(cflag, CRTSCTS)) {
-		mysterydata[0] &= ~0x7b;
-		mysterydata[0] |= 0x09;
-		mysterydata[4] = 0x80;
-	} else {
-		mysterydata[0] &= ~0x7b;
-		mysterydata[0] |= 0x01;
-		mysterydata[4] = 0x40;
+	status = usbd_do_request(sc->sc_udev, &req, &fcs);
+	if (status != USBD_NORMAL_COMPLETION) {
+		device_printf(sc->sc_dev, "%s: GET_FLOW %s\n",
+			__func__, usbd_errstr(status));
+		return uslsa_usbd_errno(status);
 	}
 
-	req.bmRequestType = USLSA_REQUEST_SET;
-	req.bRequest = USLSA_REQ_SET_MODEM;
-	USETW(req.wValue, 0);
-	USETW(req.wIndex, 0);
-	USETW(req.wLength, 16);
+	ulControlHandshake = le32toh(fcs.ulControlHandshake);
+	ulFlowReplace = le32toh(fcs.ulFlowReplace);
 
-	err = usbd_do_request(sc->sc_udev, &req, mysterydata);
-	if (err)
-		printf("%s: uslsa_set_flow: %s\n",
-		       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+	if (ISSET(cflag, CRTSCTS)) {
+		ulControlHandshake =
+		    SERIAL_CTS_HANDSHAKE | __SHIFTIN(1, SERIAL_DTR_MASK);
+		ulFlowReplace = __SHIFTIN(2, SERIAL_RTS_MASK);
+	} else {
+		ulControlHandshake = __SHIFTIN(1, SERIAL_DTR_MASK);
+		ulFlowReplace = __SHIFTIN(1, SERIAL_RTS_MASK);
+	}
+
+	fcs.ulControlHandshake = htole32(ulControlHandshake);
+	fcs.ulFlowReplace = htole32(ulFlowReplace);
+
+	req.bmRequestType = UT_WRITE_VENDOR_INTERFACE;
+	req.bRequest = SLSA_R_SET_FLOW;
+	USETW(req.wValue, 0);
+	USETW(req.wIndex, sc->sc_ifnum);
+	USETW(req.wLength, SLSA_RL_SET_FLOW);
+
+	status = usbd_do_request(sc->sc_udev, &req, &fcs);
+
+	return uslsa_usbd_errno(status);
 }

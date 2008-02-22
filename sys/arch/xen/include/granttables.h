@@ -1,4 +1,4 @@
-/* $NetBSD: granttables.h,v 1.4 2007/11/22 16:16:56 bouyer Exp $ */
+/* $NetBSD: granttables.h,v 1.9 2011/12/07 15:47:42 cegger Exp $ */
 /*
  * Copyright (c) 2006 Manuel Bouyer.
  *
@@ -10,11 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,9 +25,14 @@
  */
 
 /* Interface to the Xen Grant tables */
-#include <xen/xen3-public/grant_table.h>
+#include <xen/xen-public/xen.h>
+#include <xen/xen-public/grant_table.h>
 
 void xengnt_init(void);
+
+/* suspend/resume grant table, for save/restore operations */
+bool xengnt_suspend(void);
+bool xengnt_resume(void);
 
 /*
  * grant access to a remote domain. Returns a handle on the allocated grant
@@ -54,6 +54,6 @@ paddr_t xengnt_revoke_transfer(grant_ref_t);
 
 /*
  * Query grant status (i.e. if remote has a valid mapping to this grant).
- * Returns GTF_reading | GTF_writing.
+ * Returns GTF_reading | GTF_writing (0 if remote does not use it anymore).
  */
 int xengnt_status(grant_ref_t);

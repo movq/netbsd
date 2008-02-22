@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs.h,v 1.4 2007/12/25 18:33:44 perry Exp $	*/
+/*	$NetBSD: bfs.h,v 1.8 2014/01/09 13:23:57 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -149,24 +142,27 @@ struct sector_io_ops {
 	bool (*write_n)(void *, uint8_t *, daddr_t, int);
 };
 
+struct vnode;
+
 int bfs_init2(struct bfs **, int, struct sector_io_ops *, bool);
 void bfs_fini(struct bfs *);
 int bfs_file_read(const struct bfs *, const char *, void *, size_t, size_t *);
 int bfs_file_write(struct bfs *, const char *, void *, size_t);
 int bfs_file_create(struct bfs *, const char *, void *,  size_t,
     const struct bfs_fileattr *);
-int bfs_file_delete(struct bfs *, const char *);
+int bfs_file_delete(struct bfs *, const char *, bool);
 int bfs_file_rename(struct bfs *, const char *, const char *);
 bool bfs_file_lookup(const struct bfs *, const char *, int *, int *,
     size_t *);
 size_t bfs_file_size(const struct bfs_inode *);
+
 bool bfs_dump(const struct bfs *);
 
 /* filesystem ops */
-struct vnode;
 int sysvbfs_bfs_init(struct bfs **, struct vnode *);
 void sysvbfs_bfs_fini(struct bfs *);
 bool bfs_inode_lookup(const struct bfs *, ino_t, struct bfs_inode **);
+int bfs_inode_delete(struct bfs *, ino_t);
 bool bfs_dirent_lookup_by_name(const struct bfs *, const char *,
     struct bfs_dirent **);
 bool bfs_dirent_lookup_by_inode(const struct bfs *, int,

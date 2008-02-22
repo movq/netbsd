@@ -1,4 +1,4 @@
-/*	$NetBSD: mq200.c,v 1.28 2007/03/04 05:59:52 christos Exp $	*/
+/*	$NetBSD: mq200.c,v 1.32 2015/06/26 22:15:33 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 TAKEMURA Shin
@@ -30,11 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mq200.c,v 1.28 2007/03/04 05:59:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mq200.c,v 1.32 2015/06/26 22:15:33 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/kernel.h>
+#include <sys/bus.h>
 #include <sys/device.h>
+#include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
 
@@ -42,8 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: mq200.c,v 1.28 2007/03/04 05:59:52 christos Exp $");
 
 #include <dev/wscons/wsconsio.h>
 
+#include <mips/locore.h>
+
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
 #include <machine/autoconf.h>
 #include <machine/config_hook.h>
 #include <machine/platid.h>
@@ -130,7 +132,7 @@ mq200_attach(struct mq200_softc *sc)
 	}
 	printf("\n");
         printf("%s: framebuffer address: 0x%08lx\n",
-	    sc->sc_dev.dv_xname, (u_long)bootinfo->fb_addr);
+	    device_xname(sc->sc_dev), (u_long)bootinfo->fb_addr);
 
 	/*
 	 * setup registers
@@ -157,7 +159,7 @@ mq200_attach(struct mq200_softc *sc)
 		case 16:	mode = MQ200_GCC_16BPP_DIRECT;	break;
 		default:
 			printf("%s: %dbpp isn't supported\n",
-			    sc->sc_dev.dv_xname, sc->sc_fbconf.hf_pixel_width);
+			    device_xname(sc->sc_dev), sc->sc_fbconf.hf_pixel_width);
 			return;
 		}
 
@@ -199,11 +201,11 @@ mq200_attach(struct mq200_softc *sc)
 
 	/* Add a power hook to power saving */
 	sc->sc_mq200pwstate = MQ200_POWERSTATE_D0;
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	sc->sc_powerhook = powerhook_establish(device_xname(sc->sc_dev),
 	    mq200_power, sc);
 	if (sc->sc_powerhook == NULL)
 		printf("%s: WARNING: unable to establish power hook\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	/* Add a hard power hook to power saving */
 	sc->sc_hardpowerhook = config_hook(CONFIG_HOOK_PMEVENT,
@@ -212,7 +214,7 @@ mq200_attach(struct mq200_softc *sc)
 	    mq200_hardpower, sc);
 	if (sc->sc_hardpowerhook == NULL)
 		printf("%s: WARNING: unable to establish hard power hook\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	/* initialize backlight brightness and lcd contrast */
 	sc->sc_lcd_inited = 0;
@@ -234,7 +236,7 @@ mq200_attach(struct mq200_softc *sc)
 	ha.ha_ndspconf = 1;
 	ha.ha_dspconflist = &sc->sc_dspconf;
 
-	config_found(&sc->sc_dev, &ha, hpcfbprint);
+	config_found(sc->sc_dev, &ha, hpcfbprint);
 
 #if NBIVIDEO > 0
 	/*
@@ -338,7 +340,7 @@ mq200_fbinit(struct hpcfb_fbconf *fb)
 	}
 
 	/* zero fill */
-	bzero(fb, sizeof(*fb));
+	memset(fb, 0, sizeof(*fb));
 
 	fb->hf_conf_index	= 0;	/* configuration index		*/
 	fb->hf_nconfs		= 1;   	/* how many configurations	*/
@@ -463,12 +465,7 @@ mq200_fbinit(struct hpcfb_fbconf *fb)
 }
 
 int
-mq200_ioctl(v, cmd, data, flag, l)
-	void *v;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+mq200_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct mq200_softc *sc = (struct mq200_softc *)v;
 	struct hpcfb_fbconf *fbconf;

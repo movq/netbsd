@@ -1,4 +1,4 @@
-/*	$NetBSD: extattr.h,v 1.8 2008/01/30 14:54:01 ad Exp $	*/
+/*	$NetBSD: extattr.h,v 1.11 2014/12/19 10:59:21 manu Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001 Robert N. M. Watson
@@ -43,7 +43,7 @@
 #define	UFS_EXTATTR_FSROOTSUBDIR	".attribute"
 #define	UFS_EXTATTR_SUBDIR_SYSTEM	"system"
 #define	UFS_EXTATTR_SUBDIR_USER		"user"
-#define	UFS_EXTATTR_MAXEXTATTRNAME	65	/* including null */
+#define	UFS_EXTATTR_MAXEXTATTRNAME	256	/* including null */
 
 #define	UFS_EXTATTR_ATTR_FLAG_INUSE	0x00000001	/* attr has been set */
 #define	UFS_EXTATTR_PERM_KERNEL		0x00000000
@@ -54,8 +54,8 @@
 #define	UFS_EXTATTR_UEPM_INITIALIZED	0x00000001
 #define	UFS_EXTATTR_UEPM_STARTED	0x00000002
 
-#define	UFS_EXTATTR_CMD_START		0x00000001
-#define	UFS_EXTATTR_CMD_STOP		0x00000002
+#define	UFS_EXTATTR_CMD_START		EXTATTR_CMD_START
+#define	UFS_EXTATTR_CMD_STOP		EXTATTR_CMD_STOP
 #define	UFS_EXTATTR_CMD_ENABLE		0x00000003
 #define	UFS_EXTATTR_CMD_DISABLE		0x00000004
 
@@ -110,9 +110,13 @@ int	ufs_extattr_autostart(struct mount *mp, struct lwp *l);
 void	ufs_extattr_stop(struct mount *mp, struct lwp *l);
 int	ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename,
 	    int attrnamespace, const char *attrname);
+struct vop_getextattr_args;
 int	ufs_getextattr(struct vop_getextattr_args *ap);
+struct vop_deleteextattr_args;
 int	ufs_deleteextattr(struct vop_deleteextattr_args *ap);
+struct vop_setextattr_args;
 int	ufs_setextattr(struct vop_setextattr_args *ap);
+struct vop_listextattr_args;
 int	ufs_listextattr(struct vop_listextattr_args *ap);
 void	ufs_extattr_vnode_inactive(struct vnode *vp, struct lwp *l);
 

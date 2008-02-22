@@ -1,4 +1,4 @@
-/*	$NetBSD: fpclassifyl.c,v 1.1 2003/10/28 22:05:37 kleink Exp $	*/
+/*	$NetBSD: fpclassifyl.c,v 1.3 2013/11/20 22:22:20 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpclassifyl.c,v 1.1 2003/10/28 22:05:37 kleink Exp $");
+__RCSID("$NetBSD: fpclassifyl.c,v 1.3 2013/11/20 22:22:20 martin Exp $");
 #endif
 
 #include <machine/ieee.h>
@@ -56,14 +49,12 @@ __fpclassifyl(long double x)
 	u.extu_ld = x;
 
 	if (u.extu_ext.ext_exp == 0) {
-		if (u.extu_ext.ext_frach  == 0 && u.extu_ext.ext_frachm == 0 &&
-		    u.extu_ext.ext_fraclm == 0 && u.extu_ext.ext_fracl  == 0)
+		if (u.extu_ext.ext_frach  == 0 && u.extu_ext.ext_fracl  == 0)
 			return FP_ZERO;
 		else
 			return FP_SUBNORMAL;
 	} else if (u.extu_ext.ext_exp == EXT_EXP_INFNAN) {
-		if (u.extu_ext.ext_frach  == 0 && u.extu_ext.ext_frachm == 0 &&
-		    u.extu_ext.ext_fraclm == 0 && u.extu_ext.ext_fracl  == 0)
+		if (u.extu_ext.ext_frach  == 0 && u.extu_ext.ext_fracl  == 0)
 			return FP_INFINITE;
 		else
 			return FP_NAN;

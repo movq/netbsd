@@ -1,4 +1,4 @@
-/*	$NetBSD: uda1341.c,v 1.10 2006/03/25 15:26:51 peter Exp $	*/
+/*	$NetBSD: uda1341.c,v 1.15 2011/07/19 15:37:38 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.  All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uda1341.c,v 1.10 2006/03/25 15:26:51 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uda1341.c,v 1.15 2011/07/19 15:37:38 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,8 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: uda1341.c,v 1.10 2006/03/25 15:26:51 peter Exp $");
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/malloc.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <hpcarm/dev/ipaq_saipvar.h>
 #include <hpcarm/dev/ipaq_gpioreg.h>
@@ -58,17 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: uda1341.c,v 1.10 2006/03/25 15:26:51 peter Exp $");
 #include <arm/sa11x0/sa11x0_sspreg.h>
 
 struct uda1341_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	struct ipaq_softc	*sc_parent;
 };
 
-static	int	uda1341_match(struct device *, struct cfdata *, void *);
-static	void	uda1341_attach(struct device *, struct device *, void *);
+static	int	uda1341_match(device_t, cfdata_t, void *);
+static	void	uda1341_attach(device_t, device_t, void *);
 static	int	uda1341_print(void *, const char *);
-static	int	uda1341_search(struct device *, struct cfdata *,
-			       const int *, void *);
+static	int	uda1341_search(device_t, cfdata_t, const int *, void *);
 
 static	void	uda1341_output_high(struct uda1341_softc *);
 static	void	uda1341_output_low(struct uda1341_softc *);
@@ -77,14 +68,20 @@ static	void	uda1341_init(struct uda1341_softc *);
 static	void	uda1341_reset(struct uda1341_softc *);
 static	void	uda1341_reginit(struct uda1341_softc *);
 
+#if 0
 static	int	L3_getbit(struct uda1341_softc *);
+#endif
 static	void	L3_sendbit(struct uda1341_softc *, int);
+#if 0
 static	uint8_t L3_getbyte(struct uda1341_softc *, int);
+#endif
 static	void	L3_sendbyte(struct uda1341_softc *, uint8_t, int);
+#if 0
 static	int	L3_read(struct uda1341_softc *, uint8_t, uint8_t *, int);
+#endif
 static	int	L3_write(struct uda1341_softc *, uint8_t, uint8_t *, int);
 
-CFATTACH_DECL(uda, sizeof(struct uda1341_softc),
+CFATTACH_DECL_NEW(uda, sizeof(struct uda1341_softc),
     uda1341_match, uda1341_attach, NULL, NULL);
 
 /*
@@ -118,29 +115,24 @@ static struct {
 	bus_space_write_4(sc->sc_iot, sc->sc_parent->sc_ssph, reg, val)
 
 static int
-uda1341_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+uda1341_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 static void
-uda1341_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+uda1341_attach(device_t parent, device_t self, void *aux)
 {
-	struct uda1341_softc *sc = (struct uda1341_softc *)self;
-	struct ipaq_softc *psc = (struct ipaq_softc *)parent;
+	struct uda1341_softc *sc = device_private(self);
+	struct ipaq_softc *psc = device_private(parent);
 
-	printf("\n");
-	printf("%s: UDA1341 CODEC\n",  sc->sc_dev.dv_xname);
+	aprint_normal("\n");
+	aprint_normal_dev(self, "UDA1341 CODEC\n");
 
+	sc->sc_dev = self;
 	sc->sc_iot = psc->sc_iot;
 	sc->sc_ioh = psc->sc_ioh;
-	sc->sc_parent = (struct ipaq_softc *)parent;
+	sc->sc_parent = psc;
 
 	uda1341_L3_init(sc);
 	uda1341_init(sc);
@@ -158,11 +150,7 @@ uda1341_attach(parent, self, aux)
 }
 
 static int
-uda1341_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+uda1341_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	if (config_match(parent, cf, NULL) > 0)
 		config_attach(parent, cf, NULL, uda1341_print);
@@ -171,16 +159,13 @@ uda1341_search(parent, cf, ldesc, aux)
 
 
 static int
-uda1341_print(aux, name)
-	void *aux;
-	const char *name;
+uda1341_print(void *aux, const char *name)
 {
 	return (UNCONF);
 }
 
 static void
-uda1341_output_high(sc)
-	struct uda1341_softc *sc;
+uda1341_output_high(struct uda1341_softc *sc)
 {
 	int cr;
 
@@ -190,8 +175,7 @@ uda1341_output_high(sc)
 }
 
 static void
-uda1341_output_low(sc)
-	struct uda1341_softc *sc;
+uda1341_output_low(struct uda1341_softc *sc)
 {
 	int cr;
 
@@ -201,8 +185,7 @@ uda1341_output_low(sc)
 }
 
 static void
-uda1341_L3_init(sc)
-	struct uda1341_softc *sc;
+uda1341_L3_init(struct uda1341_softc *sc)
 {
 	int cr;
 
@@ -214,8 +197,7 @@ uda1341_L3_init(sc)
 }
 
 static void
-uda1341_init(sc)
-	struct uda1341_softc *sc;
+uda1341_init(struct uda1341_softc *sc)
 {
 	int cr; 
 
@@ -259,8 +241,7 @@ uda1341_init(sc)
 }
 
 static void
-uda1341_reset(sc)
-	struct uda1341_softc *sc;
+uda1341_reset(struct uda1341_softc *sc)
 {       
 	uint8_t command;
 
@@ -278,8 +259,7 @@ uda1341_reset(sc)
 }
 
 static void
-uda1341_reginit(sc)
-	struct uda1341_softc *sc;
+uda1341_reginit(struct uda1341_softc *sc)
 {
 	uint8_t command;
 
@@ -336,9 +316,9 @@ uda1341_reginit(sc)
 	L3_write(sc, command, (uint8_t *) &EXTEND_REG, 2);
 }
 
+#if 0
 static int
-L3_getbit(sc)
-	struct uda1341_softc *sc;
+L3_getbit(struct uda1341_softc *sc)
 {
 	int cr, data;
 
@@ -353,11 +333,10 @@ L3_getbit(sc)
 
 	return (data);
 }
+#endif
 
 static void
-L3_sendbit(sc, bit)
-	struct uda1341_softc *sc;
-	int bit;
+L3_sendbit(struct uda1341_softc *sc, int bit)
 {
 	GPIO_WRITE(sc, SAGPIO_PCR, L3_CLK);	/* Clock down */
 	
@@ -371,10 +350,9 @@ L3_sendbit(sc, bit)
 	delay(L3_CLK_HIGH);
 }
 
+#if 0
 static uint8_t
-L3_getbyte(sc, mode)
-	struct uda1341_softc *sc;
-	int mode;
+L3_getbyte(struct uda1341_softc *sc, int mode)
 {
 	int i;
 	uint8_t data;
@@ -399,12 +377,10 @@ L3_getbyte(sc, mode)
 
 	return (data);
 }
+#endif
 
 static void
-L3_sendbyte(sc, data, mode)
-	struct uda1341_softc *sc;
-	uint8_t data;
-	int mode;
+L3_sendbyte(struct uda1341_softc *sc, uint8_t data, int mode)
 {
 	int i;
 
@@ -432,11 +408,9 @@ L3_sendbyte(sc, data, mode)
 	delay(L3_MODE_HOLD);
 }
 
+#if 0
 static int
-L3_read(sc, addr, data, len)
-	struct uda1341_softc *sc;
-	uint8_t addr, *data;
-        int len;
+L3_read(struct uda1341_softc *sc, uint8_t addr, uint8_t *data, int len)
 {
 	int cr, mode;
 	mode = 0;
@@ -454,12 +428,10 @@ L3_read(sc, addr, data, len)
 
 	return len;
 }
+#endif
 
 static int
-L3_write(sc, addr, data, len)
-	struct uda1341_softc *sc;
-	uint8_t addr, *data;
-	int len;
+L3_write(struct uda1341_softc *sc, uint8_t addr, uint8_t *data, int len)
 {
 	int mode = 0;
 

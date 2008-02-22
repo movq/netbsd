@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.9 2005/12/11 12:17:19 christos Exp $	*/
+/*	$NetBSD: devopen.c,v 1.12 2018/03/08 03:12:01 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,16 +72,6 @@ u_int opendev;
 static void usage(void);
 static int devlookup(const char * ,int);
 static int devparse(const char *, int *, int*, int*, int*, int*, char **);
-
-int
-atoi(char *cp)
-{
-	int val = 0;
-
-	while (isdigit((unsigned char)*cp))
-		val = val * 10 + (*cp++ - '0');
-	return val;
-}
 
 void
 usage(void)
@@ -161,7 +144,7 @@ devparse(const char *fname, int *dev, int *adapt, int *ctlr, int *unit,
 
 	/* get device name */
 	for (s = (char *)fname; *s && *s != '/' && *s != ':' && *s != '('; s++)
-		;
+		continue;
 
 	/* first form */
 	if (*s == '(') {
@@ -205,11 +188,12 @@ devparse(const char *fname, int *dev, int *adapt, int *ctlr, int *unit,
 		int temp;
 
 		/* isolate device */
-		for (s = (char *)fname; *s != ':' && !isdigit(*s); s++);
+		for (s = (char *)fname; *s != ':' && !isdigit(*s); s++)
+			continue;
 	
-			/* lookup device and get index */
-			if ((*dev = devlookup(fname, s - fname)) < 0)
-				goto baddev;
+		/* lookup device and get index */
+		if ((*dev = devlookup(fname, s - fname)) < 0)
+			goto baddev;
 
 		/* isolate unit */
 		if ((temp = atoi(s)) > 255)
@@ -217,7 +201,7 @@ devparse(const char *fname, int *dev, int *adapt, int *ctlr, int *unit,
 		*adapt = temp / 8;
 		*ctlr = temp % 8;
 		for (; isdigit(*s); s++)
-			;
+			continue;
 	
 		/* translate partition */
 		if (!ispart(*s))

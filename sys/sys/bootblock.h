@@ -1,4 +1,4 @@
-/*	$NetBSD: bootblock.h,v 1.44 2008/01/19 20:53:49 dsl Exp $	*/
+/*	$NetBSD: bootblock.h,v 1.58 2017/04/29 00:05:35 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -175,6 +168,8 @@
  *
  *	400 - 439	MP	NetBSD: mbr_bootsel
  *
+ *	424 - 439	M	NetBSD: bootptn_guid (in GPT PMBR only)
+ *
  *	440 - 443	M	WinNT/2K/XP Drive Serial Number (NT DSN)
  *		http://www.geocities.com/thestarman3/asm/mbr/Win2kmbr.htm
  *
@@ -201,6 +196,9 @@
 #define	MBR_BOOTCODE_OFFSET	90	/* offsetof(mbr_sector, mbr_bootcode) */
 #define	MBR_BS_OFFSET		400	/* offsetof(mbr_sector, mbr_bootsel) */
 #define	MBR_BS_OLD_OFFSET	404	/* where mbr_bootsel used to be */
+#define	MBR_GPT_GUID_OFFSET	424	/* location of partition GUID to boot */
+#define	MBR_GPT_GUID_DEFAULT		/* default uninitialized GUID */ \
+	{0xeee69d04,0x02f4,0x11e0,0x8f,0x5d,{0x00,0xe0,0x81,0x52,0x9a,0x6b}}
 #define	MBR_DSN_OFFSET		440	/* offsetof(mbr_sector, mbr_dsn) */
 #define	MBR_BS_MAGIC_OFFSET	444	/* offsetof(mbr_sector, mbr_bootsel_magic) */
 #define	MBR_PART_OFFSET		446	/* offsetof(mbr_sector, mbr_part[0]) */
@@ -794,14 +792,14 @@ struct alpha_boot_block {
 	do {								\
 		const struct alpha_boot_block *_bb = (bb);		\
 		uint64_t _cksum;					\
-		int _i;							\
+		size_t _i;						\
 									\
 		_cksum = 0;						\
 		for (_i = 0;						\
 		    _i < (sizeof _bb->bb_data / sizeof _bb->bb_data[0]); \
 		    _i++)						\
-			_cksum += _bb->bb_data[_i];			\
-		*(cksum) = _cksum;					\
+			_cksum += le64toh(_bb->bb_data[_i]);		\
+		*(cksum) = htole64(_cksum);				\
 	} while (/*CONSTCOND*/ 0)
 
 /* ------------------------------------------
@@ -817,7 +815,7 @@ struct apple_drvr_descriptor {
 	uint32_t	descBlock;	/* first block of driver */
 	uint16_t	descSize;	/* driver size in blocks */
 	uint16_t	descType;	/* system type */
-};
+} __packed;
 
 /*
  *	system types; Apple reserves 0-15
@@ -862,6 +860,26 @@ struct apple_part_map_entry {
 	uint32_t	pmLgDataStart;	/* first logical block of data area */
 	uint32_t	pmDataCnt;	/* number of blocks in data area */
 	uint32_t	pmPartStatus;	/* partition status information */
+/*
+ * Partition Status Information from Apple Tech Note 1189
+ */
+#define	APPLE_PS_VALID		0x00000001	/* Entry is valid */
+#define	APPLE_PS_ALLOCATED	0x00000002	/* Entry is allocated */
+#define	APPLE_PS_IN_USE		0x00000004	/* Entry in use */
+#define	APPLE_PS_BOOT_INFO	0x00000008	/* Entry contains boot info */
+#define	APPLE_PS_READABLE	0x00000010	/* Entry is readable */
+#define	APPLE_PS_WRITABLE	0x00000020	/* Entry is writable */
+#define	APPLE_PS_BOOT_CODE_PIC	0x00000040	/* Boot code has position
+						 * independent code */
+#define	APPLE_PS_CC_DRVR	0x00000100	/* Partition contains chain-
+						 * compatible driver */
+#define	APPLE_PS_RL_DRVR	0x00000200	/* Partition contains real
+						 * driver */
+#define	APPLE_PS_CH_DRVR	0x00000400	/* Partition contains chain
+						 * driver */
+#define	APPLE_PS_AUTO_MOUNT	0x40000000	/* Mount automatically at
+						 * startup */
+#define	APPLE_PS_STARTUP	0x80000000	/* Is the startup partition */
 	uint32_t	pmLgBootStart;	/* first logical block of boot code */
 	uint32_t	pmBootSize;	/* size of boot code, in bytes */
 	uint32_t	pmBootLoad;	/* boot code load address */
@@ -970,14 +988,14 @@ struct hp300_load {
 
 
 /* ------------------------------------------
- * hp700
+ * hppa
  *
  */
 
 /*
  * volume header for "LIF" format volumes
  */
-struct	hp700_lifvol {
+struct	hppa_lifvol {
 	uint16_t	vol_id;
 	uint8_t		vol_label[6];
 	uint32_t	vol_addr;
@@ -1001,7 +1019,7 @@ struct	hp700_lifvol {
 	uint32_t	vol_dummy2;
 };
 
-struct	hp700_lifdir {
+struct	hppa_lifdir {
 	uint8_t		dir_name[10];
 	uint16_t	dir_type;
 	uint32_t	dir_addr;
@@ -1011,37 +1029,37 @@ struct	hp700_lifdir {
 	uint32_t	dir_implement;
 };
 
-struct hp700_lifload {
+struct hppa_lifload {
 	int address;
 	int count;
 };
 
-#define	HP700_LIF_VOL_ID	0x8000
-#define	HP700_LIF_VOL_OCT	0x1000
-#define	HP700_LIF_DIR_SWAP	0x5243
-#define	HP700_LIF_DIR_FS	0xcd38
-#define	HP700_LIF_DIR_IOMAP	0xcd60
-#define	HP700_LIF_DIR_HPUX	0xcd80
-#define	HP700_LIF_DIR_ISL	0xce00
-#define	HP700_LIF_DIR_PAD	0xcffe
-#define	HP700_LIF_DIR_AUTO	0xcfff
-#define	HP700_LIF_DIR_EST	0xd001
-#define	HP700_LIF_DIR_TYPE	0xe942
+#define	HPPA_LIF_VOL_ID	0x8000
+#define	HPPA_LIF_VOL_OCT	0x1000
+#define	HPPA_LIF_DIR_SWAP	0x5243
+#define	HPPA_LIF_DIR_FS	0xcd38
+#define	HPPA_LIF_DIR_IOMAP	0xcd60
+#define	HPPA_LIF_DIR_HPUX	0xcd80
+#define	HPPA_LIF_DIR_ISL	0xce00
+#define	HPPA_LIF_DIR_PAD	0xcffe
+#define	HPPA_LIF_DIR_AUTO	0xcfff
+#define	HPPA_LIF_DIR_EST	0xd001
+#define	HPPA_LIF_DIR_TYPE	0xe942
 
-#define	HP700_LIF_DIR_FLAG	0x8001	/* dont ask me! */
-#define	HP700_LIF_SECTSIZE	256
+#define	HPPA_LIF_DIR_FLAG	0x8001	/* dont ask me! */
+#define	HPPA_LIF_SECTSIZE	256
 
-#define	HP700_LIF_NUMDIR	8
+#define	HPPA_LIF_NUMDIR	8
 
-#define	HP700_LIF_VOLSTART	0
-#define	HP700_LIF_VOLSIZE	sizeof(struct hp700_lifvol)
-#define	HP700_LIF_DIRSTART	2048
-#define	HP700_LIF_DIRSIZE	(HP700_LIF_NUMDIR * sizeof(struct hp700_lifdir))
-#define	HP700_LIF_FILESTART	4096
+#define	HPPA_LIF_VOLSTART	0
+#define	HPPA_LIF_VOLSIZE	sizeof(struct hppa_lifvol)
+#define	HPPA_LIF_DIRSTART	2048
+#define	HPPA_LIF_DIRSIZE	(HPPA_LIF_NUMDIR * sizeof(struct hppa_lifdir))
+#define	HPPA_LIF_FILESTART	4096
 
-#define	hp700_btolifs(b)	(((b) + (HP700_LIF_SECTSIZE - 1)) / HP700_LIF_SECTSIZE)
-#define	hp700_lifstob(s)	((s) * HP700_LIF_SECTSIZE)
-#define	hp700_lifstodb(s)	((s) * HP700_LIF_SECTSIZE / DEV_BSIZE)
+#define	hppa_btolifs(b)	(((b) + (HPPA_LIF_SECTSIZE - 1)) / HPPA_LIF_SECTSIZE)
+#define	hppa_lifstob(s)	((s) * HPPA_LIF_SECTSIZE)
+#define	hppa_lifstodb(s)	((s) * HPPA_LIF_SECTSIZE / DEV_BSIZE)
 
 
 /* ------------------------------------------
@@ -1060,7 +1078,7 @@ struct x86_boot_params {
 	uint32_t	bp_consdev;
 	uint32_t	bp_conspeed;
 	uint8_t		bp_password[16];	/* md5 hash of password */
-	char		bp_keymap[64];	/* keyboard traslation map */
+	char		bp_keymap[64];	/* keyboard translation map */
 	uint32_t	bp_consaddr;	/* ioaddr for console */
 };
 
@@ -1071,10 +1089,15 @@ struct x86_boot_params {
 #define	X86_BOOT_MAGIC_2	X86_BOOT_MAGIC(2)	/* bootxx.S */
 #define	X86_BOOT_MAGIC_PXE	X86_BOOT_MAGIC(3)	/* start_pxe.S */
 #define	X86_BOOT_MAGIC_FAT	X86_BOOT_MAGIC(4)	/* fatboot.S */
+#define	X86_BOOT_MAGIC_EFI	X86_BOOT_MAGIC(5)	/* efiboot/start.S */
+#define	X86_MBR_GPT_MAGIC	0xedb88320		/* gpt.S */
 
 		/* values for bp_flags */
 #define	X86_BP_FLAGS_RESET_VIDEO	1
 #define	X86_BP_FLAGS_PASSWORD		2
+#define	X86_BP_FLAGS_NOMODULES		4
+#define	X86_BP_FLAGS_NOBOOTCONF		8
+#define	X86_BP_FLAGS_LBA64VALID		0x10
 
 		/* values for bp_consdev */
 #define	X86_BP_CONSDEV_PC	0
@@ -1387,7 +1410,8 @@ struct vax_boot_block {
 	uint8_t		bb_mbone;	/* must be one */
 	uint16_t	bb_lbn_hi;	/* lbn (hi word) of bootstrap */
 	uint16_t	bb_lbn_low;	/* lbn (low word) of bootstrap */
-	uint8_t		pad1[332];
+	uint8_t		pad1[406];
+	/* disklabel offset is 64 from base, or 56 from start of pad1 */
 
 	/* The rest of these fields are identification area and describe
 	 * the secondary block for uVAX VMB.
@@ -1409,7 +1433,7 @@ struct vax_boot_block {
 
 	/* The rest is unused.
 	 */
-	uint8_t		pad2[148];
+	uint8_t		pad2[74];
 } __packed;
 
 #define	VAX_BOOT_MAGIC1			0x18	/* size of BB info? */

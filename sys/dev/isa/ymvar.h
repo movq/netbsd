@@ -1,7 +1,7 @@
-/*	$NetBSD: ymvar.h,v 1.10 2005/12/11 12:22:03 christos Exp $	*/
+/*	$NetBSD: ymvar.h,v 1.13 2011/11/23 23:07:33 jmcneill Exp $	*/
 
 /*-
- * Copyright (c) 1999-2000, 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2000, 2002, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -161,7 +154,8 @@ struct ym_softc {
 	bus_space_handle_t sc_opl_ioh;
 	bus_space_handle_t sc_sb_ioh;	/* only used to disable it */
 
-	struct callout sc_powerdown_ch;
+	callout_t sc_powerdown_ch;
+	kcondvar_t sc_cv;
 
 	int  master_mute, mic_mute;
 	struct ad1848_volume master_gain;
@@ -191,11 +185,11 @@ struct ym_softc {
 #define YM_EQ_OFF(v)	((v)->left < YM_EQ_ON_MIN && (v)->right < YM_EQ_ON_MIN)
 #define YM_WIDE_OFF(v)	((v)->left < YM_3D_ON_MIN && (v)->right < YM_3D_ON_MIN)
 
-	struct device *sc_audiodev;
+	device_t sc_audiodev;
 
 #if NMPU_YM > 0
 	bus_space_handle_t sc_mpu_ioh;
-	struct device *sc_mpudev;
+	device_t sc_mpudev;
 #endif
 
 #ifndef AUDIO_NO_POWER_CTL

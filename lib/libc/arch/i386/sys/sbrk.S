@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.18 2007/03/09 14:30:56 ad Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.22 2014/05/23 02:34:19 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sbrk.S,v 1.18 2007/03/09 14:30:56 ad Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.22 2014/05/23 02:34:19 uebayasi Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -53,12 +53,14 @@ CURBRK:	.long	_end
 	.text
 
 ENTRY(_sbrk)
-#ifdef PIC
+#ifdef __PIC__
 	movl	4(%esp),%ecx
 	PIC_PROLOGUE
 	movl	PIC_GOT(CURBRK),%edx
 	PIC_EPILOGUE
 	movl	(%edx),%eax
+	test	%ecx,%ecx
+	jz	out
 	addl	%eax,%ecx
 	movl	%ecx,4(%esp)
 	OSYSTRAP(break)	/* don't clobber %ecx */
@@ -68,21 +70,23 @@ ENTRY(_sbrk)
 	PIC_EPILOGUE
 	movl	(%edx),%eax
 	movl	%ecx,(%edx)
+out:
 	ret
 err:
-	PIC_PROLOGUE
-	mov	PIC_GOT(CERROR),%edx
-	PIC_EPILOGUE
-	jmp	*%edx
+	jmp CERROR
 #else
 	movl	4(%esp),%ecx
 	movl	CURBRK,%eax
+	test	%ecx,%ecx
+	jz	out
 	addl	%eax,4(%esp)
 	OSYSTRAP(break)	/* don't clobber %ecx */
 	jc	err
 	movl	CURBRK,%eax
 	addl	%ecx,CURBRK
+out:
 	ret
 err:
 	jmp	CERROR
 #endif
+END(_sbrk)

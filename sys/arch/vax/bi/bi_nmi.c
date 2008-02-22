@@ -1,4 +1,4 @@
-/*	$NetBSD: bi_nmi.c,v 1.6 2005/12/11 12:19:29 christos Exp $	   */
+/*	$NetBSD: bi_nmi.c,v 1.9 2017/05/22 16:53:59 ragge Exp $	   */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,18 +25,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bi_nmi.c,v 1.6 2005/12/11 12:19:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bi_nmi.c,v 1.9 2017/05/22 16:53:59 ragge Exp $");
+
+#define _VAX_BUS_DMA_PRIVATE
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 
-#define	_VAX_BUS_DMA_PRIVATE
-#include <machine/bus.h>
 #include <machine/nexus.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
-#include <machine/cpu.h>
 #include <machine/ka88.h>
 
 #include <dev/bi/bivar.h>
@@ -50,43 +45,40 @@ __KERNEL_RCSID(0, "$NetBSD: bi_nmi.c,v 1.6 2005/12/11 12:19:29 christos Exp $");
 
 #include "locators.h"
 
-extern	struct vax_bus_space vax_mem_bus_space;
-extern	struct vax_bus_dma_tag vax_bus_dma_tag;
-
 static int
-bi_nmi_match(struct device *parent, struct cfdata *cf, void *aux)
+bi_nmi_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct nmi_attach_args *na = aux;
+	struct nmi_attach_args * const na = aux;
 
 	if (cf->cf_loc[NMICF_SLOT] != NMICF_SLOT_DEFAULT &&
-	    cf->cf_loc[NMICF_SLOT] != na->slot)
+	    cf->cf_loc[NMICF_SLOT] != na->na_slot)
 		return 0;
-	if (na->slot < 10)
-		return 1;
-        return 0;
+	return na->na_slot < 10;
 }
 
 static void
-bi_nmi_attach(struct device *parent, struct device *self, void *aux)
+bi_nmi_attach(device_t parent, device_t self, void *aux)
 {
-	struct nmi_attach_args *na = aux;
-	struct bi_softc *sc = (void *)self;
+	struct nmi_attach_args * const na = aux;
+	struct bi_softc * const sc = device_private(self);
 	volatile int *v, *v2;
 	extern int avail_end;
 	int nid;
 
+	sc->sc_dev = self;
+
 	/*
 	 * Fill in bus specific data.
 	 */
-	sc->sc_addr = (bus_addr_t)BI_BASE(na->slot, 0);
-	sc->sc_iot = &vax_mem_bus_space; /* No special I/O handling */
-	sc->sc_dmat = &vax_bus_dma_tag;	/* No special DMA handling either */
+	sc->sc_addr = (bus_addr_t)BI_BASE(na->na_slot, 0);
+	sc->sc_iot = na->na_iot;	/* No special I/O handling */
+	sc->sc_dmat = na->na_dmat;	/* No special DMA handling either */
 
 	/* Must get the NBIB node number (interrupt routing) */
 	/*
 	 * XXX - need a big cleanup here!
 	 */
-	v = (int *)vax_map_physmem(NBIA_REGS(na->slot/2), 1);
+	v = (int *)vax_map_physmem(NBIA_REGS(na->na_slot/2), 1);
 	v[1] = v[1]; /* Clear errors */
 	v[0] = 0x400 | CSR0_NBIIE | CSR0_LOOP; /* XXX */
 	v2 = (int *)vax_map_physmem(sc->sc_addr, 1);
@@ -100,10 +92,10 @@ bi_nmi_attach(struct device *parent, struct device *self, void *aux)
 	DELAY(1000);
 
 	sc->sc_intcpu = 1 << nid;
-	sc->sc_lastiv = /* 0x400 * na->slot + */ 0x400;
+	sc->sc_lastiv = /* 0x400 * na->na_slot + */ 0x400;
 
 	bi_attach(sc);
 }
 
-CFATTACH_DECL(bi_nmi, sizeof(struct bi_softc),
+CFATTACH_DECL_NEW(bi_nmi, sizeof(struct bi_softc),
     bi_nmi_match, bi_nmi_attach, NULL, NULL);

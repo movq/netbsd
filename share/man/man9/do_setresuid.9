@@ -1,4 +1,4 @@
-.\"	$NetBSD: do_setresuid.9,v 1.3 2004/10/04 19:09:28 rumble Exp $
+.\"	$NetBSD: do_setresuid.9,v 1.7 2017/10/17 21:11:36 pgoyette Exp $
 .\"
 .\"-
 .\" Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,7 +51,7 @@ process to change its real, effective, and saved uid and gid values.
 .Pp
 The
 .Nm do_setresuid
-function sets the specified processes real user ID to
+function sets the specified process's real user ID to
 .Ar ruid ,
 its effective user ID to
 .Ar euid ,
@@ -81,14 +78,13 @@ The
 function sets the group IDs but otherwise behaves in the same manner as
 .Nm .
 The processes group list is neither examined nor effected.
-.Sh SEE ALSO
-.Xr setregid 2 ,
-.Xr setreuid 2 ,
-.Xr setuid 2 ,
-.Xr suser 9
 .Sh CODE REFERENCES
 These functions are implemented in:
 .Pa sys/kern/kern_prot.c .
+.Sh SEE ALSO
+.Xr setregid 2 ,
+.Xr setreuid 2 ,
+.Xr setuid 2
 .Sh HISTORY
 Implemented for
 .Nx 2.0

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ifconfig.8,v 1.92 2007/12/16 13:49:22 degroote Exp $
+.\"	$NetBSD: ifconfig.8,v 1.114 2017/02/16 13:51:08 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd January 9, 2007
+.Dd January 19, 2017
 .Dt IFCONFIG 8
 .Os
 .Sh NAME
@@ -37,6 +37,7 @@
 .Nd configure network interface parameters
 .Sh SYNOPSIS
 .Nm
+.Op Fl N
 .Ar interface address_family
 .Oo
 .Ar address
@@ -44,12 +45,12 @@
 .Oc
 .Op Ar parameters
 .Nm
-.Op Fl hLmvz
+.Op Fl hLmNvz
 .Ar interface
 .Op Ar protocol_family
 .Nm
 .Fl a
-.Op Fl bdhLmsuvz
+.Op Fl bdhLNmsuvz
 .Op Ar protocol_family
 .Nm
 .Fl l
@@ -57,6 +58,10 @@
 .Nm
 .Fl s
 .Ar interface
+.Nm
+.Fl w
+.Ar secs
+.Op Fl W Ar secs
 .Nm
 .Fl C
 .Sh DESCRIPTION
@@ -120,7 +125,7 @@ supported are
 .Dq atalk ,
 .Dq iso ,
 and
-.Dq ns .
+.Dq link .
 .It Ar interface
 The
 .Ar interface
@@ -133,6 +138,19 @@ for example,
 The following parameters may be set with
 .Nm :
 .Bl -tag -width dest_addressxx
+.It Cm active
+This keyword applies when
+.Nm
+adds or modifies any link-layer address.
+It indicates that
+.Nm
+should
+.Dq activate
+the address.
+Activation makes an address the default source for transmissions
+on the interface.
+You may not delete the active address from an interface.
+You must activate some other address, first.
 .It Cm advbase Ar n
 If the driver is a
 .Xr carp 4
@@ -197,7 +215,6 @@ Enable driver dependent debugging code; usually, this turns on
 extra console error logging.
 .It Fl debug
 Disable driver dependent debugging code.
-.ne 1i
 .It Cm delete
 Remove the network address specified.
 This would be used if you incorrectly specified an alias, or it
@@ -249,13 +266,22 @@ or
 .Dq UTP
 would activate twisted pair.
 Refer to the interfaces' driver
-specific man page for a complete list of the available types.
+specific man page for a complete list of the available types
+and the
+.Xr ifmedia 4
+manual page for a list of media types.
+See the
+.Fl m
+flag below.
 .It Cm mediaopt Ar opts
 Set the specified media options on the interface.
 .Ar opts
 is a comma delimited list of options to apply to the interface.
 Refer to the interfaces' driver specific man page for a complete
 list of available options.
+Also see the
+.Xr ifmedia 4
+manual page for a list of media options.
 .It Fl mediaopt Ar opts
 Disable the specified media options on the interface.
 .It Cm mode Ar mode
@@ -290,7 +316,7 @@ to the destination network or host.
 .It Cm mtu Ar n
 Set the maximum transmission unit of the interface to
 .Ar n .
-Most interfaces don't support this option.
+Most interfaces do not support this option.
 .It Cm netmask Ar mask
 .Pq inet, inet6, and ISO
 Specify how much of the address to reserve for subdividing
@@ -351,9 +377,18 @@ and
 .Pq IEEE 802.11 devices only
 Configure the fragmentation threshold for IEEE 802.11-based wireless
 network interfaces.
+.It Cm rts Ar threshold
+.Pq IEEE 802.11 devices only
+Configure the RTS/CTS threshold for IEEE 802.11-based wireless
+network interfaces.
+This controls the number of bytes used for the RTS/CTS handshake boundary.
+The
+.Ar threshold
+can be any value between 0 and 2347.
+The default is 2347, which indicates the RTS/CTS mechanism should not be used.
 .It Cm ssid Ar id
 .Pq IEEE 802.11 devices only
-Configure the Service Set Identifier (a.k.a. the network name)
+Configure the Service Set Identifier (aka the network name)
 for IEEE 802.11-based wireless network interfaces.
 The
 .Ar id
@@ -401,7 +436,7 @@ are configured as WEP keys.
 Note that the order must be match within same network if multiple keys
 are used.
 For IEEE 802.11 wireless network, the length of each key is restricted to
-40 bits, i.e. 5-character string or 10 hexadecimal digits,
+40 bits, i.e., 5-character string or 10 hexadecimal digits,
 while the WaveLAN/IEEE Gold cards accept the 104 bits
 .Pq 13 characters
 key.
@@ -427,7 +462,7 @@ wireless clients directly (default).
 .It Fl apbridge
 .Pq IEEE 802.11 devices only
 When operating as an access point, pass packets through
-the system so that they can be forwared using some other mechanism.
+the system so that they can be forwarded using some other mechanism.
 Disabling the internal bridging is useful when traffic
 is to be processed with packet filtering.
 .It Cm pass Ar passphrase
@@ -462,8 +497,7 @@ to be used for IEEE 802.11-based wireless network interfaces.
 .Pq IEEE 802.11 devices only
 Unset the desired channel to be used
 for IEEE 802.11-based wireless network interfaces.
-It doesn't affect the channel to be created for IBSS or hostap mode.
-.It Bk -words
+It does not affect the channel to be created for IBSS or hostap mode.
 .It Cm list scan
 .Pq IEEE 802.11 devices only
 Display the access points and/or ad-hoc neighbors
@@ -472,11 +506,10 @@ The
 .Fl v
 flag may be used to display long SSIDs.
 .Fl v
-also causes received information elements to be displayed symbolicaly.
-Only the super-user can use this command. 
-.It Cm tunnel Ar src_addr Ns Op Ar ,src_port
-.Ar dest_addr Ns Op Ar ,dest_port
-.Ek
+also causes received information elements to be displayed symbolically.
+The interface must be up before any scanning operation.
+Only the super-user can use this command.
+.It Cm tunnel Ar src_addr Ns Oo Ar ,src_port Oc Ar dest_addr Ns Oo Ar ,dest_port Oc
 .Pq IP tunnel devices only
 Configure the physical source and destination address for IP tunnel
 interfaces, including
@@ -500,6 +533,25 @@ UDP header.
 Unconfigure the physical source and destination address for IP tunnel
 interfaces previously configured with
 .Cm tunnel .
+.It Cm session Ar local_session Ar remote_session
+.Pq L2TPv3 devices only
+Configure local session id and remote session id for L2TPv3
+interface.
+The length of session id is 4 bytes.
+.It Cm deletesession
+Unconfigure the local session id and remote session id for
+L2TPv3 interface previously configured with
+.Cm session .
+.It Cm cookie Ar local_cookie_length Ar local_cookie  Ar remote_cookie_length Ar remote_cookie
+.Pq L2TPv3 devices only
+Configure local cookie and remote cookie for L2TPv3 interface.
+The cookie length must be 4 or 8 bytes.
+Generally, cookies are managed by daemon.
+So, this command would be used for test or debug only.
+.It Cm deletecookie
+Unconfigure the local cookie and remote cookie for L2TPv3
+interface previously configured with
+.Cm cookie .
 .It Cm create
 Create the specified network pseudo-device.
 .It Cm destroy
@@ -518,12 +570,6 @@ Set the IPv6 deprecated address bit.
 .It Fl deprecated
 .Pq inet6 only
 Clear the IPv6 deprecated address bit.
-.It Cm tentative
-.Pq inet6 only
-Set the IPv6 tentative address bit.
-.It Fl tentative
-.Pq inet6 only
-Clear the IPv6 tentative address bit.
 .It Cm eui64
 .Pq inet6 only
 Fill interface index
@@ -535,11 +581,18 @@ These three options are interface specific in actual effect, however,
 they are in general used to select special modes of operation.
 An example
 of this is to enable SLIP compression, or to select the connector type
-for some ethernet cards.
+for some Ethernet cards.
 Refer to the man page for the specific driver
 for more information.
 .It Fl link[0-2]
 Disable special processing at the link level with the specified interface.
+.It Cm linkstr
+Set a link-level string parameter for the interface.
+This functionality varies from interface to interface.
+Refer to the man page for the specific driver
+for more information.
+.It Fl linkstr
+Remove an interface link-level string parameter.
 .It Cm up
 Mark an interface ``up''.
 This may be used to enable an interface after an ``ifconfig down.''
@@ -597,6 +650,12 @@ Note that
 and
 .Cm vlan
 must be set at the same time.
+.It Cm -vlanif Ar iface
+Dissociate
+.Ar iface
+from the
+.Xr vlan 4
+interface.
 .It Cm agrport Ar iface
 Add
 .Ar iface
@@ -694,6 +753,37 @@ support it.
 .It Cm -tso6
 Disable hardware-assisted TCP/IPv6 segmentation on interfaces that
 support it.
+.It Cm maxupd Ar n
+If the driver is a
+.Xr pfsync 4
+pseudo-device, indicate the maximum number
+of updates for a single state which can be collapsed into one.
+This is an 8-bit number; the default value is 128.
+.It Cm syncdev Ar iface
+If the driver is a
+.Xr pfsync 4
+pseudo-device, use the specified interface
+to send and receive pfsync state synchronisation messages.
+.It Fl syncdev
+If the driver is a
+.Xr pfsync 4
+pseudo-device, stop sending pfsync state
+synchronisation messages over the network.
+.It Cm syncpeer Ar peer_address
+If the driver is a
+.Xr pfsync 4
+pseudo-device, make the pfsync link point-to-point rather than using
+multicast to broadcast the state synchronisation messages.
+The peer_address is the IP address of the other host taking part in
+the pfsync cluster.
+With this option,
+.Xr pfsync 4
+traffic can be protected using
+.Xr ipsec 4 .
+.It Fl syncpeer
+If the driver is a
+.Xr pfsync 4
+pseudo-device, broadcast the packets using multicast.
 .El
 .Pp
 .Nm
@@ -738,6 +828,12 @@ flag may be used instead of an interface name.
 This flag instructs
 .Nm
 to display information about all interfaces in the system.
+This is also the default behaviour when no arguments are given to
+.Nm
+on the command line.
+When
+.Fl a
+is used, the output can be modified by adding more flags:
 .Fl d
 limits this to interfaces that are down,
 .Fl u
@@ -785,7 +881,48 @@ flag is identical to the
 flag except that it zeros the interface input and output statistics
 after printing them.
 .Pp
+The
+.Fl w
+flag may be used to wait
+.Ar seconds
+seconds for the
+.Cm tentative
+flag to be removed from all addresses.
+0 seconds means to wait indefinitely until all addresses no longer have the
+.Cm tentative
+flag.
+The optional
+.Fl W
+flag may be used to wait
+.Ar seconds
+seconds during the above time for the detached flag to be removed from all
+addresses whose interface is marked ``up'' as well.
+The detached flag is set when the interface does not have a carrier.
+.Pp
+The
+.Fl N
+flag is just the opposite of the
+.Fl n
+flag in
+.Xr netstat 1
+or in
+.Xr route 8 :
+it tells
+.Nm
+to try to resolve numbers to hostnames or to service names.
+The default
+.Nm
+behavior is to print numbers instead of names.
+.Pp
 Only the super-user may modify the configuration of a network interface.
+.Sh EXAMPLES
+Add a link-layer (MAC) address to an Ethernet:
+.Pp
+.Ic ifconfig sip0 link 00:11:22:33:44:55
+.Pp
+Add and activate a link-layer (MAC) address:
+.Pp
+.Ic ifconfig sip0 link 00:11:22:33:44:55 active
 .Sh DIAGNOSTICS
 Messages indicating the specified interface does not exist, the
 requested address is unknown, or the user is not privileged and
@@ -796,6 +933,7 @@ tried to alter an interface's configuration.
 .Xr carp 4 ,
 .Xr ifmedia 4 ,
 .Xr netintro 4 ,
+.Xr pfsync 4 ,
 .Xr vlan 4 ,
 .Xr ifconfig.if 5 ,
 .\" .Xr eon 5 ,

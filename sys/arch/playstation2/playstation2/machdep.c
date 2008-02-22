@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.21 2007/10/17 19:56:14 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.33 2017/11/06 03:47:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2007/10/17 19:56:14 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.33 2017/11/06 03:47:47 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kloader.h"
@@ -43,12 +36,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2007/10/17 19:56:14 garbled Exp $")
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/mount.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
+#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -56,10 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2007/10/17 19:56:14 garbled Exp $")
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
-#ifndef DB_ELFSIZE
-#error Must define DB_ELFSIZE!
-#endif
-#define ELFSIZE		DB_ELFSIZE
 #include <sys/exec_elf.h>
 #endif
 
@@ -79,12 +68,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2007/10/17 19:56:14 garbled Exp $")
 
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map;
 struct vm_map *mb_map;
 struct vm_map *phys_map;
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
-int physmem;	/* for buffer cache, vnode cache estimation */
 
 #ifdef DEBUG
 static void bootinfo_dump(void);
@@ -95,11 +82,12 @@ void mach_init(void);
  * Do all the stuff that locore normally does before calling main().
  */
 void
-mach_init()
+mach_init(void)
 {
 	extern char kernel_text[], edata[], end[];
-	extern struct user *proc0paddr;
-	void *kernend, *v;
+	void *kernend;
+	struct pcb *pcb0;
+	vaddr_t v;
 	paddr_t start;
 	size_t size;
 
@@ -122,7 +110,8 @@ mach_init()
 #ifdef DEBUG
 	bootinfo_dump();
 #endif
-	uvm_setpagesize();
+	uvm_md_init();
+
 	physmem = atop(PS2_MEMORY_SIZE);
 
 	/*
@@ -160,55 +149,26 @@ mach_init()
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE); 
-	lwp0.l_addr = proc0paddr = (struct user *) v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] = PSL_LOWIPL;	/* SR */
+	v = uvm_pageboot_alloc(USPACE);
+
+	pcb0 = lwp_getpcb(&lwp0);
+	pcb0->pcb_context[11] = PSL_LOWIPL;	/* SR */
 #ifdef IPL_ICU_MASK
-	proc0paddr->u_pcb.pcb_ppl = 0;
+	pcb0->pcb_ppl = 0;
 #endif
+
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1
 }
 
 /*
  * Allocate memory for variable-sized tables,
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	printf("%s%s", copyright, version);
-	printf("%s\n", cpu_model);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-	/*
-	 * Allocate a submap for physio.
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.)
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
+	cpu_startup_common();
 }
 
 void
@@ -221,7 +181,7 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Take a snapshot before clobbering any registers. */
 	if (curlwp)
-		savectx((struct user *)curpcb);
+		savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -263,6 +223,8 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN)
 		sifbios_halt(0); /* power down */
 	else if (howto & RB_HALT)
@@ -282,7 +244,7 @@ cpu_reboot(int howto, char *bootstr)
 
 #ifdef DEBUG
 void
-bootinfo_dump()
+bootinfo_dump(void)
 {
 	printf("devconf=%#x, option=%#x, rtc=%#x, pcmcia_type=%#x,"
 	    "sysconf=%#x\n",

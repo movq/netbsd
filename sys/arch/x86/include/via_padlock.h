@@ -1,4 +1,4 @@
-/*	$NetBSD: via_padlock.h,v 1.1 2007/02/17 00:28:25 daniel Exp $	*/
+/*	$NetBSD: via_padlock.h,v 1.9 2016/02/27 00:54:59 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003 Jason Wright
@@ -21,8 +21,10 @@
 #ifndef _X86_VIA_PADLOCK_H_
 #define _X86_VIA_PADLOCK_H_
 
-#ifdef _KERNEL
+#if defined(_KERNEL)
 
+#include <sys/rndsource.h>
+#include <sys/callout.h>
 #include <crypto/rijndael/rijndael.h>
 
 /* VIA C3 xcrypt-* instruction context control options */
@@ -41,22 +43,25 @@
 #define C3_CRYPT_CWLO_KEY256		0x0000080e      /* 256bit, 15 rds */
 
 struct via_padlock_session {
-        u_int32_t	ses_ekey[4 * (RIJNDAEL_MAXNR + 1) + 4];	/* 128 bit aligned */
-        u_int32_t	ses_dkey[4 * (RIJNDAEL_MAXNR + 1) + 4];	/* 128 bit aligned */
-        u_int8_t	ses_iv[16];				/* 128 bit aligned */
-        u_int32_t	ses_cw0;
+        uint32_t	ses_ekey[4 * (RIJNDAEL_MAXNR + 1) + 4];	/* 128 bit aligned */
+        uint32_t	ses_dkey[4 * (RIJNDAEL_MAXNR + 1) + 4];	/* 128 bit aligned */
+        uint8_t	ses_iv[16];				/* 128 bit aligned */
+        uint32_t	ses_cw0;
         struct swcr_data	*swd;
         int	ses_klen;
         int	ses_used;
 };
 
 struct via_padlock_softc {
-	u_int32_t	op_cw[4];	/* 128 bit aligned */
-	u_int8_t	op_iv[16];	/* 128 bit aligned */
+	device_t	sc_dev;
+
+	uint32_t	op_cw[4];	/* 128 bit aligned */
+	uint8_t	op_iv[16];	/* 128 bit aligned */
 	void		*op_buf;
 
 	/* normal softc stuff */
 	int32_t		sc_cid;
+	bool		sc_cid_attached;
 	int		sc_nsessions;
 	struct via_padlock_session *sc_sessions;
 };
@@ -64,6 +69,9 @@ struct via_padlock_softc {
 #define VIAC3_SESSION(sid)	((sid) & 0x0fffffff)
 #define VIAC3_SID(crd,ses)	(((crd) << 28) | ((ses) & 0x0fffffff))
 
+#endif /* _KERNEL */
+
+#if defined(_KERNEL) || defined(_KMEMUSER)
 struct cpu_info;
 
 struct via_padlock {
@@ -71,7 +79,5 @@ struct via_padlock {
 	int			vp_freq;
 };
 
-void	via_padlock_attach(void);
-
-#endif /* _KERNEL */
+#endif /* _KERNEL || _KMEMUSER */
 #endif /* _X86_VIA_PADLOCK_H_ */

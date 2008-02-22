@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.17 2006/03/18 09:46:35 christos Exp $	*/
+/*	$NetBSD: defs.h,v 1.19 2011/09/06 18:28:18 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -149,28 +149,25 @@ extern struct group *gr;	/* pointer to static area used by getgrent */
 extern uid_t userid;		/* user's user ID */
 extern gid_t groupid;		/* user's group ID */
 
-int	 any(int, char *);
+int	 any(int, const char *);
 char	*colon(char *);
-void	 cleanup(int);
+void	 cleanup(int) __dead;
 void	 define(char *);
 void	 docmds(char **, int, char **);
-void	 error(const char *, ...)
-     __attribute__((__format__(__printf__, 1, 2))) ;
+void	 error(const char *, ...) __printflike(1, 2);
 int	 except(char *);
 struct namelist *
 	 expand(struct namelist *, int);
 char	*exptilde(char [], char *);
-void	 fatal(const char *, ...)
-     __attribute__((__format__(__printf__, 1, 2)));
+void	 fatal(const char *, ...) __printflike(1, 2);
 int	 inlist(struct namelist *, char *);
 void	 insert(char *,
 	    struct namelist *, struct namelist *, struct subcmd *);
 void	 install(char *, char *, int, int);
-void	 dolog(FILE *, const char *, ...)
-     __attribute__((__format__(__printf__, 2, 3)));
+void	 dolog(FILE *, const char *, ...) __printflike(2, 3);
 struct namelist *
 	 lookup(char *, int, struct namelist *);
-void	 lostconn(int);
+void	 lostconn(int) __dead;
 struct namelist *
 	 makenl(char *);
 void	 freenl(struct namelist *);
@@ -179,5 +176,5 @@ struct subcmd *
 void	 freesubcmd(struct subcmd *);
 void	 prnames(struct namelist *);
 void	 server(void);
-void	 yyerror(char *);
+void	 yyerror(const char *);
 int	 yyparse(void);

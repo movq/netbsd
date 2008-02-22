@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.c,v 1.28 2008/01/17 14:53:18 yamt Exp $	*/
+/*	$NetBSD: mbuf.c,v 1.33 2015/07/28 19:46:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)mbuf.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mbuf.c,v 1.28 2008/01/17 14:53:18 yamt Exp $");
+__RCSID("$NetBSD: mbuf.c,v 1.33 2015/07/28 19:46:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +53,8 @@ __RCSID("$NetBSD: mbuf.c,v 1.28 2008/01/17 14:53:18 yamt Exp $");
 #include <limits.h>
 #include <errno.h>
 #include <err.h>
-#include <stdbool.h>
 #include "netstat.h"
+#include "prog_ops.h"
 
 #define	YES	1
 
@@ -63,8 +63,8 @@ struct pool mbpool, mclpool;
 struct pool_allocator mbpa, mclpa;
 
 static struct mbtypes {
-	int	mt_type;
-	char	*mt_name;
+	int		mt_type;
+	const char	*mt_name;
 } mbtypes[] = {
 	{ MT_DATA,	"data" },
 	{ MT_OOBDATA,	"oob data" },
@@ -86,10 +86,8 @@ int mowners_ctl[] = { CTL_KERN, KERN_MBUF, MBUF_MOWNERS };
  * Print mbuf statistics.
  */
 void
-mbpr(mbaddr, msizeaddr, mclbaddr, mbpooladdr, mclpooladdr)
-	u_long mbaddr;
-	u_long msizeaddr, mclbaddr;
-	u_long mbpooladdr, mclpooladdr;
+mbpr(u_long mbaddr, u_long msizeaddr, u_long mclbaddr, u_long mbpooladdr,
+	u_long mclpooladdr)
 {
 	u_long totmem, totused, totpct;
 	u_int totmbufs;
@@ -109,7 +107,7 @@ mbpr(mbaddr, msizeaddr, mclbaddr, mbpooladdr, mclpooladdr)
 
 	if (use_sysctl) {
 		size_t mbstatlen = sizeof(mbstat);
-		if (sysctl(mbstats_ctl,
+		if (prog_sysctl(mbstats_ctl,
 			    sizeof(mbstats_ctl) / sizeof(mbstats_ctl[0]),
 			    &mbstat, &mbstatlen, NULL, 0) < 0) {
 			warn("mbstat: sysctl failed");
@@ -202,8 +200,9 @@ dump_drain:
 	if (!use_sysctl)
 		return;
 
-	if (sysctl(mowners_ctl, sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
-		    NULL, &len, NULL, 0) < 0) {
+	if (prog_sysctl(mowners_ctl,
+	    sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
+	    NULL, &len, NULL, 0) < 0) {
 		if (errno == ENOENT)
 			return;
 		warn("mowners: sysctl test");
@@ -216,8 +215,9 @@ dump_drain:
 		return;
 	}
 
-	if (sysctl(mowners_ctl, sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
-		    data, &len, NULL, 0) < 0) {
+	if (prog_sysctl(mowners_ctl,
+	    sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
+	    data, &len, NULL, 0) < 0) {
 		warn("mowners: sysctl get");
 		free(data);
 		return;

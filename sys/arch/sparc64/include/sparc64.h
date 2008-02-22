@@ -1,4 +1,4 @@
-/*	$NetBSD: sparc64.h,v 1.9 2006/02/11 17:57:31 cdi Exp $	*/
+/*	$NetBSD: sparc64.h,v 1.13 2014/09/06 20:56:39 palle Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -38,19 +38,26 @@ struct mem_region {
 	uint64_t size;
 };
 
-int prom_set_trap_table (vaddr_t);
-uint64_t prom_vtop (vaddr_t);
-vaddr_t prom_claim_virt (vaddr_t, int);
-vaddr_t prom_alloc_virt (int, int);
-int prom_free_virt (vaddr_t, int);
-int prom_unmap_virt (vaddr_t, int);
-int prom_map_phys (uint64_t, off_t, vaddr_t, int);
-uint64_t prom_alloc_phys (int , int);
-uint64_t prom_claim_phys (paddr_t, int);
-int prom_free_phys (paddr_t, int);
-uint64_t prom_get_msgbuf (int, int);
+int prom_set_trap_table_sun4u(vaddr_t);
+#ifdef SUN4V
+int prom_set_trap_table_sun4v(vaddr_t, paddr_t);
+#endif
+paddr_t prom_vtop(vaddr_t);
+vaddr_t prom_claim_virt(vaddr_t, int);
+vaddr_t prom_alloc_virt(int, int);
+int prom_free_virt(vaddr_t, int);
+int prom_unmap_virt(vaddr_t, int);
+int prom_map_phys(paddr_t, off_t, vaddr_t, int);
+paddr_t prom_alloc_phys(int , int);
+paddr_t prom_claim_phys(paddr_t, int);
+int prom_free_phys(paddr_t, int);
+paddr_t prom_get_msgbuf(int, int);
 
 void prom_stopself(void);
+bool prom_has_stopself(void);
+int  prom_stop_other(u_int);
+bool prom_has_stop_other(void);
 void prom_startcpu(u_int, void *, u_long);
+int prom_startcpu_by_cpuid(u_int, void *, u_long arg);
 
 #endif	/* _MACHINE_SPARC64_H_ */

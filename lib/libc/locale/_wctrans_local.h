@@ -1,4 +1,4 @@
-/*	$NetBSD: _wctrans_local.h,v 1.2 2003/04/06 18:33:23 tshiozak Exp $	*/
+/*	$NetBSD: _wctrans_local.h,v 1.9 2010/06/02 15:47:25 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -29,30 +29,32 @@
 #ifndef _WCTRANS_LOCAL_H_
 #define _WCTRANS_LOCAL_H_
 
-wint_t	_towctrans_ext(wint_t, _WCTransEntry *);
-void	_wctrans_init(_RuneLocale *);
+__BEGIN_DECLS
+wint_t	_towctrans_ext(wint_t, _WCTransEntry const *);
+__END_DECLS
 
 static __inline wint_t
-_towctrans(wint_t c, _WCTransEntry *te)
+_towctrans_priv(wint_t c, _WCTransEntry const *te)
 {
-	return (_RUNE_ISCACHED(c) ?
-		te->te_cached[(__nbrune_t)c]:_towctrans_ext(c, te));
+	return (_RUNE_ISCACHED(c)
+		? (wint_t)te->te_cached[(size_t)c]
+		: _towctrans_ext(c, te));
 }
 
 static __inline struct _WCTransEntry *
 _wctrans_lower(_RuneLocale *rl)
 {
-	if (rl->rl_wctrans[_WCTRANS_INDEX_LOWER].te_name==NULL)
-		_wctrans_init(rl);
+	_DIAGASSERT(rl->rl_wctrans[_WCTRANS_INDEX_LOWER].te_name != NULL);
+
 	return (&rl->rl_wctrans[_WCTRANS_INDEX_LOWER]);
 }
 
 static __inline struct _WCTransEntry *
 _wctrans_upper(_RuneLocale *rl)
 {
-	if (rl->rl_wctrans[_WCTRANS_INDEX_UPPER].te_name==NULL)
-		_wctrans_init(rl);
+	_DIAGASSERT(rl->rl_wctrans[_WCTRANS_INDEX_UPPER].te_name != NULL);
+
 	return (&rl->rl_wctrans[_WCTRANS_INDEX_UPPER]);
 }
 
-#endif
+#endif /*_WCTRANS_LOCAL_H_*/

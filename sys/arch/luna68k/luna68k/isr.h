@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.h,v 1.2 2003/01/06 13:05:02 wiz Exp $	*/
+/*	$NetBSD: isr.h,v 1.4 2009/03/14 14:46:01 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@
  */
 struct isr_autovec {
 	LIST_ENTRY(isr_autovec) isr_link;
-	int		(*isr_func) __P((void *));
+	int		(*isr_func)(void *);
 	void		*isr_arg;
 	int		isr_ipl;
 	int		isr_priority;
@@ -71,7 +64,7 @@ typedef LIST_HEAD(, isr_autovec) isr_autovec_list_t;
  * when establishing the interrupt.
  */
 struct isr_vectored {
-	int		(*isr_func) __P((void *));
+	int		(*isr_func)(void *);
 	void		*isr_arg;
 	int		isr_ipl;
 };
@@ -84,9 +77,9 @@ struct isr_vectored {
 #define ISRPRI_TTY		2
 #define ISRPRI_TTYNOBUF		3
 
-void	isrinit __P((void));
-void	isrlink_autovec __P((int (*)(void *), void *, int, int));
-void	isrlink_vectored __P((int (*)(void *), void *, int, int));
-void	isrunlink_vectored __P((int));
-void	isrdispatch_autovec __P((int));
-void	isrdispatch_vectored __P((int, int, void *));
+void	isrinit(void);
+void	isrlink_autovec(int (*)(void *), void *, int, int);
+void	isrlink_vectored(int (*)(void *), void *, int, int);
+void	isrunlink_vectored(int);
+void	isrdispatch_autovec(int);
+void	isrdispatch_vectored(int, int, void *);

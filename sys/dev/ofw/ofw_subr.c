@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $	*/
+/*	$NetBSD: ofw_subr.c,v 1.31 2018/06/26 06:24:52 thorpej Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.31 2018/06/26 06:24:52 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,8 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_subr.c,v 1.13 2007/11/07 19:26:45 garbled Exp $"
  *	None.
  */
 int
-of_decode_int(p)
-	const unsigned char *p;
+of_decode_int(const unsigned char *p)
 {
 	unsigned int i = *p++ << 8;
 	i = (i + *p++) << 8;
@@ -80,7 +79,7 @@ of_decode_int(p)
  * it matches any of the provided strings.
  *
  * It should be used when determining whether a driver can drive
- * a partcular device.
+ * a particular device.
  *
  * Arguments:
  *	phandle		OFW phandle of device to be checked for
@@ -91,8 +90,8 @@ of_decode_int(p)
  *
  * Return Value:
  *	-1 if none of the strings are found in phandle's "compatibility"
- *	property, or the index of the string in "strings" of the first
- *	string found in phandle's "compatibility" property.
+ *	property, or the reverse index of the matching string in the
+ *	phandle's "compatibility" property.
  *
  * Side Effects:
  *	None.
@@ -100,7 +99,8 @@ of_decode_int(p)
 int
 of_compatible(int phandle, const char * const *strings)
 {
-	int len, allocated, rv;
+
+	int len, olen, allocated, nstr, cstr, rv;
 	char *buf;
 	const char *sp, *nsp;
 
@@ -122,11 +122,25 @@ of_compatible(int phandle, const char * const *strings)
 		goto out;
 	}
 
+	/* count 'compatible' strings */
 	sp = buf;
+	nstr = 0;
+	olen = len;
 	while (len && (nsp = memchr(sp, 0, len)) != NULL) {
+		nsp++;			/* skip over NUL char */
+		len -= (nsp - sp);
+		sp = nsp;
+		nstr++;
+	}
+	len = olen;
+
+	sp = buf;
+	rv = nstr;
+	while (len && (nsp = memchr(sp, 0, len)) != NULL) {
+		rv--;
 		/* look for a match among the strings provided */
-		for (rv = 0; strings[rv] != NULL; rv++)
-			if (strcmp(sp, strings[rv]) == 0)
+		for (cstr = 0; strings[cstr] != NULL; cstr++)
+			if (strcmp(sp, strings[cstr]) == 0)
 				goto out;
 
 		nsp++;			/* skip over NUL char */
@@ -139,7 +153,105 @@ out:
 	if (allocated)
 		free(buf, M_TEMP);
 	return (rv);
+}
 
+/*
+ * int of_match_compatible(phandle, strings)
+ *
+ * This routine checks an OFW node's "compatible" entry to see if
+ * it matches any of the provided strings.
+ *
+ * It should be used when determining whether a driver can drive
+ * a particular device.
+ *
+ * Arguments:
+ *	phandle		OFW phandle of device to be checked for
+ *			compatibility.
+ *	strings		Array of containing expected "compatibility"
+ *			property values, presence of any of which
+ *			indicates compatibility.
+ *
+ * Return Value:
+ *	0 if none of the strings are found in phandle's "compatibility"
+ *	property, or a positive number based on the reverse index of the
+ *	matching string in the phandle's "compatibility" property, plus 1.
+ *
+ * Side Effects:
+ *	None.
+ */
+int
+of_match_compatible(int phandle, const char * const *strings)
+{
+	return of_compatible(phandle, strings) + 1;
+}
+
+/*
+ * int of_match_compat_data(phandle, compat_data)
+ *
+ * This routine searches an array of compat_data structures for a
+ * matching "compatible" entry matching the supplied OFW node.
+ *
+ * It should be used when determining whether a driver can drive
+ * a particular device.
+ *
+ * Arguments:
+ *	phandle		OFW phandle of device to be checked for
+ *			compatibility.
+ *	compat_data	Array of possible compat entry strings and
+ *			associated metadata. The last entry in the
+ *			list should have a "compat" of NULL to terminate
+ *			the list.
+ *
+ * Return Value:
+ *	0 if none of the strings are found in phandle's "compatibility"
+ *	property, or a positive number based on the reverse index of the
+ *	matching string in the phandle's "compatibility" property, plus 1.
+ *
+ * Side Effects:
+ *	None.
+ */
+int
+of_match_compat_data(int phandle, const struct of_compat_data *compat_data)
+{
+	for (; compat_data->compat != NULL; compat_data++) {
+		const char *compat[] = { compat_data->compat, NULL };
+		const int match = of_match_compatible(phandle, compat);
+		if (match)
+			return match;
+	}
+	return 0;
+}
+
+/*
+ * const struct of_compat_data *of_search_compatible(phandle, compat_data)
+ *
+ * This routine searches an array of compat_data structures for a
+ * matching "compatible" entry matching the supplied OFW node.
+ *
+ * Arguments:
+ *	phandle		OFW phandle of device to be checked for
+ *			compatibility.
+ *	compat_data	Array of possible compat entry strings and
+ *			associated metadata. The last entry in the
+ *			list should have a "compat" of NULL to terminate
+ *			the list.
+ *
+ * Return Value:
+ *	The first matching compat_data entry in the array. If no matches
+ *	are found, the terminating ("compat" of NULL) record is returned.
+ *
+ * Side Effects:
+ *	None.
+ */
+const struct of_compat_data *
+of_search_compatible(int phandle, const struct of_compat_data *compat_data)
+{
+	for (; compat_data->compat != NULL; compat_data++) {
+		const char *compat[] = { compat_data->compat, NULL };
+		if (of_match_compatible(phandle, compat))
+			break;
+	}
+	return compat_data;
 }
 
 /*
@@ -284,11 +396,138 @@ of_to_dataprop(prop_dictionary_t dict, int node, const char *ofname,
 	prop_data_t data;
 	int len;
 	uint8_t prop[256];
+	boolean_t res;
 
 	len = OF_getprop(node, ofname, prop, 256);
 	if (len < 1)
 		return FALSE;
 
 	data = prop_data_create_data(prop, len);
-	return(prop_dictionary_set(dict, propname, data));
+	res = prop_dictionary_set(dict, propname, data);
+	prop_object_release(data);
+	return res;
+}
+
+/*
+ * look at output-device, see if there's a Sun-typical video mode specifier as
+ * in screen:r1024x768x60 attached. If found copy it into *buffer, otherwise
+ * return NULL
+ */
+
+char *
+of_get_mode_string(char *buffer, int len)
+{
+	int options;
+	char *pos, output_device[256];
+
+	/*
+	 * finally, let's see if there's a video mode specified in
+	 * output-device and pass it on so there's at least some way
+	 * to program video modes
+	 */
+	options = OF_finddevice("/options");
+	if ((options == 0) || (options == -1))
+		return NULL;
+	if (OF_getprop(options, "output-device", output_device, 256) == 0)
+		return NULL;
+
+	/* find the mode string if there is one */
+	pos = strstr(output_device, ":r");
+	if (pos == NULL)
+		return NULL;
+	strncpy(buffer, pos + 2, len);
+	return buffer;
+}
+
+/*
+ * Iterate over the subtree of a i2c controller node.
+ * Add all sub-devices into an array as part of the controller's
+ * device properties.
+ * This is used by the i2c bus attach code to do direct configuration.
+ */
+void
+of_enter_i2c_devs(prop_dictionary_t props, int ofnode, size_t cell_size,
+    int addr_shift)
+{
+	int node, len;
+	char name[32];
+	uint64_t reg64;
+	uint32_t reg32;
+	uint64_t addr;
+	prop_array_t array = NULL;
+	prop_dictionary_t dev;
+
+	for (node = OF_child(ofnode); node; node = OF_peer(node)) {
+		if (OF_getprop(node, "name", name, sizeof(name)) <= 0)
+			continue;
+		len = OF_getproplen(node, "reg");
+		addr = 0;
+		if (cell_size == 8 && len >= sizeof(reg64)) {
+			if (OF_getprop(node, "reg", &reg64, sizeof(reg64))
+			    < sizeof(reg64))
+				continue;
+			addr = be64toh(reg64);
+			/*
+			 * The i2c bus number (0 or 1) is encoded in bit 33
+			 * of the register, but we encode it in bit 8 of
+			 * i2c_addr_t.
+			 */
+			if (addr & 0x100000000)
+				addr = (addr & 0xff) | 0x100;
+		} else if (cell_size == 4 && len >= sizeof(reg32)) {
+			if (OF_getprop(node, "reg", &reg32, sizeof(reg32))
+			    < sizeof(reg32))
+				continue;
+			addr = be32toh(reg32);
+		} else {
+			continue;
+		}
+		addr >>= addr_shift;
+		if (addr == 0) continue;
+
+		if (array == NULL)
+			array = prop_array_create();
+
+		dev = prop_dictionary_create();
+		prop_dictionary_set_cstring(dev, "name", name);
+		prop_dictionary_set_uint32(dev, "addr", addr);
+		prop_dictionary_set_uint64(dev, "cookie", node);
+		of_to_dataprop(dev, node, "compatible", "compatible");
+		prop_array_add(array, dev);
+		prop_object_release(dev);
+	}
+
+	if (array != NULL) {
+		prop_dictionary_set(props, "i2c-child-devices", array);
+		prop_object_release(array);
+	}
+
+	prop_dictionary_set_bool(props, "i2c-indirect-config", false);
+}
+
+/*
+ * Returns true if the specified property is present.
+ */
+bool
+of_hasprop(int node, const char *prop)
+{
+	return OF_getproplen(node, prop) >= 0;
+}
+
+/*
+ * Get the value of a uint32 property, compensating for host byte order.
+ * Returns 0 on success, non-zero on failure.
+ */
+int
+of_getprop_uint32(int node, const char *prop, uint32_t *val)
+{
+	uint32_t v;
+	int len;
+
+	len = OF_getprop(node, prop, &v, sizeof(v));
+	if (len != sizeof(v))
+		return -1;
+
+	*val = be32toh(v);
+	return 0;
 }

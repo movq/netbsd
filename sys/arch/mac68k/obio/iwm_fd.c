@@ -1,4 +1,4 @@
-/*	$NetBSD: iwm_fd.c,v 1.40 2007/10/17 19:55:16 garbled Exp $	*/
+/*	$NetBSD: iwm_fd.c,v 1.56 2015/04/26 15:15:19 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 Hauke Fath.  All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,13 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.40 2007/10/17 19:55:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.56 2015/04/26 15:15:19 mlelstv Exp $");
 
-#ifdef _LKM
-#define IWMCF_DRIVE 0
-#else
 #include "locators.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,11 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: iwm_fd.c,v 1.40 2007/10/17 19:55:16 garbled Exp $");
 static int map_iwm_base(vm_offset_t);
 
 /* Autoconfig */
-int	iwm_match(struct device *, struct cfdata *, void *);
-void	iwm_attach(struct device *, struct device *, void *);
+int	iwm_match(device_t, cfdata_t, void *);
+void	iwm_attach(device_t, device_t, void *);
 int	iwm_print(void *, const char *);
-int	fd_match(struct device *, struct cfdata *, void *);
-void	fd_attach(struct device *, struct device *, void *);
+int	fd_match(device_t, cfdata_t, void *);
+void	fd_attach(device_t, device_t, void *);
 int	fd_print(void *, const char *);
 
 /* Disklabel stuff */
@@ -98,12 +92,6 @@ static int seek(fd_softc_t *, int);
 static int checkTrack(diskPosition_t *, int);
 static int initCylinderCache(fd_softc_t *);
 static void invalidateCylinderCache(fd_softc_t *);
-
-#ifdef _LKM
-static int probe_fd(void);
-int fd_mod_init(void);
-void fd_mod_free(void);
-#endif
 
 static int fdstart_Init(fd_softc_t *);
 static int fdstart_Seek(fd_softc_t *);
@@ -225,19 +213,16 @@ enum {
  * {device}_cd
  * references all found devices of a type.
  */
-#ifndef _LKM
 
 extern struct cfdriver iwm_cd;
 extern struct cfdriver fd_cd;
 
-#endif /* defined _LKM */
-
 /* IWM floppy disk controller */
-CFATTACH_DECL(iwm, sizeof(iwm_softc_t),
+CFATTACH_DECL_NEW(iwm, sizeof(iwm_softc_t),
     iwm_match, iwm_attach, NULL, NULL);
 
 /* Attached floppy disk drives */
-CFATTACH_DECL(fd, sizeof(fd_softc_t),
+CFATTACH_DECL_NEW(fd, sizeof(fd_softc_t),
     fd_match, fd_attach, NULL, NULL);
 
 dev_type_open(fdopen);
@@ -248,17 +233,34 @@ dev_type_ioctl(fdioctl);
 dev_type_strategy(fdstrategy);
 
 const struct bdevsw fd_bdevsw = {
-	fdopen, fdclose, fdstrategy, fdioctl, nodump, nosize, D_DISK
+	.d_open = fdopen,
+	.d_close = fdclose,
+	.d_strategy = fdstrategy,
+	.d_ioctl = fdioctl,
+	.d_dump = nodump,
+	.d_psize = nosize,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
 const struct cdevsw fd_cdevsw = {
-	fdopen, fdclose, fdread, fdwrite, fdioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
+	.d_open = fdopen,
+	.d_close = fdclose,
+	.d_read = fdread,
+	.d_write = fdwrite,
+	.d_ioctl = fdioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_DISK
 };
 
 /* disk(9) framework device switch */
 struct dkdriver fd_dkDriver = {
-	fdstrategy
+	.d_strategy = fdstrategy
 };
 
 /***  Configure the IWM controller  ***/
@@ -266,19 +268,16 @@ struct dkdriver fd_dkDriver = {
 /*
  * iwm_match
  *
- * Is the IWM chip present? Here, *auxp is a ptr to struct confargs 
+ * Is the IWM chip present? Here, *aux is a ptr to struct confargs 
  * (see <mac68k/mac68k/autoconf.h>), which does not hold any information 
  * to match against. After all, that's what the obio concept is 
  * about: Onboard components that are present depending (only) 
  * on machine type.
  */
 int
-iwm_match(struct device *parent, struct cfdata *match, void *auxp)
+iwm_match(device_t parent, cfdata_t match, void *aux)
 {
 	int matched;
-#ifdef _LKM
-	int iwmErr;
-#endif
 	extern u_long IOBase;		/* from mac68k/machdep.c */
 	extern u_long IWMBase;
 	
@@ -298,12 +297,6 @@ iwm_match(struct device *parent, struct cfdata *match, void *auxp)
 			printf("iwm: IWMBase mapped to 0x%lx in VM.\n", 
 			    IWMBase);
 		}
-#ifdef _LKM
-		iwmErr = iwmInit();
-		if (TRACE_CONFIG)
-			printf("initIWM() says %d.\n", iwmErr);
-		matched = (iwmErr == 0) ? 1 : 0;
-#endif
 	}
 	return matched;
 }
@@ -316,14 +309,14 @@ iwm_match(struct device *parent, struct cfdata *match, void *auxp)
  * and attach them.
  */
 void
-iwm_attach(struct device *parent, struct device *self, void *auxp)
+iwm_attach(device_t parent, device_t self, void *aux)
 {
 	int iwmErr;
 	iwm_softc_t *iwm;
 	iwmAttachArgs_t ia;
 
 	printf(": Apple GCR floppy disk controller\n");
-	iwm = (iwm_softc_t *)self;
+	iwm = device_private(self);
 
 	iwmErr = iwmInit();
 	if (TRACE_CONFIG)
@@ -357,7 +350,7 @@ iwm_attach(struct device *parent, struct device *self, void *auxp)
  * of *Print() is ignored.
  */
 int
-iwm_print(void *auxp, const char *controller)
+iwm_print(void *aux, const char *controller)
 {
 	return UNCONF;
 }
@@ -414,14 +407,14 @@ map_iwm_base(vm_offset_t base)
  * fd_match
  */
 int
-fd_match(struct device *parent, struct cfdata *match, void *auxp)
+fd_match(device_t parent, cfdata_t match, void *aux)
 {
 	int matched, cfUnit;
 	struct cfdata *cfp;
 	iwmAttachArgs_t *fdParams;
 
 	cfp = match;
-	fdParams = (iwmAttachArgs_t *)auxp;
+	fdParams = aux;
 	cfUnit = cfp->cf_loc[IWMCF_DRIVE];
 	matched = (cfUnit == fdParams->unit || cfUnit == -1) ? 1 : 0;
 	if (TRACE_CONFIG) {
@@ -439,16 +432,16 @@ fd_match(struct device *parent, struct cfdata *match, void *auxp)
  * so we can attach it.
  */
 void
-fd_attach(struct device *parent, struct device *self, void *auxp)
+fd_attach(device_t parent, device_t self, void *aux)
 {
 	iwm_softc_t *iwm;
 	fd_softc_t *fd;
 	iwmAttachArgs_t *ia;
 	int driveInfo;
 
-	iwm = (iwm_softc_t *)parent;
-	fd = (fd_softc_t *)self;
-	ia = (iwmAttachArgs_t *)auxp;
+	iwm = device_private(parent);
+	fd = device_private(self);
+	ia = aux;
 
 	driveInfo = iwmCheckDrive(ia->unit);
 
@@ -488,7 +481,7 @@ fd_attach(struct device *parent, struct device *self, void *auxp)
 		}
 		splx(spl);
 	}
-	disk_init(&fd->diskInfo, fd->devInfo.dv_xname, &fd_dkDriver);
+	disk_init(&fd->diskInfo, device_xname(fd->sc_dev), &fd_dkDriver);
 	disk_attach(&fd->diskInfo);
 }
 
@@ -502,122 +495,15 @@ fd_attach(struct device *parent, struct device *self, void *auxp)
  * return value of *Print() is ignored.
  */
 int
-fd_print(void *auxp, const char *controller)
+fd_print(void *aux, const char *controller)
 {
 	iwmAttachArgs_t *ia;
 
-	ia = (iwmAttachArgs_t *)auxp;
+	ia = aux;
 	if (NULL != controller)
 		aprint_normal("fd%d at %s", ia->unit, controller);
 	return UNCONF;
 }
-
-
-#ifdef _LKM
-
-static iwm_softc_t *iwm;
-
-/*
- * fd_mod_init
- *
- * Any initializations necessary after loading the module happen here.
- */
-int
-fd_mod_init(void)
-{
-	int err;
-
-	iwm = (iwm_softc_t *)malloc(sizeof(iwm_softc_t), M_DEVBUF, M_WAITOK);
-
-	err = (1 == iwm_match(NULL, NULL, NULL)) ? 0 : EIO;
-	if (!err) {
-		memset(iwm, 0, sizeof(iwm_softc_t));
-		iwm->maxRetries = 10;
-		err = (0 == probe_fd()) ? 0 : EIO;
-	}
-	return err;
-}
-
-
-/*
- * fd_mod_free
- *
- * Necessary clean-up before unloading the module.
- */
-void
-fd_mod_free(void)
-{
-	int unit, spl;
-
-	spl = splbio();
-	/* Release any allocated memory */
-	for (unit = 0; unit < IWM_MAX_DRIVE; unit++)
-		if (iwm->fd[unit] != NULL) {
-			/* 
-			 * Let's hope there is only one task per drive,
-			 * see callout(9). 
-			 */
-			callout_stop(&iwm->fd[unit]->motor_ch);
-			disk_detach(&iwm->fd[unit]->diskInfo);
-			disk_destroy(&iwm->fd[unit]->diskInfo);
-			free(iwm->fd[unit], M_DEVBUF);
-			iwm->fd[unit] = NULL;
-		}
-	free(iwm, M_DEVBUF);
-	splx(spl);
-}
-
-
-/*
- * probe_fd
- *
- * See if there are any drives out there and configure them.
- * If we find a drive we allocate a softc structure for it and
- * insert its address into the iwm_softc.
- *
- * XXX Merge the remainder of probeFD() with the autoconfig framework.
- */
-static int
-probe_fd(void)
-{
-	fd_softc_t *fd;
-	iwmAttachArgs_t ia;
-	int err, unit;
-
-	err = 0;
-	for (ia.unit = 0; ia.unit < IWM_MAX_DRIVE; ia.unit++) {
-		ia.driveType = getFDType(ia.unit);
-		if (NULL == ia.driveType) {
-			iwm->fd[ia.unit] = NULL;
-			continue;
-		}
-		fd = (fd_softc_t *)malloc(sizeof(fd_softc_t),
-		    M_DEVBUF, M_WAITOK);
-		if (fd == NULL) {
-			err = ENOMEM;
-			break;
-		} else {
-			memset(fd, 0, sizeof(fd_softc_t));
-
-			/* This is usually set by the autoconfig framework */
-			sprintf(fd->devInfo.dv_xname, "fd%d%c", ia.unit, 'a');
-			fd_attach((struct device *)iwm, (struct device *)fd,
-			    &ia);
-		}
-	}
-	if (err) {
-		/* Release any allocated memory */
-		for (unit = 0; unit < IWM_MAX_DRIVE; unit++)
-			if (iwm->fd[unit] != NULL) {
-				free(iwm->fd[unit], M_DEVBUF);
-				iwm->fd[unit] = NULL;
-			}
-	}
-	return err;
-}
-
-#endif /* defined _LKM */
-
 
 /**
  ** Implementation section of driver interface
@@ -642,9 +528,7 @@ fdopen(dev_t dev, int flags, int devType, struct lwp *l)
 	int partitionMask;
 	int fdType, fdUnit;
 	int ierr, err;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0); /* XXX */
 	info = NULL;		/* XXX shut up egcs */
 	fd = NULL;		/* XXX shut up gcc3 */
 
@@ -776,9 +660,7 @@ fdclose(dev_t dev, int flags, int devType, struct lwp *l)
 {
 	fd_softc_t *fd;
 	int partitionMask, fdUnit, fdType;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0);
 
 	if (TRACE_CLOSE)
 		printf("iwm: Closing driver.");
@@ -816,13 +698,12 @@ fdclose(dev_t dev, int flags, int devType, struct lwp *l)
  * we do not support them.
  */
 int
-fdioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+fdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int result, fdUnit, fdType;
 	fd_softc_t *fd;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0);
+	int error;
 
 	if (TRACE_IOCTL)
 		printf("iwm: Execute ioctl... ");
@@ -840,18 +721,15 @@ fdioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	fd = iwm->fd[fdUnit];
 	result = 0;
 
-	switch (cmd) {
-	case DIOCGDINFO:
-		if (TRACE_IOCTL)
-			printf(" DIOCGDINFO: Get in-core disklabel.\n");
-		*(struct disklabel *) data = *(fd->diskInfo.dk_label);
-		result = 0;
-		break;
+	error = disk_ioctl(&fd->diskInfo, fdType, cmd, data, flag, l);
+	if (error != EPASSTHROUGH)
+		return error;
 
+	switch (cmd) {
 	case DIOCSDINFO:
 		if (TRACE_IOCTL)
 			printf(" DIOCSDINFO: Set in-core disklabel.\n");
-		result = ((flags & FWRITE) == 0) ? EBADF : 0;
+		result = ((flag & FWRITE) == 0) ? EBADF : 0;
 		if (result == 0)
 			result = setdisklabel(fd->diskInfo.dk_label,
 			    (struct disklabel *)data, 0,
@@ -862,7 +740,7 @@ fdioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 		if (TRACE_IOCTL)
 			printf(" DIOCWDINFO: Set in-core disklabel "
 			    "& update disk.\n");
-		result = ((flags & FWRITE) == 0) ? EBADF : 0;
+		result = ((flag & FWRITE) == 0) ? EBADF : 0;
 
 		if (result == 0)
 			result = setdisklabel(fd->diskInfo.dk_label,
@@ -872,15 +750,6 @@ fdioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 			result = writedisklabel(dev, fdstrategy,
 			    fd->diskInfo.dk_label,
 			    fd->diskInfo.dk_cpulabel);
-		break;
-
-	case DIOCGPART:
-		if (TRACE_IOCTL)
-			printf(" DIOCGPART: Get disklabel & partition table.\n");
-		((struct partinfo *)data)->disklab = fd->diskInfo.dk_label;
-		((struct partinfo *)data)->part =
-		    &fd->diskInfo.dk_label->d_partitions[fdType];
-		result = 0;
 		break;
 
 	case DIOCRFORMAT:
@@ -910,7 +779,7 @@ fdioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	case DIOCWLABEL:
 		if (TRACE_IOCTL)
 			printf(" DIOCWLABEL: Set write access to disklabel.\n");
-		result = ((flags & FWRITE) == 0) ? EBADF : 0;
+		result = ((flag & FWRITE) == 0) ? EBADF : 0;
 
 		if (result == 0)
 			fd->writeLabel = *(int *)data;
@@ -983,9 +852,7 @@ fdstrategy(struct buf *bp)
 	int sectSize, transferSize;
 	diskPosition_t physDiskLoc;
 	fd_softc_t *fd;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0);
 
 	err = 0;
 	done = 0;
@@ -1080,7 +947,7 @@ fdstrategy(struct buf *bp)
 		}
 		spl = splbio();
 		callout_stop(&fd->motor_ch);
-		BUFQ_PUT(fd->bufQueue, bp);
+		bufq_put(fd->bufQueue, bp);
 		if (fd->sc_active == 0)
 			fdstart(fd);
 		splx(spl);
@@ -1191,7 +1058,7 @@ fdstart_Init(fd_softc_t *fd)
 	 * Get the first entry from the queue. This is the buf we gave to
 	 * fdstrategy(); disksort() put it into our softc.
 	 */
-	bp = BUFQ_PEEK(fd->bufQueue);
+	bp = bufq_peek(fd->bufQueue);
 	if (NULL == bp) {
 		if (TRACE_STRAT)
 			printf("Queue empty: Nothing to do");
@@ -1276,9 +1143,7 @@ fdstart_Read(fd_softc_t *fd)
 	int i;
 	diskPosition_t *pos;
 	sectorHdr_t *shdr;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0); /* XXX */
 	
 	/* Initialize retry counters */
 	fd->seekRetries = 0;
@@ -1392,9 +1257,8 @@ fdstart_Flush(fd_softc_t *fd)
 	int i, dcnt;
 	diskPosition_t *pos;
 	sectorHdr_t *shdr;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0); /* XXX */
+
 	dcnt = 0;
 	pos = &fd->pos;
 	shdr = &fd->sHdr;
@@ -1522,9 +1386,7 @@ static int
 fdstart_IOErr(fd_softc_t *fd)
 {
 	int state;
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0); /* XXX */
 	
 #ifdef DIAGNOSTIC
 	printf("iwm%sSector() err = %d, %d retries, on c%d_h%d_s%d.\n",
@@ -1586,7 +1448,7 @@ fdstart_Exit(fd_softc_t *fd)
 			    fd->pos.track, fd->pos.side, fd->pos.sector);
 #endif
 
-	bp = BUFQ_GET(fd->bufQueue);
+	bp = bufq_get(fd->bufQueue);
 
 	bp->b_resid = fd->bytesLeft;
 	bp->b_error = (0 == fd->iwmErr) ? 0 : EIO;
@@ -1599,7 +1461,7 @@ fdstart_Exit(fd_softc_t *fd)
 	}
 	if (DISABLED && TRACE_STRAT)
 		printf(" Next buf (bufQueue first) at %p\n",
-		    BUFQ_PEEK(fd->bufQueue));
+		    bufq_peek(fd->bufQueue));
 	disk_unbusy(&fd->diskInfo, bp->b_bcount - bp->b_resid,
 	    (bp->b_flags & B_READ));
 	biodone(bp);
@@ -1672,7 +1534,7 @@ motor_off(void *param)
 	int spl;
 	fd_softc_t *fd;
 
-	fd = (fd_softc_t *)param;
+	fd = param;
 	if (TRACE_STRAT)
 		printf("iwm: Switching motor OFF (timeout).\n");
 	spl = spl6();
@@ -1699,8 +1561,8 @@ fdGetDiskLabel(fd_softc_t *fd, dev_t dev)
 	struct cpu_disklabel *clp;
 
 	if (TRACE_IOCTL)
-		printf("iwm: fdGetDiskLabel() for disk %d.\n",
-		    minor(dev) / MAXPARTITIONS);
+		printf("iwm: fdGetDiskLabel() for disk %" PRIu64 ".\n",
+		    (dev_t) (minor(dev) / MAXPARTITIONS));
 	fdType = minor(dev) % MAXPARTITIONS;
 	lp = fd->diskInfo.dk_label;
 	clp = fd->diskInfo.dk_cpulabel;
@@ -1711,7 +1573,7 @@ fdGetDiskLabel(fd_softc_t *fd, dev_t dev)
 	 * track (8..12) and variable rpm (300..550)? Apple came up
 	 * with ZBR in 1983! Un*x drive management sucks.
 	 */
-	lp->d_type = DTYPE_FLOPPY;
+	lp->d_type = DKTYPE_FLOPPY;
 	lp->d_rpm = 300;
 	lp->d_secsize = fd->currentType->sectorSize;
 	lp->d_ntracks = fd->currentType->heads;
@@ -1722,7 +1584,7 @@ fdGetDiskLabel(fd_softc_t *fd, dev_t dev)
 	lp->d_interleave = fd->currentType->interleave;
 	lp->d_trkseek = fd->currentType->stepRate;
 
-	strcpy(lp->d_typename, dktypenames[DTYPE_FLOPPY]);
+	strcpy(lp->d_typename, dktypenames[DKTYPE_FLOPPY]);
 	strncpy(lp->d_packname, "fictitious", sizeof(lp->d_packname));
 
 	lp->d_npartitions = fdType + 1;
@@ -1888,9 +1750,7 @@ seek(fd_softc_t *fd, int style)
 	diskPosition_t *loc;
 	sectorHdr_t hdr;
 	char action[32];
-#ifndef _LKM
-	iwm_softc_t *iwm = iwm_cd.cd_devs[0];
-#endif
+	iwm_softc_t *iwm = device_lookup_private(&iwm_cd, 0); /* XXX */
 
 	const char *stateDesc[] = {
 		"Init",

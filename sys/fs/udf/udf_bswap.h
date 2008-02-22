@@ -1,4 +1,4 @@
-/*	$NetBSD: udf_bswap.h,v 1.4 2006/03/05 16:55:44 christos Exp $	*/
+/* $NetBSD: udf_bswap.h,v 1.8 2009/10/22 21:50:01 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -11,13 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,49 +30,35 @@
 #ifndef _FS_UDF_UDF_BSWAP_H_
 #define _FS_UDF_UDF_BSWAP_H_
 
-#if HAVE_ENDIAN_H
-#include <endian.h>
-#else
-#if HAVE_SYS_ENDIAN_H
 #include <sys/endian.h>
-#else
-#if HAVE_MACHINE_ENDIAN_H
-#include <machine/endian.h>
-#endif
-#endif
-#endif
+#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 /* rest only relevant for big endian machines */
 #if (BYTE_ORDER == BIG_ENDIAN)
 
-#include <machine/bswap.h>
-#include <sys/bswap.h>
-
 /* inlines for access to swapped data */
-static __inline u_int16_t udf_rw16(u_int16_t);
-static __inline u_int32_t udf_rw32(u_int32_t);
-static __inline u_int64_t udf_rw64(u_int64_t);
+static __inline uint16_t udf_rw16(uint16_t);
+static __inline uint32_t udf_rw32(uint32_t);
+static __inline uint64_t udf_rw64(uint64_t);
 
 
-static __inline u_int16_t
-udf_rw16(a)
-	u_int16_t a;
+static __inline uint16_t
+udf_rw16(uint16_t a)
 {
 	return bswap16(a);
 }
 
 
-static __inline u_int32_t
-udf_rw32(a)
-	u_int32_t a;
+static __inline uint32_t
+udf_rw32(uint32_t a)
 {
 	return bswap32(a);
 }
 
 
-static __inline u_int64_t
-udf_rw64(a)
-	u_int64_t a;
+static __inline uint64_t
+udf_rw64(uint64_t a)
 {
 	return bswap64(a);
 }
@@ -94,3 +73,4 @@ udf_rw64(a)
 
 
 #endif /* !_FS_UDF_UDF_BSWAP_H_ */
+

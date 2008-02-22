@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.18 2006/01/20 22:02:41 christos Exp $ */
+/*	$NetBSD: asm.h,v 1.27 2018/04/25 09:23:00 ragge Exp $ */
 /*
  * Copyright (c) 1982, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -46,15 +46,7 @@
 #define R10	0x400
 #define R11	0x800
 
-#ifdef __ELF__
-# define _C_LABEL(x)	x
-#else
-# ifdef __STDC__
-#  define _C_LABEL(x)	_ ## x
-# else
-#  define _C_LABEL(x)	_/**/x
-# endif
-#endif
+#define _C_LABEL(x)	x
 
 #define	_ASM_LABEL(x)	x
 
@@ -68,24 +60,15 @@
 
 /* let kernels and others override entrypoint alignment */
 #ifndef _ALIGN_TEXT
-# ifdef __ELF__
-#  define _ALIGN_TEXT .align 4
-# else
-#  define _ALIGN_TEXT .align 2
-# endif
+# define _ALIGN_TEXT .p2align 2
 #endif
 
 #define	_ENTRY(x, regs) \
 	.text; _ALIGN_TEXT; .globl x; .type x@function; x: .word regs
 
 #ifdef GPROF
-# ifdef __ELF__
-#  define _PROF_PROLOGUE	\
+# define _PROF_PROLOGUE	\
 	.data; 1:; .long 0; .text; moval 1b,%r0; jsb _ASM_LABEL(__mcount)
-# else 
-#  define _PROF_PROLOGUE	\
-	.data; 1:; .long 0; .text; moval 1b,r0; jsb _ASM_LABEL(mcount)
-# endif
 #else
 # define _PROF_PROLOGUE
 #endif
@@ -93,15 +76,21 @@
 #define ENTRY(x, regs)		_ENTRY(_C_LABEL(x), regs); _PROF_PROLOGUE
 #define NENTRY(x, regs)		_ENTRY(_C_LABEL(x), regs)
 #define ASENTRY(x, regs)	_ENTRY(_ASM_LABEL(x), regs); _PROF_PROLOGUE
+#define END(x)			.size _C_LABEL(x),.-_C_LABEL(x)
 
 #define ALTENTRY(x)		.globl _C_LABEL(x); _C_LABEL(x):
-#define RCSID(x)		.text; .asciz x
+#define RCSID(name)		.pushsection ".ident"; .asciz name; .popsection
 
-#ifdef __ELF__
+#ifdef NO_KERNEL_RCSIDS
+#define __KERNEL_RCSID(_n, _s)  /* nothing */
+#else
+#define __KERNEL_RCSID(_n, _s)  RCSID(_s)
+#endif
+
 #define	WEAK_ALIAS(alias,sym)						\
 	.weak alias;							\
 	alias = sym
-#endif
+
 /*
  * STRONG_ALIAS: create a strong alias.
  */
@@ -111,12 +100,40 @@
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_C_LABEL(sym)) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_C_LABEL(sym)),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
+
+.macro	polyf arg:req degree:req tbladdr:req
+	movf	\arg, %r1
+	movzwl	\degree, %r2
+	movab	\tbladdr, %r3
+
+	movf	(%r3)+, %r0
+1:
+	mulf2	%r1, %r0		/* result *= arg */
+	addf2	(%r3)+, %r0		/* result += c[n] */
+	sobgtr	%r2, 1b
+	clrf	%r1			/* r1 is 0 on finish */
+.endm
+
+.macro	polyd arg:req degree:req tbladdr:req
+	movd	\arg, %r4
+	movzwl	\degree, %r2
+	movab	\tbladdr, %r3
+
+	movd	(%r3)+,	%r0
+1:
+	muld2	%r4, %r0		/* result *= arg */
+	addd2	(%r3)+, %r0		/* result += c[n] */
+	sobgtr	%r2, 1b
+	clrq	%r4			/* r4, r5 are 0 on finish */
+.endm
 
 #endif /* !_VAX_ASM_H_ */

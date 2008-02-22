@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.18 2004/10/30 16:57:27 dsl Exp $	*/
+/*	$NetBSD: audio.c,v 1.25 2015/08/05 06:54:39 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: audio.c,v 1.18 2004/10/30 16:57:27 dsl Exp $");
+__RCSID("$NetBSD: audio.c,v 1.25 2015/08/05 06:54:39 mrg Exp $");
 #endif
 
 
@@ -42,7 +40,9 @@ __RCSID("$NetBSD: audio.c,v 1.18 2004/10/30 16:57:27 dsl Exp $");
 #include <sys/audioio.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 
+#include <unistd.h>
 #include <ctype.h>
 #include <err.h>
 #include <stdio.h>
@@ -50,10 +50,11 @@ __RCSID("$NetBSD: audio.c,v 1.18 2004/10/30 16:57:27 dsl Exp $");
 #include <string.h>
 
 #include "libaudio.h"
+#include "auconv.h"
 
 /* what format am i? */
 
-struct {
+static const struct {
 	const char *fname;
 	int fno;
 } formats[] = {
@@ -68,9 +69,10 @@ struct {
 	{ NULL, -1 }
 };
 
+char	audio_default_info[8] = { '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' };
+
 int
-audio_format_from_str(str)
-	char *str;
+audio_format_from_str(char *str)
 {
 	int	i;
 
@@ -83,7 +85,7 @@ audio_format_from_str(str)
 
 
 /* back and forth between encodings */
-struct {
+static const struct {
 	const char *ename;
 	int eno;
 } encs[] = {
@@ -107,13 +109,13 @@ struct {
 	{ AudioEmpeg_l2_stream,	AUDIO_ENCODING_MPEG_L2_STREAM },
 	{ AudioEmpeg_l2_packets,AUDIO_ENCODING_MPEG_L2_PACKETS },
 	{ AudioEmpeg_l2_system,	AUDIO_ENCODING_MPEG_L2_SYSTEM },
+	{ AudioEac3,		AUDIO_ENCODING_AC3 },
 	{ NULL, -1 }
 };
 
 
 const char *
-audio_enc_from_val(val)
-	int	val;
+audio_enc_from_val(int val)
 {
 	int	i;
 
@@ -124,8 +126,7 @@ audio_enc_from_val(val)
 }
 
 int
-audio_enc_to_val(enc)
-	const	char *enc;
+audio_enc_to_val(const char *enc)
 {
 	int	i;
 
@@ -138,79 +139,11 @@ audio_enc_to_val(enc)
 		return (AUDIO_ENOENT);
 }
 
-void
-decode_int(arg, intp)
-	const char *arg;
-	int *intp;
-{
-	char	*ep;
-	int	ret;
-
-	ret = (int)strtoul(arg, &ep, 10);
-
-	if (ep[0] == '\0') {
-		*intp = ret;
-		return;
-	}
-	errx(1, "argument `%s' not a valid integer", arg);
-}
-
-void
-decode_time(arg, tvp)
-	const char *arg;
-	struct timeval *tvp;
-{
-	char	*s, *colon, *dot;
-	char	*copy = strdup(arg);
-	int	first;
-
-	if (copy == NULL)
-		err(1, "could not allocate a copy of %s", arg);
-
-	tvp->tv_sec = tvp->tv_usec = 0;
-	s = copy;
-	
-	/* handle [hh:]mm:ss.dd */
-	if ((colon = strchr(s, ':')) != NULL) {
-		*colon++ = '\0';
-		decode_int(s, &first);
-		tvp->tv_sec = first * 60;	/* minutes */
-		s = colon;
-
-		if ((colon = strchr(s, ':')) != NULL) {
-			*colon++ = '\0';
-			decode_int(s, &first);
-			tvp->tv_sec += first;	/* minutes and hours */
-			tvp->tv_sec *= 60;
-			s = colon;
-		}
-	}
-	if ((dot = strchr(s, '.')) != NULL) {
-		int 	i, base = 100000;
-
-		*dot++ = '\0';
-
-		for (i = 0; i < 6; i++, base /= 10) {
-			if (!dot[i])
-				break;
-			if (!isdigit((unsigned char)dot[i]))
-				errx(1, "argument `%s' is not a value time specification", arg);
-			tvp->tv_usec += base * (dot[i] - '0');
-		}
-	}
-	decode_int(s, &first);
-	tvp->tv_sec += first;
-
-	free(copy);
-}
-
 /*
  * decode a string into an encoding value.
  */
 void
-decode_encoding(arg, encp)
-	const char *arg;
-	int *encp;
+decode_encoding(const char *arg, int *encp)
 {
 	size_t	len;
 	int i;
@@ -224,7 +157,7 @@ decode_encoding(arg, encp)
 	errx(1, "unknown encoding `%s'", arg);
 }
 
-const char *const audio_errlist[] = {
+static const char *const audio_errlist[] = {
 	"error zero",				/* nothing? */
 	"no audio entry",			/* AUDIO_ENOENT */
 	"short header",				/* AUDIO_ESHORTHDR */
@@ -235,12 +168,78 @@ const char *const audio_errlist[] = {
 };
 
 const char *
-audio_errstring(errval)
-	int	errval;
+audio_errstring(int errval)
 {
 
 	errval = -errval;
 	if (errval < 1 || errval > AUDIO_MAXERRNO)
 		return "Invalid error";
 	return audio_errlist[errval];
+}
+
+void
+write_header(struct track_info *ti)
+{
+	struct iovec iv[3];
+	int veclen, left, tlen;
+	void *hdr;
+	size_t hdrlen;
+
+	switch (ti->format) {
+	case AUDIO_FORMAT_DEFAULT:
+	case AUDIO_FORMAT_SUN:
+		if (sun_prepare_header(ti, &hdr, &hdrlen, &left) != 0)
+			return;
+		break;
+	case AUDIO_FORMAT_WAV:
+		if (wav_prepare_header(ti, &hdr, &hdrlen, &left) != 0)
+			return;
+		break;
+	case AUDIO_FORMAT_NONE:
+		return;
+	default:
+		errx(1, "unknown audio format");
+	}
+
+	veclen = 0;
+	tlen = 0;
+		
+	if (hdrlen != 0) {
+		iv[veclen].iov_base = hdr;
+		iv[veclen].iov_len = hdrlen;
+		tlen += iv[veclen++].iov_len;
+	}
+	if (ti->header_info) {
+		iv[veclen].iov_base = ti->header_info;
+		iv[veclen].iov_len = (int)strlen(ti->header_info) + 1;
+		tlen += iv[veclen++].iov_len;
+	}
+	if (left) {
+		iv[veclen].iov_base = audio_default_info;
+		iv[veclen].iov_len = left;
+		tlen += iv[veclen++].iov_len;
+	}
+
+	if (tlen == 0)
+		return;
+
+	if (writev(ti->outfd, iv, veclen) != tlen)
+		err(1, "could not write audio header");
+}
+
+write_conv_func
+write_get_conv_func(struct track_info *ti)
+{
+
+	switch (ti->format) {
+	case AUDIO_FORMAT_DEFAULT:
+	case AUDIO_FORMAT_SUN:
+		return sun_write_get_conv_func(ti);
+	case AUDIO_FORMAT_WAV:
+		return wav_write_get_conv_func(ti);
+	case AUDIO_FORMAT_NONE:
+		return NULL;
+	default:
+		errx(1, "unknown audio format");
+	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: check.c,v 1.15 2007/03/10 00:30:36 hubertf Exp $	*/
+/*	$NetBSD: check.c,v 1.19 2014/07/10 21:06:20 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: check.c,v 1.15 2007/03/10 00:30:36 hubertf Exp $");
+__RCSID("$NetBSD: check.c,v 1.19 2014/07/10 21:06:20 christos Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -46,6 +39,7 @@ __RCSID("$NetBSD: check.c,v 1.15 2007/03/10 00:30:36 hubertf Exp $");
 
 #include "ext.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 int
 checkfilesys(const char *filename)
@@ -53,9 +47,10 @@ checkfilesys(const char *filename)
 	int dosfs;
 	struct bootblock boot;
 	struct fatEntry *fat = NULL;
-	int i, finish_dosdirsection=0;
+	int finish_dosdirsection=0;
+	u_int i;
 	int mod = 0;
-	int ret = 8;
+	int ret = FSCK_EXIT_CHECK_FAILED;
 
 	rdonly = alwaysno;
 	if (!preen)
@@ -74,13 +69,13 @@ checkfilesys(const char *filename)
 
 	if (dosfs < 0) {
 		perr("Can't open `%s'", filename);
-		return 8;
+		return FSCK_EXIT_CHECK_FAILED;
 	}
 
 	if (readboot(dosfs, &boot) != FSOK) {
 		close(dosfs);
 		printf("\n");
-		return 8;
+		return FSCK_EXIT_CHECK_FAILED;
 	}
 
 	if (!preen)  {
@@ -93,7 +88,7 @@ checkfilesys(const char *filename)
 	mod |= readfat(dosfs, &boot, boot.ValidFat >= 0 ? boot.ValidFat : 0, &fat);
 	if (mod & FSFATAL) {
 		close(dosfs);
-		return 8;
+		return FSCK_EXIT_CHECK_FAILED;
 	}
 
 	if (boot.ValidFat < 0)
@@ -140,7 +135,7 @@ checkfilesys(const char *filename)
 		goto out;
 
 	/* now write the FATs */
-	if (mod & FSFATMOD) {
+	if (mod & (FSFATMOD|FSFIXFAT)) {
 		if (ask(1, "Update FATs")) {
 			mod |= writefat(dosfs, &boot, fat, mod & FSFIXFAT);
 			if (mod & FSFATAL)
@@ -177,7 +172,7 @@ checkfilesys(const char *filename)
 	if (mod & (FSFATAL | FSERROR))
 		goto out;
 
-	ret = 0;
+	ret = FSCK_EXIT_OK;
 
     out:
 	if (finish_dosdirsection)
